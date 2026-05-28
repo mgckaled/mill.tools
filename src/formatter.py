@@ -30,6 +30,7 @@ FORMAT_PROMPT = ChatPromptTemplate.from_messages([
         "- Only insert blank lines (two newlines) between paragraphs\n"
         "- Insert a break where a new topic, idea, or logical section begins\n"
         "- Keep paragraphs between 3 and 8 sentences\n"
+        "- PRESERVE all [?] markers exactly where they appear — they are quality indicators, not part of the speech\n"
         "- Output ONLY the formatted text, no explanations or comments"
     )),
     ("human", "{text}"),

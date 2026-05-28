@@ -20,6 +20,7 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 AUDIOS_DIR = PROJECT_ROOT / "audios"
 TRANSCRIPTIONS_RAW_DIR = PROJECT_ROOT / "transcriptions" / "raw"
 TRANSCRIPTIONS_ANALYSIS_DIR = PROJECT_ROOT / "transcriptions" / "analysis"
+TRANSCRIPTIONS_PROMPT_DIR = PROJECT_ROOT / "transcriptions" / "prompt_ready"
 YOUTUBE_URL_PATTERN = re.compile(
     r"^(https?://)?(www\.)?(youtube\.com/watch\?v=|youtu\.be/)[A-Za-z0-9_-]{11}"
 )

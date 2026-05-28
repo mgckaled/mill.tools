@@ -10,8 +10,10 @@ Examples:
     uv run yt-transcriber https://www.youtube.com/watch?v=ovabeVoWrA0 --language pt
     uv run yt-transcriber https://www.youtube.com/watch?v=ovabeVoWrA0 --format
     uv run yt-transcriber https://www.youtube.com/watch?v=ovabeVoWrA0 --analyze
+    uv run yt-transcriber https://www.youtube.com/watch?v=ovabeVoWrA0 --prompt
     uv run yt-transcriber https://www.youtube.com/watch?v=ovabeVoWrA0 --format --analyze
     uv run yt-transcriber https://www.youtube.com/watch?v=ovabeVoWrA0 --format --fm phi4-mini --analyze --am qwen7b-custom
+    uv run yt-transcriber https://www.youtube.com/watch?v=ovabeVoWrA0 --prompt --pm qwen7b-custom
 """
 
 import argparse
@@ -35,7 +37,8 @@ def parse_args() -> argparse.Namespace:
 
     Returns:
         Namespace with url, whisper_model, language, threads, beam_size,
-        output_name, format, format_model, analyze, analyzer_model and verbose fields.
+        output_name, format, format_model, analyze, analyzer_model,
+        prompt, prompt_model and verbose fields.
     """
     parser = argparse.ArgumentParser(
         description="Transcribe a YouTube video to plain text using faster-whisper.",
@@ -95,6 +98,17 @@ def parse_args() -> argparse.Namespace:
         dest="analyzer_model",
     )
     parser.add_argument(
+        "--prompt",
+        action="store_true",
+        help="Generate a condensed prompt-ready version of the transcription (requires Ollama)",
+    )
+    parser.add_argument(
+        "--pm",
+        default="qwen7b-custom",
+        help="Ollama model for prompt-ready condensation",
+        dest="prompt_model",
+    )
+    parser.add_argument(
         "--verbose",
         action="store_true",
         help="Enable debug logging",
@@ -147,6 +161,10 @@ def main() -> None:
     if args.analyze:
         from src.analyzer import analyze  # lazy import — only loads LangChain when needed
         analyze(output_path, model_name=args.analyzer_model, transcription=formatted_body)
+
+    if args.prompt:
+        from src.prompter import build_prompt_ready  # lazy import
+        build_prompt_ready(output_path, model_name=args.prompt_model)
 
 
 if __name__ == "__main__":

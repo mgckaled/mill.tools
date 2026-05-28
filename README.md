@@ -4,6 +4,12 @@ CLI Python para transcrever vídeos do YouTube em texto corrido e gerar análise
 
 ---
 
+## Como funciona
+
+**yt-dlp busca metadados** → **yt-dlp baixa só o áudio em MP3** → **Whisper carrega na GPU (CUDA int8_float32)** → **VAD filtra silêncio e ruído** → **Whisper detecta idioma e transcreve segmento por segmento** → **segmentos de baixa confiança recebem marcador `[?]` no `.txt`** → **`--format`: phi4mini-custom insere quebras de parágrafo sem alterar palavras** → **`--analyze`: qwen7b-custom extrai 10 campos em JSON — `summary`, `key_points`, `action_items`, `key_concepts`, `tools_mentioned`, `metrics`, `quotes`, `assumptions`, `vocabulary`, `sentiment_arc` — traduz para PT-BR se necessário e gera `.md`** → **`--prompt`: qwen7b-custom condensa a transcrição para ~40% do tamanho removendo filler e CTAs, salva em `prompt_ready/`**
+
+---
+
 ## Requisitos
 
 - Python 3.13+
@@ -71,6 +77,8 @@ uv run -m src transcriptions/raw/transcricao_ovabeV.txt
 | `--fm`          | `phi4mini-custom` | Ollama model para formatação de parágrafos                   |
 | `--analyze`     | off               | Roda análise estruturada após transcrição                    |
 | `--am`          | `qwen7b-custom`   | Ollama model para análise                                    |
+| `--prompt`      | off               | Gera versão condensada para uso como contexto em prompts     |
+| `--pm`          | `qwen7b-custom`   | Ollama model para condensação prompt-ready                   |
 | `--verbose`     | off               | Ativa logging DEBUG                                          |
 
 ---
@@ -93,8 +101,11 @@ uv run main.py https://www.youtube.com/watch?v=ovabeVoWrA0 --analyze
 # pipeline completo: formatação + análise com transcrição no relatório
 uv run main.py https://www.youtube.com/watch?v=ovabeVoWrA0 --format --analyze
 
+# gerar versão condensada para uso como contexto em prompts
+uv run main.py https://www.youtube.com/watch?v=ovabeVoWrA0 --prompt
+
 # whisper medium + modelos customizados
-uv run main.py https://www.youtube.com/watch?v=ovabeVoWrA0 --wm medium --fm phi4mini-custom --am qwen7b-custom --format --analyze
+uv run main.py https://www.youtube.com/watch?v=ovabeVoWrA0 --wm medium --fm phi4mini-custom --am qwen7b-custom --format --analyze --prompt
 
 # análise standalone sobre transcrição existente
 uv run -m src transcriptions/raw/transcricao_ovabeV.txt
@@ -113,6 +124,7 @@ yt-transcriber/
 │   ├── transcriber.py         — transcrição via faster-whisper
 │   ├── formatter.py           — formatação de parágrafos via LLM local
 │   ├── analyzer.py            — análise estruturada via LangChain + Ollama
+│   ├── prompter.py            — condensação para uso como contexto em prompts
 │   └── utils.py               — logging, validação, metadata, download
 ├── ollama/
 │   ├── Modelfile              — config do qwen7b-custom
@@ -120,7 +132,8 @@ yt-transcriber/
 ├── audios/                    — áudios baixados (.mp3)
 └── transcriptions/
     ├── raw/                   — transcrições brutas (.txt)
-    └── analysis/              — análises estruturadas (.md)
+    ├── analysis/              — análises estruturadas (.md)
+    └── prompt_ready/          — versões condensadas para uso como contexto (.txt)
 ```
 
 ---
@@ -143,7 +156,34 @@ url:          https://www.youtube.com/watch?v=ovabeVoWrA0
 [transcription text...]
 ```
 
-A análise (.md) contém: resumo, pontos-chave, conceitos-chave (com definição), ferramentas mencionadas, métricas e ações sugeridas. Se o resultado não estiver em português, é traduzido automaticamente. Quando `--format --analyze` são usados em conjunto, a transcrição formatada é incluída no final do relatório.
+### Transcrição (`.txt`)
+
+Cabeçalho de metadados seguido do texto corrido. Segmentos onde o Whisper teve baixa confiança são sinalizados com `[?]` diretamente no texto — indicam trechos que merecem revisão manual (ruído, sotaque, vocabulário incomum). O terminal exibe a contagem de segmentos flagados ao final da transcrição.
+
+Critérios de flag: `avg_logprob < -1.0` (probabilidade média dos tokens abaixo do limiar) ou `no_speech_prob > 0.6` (alta chance de o trecho ser silêncio ou ruído).
+
+### Análise (`.md`) — `--analyze`
+
+Relatório estruturado com 10 campos extraídos pelo LLM:
+
+| Campo | Descrição |
+| ----- | --------- |
+| `summary` | Parágrafo de 3–5 frases resumindo o conteúdo principal |
+| `key_points` | 5–10 pontos-chave como frases completas (mín. 12 palavras), explicando o *como* e o *por quê* |
+| `action_items` | Passos práticos ou recomendações mencionados no vídeo |
+| `key_concepts` | Conceitos técnicos centrais no formato `Termo: definição` |
+| `tools_mentioned` | Ferramentas, bibliotecas, plataformas ou tecnologias citadas |
+| `metrics` | Números, estatísticas e quantidades com contexto |
+| `quotes` | Frases marcantes ou citações quase literais do speaker |
+| `assumptions` | Premissas implícitas que o speaker toma como verdade |
+| `vocabulary` | Jargões e termos de nicho no formato `Termo: definição` |
+| `sentiment_arc` | Evolução do tom ao longo do vídeo em uma frase |
+
+Se o resultado não estiver em português, é traduzido automaticamente para PT-BR. Quando `--format --analyze` são usados em conjunto, a transcrição formatada é incluída no final do relatório.
+
+### Prompt-ready (`.txt`) — `--prompt`
+
+Versão condensada da transcrição salva em `transcriptions/prompt_ready/`, com ~40% do tamanho original. Remove cumprimentos, CTAs, patrocinadores e frases de preenchimento, mantendo todo o conteúdo técnico. Otimizado para ser colado como contexto em qualquer prompt de LLM.
 
 ---
 

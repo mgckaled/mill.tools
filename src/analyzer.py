@@ -42,7 +42,11 @@ ANALYSIS_PROMPT = ChatPromptTemplate.from_messages([
         '  "action_items": ["ação 1", "ação 2", "..."],\n'
         '  "key_concepts": ["Termo: definição curta de uma linha", "..."],\n'
         '  "tools_mentioned": ["ferramenta ou tecnologia 1", "..."],\n'
-        '  "metrics": ["número ou estatística com contexto", "..."]\n'
+        '  "metrics": ["número ou estatística com contexto", "..."],\n'
+        '  "quotes": ["frase notável do speaker com contexto mínimo", "..."],\n'
+        '  "assumptions": ["premissa implícita identificada", "..."],\n'
+        '  "vocabulary": ["Jargão: definição inferida do contexto", "..."],\n'
+        '  "sentiment_arc": "evolução do tom ao longo do conteúdo"\n'
         '}}\n\n'
         "Regras:\n"
         "- summary: 3-5 frases, capture a essência\n"
@@ -52,11 +56,19 @@ ANALYSIS_PROMPT = ChatPromptTemplate.from_messages([
         "IGNORE CTAs (curtir, inscrever, comentar), patrocinadores e autopromoção\n"
         "- action_items: passos práticos ou recomendações mencionados (lista vazia se nenhum); "
         "IGNORE pedidos de inscrição, curtida ou comentário\n"
-        "- key_concepts: termos técnicos ou conceitos relevantes no formato obrigatório 'Termo: definição de uma linha'; "
+        "- key_concepts: conceitos abstratos ou técnicos centrais para entender o tema, formato obrigatório 'Termo: definição de uma linha'; "
         "Ex: 'Fermento químico: agente que libera CO2 durante o cozimento, tornando a massa mais leve'; "
         "(lista vazia se nenhum)\n"
         "- tools_mentioned: ferramentas, bibliotecas, plataformas ou tecnologias citadas (lista vazia se nenhuma)\n"
-        "- metrics: números, estatísticas, durações, quantidades mencionadas com seu contexto (lista vazia se nenhuma)"
+        "- metrics: números, estatísticas, durações, quantidades mencionadas com seu contexto (lista vazia se nenhuma)\n"
+        "- quotes: até 5 frases marcantes ou citações quase literais do speaker que sintetizem bem uma ideia; "
+        "inclua contexto mínimo entre parênteses se necessário; (lista vazia se nenhuma)\n"
+        "- assumptions: até 5 premissas implícitas que o speaker assume como verdade sem questionar; "
+        "formule como afirmação, ex: 'O público já conhece os fundamentos de X'; (lista vazia se nenhuma)\n"
+        "- vocabulary: jargões, siglas ou termos de nicho usados pelo speaker, formato 'Termo: definição inferida'; "
+        "diferente de key_concepts — foco em linguagem específica do domínio/nicho; (lista vazia se nenhum)\n"
+        "- sentiment_arc: UMA frase descrevendo como o tom evolui do início ao fim; "
+        "ex: 'Introdução técnica e expositiva → aprofundamento crítico → encerramento motivacional'"
     )),
     ("human", "Transcrição:\n\n{text}"),
 ])
@@ -95,7 +107,11 @@ MERGE_PROMPT = ChatPromptTemplate.from_messages([
         '  "action_items": ["ação 1", "ação 2", "..."],\n'
         '  "key_concepts": ["Termo: definição curta de uma linha", "..."],\n'
         '  "tools_mentioned": ["ferramenta ou tecnologia 1", "..."],\n'
-        '  "metrics": ["número ou estatística com contexto", "..."]\n'
+        '  "metrics": ["número ou estatística com contexto", "..."],\n'
+        '  "quotes": ["frase notável do speaker com contexto mínimo", "..."],\n'
+        '  "assumptions": ["premissa implícita identificada", "..."],\n'
+        '  "vocabulary": ["Jargão: definição inferida do contexto", "..."],\n'
+        '  "sentiment_arc": "evolução do tom ao longo do conteúdo"\n'
         '}}\n\n'
         "Regras por campo:\n"
         "- summary: 3-5 frases, capture a essência sem repetir pontos do key_points\n"
@@ -104,9 +120,13 @@ MERGE_PROMPT = ChatPromptTemplate.from_messages([
         "IGNORE CTAs (curtir, inscrever, comentar), patrocinadores e autopromoção\n"
         "- action_items: passos práticos mencionados (lista vazia se nenhum); "
         "IGNORE pedidos de inscrição, curtida ou comentário\n"
-        "- key_concepts: formato obrigatório 'Termo: definição de uma linha'; elimine duplicatas, mantenha a mais completa (lista vazia se nenhum)\n"
+        "- key_concepts: conceitos abstratos/técnicos centrais; formato 'Termo: definição'; elimine duplicatas (lista vazia se nenhum)\n"
         "- tools_mentioned: consolide sem repetição (lista vazia se nenhuma)\n"
-        "- metrics: elimine duplicatas, mantenha contexto (lista vazia se nenhuma)"
+        "- metrics: elimine duplicatas, mantenha contexto (lista vazia se nenhuma)\n"
+        "- quotes: consolide as mais representativas, até 5; elimine duplicatas (lista vazia se nenhuma)\n"
+        "- assumptions: consolide premissas únicas, até 5 (lista vazia se nenhuma)\n"
+        "- vocabulary: consolide jargões únicos; formato 'Termo: definição' (lista vazia se nenhum)\n"
+        "- sentiment_arc: sintetize o arco completo em UMA frase a partir de todos os arcos parciais"
     )),
     ("human", "Análises parciais para consolidar:\n\n{analyses}"),
 ])
@@ -281,11 +301,34 @@ def _format_report(
         for tool in tools:
             lines.append(f"- {tool}")
 
-    metrics=analysis.get("metrics", [])
+    metrics = analysis.get("metrics", [])
     if metrics:
         lines.extend(["", "## Métricas e números", ""])
         for metric in metrics:
             lines.append(f"- {metric}")
+
+    quotes = analysis.get("quotes", [])
+    if quotes:
+        lines.extend(["", "## Citações notáveis", ""])
+        for quote in quotes:
+            lines.append(f"> {quote}")
+            lines.append("")
+
+    assumptions = analysis.get("assumptions", [])
+    if assumptions:
+        lines.extend(["", "## Premissas implícitas", ""])
+        for assumption in assumptions:
+            lines.append(f"- {assumption}")
+
+    vocabulary = analysis.get("vocabulary", [])
+    if vocabulary:
+        lines.extend(["", "## Vocabulário do nicho", ""])
+        for term in vocabulary:
+            lines.append(f"- {term}")
+
+    sentiment_arc = analysis.get("sentiment_arc", "")
+    if sentiment_arc:
+        lines.extend(["", "## Arco de sentimento", "", sentiment_arc])
 
     if transcription:
         lines.extend(["", "---", "", "## Transcrição", ""])

@@ -13,6 +13,9 @@ from tqdm import tqdm
 
 from src.utils import format_duration, format_metadata
 
+LOW_CONF_LOGPROB = -1.0   # avg_logprob abaixo disso indica baixa confiança
+HIGH_NO_SPEECH_PROB = 0.6  # no_speech_prob acima disso indica provável silêncio/ruído
+
 
 def format_elapsed(seconds: float) -> str:
     """Format elapsed processing time into a human-readable string.
@@ -133,20 +136,38 @@ def transcribe(
         duration = int(meta.get("duration", 0))
 
         segment_count = 0
+        flagged_count = 0
         with output_path.open("w", encoding="utf-8") as f:
             f.write(header)
             current = 0.0
             with tqdm(total=duration, unit="s", desc="Transcribing", ncols=72) as progress_bar:
                 for segment in segments:
-                    f.write(segment.text.strip() + " ")
-                    elapsed = segment.end - current
-                    progress_bar.update(int(elapsed))
+                    text = segment.text.strip()
+                    low_conf = (
+                        segment.avg_logprob < LOW_CONF_LOGPROB
+                        or segment.no_speech_prob > HIGH_NO_SPEECH_PROB
+                    )
+                    if low_conf:
+                        f.write(f"{text} [?] ")
+                        flagged_count += 1
+                    else:
+                        f.write(f"{text} ")
+                    elapsed_seg = segment.end - current
+                    progress_bar.update(int(elapsed_seg))
                     current = segment.end
                     segment_count += 1
 
         elapsed = time() - start
         txt_size_kb = output_path.stat().st_size / 1024
-        logging.debug("[d] Segments transcribed: %d | output size: %.1f KB", segment_count, txt_size_kb)
+        logging.debug(
+            "[d] Segments transcribed: %d | flagged low-confidence: %d | output size: %.1f KB",
+            segment_count, flagged_count, txt_size_kb,
+        )
+        if flagged_count:
+            logging.info(
+                "[!] %d segment(s) flagged as low-confidence [?] — review recommended",
+                flagged_count,
+            )
         return elapsed
 
     except KeyboardInterrupt:
