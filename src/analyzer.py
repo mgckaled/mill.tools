@@ -15,14 +15,15 @@ import argparse
 import json
 import logging
 import sys
+from datetime import datetime
 from pathlib import Path
 from time import time
 
-from langchain_ollama import ChatOllama
 from langchain_core.prompts import ChatPromptTemplate
+from langchain_ollama import ChatOllama
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 
-from src.utils import setup_logging, TRANSCRIPTIONS_ANALYSIS_DIR
+from src.utils import TRANSCRIPTIONS_ANALYSIS_DIR, setup_logging
 
 DEFAULT_MODEL = "qwen7b-custom"
 CHUNK_SIZE = 4500
@@ -39,13 +40,23 @@ ANALYSIS_PROMPT = ChatPromptTemplate.from_messages([
         '  "summary": "Um parágrafo conciso resumindo o conteúdo principal.",\n'
         '  "key_points": ["ponto 1", "ponto 2", "..."],\n'
         '  "action_items": ["ação 1", "ação 2", "..."],\n'
-        '  "topics": ["tópico 1", "tópico 2", "..."]\n'
+        '  "key_concepts": ["Termo: definição curta de uma linha", "..."],\n'
+        '  "tools_mentioned": ["ferramenta ou tecnologia 1", "..."],\n'
+        '  "metrics": ["número ou estatística com contexto", "..."]\n'
         '}}\n\n'
         "Regras:\n"
         "- summary: 3-5 frases, capture a essência\n"
-        "- key_points: 5-10 pontos mais importantes\n"
-        "- action_items: passos práticos ou recomendações mencionados (lista vazia se nenhum)\n"
-        "- topics: principais assuntos/temas discutidos"
+        "- key_points: 5-10 pontos mais importantes; cada ponto deve ser uma frase completa com sujeito e verbo, "
+        "com no mínimo 12 palavras; explique o 'como' ou 'por que' sempre que possível, não apenas liste fatos; "
+        "ERRADO: 'Bolo feito no liquidificador' | CERTO: 'O liquidificador substitui a batedeira ao emulsionar os ingredientes, resultando em massa mais homogênea e fofa'; "
+        "IGNORE CTAs (curtir, inscrever, comentar), patrocinadores e autopromoção\n"
+        "- action_items: passos práticos ou recomendações mencionados (lista vazia se nenhum); "
+        "IGNORE pedidos de inscrição, curtida ou comentário\n"
+        "- key_concepts: termos técnicos ou conceitos relevantes no formato obrigatório 'Termo: definição de uma linha'; "
+        "Ex: 'Fermento químico: agente que libera CO2 durante o cozimento, tornando a massa mais leve'; "
+        "(lista vazia se nenhum)\n"
+        "- tools_mentioned: ferramentas, bibliotecas, plataformas ou tecnologias citadas (lista vazia se nenhuma)\n"
+        "- metrics: números, estatísticas, durações, quantidades mencionadas com seu contexto (lista vazia se nenhuma)"
     )),
     ("human", "Transcrição:\n\n{text}"),
 ])
@@ -68,18 +79,34 @@ TRANSLATE_PROMPT = ChatPromptTemplate.from_messages([
 MERGE_PROMPT = ChatPromptTemplate.from_messages([
     ("system", (
         "Você é um analista especialista. Você recebe múltiplas análises parciais de uma "
-        "única transcrição de vídeo do YouTube (que foi dividida em partes). "
-        "Consolide tudo em UMA análise coerente. Remova duplicatas, "
-        "unifique pontos sobrepostos e produza uma visão unificada.\n\n"
-        "Responda APENAS com JSON válido, sem texto extra antes ou depois. "
-        "Responda SEMPRE em português brasileiro.\n\n"
+        "única transcrição de vídeo do YouTube dividida em partes. "
+        "Sua tarefa é consolidar tudo em UMA análise final coerente e bem escrita.\n\n"
+        "Regras de consolidação:\n"
+        "- Elimine pontos duplicados ou semanticamente equivalentes — mantenha apenas a versão mais completa\n"
+        "- Unifique pontos que tratam do mesmo assunto em um único ponto abrangente\n"
+        "- Todos os itens de key_points devem ser frases completas com inicial maiúscula\n"
+        "- O summary deve ser um parágrafo coeso de 3-5 frases, sem repetições\n"
+        "- Use português brasileiro correto — sem neologismos, sem palavras inventadas\n\n"
+        "Responda APENAS com JSON válido, sem texto extra antes ou depois.\n\n"
         "Estrutura JSON obrigatória:\n"
         '{{\n'
         '  "summary": "Um parágrafo conciso resumindo o conteúdo principal.",\n'
         '  "key_points": ["ponto 1", "ponto 2", "..."],\n'
         '  "action_items": ["ação 1", "ação 2", "..."],\n'
-        '  "topics": ["tópico 1", "tópico 2", "..."]\n'
-        '}}'
+        '  "key_concepts": ["Termo: definição curta de uma linha", "..."],\n'
+        '  "tools_mentioned": ["ferramenta ou tecnologia 1", "..."],\n'
+        '  "metrics": ["número ou estatística com contexto", "..."]\n'
+        '}}\n\n'
+        "Regras por campo:\n"
+        "- summary: 3-5 frases, capture a essência sem repetir pontos do key_points\n"
+        "- key_points: 5-10 pontos distintos; cada ponto deve ser uma frase completa com sujeito e verbo, "
+        "com no mínimo 12 palavras; explique o 'como' ou 'por que' sempre que possível; "
+        "IGNORE CTAs (curtir, inscrever, comentar), patrocinadores e autopromoção\n"
+        "- action_items: passos práticos mencionados (lista vazia se nenhum); "
+        "IGNORE pedidos de inscrição, curtida ou comentário\n"
+        "- key_concepts: formato obrigatório 'Termo: definição de uma linha'; elimine duplicatas, mantenha a mais completa (lista vazia se nenhum)\n"
+        "- tools_mentioned: consolide sem repetição (lista vazia se nenhuma)\n"
+        "- metrics: elimine duplicatas, mantenha contexto (lista vazia se nenhuma)"
     )),
     ("human", "Análises parciais para consolidar:\n\n{analyses}"),
 ])
@@ -127,6 +154,8 @@ def _split_text(text: str) -> list[str]:
     if len(text) <= CHUNK_SIZE:
         return [text]
 
+    logging.debug("[d] Splitting text: chunk_size=%d | overlap=%d",
+                  CHUNK_SIZE, CHUNK_OVERLAP)
     splitter = RecursiveCharacterTextSplitter(
         chunk_size=CHUNK_SIZE,
         chunk_overlap=CHUNK_OVERLAP,
@@ -154,20 +183,73 @@ def _extract_transcription_body(raw_text: str) -> str:
     return raw_text.strip()
 
 
-def _format_report(analysis: dict, source_path: Path) -> str:
+def _parse_header(raw_text: str) -> dict:
+    """Parse the key: value metadata fields from the transcription file header.
+
+    Args:
+        raw_text: Full file content including metadata header.
+
+    Returns:
+        Dictionary with metadata fields (title, channel, duration, url, etc.).
+        Empty dict if no header separator is found.
+    """
+    separator = "-" * 64
+    if separator not in raw_text:
+        return {}
+
+    header_text = raw_text.split(separator, 1)[0]
+    meta = {}
+    for line in header_text.splitlines():
+        if ":" in line:
+            key, _, value = line.partition(":")
+            key = key.strip()
+            value = value.strip()
+            if key and value:
+                meta[key] = value
+    return meta
+
+
+def _format_report(
+    analysis: dict,
+    source_path: Path,
+    video_meta: dict | None = None,
+    transcription: str | None = None,
+) -> str:
     """Format the analysis dictionary as a Markdown report.
 
     Args:
-        analysis: Dictionary with summary, key_points, action_items, topics.
+        analysis: Dictionary with summary, key_points, action_items, etc.
         source_path: Path to the original transcription file.
+        video_meta: Parsed metadata from the transcription header (optional).
+        transcription: Formatted transcription body to append at the end (optional).
 
     Returns:
         Formatted Markdown string.
     """
-    lines = [
-        f"# Análise: {source_path.stem}",
+    video_meta = video_meta or {}
+    title = video_meta.get("title") or f"Análise: {source_path.stem}"
+    channel = video_meta.get("channel", "")
+    duration = video_meta.get("duration", "")
+    url = video_meta.get("url", "")
+    generated_at = datetime.now().strftime("%Y-%m-%d %H:%M")
+
+    lines = [f"# {title}", ""]
+
+    meta_parts = []
+    if channel:
+        meta_parts.append(f"**Canal:** {channel}")
+    if duration:
+        meta_parts.append(f"**Duração:** {duration}")
+    if meta_parts:
+        lines.append(" | ".join(meta_parts))
+    if url:
+        lines.append(f"[Assistir no YouTube]({url})")
+
+    lines.extend([
         "",
-        f"> Fonte: `{source_path.name}`",
+        f"> Gerado em: {generated_at} | Fonte: `{source_path.name}`",
+        "",
+        "---",
         "",
         "## Resumo",
         "",
@@ -175,21 +257,39 @@ def _format_report(analysis: dict, source_path: Path) -> str:
         "",
         "## Pontos-chave",
         "",
-    ]
+    ])
     for point in analysis.get("key_points", []):
         lines.append(f"- {point}")
 
     lines.extend(["", "## Ações sugeridas", ""])
-    actions = analysis.get("action_items", [])
+    actions=analysis.get("action_items", [])
     if actions:
         for action in actions:
             lines.append(f"- {action}")
     else:
         lines.append("Nenhuma ação identificada.")
 
-    lines.extend(["", "## Tópicos", ""])
-    for topic in analysis.get("topics", []):
-        lines.append(f"- {topic}")
+    concepts=analysis.get("key_concepts", [])
+    if concepts:
+        lines.extend(["", "## Conceitos-chave", ""])
+        for concept in concepts:
+            lines.append(f"- {concept}")
+
+    tools=analysis.get("tools_mentioned", [])
+    if tools:
+        lines.extend(["", "## Ferramentas mencionadas", ""])
+        for tool in tools:
+            lines.append(f"- {tool}")
+
+    metrics=analysis.get("metrics", [])
+    if metrics:
+        lines.extend(["", "## Métricas e números", ""])
+        for metric in metrics:
+            lines.append(f"- {metric}")
+
+    if transcription:
+        lines.extend(["", "---", "", "## Transcrição", ""])
+        lines.append(transcription)
 
     lines.append("")
     return "\n".join(lines)
@@ -208,24 +308,27 @@ def _ensure_portuguese(analysis: dict, llm: ChatOllama) -> dict:
     Returns:
         Original analysis if already in Portuguese, or translated version.
     """
-    summary = analysis.get("summary", "")
+    summary=analysis.get("summary", "")
     if not summary:
         return analysis
 
     logging.info("[~] Detecting analysis language...")
-    detect_chain = DETECT_LANGUAGE_PROMPT | llm
-    lang_response = detect_chain.invoke({"text": summary[:500]})
-    detected = lang_response.content.strip().lower()[:2]
+    detect_chain=DETECT_LANGUAGE_PROMPT | llm
+    lang_response=detect_chain.invoke({"text": summary[:500]})
+    raw_lang=lang_response.content.strip()
+    detected=raw_lang.lower()[:2]
+    logging.debug("[d] Language raw response: %r → parsed: %r",
+                  raw_lang, detected)
     logging.info("[i] Detected language: %s", detected)
 
     if detected == "pt":
         return analysis
 
     logging.info("[~] Translating analysis to PT-BR...")
-    json_text = json.dumps(analysis, ensure_ascii=False, indent=2)
-    translate_chain = TRANSLATE_PROMPT | llm
-    translated_response = translate_chain.invoke({"json_text": json_text})
-    translated = _parse_json_response(translated_response.content)
+    json_text=json.dumps(analysis, ensure_ascii=False, indent=2)
+    translate_chain=TRANSLATE_PROMPT | llm
+    translated_response=translate_chain.invoke({"json_text": json_text})
+    translated=_parse_json_response(translated_response.content)
 
     logging.info("[✓] Translation complete.")
     return translated
@@ -234,6 +337,7 @@ def _ensure_portuguese(analysis: dict, llm: ChatOllama) -> dict:
 def analyze(
     input_path: Path,
     model_name: str = DEFAULT_MODEL,
+    transcription: str | None = None,
 ) -> Path:
     """Analyze a transcription file and generate a structured Markdown report.
 
@@ -243,6 +347,9 @@ def analyze(
     Args:
         input_path: Path to the transcription .txt file.
         model_name: Ollama model to use for analysis.
+        transcription: Formatted transcription body to append to the report (optional).
+            When provided (e.g. after --format), the full text is included at the
+            bottom of the .md under a "Transcrição" section.
 
     Returns:
         Path to the generated .md report file.
@@ -258,8 +365,9 @@ def analyze(
     logging.info("[*] Analyzing: %s", input_path.name)
     logging.info("[*] Model: %s", model_name)
 
-    raw_text = input_path.read_text(encoding="utf-8")
-    body = _extract_transcription_body(raw_text)
+    raw_text=input_path.read_text(encoding="utf-8")
+    video_meta=_parse_header(raw_text)
+    body=_extract_transcription_body(raw_text)
     logging.debug("[d] File: %d chars total | body after header strip: %d chars",
                   len(raw_text), len(body))
 
@@ -267,49 +375,56 @@ def analyze(
         logging.error("Transcription body is empty: %s", input_path)
         sys.exit(1)
 
-    chunks = _split_text(body)
+    chunks=_split_text(body)
     logging.info("[i] Text split into %d chunk(s) (%d chars total)",
                  len(chunks), len(body))
     for i, chunk in enumerate(chunks, 1):
         logging.debug("[d] Chunk %d/%d: %d chars", i, len(chunks), len(chunk))
 
-    llm = ChatOllama(model=model_name, temperature=0)
+    llm = ChatOllama(model=model_name, temperature=0.4)      # análise e merge
+    llm_util = ChatOllama(model=model_name, temperature=0)   # detecção de idioma e tradução
 
-    start = time()
+    start=time()
 
     if len(chunks) == 1:
         logging.info("[~] Analyzing single chunk...")
-        chain = ANALYSIS_PROMPT | llm
-        response = chain.invoke({"text": chunks[0]})
-        analysis = _parse_json_response(response.content)
+        t_chunk=time()
+        chain=ANALYSIS_PROMPT | llm
+        response=chain.invoke({"text": chunks[0]})
+        analysis=_parse_json_response(response.content)
+        logging.debug("[d] Single chunk done in %.1fs | response: %d chars | keys: %s",
+                      time() - t_chunk, len(response.content), list(analysis.keys()))
     else:
-        partial_analyses = []
+        partial_analyses=[]
         for i, chunk in enumerate(chunks, 1):
             logging.info("[~] Analyzing chunk %d/%d...", i, len(chunks))
-            t_chunk = time()
-            chain = ANALYSIS_PROMPT | llm
-            response = chain.invoke({"text": chunk})
-            partial = _parse_json_response(response.content)
+            t_chunk=time()
+            chain=ANALYSIS_PROMPT | llm
+            response=chain.invoke({"text": chunk})
+            partial=_parse_json_response(response.content)
             logging.debug("[d] Chunk %d done in %.1fs | response: %d chars | keys: %s",
                           i, time() - t_chunk, len(response.content), list(partial.keys()))
             partial_analyses.append(partial)
 
-        logging.info("[~] Merging %d partial analyses...", len(partial_analyses))
-        t_merge = time()
-        merge_input = json.dumps(partial_analyses, ensure_ascii=False, indent=2)
-        merge_chain = MERGE_PROMPT | llm
-        merge_response = merge_chain.invoke({"analyses": merge_input})
-        analysis = _parse_json_response(merge_response.content)
+        logging.info("[~] Merging %d partial analyses...",
+                     len(partial_analyses))
+        t_merge=time()
+        merge_input=json.dumps(partial_analyses, ensure_ascii=False, indent=2)
+        merge_chain=MERGE_PROMPT | llm
+        merge_response=merge_chain.invoke({"analyses": merge_input})
+        analysis=_parse_json_response(merge_response.content)
         logging.debug("[d] Merge done in %.1fs", time() - t_merge)
 
-    analysis = _ensure_portuguese(analysis, llm)
+    analysis = _ensure_portuguese(analysis, llm_util)
 
-    elapsed = time() - start
+    elapsed=time() - start
 
     TRANSCRIPTIONS_ANALYSIS_DIR.mkdir(parents=True, exist_ok=True)
-    report = _format_report(analysis, input_path)
-    output_path = TRANSCRIPTIONS_ANALYSIS_DIR / f"{input_path.stem}.md"
+    report = _format_report(analysis, input_path, video_meta, transcription)
+    output_path=TRANSCRIPTIONS_ANALYSIS_DIR / f"{input_path.stem}.md"
     output_path.write_text(report, encoding="utf-8")
+    md_size_kb=output_path.stat().st_size / 1024
+    logging.debug("[d] Report size: %.1f KB", md_size_kb)
 
     logging.info("[✓] Analysis saved to: %s (%.0fs)", output_path, elapsed)
     return output_path
@@ -317,7 +432,7 @@ def analyze(
 
 def main() -> None:
     """Entry point for standalone analyzer CLI."""
-    parser = argparse.ArgumentParser(
+    parser=argparse.ArgumentParser(
         description="Analyze a transcription file using Ollama (local LLM).",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
@@ -335,7 +450,7 @@ def main() -> None:
         action="store_true",
         help="Enable debug logging",
     )
-    args = parser.parse_args()
+    args=parser.parse_args()
 
     setup_logging(args.verbose)
     analyze(Path(args.input_file), model_name=args.model)

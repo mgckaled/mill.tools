@@ -63,7 +63,7 @@ def transcribe(
     language: str | None,
     threads: int,
     beam_size: int,
-) -> float:
+) -> float | None:
     """Transcribe an audio file using faster-whisper and save plain text output.
 
     Writes a metadata header (including detected language) at the top of the
@@ -90,7 +90,7 @@ def transcribe(
             f"[!] Transcription already exists: '{output_path}'. Overwrite? [y/N] ")
         if answer.strip().lower() != "y":
             logging.info("Skipping transcription.")
-            return 0.0
+            return None
 
     device, compute_type = _resolve_device(threads)
     logging.debug("[d] Device: %s | compute_type: %s | threads: %d | beam_size: %d",
@@ -144,8 +144,10 @@ def transcribe(
                     current = segment.end
                     segment_count += 1
 
-        logging.debug("[d] Segments transcribed: %d", segment_count)
-        return time() - start
+        elapsed = time() - start
+        txt_size_kb = output_path.stat().st_size / 1024
+        logging.debug("[d] Segments transcribed: %d | output size: %.1f KB", segment_count, txt_size_kb)
+        return elapsed
 
     except KeyboardInterrupt:
         logging.warning("[!] Transcription interrupted by user.")

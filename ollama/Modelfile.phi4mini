@@ -1,0 +1,3 @@
+FROM phi4-mini:latest
+PARAMETER num_gpu 8
+PARAMETER num_thread 4

@@ -10,7 +10,7 @@ CLI Python para transcrever vídeos do YouTube em texto corrido e gerar análise
 - [uv](https://docs.astral.sh/uv/)
 - [ffmpeg](https://ffmpeg.org/download.html) no PATH
 - [yt-dlp](https://github.com/yt-dlp/yt-dlp) no PATH
-- [Ollama](https://ollama.com/download) (apenas para análise)
+- [Ollama](https://ollama.com/download) (apenas para formatação e análise)
 
 ---
 
@@ -22,11 +22,16 @@ cd yt-transcriber
 uv sync
 ```
 
-Para usar a análise, instale o Ollama e configure o modelo:
+Para usar formatação e análise, instale o Ollama e configure os modelos:
 
 ```bash
+# modelo para análise
 ollama pull qwen2.5:7b
 ollama create qwen7b-custom -f ollama/Modelfile
+
+# modelo para formatação de parágrafos
+ollama pull phi4-mini
+ollama create phi4mini-custom -f ollama/Modelfile.phi4mini
 ```
 
 ---
@@ -55,16 +60,18 @@ uv run -m src transcriptions/raw/transcricao_ovabeV.txt
 
 ## Flags
 
-| Flag            | Default       | Descrição                                                    |
-| --------------- | ------------- | ------------------------------------------------------------ |
-| `--wm`          | `small`       | Whisper model: `tiny`, `base`, `small`, `medium`, `large-v3-turbo`, `large-v3` |
-| `--language`    | auto          | Código do idioma (`en`, `pt`, etc.)                          |
-| `--threads`     | `2`           | Threads CPU (só em fallback CPU)                             |
-| `--beam-size`   | `1`           | Beam size: `1` = rápido, `5` = preciso                       |
-| `--output-name` | auto          | Nome customizado do arquivo de saída                         |
-| `--analyze`     | off           | Roda análise estruturada após transcrição                    |
-| `--am`          | `qwen7b-custom` | Ollama model para análise                                  |
-| `--verbose`     | off           | Ativa logging DEBUG                                          |
+| Flag            | Default           | Descrição                                                    |
+| --------------- | ----------------- | ------------------------------------------------------------ |
+| `--wm`          | `small`           | Whisper model: `tiny`, `base`, `small`, `medium`, `large-v3-turbo`, `large-v3` |
+| `--language`    | auto              | Código do idioma (`en`, `pt`, etc.)                          |
+| `--threads`     | `2`               | Threads CPU (só em fallback CPU)                             |
+| `--beam-size`   | `1`               | Beam size: `1` = rápido, `5` = preciso                       |
+| `--output-name` | auto              | Nome customizado do arquivo de saída                         |
+| `--format`      | off               | Insere quebras de parágrafo via LLM local                    |
+| `--fm`          | `phi4mini-custom` | Ollama model para formatação de parágrafos                   |
+| `--analyze`     | off               | Roda análise estruturada após transcrição                    |
+| `--am`          | `qwen7b-custom`   | Ollama model para análise                                    |
+| `--verbose`     | off               | Ativa logging DEBUG                                          |
 
 ---
 
@@ -74,17 +81,23 @@ uv run -m src transcriptions/raw/transcricao_ovabeV.txt
 # transcrição básica (detecção automática de idioma)
 uv run main.py https://www.youtube.com/watch?v=ovabeVoWrA0
 
-# whisper medium + análise
-uv run main.py https://www.youtube.com/watch?v=ovabeVoWrA0 --wm medium --analyze
-
-# análise com modelo alternativo (mais rápido)
-uv run main.py https://www.youtube.com/watch?v=ovabeVoWrA0 --analyze --am phi4-mini
-
 # forçar idioma + maior precisão
 uv run main.py https://www.youtube.com/watch?v=ovabeVoWrA0 --language pt --beam-size 3
 
+# transcrição + formatação de parágrafos
+uv run main.py https://www.youtube.com/watch?v=ovabeVoWrA0 --format
+
+# transcrição + análise estruturada
+uv run main.py https://www.youtube.com/watch?v=ovabeVoWrA0 --analyze
+
+# pipeline completo: formatação + análise com transcrição no relatório
+uv run main.py https://www.youtube.com/watch?v=ovabeVoWrA0 --format --analyze
+
+# whisper medium + modelos customizados
+uv run main.py https://www.youtube.com/watch?v=ovabeVoWrA0 --wm medium --fm phi4mini-custom --am qwen7b-custom --format --analyze
+
 # análise standalone sobre transcrição existente
-uv run -m src transcriptions/raw/transcricao_ovabeV.txt --model phi4-mini
+uv run -m src transcriptions/raw/transcricao_ovabeV.txt
 ```
 
 ---
@@ -98,10 +111,12 @@ yt-transcriber/
 │   ├── __init__.py
 │   ├── __main__.py            — entry point do analyzer standalone
 │   ├── transcriber.py         — transcrição via faster-whisper
-│   ├── analyzer.py            — análise via LangChain + Ollama
+│   ├── formatter.py           — formatação de parágrafos via LLM local
+│   ├── analyzer.py            — análise estruturada via LangChain + Ollama
 │   └── utils.py               — logging, validação, metadata, download
 ├── ollama/
-│   └── Modelfile              — config do qwen7b-custom
+│   ├── Modelfile              — config do qwen7b-custom
+│   └── Modelfile.phi4mini     — config do phi4mini-custom
 ├── audios/                    — áudios baixados (.mp3)
 └── transcriptions/
     ├── raw/                   — transcrições brutas (.txt)
@@ -128,7 +143,7 @@ url:          https://www.youtube.com/watch?v=ovabeVoWrA0
 [transcription text...]
 ```
 
-Cada análise (.md) contém: resumo, pontos-chave, ações sugeridas e tópicos. Se o resultado não estiver em português, é traduzido automaticamente.
+A análise (.md) contém: resumo, pontos-chave, conceitos-chave (com definição), ferramentas mencionadas, métricas e ações sugeridas. Se o resultado não estiver em português, é traduzido automaticamente. Quando `--format --analyze` são usados em conjunto, a transcrição formatada é incluída no final do relatório.
 
 ---
 
@@ -144,12 +159,12 @@ Cada análise (.md) contém: resumo, pontos-chave, ações sugeridas e tópicos.
 
 ## Modelos Ollama
 
-| Modelo          | Tamanho | Velocidade | Qualidade |
-| --------------- | ------- | ---------- | --------- |
-| `phi4-mini`     | 2.5 GB  | rápido     | básica    |
-| `qwen7b-custom` | 4.7 GB  | lento      | boa       |
+| Modelo             | Uso          | Tamanho | Qualidade |
+| ------------------ | ------------ | ------- | --------- |
+| `phi4mini-custom`  | `--format`   | 2.5 GB  | básica    |
+| `qwen7b-custom`    | `--analyze`  | 4.7 GB  | boa       |
 
-O `qwen7b-custom` é criado a partir do `Modelfile` em `ollama/`. Ajuste os parâmetros conforme o seu hardware:
+Os modelos customizados são criados a partir dos Modelfiles em `ollama/`. Ajuste os parâmetros conforme o seu hardware:
 
 ```text
 FROM qwen2.5:7b
@@ -177,4 +192,5 @@ Depois de editar, recrie o modelo:
 
 ```bash
 ollama create qwen7b-custom -f ollama/Modelfile
+ollama create phi4mini-custom -f ollama/Modelfile.phi4mini
 ```

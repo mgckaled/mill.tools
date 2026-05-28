@@ -8,8 +8,10 @@ Examples:
     uv run yt-transcriber https://www.youtube.com/watch?v=ovabeVoWrA0
     uv run yt-transcriber https://www.youtube.com/watch?v=ovabeVoWrA0 --wm medium
     uv run yt-transcriber https://www.youtube.com/watch?v=ovabeVoWrA0 --language pt
+    uv run yt-transcriber https://www.youtube.com/watch?v=ovabeVoWrA0 --format
     uv run yt-transcriber https://www.youtube.com/watch?v=ovabeVoWrA0 --analyze
-    uv run yt-transcriber https://www.youtube.com/watch?v=ovabeVoWrA0 --analyze --am phi4-mini
+    uv run yt-transcriber https://www.youtube.com/watch?v=ovabeVoWrA0 --format --analyze
+    uv run yt-transcriber https://www.youtube.com/watch?v=ovabeVoWrA0 --format --fm phi4-mini --analyze --am qwen7b-custom
 """
 
 import argparse
@@ -33,7 +35,7 @@ def parse_args() -> argparse.Namespace:
 
     Returns:
         Namespace with url, whisper_model, language, threads, beam_size,
-        output_name, analyze, analyzer_model and verbose fields.
+        output_name, format, format_model, analyze, analyzer_model and verbose fields.
     """
     parser = argparse.ArgumentParser(
         description="Transcribe a YouTube video to plain text using faster-whisper.",
@@ -69,6 +71,17 @@ def parse_args() -> argparse.Namespace:
         type=int,
         default=1,
         help="Beam size for decoding (1 = fastest, 5 = most accurate)",
+    )
+    parser.add_argument(
+        "--format",
+        action="store_true",
+        help="Add paragraph breaks to the transcription using a local LLM (requires Ollama)",
+    )
+    parser.add_argument(
+        "--fm",
+        default="phi4mini-custom",
+        help="Ollama model for paragraph formatting",
+        dest="format_model",
     )
     parser.add_argument(
         "--analyze",
@@ -122,12 +135,18 @@ def main() -> None:
         args.beam_size,
     )
 
-    logging.info("[✓] Transcription saved to: %s", output_path)
-    print_summary(meta, output_path, elapsed)
+    if elapsed is not None:
+        logging.info("[✓] Transcription saved to: %s", output_path)
+        print_summary(meta, output_path, elapsed)
+
+    formatted_body = None
+    if args.format:
+        from src.formatter import format_transcription  # lazy import
+        formatted_body = format_transcription(output_path, model_name=args.format_model)
 
     if args.analyze:
         from src.analyzer import analyze  # lazy import — only loads LangChain when needed
-        analyze(output_path, model_name=args.analyzer_model)
+        analyze(output_path, model_name=args.analyzer_model, transcription=formatted_body)
 
 
 if __name__ == "__main__":
