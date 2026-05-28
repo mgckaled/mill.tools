@@ -5,6 +5,14 @@ Reads a raw transcription file and produces a dense, information-rich version
 optimized for use as context in future LLM prompts. Removes filler, CTAs,
 repetitions and sponsor mentions while retaining all technical content.
 
+Provider routing is handled by `src.llm_factory.make_llm`:
+- model names starting with "gemini" → Google Gemini (requires GOOGLE_API_KEY)
+- anything else → local Ollama
+
+When the provider supports a very large context window (Gemini, 1M tokens),
+chunking is skipped — the full body is condensed in a single pass, producing
+better coherence and skipping the merge step.
+
 Output is saved to transcriptions/prompt_ready/ with the same stem as the source.
 """
 
@@ -12,10 +20,10 @@ import logging
 from pathlib import Path
 from time import time
 
-from langchain_ollama import ChatOllama
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 
+from src.llm_factory import is_gemini_model, make_llm
 from src.utils import TRANSCRIPTIONS_PROMPT_DIR
 
 DEFAULT_PROMPT_MODEL = "qwen7b-custom"
@@ -57,15 +65,25 @@ MERGE_CONDENSE_PROMPT = ChatPromptTemplate.from_messages([
 ])
 
 
-def _split_for_prompt(text: str) -> list[str]:
+def _split_for_prompt(text: str, model_name: str) -> list[str]:
     """Split transcription body into chunks for condensation.
+
+    When the provider supports a 1M-token context (Gemini), chunking is
+    skipped so the model can condense the whole body coherently in a single
+    pass and the merge step is avoided.
 
     Args:
         text: Full transcription body.
+        model_name: Active model name; controls whether chunking is bypassed.
 
     Returns:
         List of text chunks.
     """
+    if is_gemini_model(model_name):
+        logging.debug("[d] Provider supports long context — chunking skipped (%d chars)",
+                      len(text))
+        return [text]
+
     if len(text) <= PROMPT_CHUNK_SIZE:
         return [text]
 
@@ -114,7 +132,9 @@ def build_prompt_ready(input_path: Path, model_name: str = DEFAULT_PROMPT_MODEL)
 
     Args:
         input_path: Path to the transcription .txt file.
-        model_name: Ollama model to use for condensation.
+        model_name: Model identifier — local Ollama tag (e.g. "qwen7b-custom")
+            or Gemini name (e.g. "gemini-2.5-flash"). Provider is resolved by
+            prefix in `llm_factory.make_llm`.
 
     Returns:
         Path to the generated prompt-ready .txt file.
@@ -138,10 +158,10 @@ def build_prompt_ready(input_path: Path, model_name: str = DEFAULT_PROMPT_MODEL)
 
     logging.debug("[d] Body to condense: %d chars", len(body))
 
-    chunks = _split_for_prompt(body)
+    chunks = _split_for_prompt(body, model_name)
     logging.info("[i] %d chunk(s) to condense (%d chars total)", len(chunks), len(body))
 
-    llm = ChatOllama(model=model_name, temperature=0.2)
+    llm = make_llm(model_name=model_name, temperature=0.2)
     condense_chain = CONDENSE_PROMPT | llm
 
     start = time()

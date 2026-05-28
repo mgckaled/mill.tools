@@ -1,6 +1,6 @@
 # yt-transcriber
 
-CLI Python para transcrever vídeos do YouTube em texto corrido e gerar análises estruturadas com LLM local. Usa [faster-whisper](https://github.com/SYSTRAN/faster-whisper) para transcrição e [Ollama](https://ollama.com) + [LangChain](https://www.langchain.com/) para análise. Todo processamento é 100% local.
+CLI Python para transcrever vídeos do YouTube em texto corrido e gerar análises estruturadas. Usa [faster-whisper](https://github.com/SYSTRAN/faster-whisper) para transcrição (100% local, com GPU) e [LangChain](https://www.langchain.com/) para formatação, análise e condensação — com escolha de provider via CLI: [Ollama](https://ollama.com) local (default) ou [Google Gemini](https://ai.google.dev/) na nuvem (free tier).
 
 ---
 
@@ -16,7 +16,8 @@ CLI Python para transcrever vídeos do YouTube em texto corrido e gerar análise
 - [uv](https://docs.astral.sh/uv/)
 - [ffmpeg](https://ffmpeg.org/download.html) no PATH
 - [yt-dlp](https://github.com/yt-dlp/yt-dlp) no PATH
-- [Ollama](https://ollama.com/download) (apenas para formatação e análise)
+- [Ollama](https://ollama.com/download) (apenas se usar modelos locais para `--format`/`--analyze`/`--prompt`)
+- Chave da [Google AI Studio](https://aistudio.google.com/apikey) (apenas se usar modelos Gemini)
 
 ---
 
@@ -28,7 +29,9 @@ cd yt-transcriber
 uv sync
 ```
 
-Para usar formatação e análise, instale o Ollama e configure os modelos:
+### Opção A — usar modelos locais (Ollama)
+
+Instale o Ollama e configure os modelos:
 
 ```bash
 # modelo para análise
@@ -39,6 +42,20 @@ ollama create qwen7b-custom -f ollama/Modelfile
 ollama pull phi4-mini
 ollama create phi4mini-custom -f ollama/Modelfile.phi4mini
 ```
+
+### Opção B — usar Google Gemini (free tier)
+
+1. Gere uma chave em https://aistudio.google.com/apikey
+2. Copie `.env.example` para `.env` e cole a chave:
+
+```bash
+cp .env.example .env
+# edite .env e preencha GOOGLE_API_KEY=...
+```
+
+O `.env` é carregado automaticamente sempre que `--fm`, `--am` ou `--pm` receber um nome de modelo iniciado por `gemini`. O Ollama continua sendo o default — nada quebra se você não criar o `.env`.
+
+**Modelo recomendado:** `gemini-2.5-flash` — free tier robusto, contexto de 1M tokens (dispensa chunking), bom em saída JSON estruturada.
 
 ---
 
@@ -73,12 +90,12 @@ uv run -m src transcriptions/raw/transcricao_ovabeV.txt
 | `--threads`     | `2`               | Threads CPU (só em fallback CPU)                             |
 | `--beam-size`   | `1`               | Beam size: `1` = rápido, `5` = preciso                       |
 | `--output-name` | auto              | Nome customizado do arquivo de saída                         |
-| `--format`      | off               | Insere quebras de parágrafo via LLM local                    |
-| `--fm`          | `phi4mini-custom` | Ollama model para formatação de parágrafos                   |
+| `--format`      | off               | Insere quebras de parágrafo via LLM                          |
+| `--fm`          | `phi4mini-custom` | Modelo para formatação — Ollama tag ou `gemini-*`            |
 | `--analyze`     | off               | Roda análise estruturada após transcrição                    |
-| `--am`          | `qwen7b-custom`   | Ollama model para análise                                    |
+| `--am`          | `qwen7b-custom`   | Modelo para análise — Ollama tag ou `gemini-*`               |
 | `--prompt`      | off               | Gera versão condensada para uso como contexto em prompts     |
-| `--pm`          | `qwen7b-custom`   | Ollama model para condensação prompt-ready                   |
+| `--pm`          | `qwen7b-custom`   | Modelo para condensação — Ollama tag ou `gemini-*`           |
 | `--verbose`     | off               | Ativa logging DEBUG                                          |
 
 ---
@@ -107,8 +124,20 @@ uv run main.py https://www.youtube.com/watch?v=ovabeVoWrA0 --prompt
 # whisper medium + modelos customizados
 uv run main.py https://www.youtube.com/watch?v=ovabeVoWrA0 --wm medium --fm phi4mini-custom --am qwen7b-custom --format --analyze --prompt
 
+# tudo na nuvem: Whisper local + Gemini nas 3 etapas (requer GOOGLE_API_KEY no .env)
+uv run main.py https://www.youtube.com/watch?v=ovabeVoWrA0 \
+  --format --fm gemini-2.5-flash \
+  --analyze --am gemini-2.5-flash \
+  --prompt  --pm gemini-2.5-flash
+
+# híbrido: formatação local rápida + análise mais sofisticada via Gemini
+uv run main.py https://www.youtube.com/watch?v=ovabeVoWrA0 --format --analyze --am gemini-2.5-flash
+
 # análise standalone sobre transcrição existente
 uv run -m src transcriptions/raw/transcricao_ovabeV.txt
+
+# análise standalone usando Gemini
+uv run -m src transcriptions/raw/transcricao_ovabeV.txt --model gemini-2.5-flash
 ```
 
 ---
@@ -118,12 +147,14 @@ uv run -m src transcriptions/raw/transcricao_ovabeV.txt
 ```text
 yt-transcriber/
 ├── main.py                    — entry point, CLI
+├── .env.example               — template do .env (GOOGLE_API_KEY para Gemini)
 ├── src/
 │   ├── __init__.py
 │   ├── __main__.py            — entry point do analyzer standalone
 │   ├── transcriber.py         — transcrição via faster-whisper
-│   ├── formatter.py           — formatação de parágrafos via LLM local
-│   ├── analyzer.py            — análise estruturada via LangChain + Ollama
+│   ├── llm_factory.py         — roteia gemini-* → Google, demais → Ollama
+│   ├── formatter.py           — formatação de parágrafos via LLM
+│   ├── analyzer.py            — análise estruturada via LangChain
 │   ├── prompter.py            — condensação para uso como contexto em prompts
 │   └── utils.py               — logging, validação, metadata, download
 ├── ollama/
@@ -197,12 +228,25 @@ Versão condensada da transcrição salva em `transcriptions/prompt_ready/`, com
 | `large-v3-turbo` | lento      | excelente |
 | `large-v3`       | mais lento | melhor    |
 
-## Modelos Ollama
+## Modelos Ollama (locais, default)
 
 | Modelo             | Uso          | Tamanho | Qualidade |
 | ------------------ | ------------ | ------- | --------- |
 | `phi4mini-custom`  | `--format`   | 2.5 GB  | básica    |
 | `qwen7b-custom`    | `--analyze`  | 4.7 GB  | boa       |
+
+## Modelos Gemini (nuvem, free tier)
+
+Para usar Gemini em qualquer uma das três etapas, passe o nome do modelo via `--fm`, `--am` ou `--pm`. Roteamento é por prefixo — qualquer nome começando com `gemini` vai para o Google.
+
+| Modelo                  | Uso recomendado          | Free tier (RPD) | Contexto |
+| ----------------------- | ------------------------ | --------------- | -------- |
+| `gemini-2.5-flash`      | `--analyze`, `--prompt`  | sim             | 1M       |
+| `gemini-2.5-flash-lite` | `--format` (mais rápido) | sim             | 1M       |
+
+Como Gemini tem janela de 1M tokens, o `--analyze` e o `--prompt` **dispensam chunking** quando o provider é Gemini — processam o texto inteiro em uma única chamada, mais coerente e gastando menos requests do RPD. O `--format` mantém chunking porque a tarefa é localizada por parágrafo.
+
+Consulte os limites ativos do seu projeto em <https://aistudio.google.com/rate-limit>. Cotas são por projeto e RPD reseta à meia-noite do horário do Pacífico (≈ 04:00 BRT).
 
 Os modelos customizados são criados a partir dos Modelfiles em `ollama/`. Ajuste os parâmetros conforme o seu hardware:
 

@@ -1,18 +1,26 @@
 """
-formatter.py: Paragraph segmentation of raw transcriptions using a local LLM.
+formatter.py: Paragraph segmentation of raw transcriptions.
 
-Reads the transcription body, sends it to a local Ollama model to insert
-paragraph breaks at natural boundaries, and writes the result back in place.
-No words are changed — only blank lines are added.
+Reads the transcription body, sends it to the configured LLM (local Ollama or
+Google Gemini) to insert paragraph breaks at natural boundaries, and writes the
+result back in place. No words are changed — only blank lines are added.
+
+Provider routing is handled by `src.llm_factory.make_llm`:
+- model names starting with "gemini" → Google Gemini (requires GOOGLE_API_KEY)
+- anything else → local Ollama
+
+Note on chunking: paragraph segmentation is a per-region task with no benefit
+from global context, so chunking is preserved for both providers.
 """
 
 import logging
 from pathlib import Path
 from time import time
 
-from langchain_ollama import ChatOllama
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_text_splitters import RecursiveCharacterTextSplitter
+
+from src.llm_factory import make_llm
 
 DEFAULT_FORMAT_MODEL = "phi4mini-custom"
 FORMAT_CHUNK_SIZE = 4500
@@ -70,7 +78,9 @@ def format_transcription(input_path: Path, model_name: str = DEFAULT_FORMAT_MODE
 
     Args:
         input_path: Path to the transcription .txt file.
-        model_name: Ollama model to use for formatting.
+        model_name: Model identifier — local Ollama tag (e.g. "phi4mini-custom")
+            or Gemini name (e.g. "gemini-2.5-flash"). Provider is resolved by
+            prefix in `llm_factory.make_llm`.
 
     Returns:
         The formatted transcription body, or None if the body was empty.
@@ -105,7 +115,7 @@ def format_transcription(input_path: Path, model_name: str = DEFAULT_FORMAT_MODE
     for i, chunk in enumerate(chunks, 1):
         logging.debug("[d] Chunk %d/%d: %d chars", i, len(chunks), len(chunk))
 
-    llm = ChatOllama(model=model_name, temperature=0)
+    llm = make_llm(model_name=model_name, temperature=0)
     chain = FORMAT_PROMPT | llm
 
     start = time()

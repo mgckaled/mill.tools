@@ -1,13 +1,19 @@
 """
-analyzer.py: Structured analysis of transcriptions using LangChain + Ollama.
+analyzer.py: Structured analysis of transcriptions using LangChain.
 
 Reads a transcription file, splits it into chunks if needed, sends each
-chunk to a local Ollama model, and produces a structured Markdown report
-with summary, key_points, action_items, and topics.
+chunk to the configured LLM (local Ollama or Google Gemini), and produces
+a structured Markdown report with summary, key_points, action_items, and
+topics.
+
+Provider routing is handled by `src.llm_factory.make_llm`:
+- model names starting with "gemini" → Google Gemini (requires GOOGLE_API_KEY)
+- anything else → local Ollama
 
 Usage (standalone):
     uv run yt-analyzer transcriptions/raw/transcricao_ovabeV.txt
-    uv run yt-analyzer transcriptions/raw/transcricao_ovabeV.txt --model phi4-mini
+    uv run yt-analyzer transcriptions/raw/transcricao_ovabeV.txt --model qwen7b-custom
+    uv run yt-analyzer transcriptions/raw/transcricao_ovabeV.txt --model gemini-2.5-flash
     uv run yt-analyzer transcriptions/raw/transcricao_ovabeV.txt --verbose
 """
 
@@ -19,10 +25,11 @@ from datetime import datetime
 from pathlib import Path
 from time import time
 
+from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.prompts import ChatPromptTemplate
-from langchain_ollama import ChatOllama
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 
+from src.llm_factory import is_gemini_model, make_llm
 from src.utils import TRANSCRIPTIONS_ANALYSIS_DIR, setup_logging
 
 DEFAULT_MODEL = "qwen7b-custom"
@@ -159,18 +166,30 @@ def _parse_json_response(text: str) -> dict:
         raise ValueError("LLM did not return valid JSON") from exc
 
 
-def _split_text(text: str) -> list[str]:
+def _split_text(text: str, model_name: str) -> list[str]:
     """Split transcription text into chunks for processing.
 
     Uses RecursiveCharacterTextSplitter to break text at natural boundaries
     (paragraphs, sentences, words) while respecting chunk size limits.
 
+    When the provider supports a very large context window (Gemini, 1M tokens),
+    chunking is skipped — the full body is processed in a single call. This
+    produces a more coherent analysis (no merge step) and consumes fewer
+    requests against the daily quota.
+
     Args:
         text: Full transcription text.
+        model_name: Active model name; controls whether chunking is bypassed.
 
     Returns:
-        List of text chunks. Returns single-element list if text is short enough.
+        List of text chunks. Returns single-element list if text is short enough
+        or if the provider supports the full body in a single call.
     """
+    if is_gemini_model(model_name):
+        logging.debug("[d] Provider supports long context — chunking skipped (%d chars)",
+                      len(text))
+        return [text]
+
     if len(text) <= CHUNK_SIZE:
         return [text]
 
@@ -338,7 +357,7 @@ def _format_report(
     return "\n".join(lines)
 
 
-def _ensure_portuguese(analysis: dict, llm: ChatOllama) -> dict:
+def _ensure_portuguese(analysis: dict, llm: BaseChatModel) -> dict:
     """Detect the language of the analysis and translate to PT-BR if needed.
 
     Uses the LLM to detect the language of the summary field. If it's not
@@ -346,7 +365,7 @@ def _ensure_portuguese(analysis: dict, llm: ChatOllama) -> dict:
 
     Args:
         analysis: Dictionary with analysis fields.
-        llm: ChatOllama instance already loaded.
+        llm: LangChain chat model already loaded (Ollama or Gemini).
 
     Returns:
         Original analysis if already in Portuguese, or translated version.
@@ -384,12 +403,15 @@ def analyze(
 ) -> Path:
     """Analyze a transcription file and generate a structured Markdown report.
 
-    Reads the transcription, splits into chunks if needed, sends to Ollama
-    for analysis, merges partial results, and writes the final report.
+    Reads the transcription, splits into chunks if needed, sends to the
+    configured LLM for analysis, merges partial results, and writes the
+    final report.
 
     Args:
         input_path: Path to the transcription .txt file.
-        model_name: Ollama model to use for analysis.
+        model_name: Model identifier — local Ollama tag (e.g. "qwen7b-custom")
+            or Gemini name (e.g. "gemini-2.5-flash"). Provider is resolved by
+            prefix in `llm_factory.make_llm`.
         transcription: Formatted transcription body to append to the report (optional).
             When provided (e.g. after --format), the full text is included at the
             bottom of the .md under a "Transcrição" section.
@@ -418,14 +440,14 @@ def analyze(
         logging.error("Transcription body is empty: %s", input_path)
         sys.exit(1)
 
-    chunks=_split_text(body)
+    chunks=_split_text(body, model_name)
     logging.info("[i] Text split into %d chunk(s) (%d chars total)",
                  len(chunks), len(body))
     for i, chunk in enumerate(chunks, 1):
         logging.debug("[d] Chunk %d/%d: %d chars", i, len(chunks), len(chunk))
 
-    llm = ChatOllama(model=model_name, temperature=0.4)      # análise e merge
-    llm_util = ChatOllama(model=model_name, temperature=0)   # detecção de idioma e tradução
+    llm = make_llm(model_name=model_name, temperature=0.4)      # análise e merge
+    llm_util = make_llm(model_name=model_name, temperature=0)   # detecção de idioma e tradução
 
     start=time()
 
@@ -476,7 +498,7 @@ def analyze(
 def main() -> None:
     """Entry point for standalone analyzer CLI."""
     parser=argparse.ArgumentParser(
-        description="Analyze a transcription file using Ollama (local LLM).",
+        description="Analyze a transcription file using a local or cloud LLM.",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
     parser.add_argument(
@@ -486,7 +508,7 @@ def main() -> None:
     parser.add_argument(
         "--model",
         default=DEFAULT_MODEL,
-        help="Ollama model name",
+        help="Model name — local Ollama (e.g. qwen7b-custom) or Gemini (e.g. gemini-2.5-flash)",
     )
     parser.add_argument(
         "--verbose",
