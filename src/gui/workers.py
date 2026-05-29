@@ -84,12 +84,16 @@ def run_pipeline(
 
     # instala LogEventHandler no root logger para capturar logs granulares
     log_handler = LogEventHandler(bus)
-    log_handler.setLevel(logging.DEBUG)
+    log_handler.setLevel(logging.INFO)
     log_handler.setFormatter(logging.Formatter("%(message)s"))
     root_logger = logging.getLogger()
     root_logger.addHandler(log_handler)
     original_level = root_logger.level
-    root_logger.setLevel(logging.DEBUG)
+    # INFO evita flood de DEBUG de libs terceiras (faster_whisper, ctranslate2, langchain)
+    root_logger.setLevel(logging.INFO)
+    for _noisy in ("httpx", "httpcore", "faster_whisper", "huggingface_hub",
+                   "langchain", "langchain_core", "ctranslate2"):
+        logging.getLogger(_noisy).setLevel(logging.WARNING)
 
     result = PipelineResult()
 

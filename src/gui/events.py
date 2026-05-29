@@ -40,6 +40,22 @@ class LogEventHandler(logging.Handler):
         "[i] Fetching video metadata",
         "[»] Audio already exists",
         "[↓] Downloading audio",
+        "[*] Formatting:",
+        "[*] Format model:",
+        "[*] Analyzing:",
+        "[*] Model:",
+        "[*] Building prompt-ready:",
+        "[*] Prompt model:",
+        "[~] Formatting chunk",
+        "[~] Analyzing chunk",
+        "[~] Analyzing single chunk",
+        "[~] Condensing chunk",
+        "[~] Merging",
+        "[~] Translating",
+        "[✓] Translation complete",
+        "[✓] Formatted in place",
+        "[✓] Analysis saved",
+        "[✓] Prompt-ready saved",
     )
 
     def __init__(self, bus: EventBus) -> None:
