@@ -10,29 +10,15 @@ import flet as ft
 
 
 def _read(path: Path | None) -> str:
-    """Lê o conteúdo de um arquivo de resultado.
-
-    Args:
-        path: Caminho do arquivo a ser lido, ou None.
-
-    Returns:
-        Conteúdo do arquivo como string, ou mensagem informativa se indisponível.
-    """
     if path is None or not Path(path).exists():
         return "_Arquivo não gerado._"
     return Path(path).read_text(encoding="utf-8")
 
 
 def _open_folder(path: Path | None) -> None:
-    """Abre o Explorer do Windows no diretório do arquivo.
-
-    Args:
-        path: Caminho do arquivo cujo diretório será aberto.
-    """
     if path is None:
         return
-    folder = Path(path).parent
-    subprocess.Popen(["explorer", str(folder)])
+    subprocess.Popen(["explorer", str(Path(path).parent)])
 
 
 def build_result_view(
@@ -44,35 +30,22 @@ def build_result_view(
 ) -> ft.Control:
     """Retorna o controle raiz da view de resultados.
 
-    Exibe os arquivos gerados pelo pipeline em três abas (Transcrição, Análise,
-    Prompt-ready) com ações de abrir pasta, copiar conteúdo e reiniciar.
-
-    Args:
-        page: Instância da página Flet.
-        raw_path: Caminho do arquivo de transcrição bruta (.txt), ou None.
-        analysis_path: Caminho do arquivo de análise (.md), ou None.
-        prompt_path: Caminho do arquivo prompt-ready (.txt), ou None.
-        on_restart: Callback chamado ao clicar em "Nova transcrição".
-
-    Returns:
-        Controle raiz da view de resultados.
+    Implementa tab switching manual (ft.Tabs/ft.Tab incompatíveis com Flet 0.85).
+    Exibe Transcrição, Análise e Prompt-ready com ações de copiar e abrir pasta.
     """
     raw_content = _read(raw_path)
     analysis_content = _read(analysis_path)
     prompt_content = _read(prompt_path)
 
-    contents = [raw_content, analysis_content, prompt_content]
+    tab_labels = ["Transcrição", "Análise", "Prompt-ready"]
+    tab_contents = [raw_content, analysis_content, prompt_content]
+    selected: list[int] = [0]
 
-    def _make_tab_content(text: str) -> ft.Control:
+    # --- painéis de conteúdo ---
+    def _make_panel(text: str) -> ft.Container:
         return ft.Container(
             content=ft.Column(
-                controls=[
-                    ft.Markdown(
-                        value=text,
-                        expand=True,
-                        selectable=True,
-                    )
-                ],
+                controls=[ft.Markdown(value=text, expand=True, selectable=True)],
                 scroll=ft.ScrollMode.AUTO,
                 expand=True,
             ),
@@ -80,58 +53,67 @@ def build_result_view(
             padding=ft.Padding(left=12, right=12, top=8, bottom=8),
         )
 
-    tabs = ft.Tabs(
-        selected_index=0,
+    panels = [_make_panel(c) for c in tab_contents]
+    for i, p in enumerate(panels):
+        p.visible = (i == 0)
+
+    content_stack = ft.Column(
+        controls=panels,
         expand=True,
-        tabs=[
-            ft.Tab(
-                text="Transcrição",
-                content=_make_tab_content(raw_content),
-            ),
-            ft.Tab(
-                text="Análise",
-                content=_make_tab_content(analysis_content),
-            ),
-            ft.Tab(
-                text="Prompt-ready",
-                content=_make_tab_content(prompt_content),
-            ),
-        ],
     )
 
-    def on_copy(_: ft.ControlEvent) -> None:
-        idx = tabs.selected_index or 0
-        page.set_clipboard(contents[idx])
-        page.open(
-            ft.SnackBar(
-                content=ft.Text("Conteúdo copiado para a área de transferência."),
-                duration=2000,
-            )
+    # --- cabeçalho de abas ---
+    tab_buttons: list[ft.TextButton] = []
+
+    def _make_tab_btn(label: str, idx: int) -> ft.TextButton:
+        return ft.TextButton(
+            label,
+            style=ft.ButtonStyle(
+                color={
+                    ft.ControlState.DEFAULT: ft.Colors.PRIMARY if idx == 0 else ft.Colors.ON_SURFACE_VARIANT,
+                },
+            ),
+            on_click=lambda _, i=idx: _switch(i),
         )
 
-    def on_open_folder(_: ft.ControlEvent) -> None:
-        _open_folder(raw_path)
+    def _switch(idx: int) -> None:
+        selected[0] = idx
+        for i, (btn, panel) in enumerate(zip(tab_buttons, panels)):
+            active = i == idx
+            panel.visible = active
+            btn.style = ft.ButtonStyle(
+                color={
+                    ft.ControlState.DEFAULT: ft.Colors.PRIMARY if active else ft.Colors.ON_SURFACE_VARIANT,
+                },
+            )
+        page.update()
 
-    def on_new_transcription(_: ft.ControlEvent) -> None:
-        on_restart()
+    tab_buttons.extend(_make_tab_btn(label, i) for i, label in enumerate(tab_labels))
+
+    tab_bar = ft.Row(
+        controls=[
+            *tab_buttons,
+            ft.Container(expand=True),
+        ],
+        spacing=0,
+    )
+
+    # --- ações ---
+    def on_copy(_: ft.ControlEvent) -> None:
+        page.set_clipboard(tab_contents[selected[0]])
+        page.open(ft.SnackBar(
+            content=ft.Text("Conteúdo copiado para a área de transferência."),
+            duration=2000,
+        ))
 
     action_row = ft.Row(
         controls=[
-            ft.IconButton(
-                icon=ft.Icons.FOLDER_OPEN,
-                tooltip="Abrir pasta",
-                on_click=on_open_folder,
-            ),
-            ft.IconButton(
-                icon=ft.Icons.COPY,
-                tooltip="Copiar conteúdo da aba",
-                on_click=on_copy,
-            ),
+            ft.IconButton(ft.Icons.FOLDER_OPEN, tooltip="Abrir pasta",
+                          on_click=lambda _: _open_folder(raw_path)),
+            ft.IconButton(ft.Icons.COPY, tooltip="Copiar conteúdo da aba",
+                          on_click=on_copy),
             ft.Container(expand=True),
-            ft.TextButton(
-                "Nova transcrição",
-                on_click=on_new_transcription,
-            ),
+            ft.TextButton("Nova transcrição", on_click=lambda _: on_restart()),
         ],
         vertical_alignment=ft.CrossAxisAlignment.CENTER,
     )
@@ -140,7 +122,9 @@ def build_result_view(
         controls=[
             action_row,
             ft.Divider(height=1),
-            tabs,
+            tab_bar,
+            ft.Divider(height=1, color=ft.Colors.OUTLINE_VARIANT),
+            content_stack,
         ],
         expand=True,
     )
