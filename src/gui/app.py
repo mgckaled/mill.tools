@@ -1,4 +1,4 @@
-"""Layout raiz e navegação entre views do yt-transcriber GUI."""
+"""Layout raiz do yt-transcriber GUI — layout split form | pipeline."""
 
 from __future__ import annotations
 
@@ -10,26 +10,27 @@ from src.gui import settings
 from src.gui.events import EventBus
 from src.gui.views.form_view import build_form_view
 from src.gui.views.progress_view import build_progress_view
-from src.gui.views.result_view import build_result_view
 from src.gui.workers import PipelineArgs, PipelineResult, start_pipeline
 
 
 def build_app(page: ft.Page) -> None:
-    """Monta o app na página Flet com navegação form → progress → result.
+    """Monta o layout split: formulário fixo à esquerda, pipeline expansível à direita.
 
-    Carrega configurações de tema persistidas e instala AppBar com toggle
-    dark/light. Gerencia o ciclo de vida do worker e do cancel_event.
+    Não há mais navegação entre views — ambos os painéis são sempre visíveis.
+    O EventBus é criado uma única vez e reutilizado entre execuções. O botão
+    Iniciar é desabilitado durante a execução e reabilitado ao fim.
     """
     cfg = settings.load()
     page.theme_mode = (
-        ft.ThemeMode.DARK if cfg.get(
-            "theme_mode", "dark") == "dark" else ft.ThemeMode.LIGHT
+        ft.ThemeMode.DARK if cfg.get("theme_mode", "dark") == "dark" else ft.ThemeMode.LIGHT
     )
 
     cancel_event = threading.Event()
+    bus = EventBus(page)
+    pipeline_running: list[bool] = [False]
 
     # ------------------------------------------------------------------
-    # AppBar com título e botão de tema
+    # AppBar
     # ------------------------------------------------------------------
 
     def _toggle_theme(_e) -> None:
@@ -52,76 +53,80 @@ def build_app(page: ft.Page) -> None:
     )
 
     # ------------------------------------------------------------------
-    # Navegação entre views
-    # ------------------------------------------------------------------
-
-    def _show(control: ft.Control) -> None:
-        page.controls.clear()
-        page.add(control)
-        page.update()
-
-    def _show_form() -> None:
-        cancel_event.clear()
-        _show(build_form_view(page, on_start=_on_start))
-
-    def _show_progress() -> None:
-        _show(build_progress_view(page, on_cancel=_on_cancel,
-              on_done=_on_pipeline_done))  # type: ignore[arg-type]
-
-    def _show_result(result: PipelineResult) -> None:
-        _show(build_result_view(
-            page,
-            raw_path=result.raw_path,
-            analysis_path=result.analysis_path,
-            prompt_path=result.prompt_path,
-            on_restart=_show_form,
-        ))
-
-    # ------------------------------------------------------------------
-    # Handlers do ciclo de vida do worker
+    # Handlers do ciclo de vida
     # ------------------------------------------------------------------
 
     def _on_start(args: PipelineArgs) -> None:
+        if pipeline_running[0]:
+            return
+        pipeline_running[0] = True
         cancel_event.clear()
-        bus = EventBus(page)
-        _show_progress()
+        progress_panel.reset()
+        form_panel.set_running(True)
         start_pipeline(args, bus, cancel_event)
 
     def _on_cancel() -> None:
         cancel_event.set()
 
     def _on_pipeline_done(payload: dict) -> None:
+        pipeline_running[0] = False
+        form_panel.set_running(False)
         result = PipelineResult(
             raw_path=payload.get("raw_path"),
             analysis_path=payload.get("analysis_path"),
             prompt_path=payload.get("prompt_path"),
         )
-        _show_result(result)
+        progress_panel.show_results(result)
 
     # ------------------------------------------------------------------
-    # Atalhos de teclado globais
+    # Painéis
     # ------------------------------------------------------------------
 
-    _view_state: dict[str, str] = {"current": "form"}
+    form_panel = build_form_view(page, on_start=_on_start)
+    progress_panel = build_progress_view(page, on_cancel=_on_cancel, on_done=_on_pipeline_done)
+
+    # ------------------------------------------------------------------
+    # Layout split
+    # ------------------------------------------------------------------
+
+    layout = ft.Row(
+        controls=[
+            ft.Container(
+                content=form_panel.control,
+                width=380,
+                padding=ft.Padding(left=12, right=8, top=8, bottom=8),
+            ),
+            ft.VerticalDivider(width=1, color=ft.Colors.OUTLINE_VARIANT),
+            ft.Container(
+                content=progress_panel.control,
+                expand=True,
+                padding=ft.Padding(left=12, right=12, top=8, bottom=8),
+            ),
+        ],
+        expand=True,
+        spacing=0,
+        vertical_alignment=ft.CrossAxisAlignment.STRETCH,
+    )
+
+    # ------------------------------------------------------------------
+    # Atalhos de teclado
+    # ------------------------------------------------------------------
 
     def _on_keyboard(e: ft.KeyboardEvent) -> None:
-        # Ctrl+Enter na form → simula clique no botão Iniciar se habilitado
-        if e.ctrl and e.key == "Enter" and _view_state["current"] == "form":
-            for ctrl_item in _walk_controls(page):
+        if e.ctrl and e.key == "Enter" and not pipeline_running[0]:
+            for ctrl in _walk(page):
                 if (
-                    isinstance(ctrl_item, ft.FilledButton)
-                    and getattr(ctrl_item, "text", "") == "Iniciar"
-                    and not ctrl_item.disabled
-                    and ctrl_item.on_click
+                    isinstance(ctrl, ft.FilledButton)
+                    and getattr(ctrl, "text", "") == "Iniciar"
+                    and not ctrl.disabled
+                    and ctrl.on_click
                 ):
-                    ctrl_item.on_click(e)
+                    ctrl.on_click(e)
                     break
-
-        # Escape na progress → cancela o pipeline
-        if e.key == "Escape" and _view_state["current"] == "progress":
+        if e.key == "Escape" and pipeline_running[0]:
             _on_cancel()
 
-    def _walk_controls(root):
+    def _walk(root):
         queue = [root]
         while queue:
             item = queue.pop(0)
@@ -135,20 +140,10 @@ def build_app(page: ft.Page) -> None:
 
     page.on_keyboard_event = _on_keyboard
 
-    # Instrumenta as funções de navegação para atualizar o estado
-    _orig_show_form = _show_form
-    _orig_show_progress = _show_progress
-
-    def _show_form() -> None:  # type: ignore[misc]
-        _view_state["current"] = "form"
-        _orig_show_form()
-
-    def _show_progress() -> None:  # type: ignore[misc]
-        _view_state["current"] = "progress"
-        _orig_show_progress()
-
     # ------------------------------------------------------------------
-    # Inicia na view de formulário
+    # Montar página
     # ------------------------------------------------------------------
 
-    _show_form()
+    page.controls.clear()
+    page.add(layout)
+    page.update()
