@@ -5,6 +5,7 @@ Coleta os parâmetros do pipeline e dispara o worker ao clicar em Iniciar.
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable
 
@@ -12,6 +13,13 @@ import flet as ft
 
 from src.gui import settings
 from src.gui.workers import PipelineArgs
+
+
+@dataclass
+class FormPanel:
+    """Controle do formulário com método de controle de estado de execução."""
+    control: ft.Control
+    set_running: Callable[[bool], None]
 
 # ---------------------------------------------------------------------------
 # Helpers para .env
@@ -47,8 +55,8 @@ def _write_api_key(value: str) -> None:
 # ---------------------------------------------------------------------------
 
 
-def build_form_view(page: ft.Page, on_start: Callable[[PipelineArgs], None]) -> ft.Control:
-    """Retorna o controle raiz da view de formulário.
+def build_form_view(page: ft.Page, on_start: Callable[[PipelineArgs], None]) -> FormPanel:
+    """Retorna um FormPanel com o controle raiz e método set_running.
 
     Args:
         page: Página Flet.
@@ -281,6 +289,12 @@ def build_form_view(page: ft.Page, on_start: Callable[[PipelineArgs], None]) -> 
 
     start_btn.on_click = _on_start_click
 
+    def _set_running(running: bool) -> None:
+        start_btn.disabled = running
+        start_btn.text = "Executando..." if running else "Iniciar"
+        start_btn.icon = ft.Icons.HOURGLASS_EMPTY if running else ft.Icons.PLAY_ARROW_ROUNDED
+        page.update()
+
     # ------------------------------------------------------------------
     # Layout helpers
     # ------------------------------------------------------------------
@@ -299,9 +313,8 @@ def build_form_view(page: ft.Page, on_start: Callable[[PipelineArgs], None]) -> 
     # ------------------------------------------------------------------
     # Root control
     # ------------------------------------------------------------------
-    return ft.Column(
+    root = ft.Column(
         scroll=ft.ScrollMode.AUTO,
-        expand=True,
         spacing=0,
         controls=[
             ft.Container(
@@ -378,3 +391,4 @@ def build_form_view(page: ft.Page, on_start: Callable[[PipelineArgs], None]) -> 
             ),
         ],
     )
+    return FormPanel(control=root, set_running=_set_running)
