@@ -14,6 +14,7 @@ from global context, so chunking is preserved for both providers.
 """
 
 import logging
+from collections.abc import Callable
 from pathlib import Path
 from time import time
 
@@ -69,7 +70,11 @@ def _split_for_format(text: str) -> list[str]:
     return splitter.split_text(text)
 
 
-def format_transcription(input_path: Path, model_name: str = DEFAULT_FORMAT_MODEL) -> str | None:
+def format_transcription(
+    input_path: Path,
+    model_name: str = DEFAULT_FORMAT_MODEL,
+    on_event: Callable[[str, str, dict], None] | None = None,
+) -> str | None:
     """Add paragraph breaks to a raw transcription file using a local LLM.
 
     Reads the transcription body, formats it with paragraph breaks, and
@@ -88,6 +93,10 @@ def format_transcription(input_path: Path, model_name: str = DEFAULT_FORMAT_MODE
     Raises:
         FileNotFoundError: If the input file does not exist.
     """
+    def _emit(type: str, payload: dict = {}) -> None:
+        if on_event:
+            on_event(type, "format", payload)
+
     if not input_path.exists():
         logging.error("File not found: %s", input_path)
         raise FileNotFoundError(input_path)
@@ -114,6 +123,7 @@ def format_transcription(input_path: Path, model_name: str = DEFAULT_FORMAT_MODE
     logging.info("[i] %d chunk(s) to format (%d chars total)", len(chunks), len(body))
     for i, chunk in enumerate(chunks, 1):
         logging.debug("[d] Chunk %d/%d: %d chars", i, len(chunks), len(chunk))
+    _emit("format_started", {"filename": input_path.name, "total_chunks": len(chunks)})
 
     llm = make_llm(model_name=model_name, temperature=0)
     chain = FORMAT_PROMPT | llm
@@ -122,11 +132,14 @@ def format_transcription(input_path: Path, model_name: str = DEFAULT_FORMAT_MODE
     formatted_chunks = []
     for i, chunk in enumerate(chunks, 1):
         logging.info("[~] Formatting chunk %d/%d...", i, len(chunks))
+        _emit("format_chunk_start", {"i": i, "total": len(chunks)})
         t = time()
         response = chain.invoke({"text": chunk})
         formatted_chunks.append(response.content.strip())
+        chunk_elapsed = time() - t
         logging.debug("[d] Chunk %d done in %.1fs | output: %d chars",
-                      i, time() - t, len(response.content))
+                      i, chunk_elapsed, len(response.content))
+        _emit("format_chunk_done", {"i": i, "total": len(chunks), "elapsed": round(chunk_elapsed, 1)})
 
     formatted_body = "\n\n".join(formatted_chunks)
 
@@ -139,4 +152,5 @@ def format_transcription(input_path: Path, model_name: str = DEFAULT_FORMAT_MODE
     elapsed = time() - start
     logging.debug("[d] Formatted body: %d chars", len(formatted_body))
     logging.info("[✓] Formatted in place: %s (%.0fs)", input_path.name, elapsed)
+    _emit("format_done", {"elapsed": round(elapsed, 1), "output_path": str(input_path)})
     return formatted_body
