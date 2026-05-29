@@ -32,6 +32,16 @@ class EventBus:
 class LogEventHandler(logging.Handler):
     """Captura logs do Python e os repassa ao EventBus como eventos 'log'."""
 
+    # Mensagens que já são cobertas por eventos estruturais — evitar duplicação
+    _SUPPRESSED_PREFIXES = (
+        "[~] Transcribing",
+        "[i] Detected language",
+        "[*] Loading model",
+        "[i] Fetching video metadata",
+        "[»] Audio already exists",
+        "[↓] Downloading audio",
+    )
+
     def __init__(self, bus: EventBus) -> None:
         super().__init__()
         self._bus = bus
@@ -39,6 +49,8 @@ class LogEventHandler(logging.Handler):
     def emit(self, record: logging.LogRecord) -> None:
         try:
             msg = self.format(record)
+            if any(msg.startswith(p) for p in self._SUPPRESSED_PREFIXES):
+                return
             self._bus.emit("log", "system", {"message": msg, "level": record.levelname})
         except Exception:
             self.handleError(record)

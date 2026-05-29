@@ -111,7 +111,7 @@ def transcribe(
     logging.info("[*] Loading model '%s' on %s (%s)...",
                  model_size, device.upper(), compute_type)
     model_load_start = time()
-    _emit("whisper_loading")
+    _emit("whisper_loading", {"model_size": model_size, "device": device, "compute_type": compute_type})
     model = WhisperModel(
         model_size,
         device=device,
@@ -145,6 +145,11 @@ def transcribe(
             "[d] Audio duration: %.1fs | language_prob: %.2f | vad_filter: on | min_silence: 500ms",
             info.duration, info.language_probability,
         )
+        _emit("language_detected", {
+            "language": info.language,
+            "confidence": info.language_probability,
+            "audio_duration": info.duration,
+        })
 
         header = format_metadata(meta, url, detected_language=info.language)
         duration = int(meta.get("duration", 0))
