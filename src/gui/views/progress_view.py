@@ -266,7 +266,7 @@ def build_progress_view(
             progress_bar.value = 1.0
             cancel_button.disabled = True
             page.update()
-            page.pubsub.unsubscribe(_handle_event)
+            page.pubsub.unsubscribe()
             on_done()
             return
 
@@ -296,8 +296,13 @@ def build_progress_view(
     log_container = ft.Container(
         content=log_list,
         expand=True,
-        border=ft.border.all(1, ft.Colors.GREY_700),
-        border_radius=ft.border_radius.all(6),
+        border=ft.Border(
+            left=ft.BorderSide(1, ft.Colors.GREY_700),
+            right=ft.BorderSide(1, ft.Colors.GREY_700),
+            top=ft.BorderSide(1, ft.Colors.GREY_700),
+            bottom=ft.BorderSide(1, ft.Colors.GREY_700),
+        ),
+        border_radius=6,
         bgcolor=ft.Colors.GREY_900,
     )
 

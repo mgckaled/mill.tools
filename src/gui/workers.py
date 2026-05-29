@@ -30,6 +30,7 @@ class PipelineArgs:
     whisper_model: str = "small"
     language: str = "auto"
     beam_size: int = 1
+    threads: int = 2
     use_format: bool = False
     format_model: str = "phi4mini-custom"
     use_analyze: bool = False
@@ -109,6 +110,7 @@ def run_pipeline(
             url=args.url,
             model_size=args.whisper_model,
             language=None if args.language == "auto" else args.language,
+            threads=args.threads,
             beam_size=args.beam_size,
             on_event=on_event,
         )

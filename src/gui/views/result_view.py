@@ -77,7 +77,7 @@ def build_result_view(
                 expand=True,
             ),
             expand=True,
-            padding=ft.padding.symmetric(horizontal=12, vertical=8),
+            padding=ft.Padding(left=12, right=12, top=8, bottom=8),
         )
 
     tabs = ft.Tabs(
@@ -129,7 +129,7 @@ def build_result_view(
             ),
             ft.Container(expand=True),
             ft.TextButton(
-                text="Nova transcrição",
+                "Nova transcrição",
                 on_click=on_new_transcription,
             ),
         ],

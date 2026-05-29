@@ -96,10 +96,10 @@ def build_app(page: ft.Page) -> None:
                     analysis_path=p.get("analysis_path"),
                     prompt_path=p.get("prompt_path"),
                 )
-                page.pubsub.unsubscribe(_capture_result)
+                page.pubsub.unsubscribe()
             elif event.type == "pipeline_error":
                 _result["last"] = PipelineResult(error=event.payload.get("message"))
-                page.pubsub.unsubscribe(_capture_result)
+                page.pubsub.unsubscribe()
 
         _result["last"] = PipelineResult()
         page.pubsub.subscribe(_capture_result)

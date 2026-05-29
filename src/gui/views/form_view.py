@@ -241,7 +241,7 @@ def build_form_view(page: ft.Page, on_start: Callable[[PipelineArgs], None]) -> 
     # Start button
     # ------------------------------------------------------------------
     start_btn = ft.FilledButton(
-        text="Iniciar",
+        "Iniciar",
         icon=ft.Icons.PLAY_ARROW_ROUNDED,
         disabled=True,
     )
@@ -305,7 +305,7 @@ def build_form_view(page: ft.Page, on_start: Callable[[PipelineArgs], None]) -> 
         spacing=0,
         controls=[
             ft.Container(
-                padding=ft.padding.all(20),
+                padding=20,
                 content=ft.Column(
                     spacing=16,
                     controls=[
