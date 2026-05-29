@@ -113,6 +113,55 @@ def build_app(page: ft.Page) -> None:
         _show_result(_result.get("last", PipelineResult()))
 
     # ------------------------------------------------------------------
+    # Atalhos de teclado globais
+    # ------------------------------------------------------------------
+
+    _view_state: dict[str, str] = {"current": "form"}
+
+    def _on_keyboard(e: ft.KeyboardEvent) -> None:
+        # Ctrl+Enter na form → simula clique no botão Iniciar se habilitado
+        if e.ctrl and e.key == "Enter" and _view_state["current"] == "form":
+            for ctrl_item in _walk_controls(page):
+                if (
+                    isinstance(ctrl_item, ft.FilledButton)
+                    and getattr(ctrl_item, "text", "") == "Iniciar"
+                    and not ctrl_item.disabled
+                    and ctrl_item.on_click
+                ):
+                    ctrl_item.on_click(e)
+                    break
+
+        # Escape na progress → cancela o pipeline
+        if e.key == "Escape" and _view_state["current"] == "progress":
+            _on_cancel()
+
+    def _walk_controls(root):
+        queue = [root]
+        while queue:
+            item = queue.pop(0)
+            yield item
+            for attr in ("controls", "content", "actions"):
+                child = getattr(item, attr, None)
+                if isinstance(child, list):
+                    queue.extend(c for c in child if c is not None)
+                elif child is not None:
+                    queue.append(child)
+
+    page.on_keyboard_event = _on_keyboard
+
+    # Instrumenta as funções de navegação para atualizar o estado
+    _orig_show_form = _show_form
+    _orig_show_progress = _show_progress
+
+    def _show_form() -> None:  # type: ignore[misc]
+        _view_state["current"] = "form"
+        _orig_show_form()
+
+    def _show_progress() -> None:  # type: ignore[misc]
+        _view_state["current"] = "progress"
+        _orig_show_progress()
+
+    # ------------------------------------------------------------------
     # Inicia na view de formulário
     # ------------------------------------------------------------------
 
