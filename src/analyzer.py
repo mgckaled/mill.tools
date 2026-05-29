@@ -462,7 +462,7 @@ def analyze(
                  len(chunks), len(body))
     for i, chunk in enumerate(chunks, 1):
         logging.debug("[d] Chunk %d/%d: %d chars", i, len(chunks), len(chunk))
-    _emit("analyze_started", {"filename": input_path.name, "total_chunks": len(chunks)})
+    _emit("analyze_started", {"filename": input_path.name, "total_chunks": len(chunks), "model_name": model_name})
 
     llm = make_llm(model_name=model_name, temperature=0.4)      # análise e merge
     llm_util = make_llm(model_name=model_name, temperature=0)   # detecção de idioma e tradução
@@ -476,9 +476,10 @@ def analyze(
         chain=ANALYSIS_PROMPT | llm
         response=chain.invoke({"text": chunks[0]})
         analysis=_parse_json_response(response.content)
+        chunk_elapsed = time() - t_chunk
         logging.debug("[d] Single chunk done in %.1fs | response: %d chars | keys: %s",
-                      time() - t_chunk, len(response.content), list(analysis.keys()))
-        _emit("analyze_chunk_done", {"i": 1, "total": 1})
+                      chunk_elapsed, len(response.content), list(analysis.keys()))
+        _emit("analyze_chunk_done", {"i": 1, "total": 1, "elapsed": round(chunk_elapsed, 1)})
     else:
         partial_analyses=[]
         for i, chunk in enumerate(chunks, 1):
@@ -488,9 +489,10 @@ def analyze(
             chain=ANALYSIS_PROMPT | llm
             response=chain.invoke({"text": chunk})
             partial=_parse_json_response(response.content)
+            chunk_elapsed = time() - t_chunk
             logging.debug("[d] Chunk %d done in %.1fs | response: %d chars | keys: %s",
-                          i, time() - t_chunk, len(response.content), list(partial.keys()))
-            _emit("analyze_chunk_done", {"i": i, "total": len(chunks)})
+                          i, chunk_elapsed, len(response.content), list(partial.keys()))
+            _emit("analyze_chunk_done", {"i": i, "total": len(chunks), "elapsed": round(chunk_elapsed, 1)})
             partial_analyses.append(partial)
 
         logging.info("[~] Merging %d partial analyses...",

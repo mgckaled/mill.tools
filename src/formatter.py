@@ -123,7 +123,7 @@ def format_transcription(
     logging.info("[i] %d chunk(s) to format (%d chars total)", len(chunks), len(body))
     for i, chunk in enumerate(chunks, 1):
         logging.debug("[d] Chunk %d/%d: %d chars", i, len(chunks), len(chunk))
-    _emit("format_started", {"filename": input_path.name, "total_chunks": len(chunks)})
+    _emit("format_started", {"filename": input_path.name, "total_chunks": len(chunks), "model_name": model_name})
 
     llm = make_llm(model_name=model_name, temperature=0)
     chain = FORMAT_PROMPT | llm

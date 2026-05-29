@@ -165,7 +165,7 @@ def build_prompt_ready(input_path: Path, model_name: str = DEFAULT_PROMPT_MODEL,
 
     chunks = _split_for_prompt(body, model_name)
     logging.info("[i] %d chunk(s) to condense (%d chars total)", len(chunks), len(body))
-    _emit("prompt_started", {"filename": input_path.name, "total_chunks": len(chunks)})
+    _emit("prompt_started", {"filename": input_path.name, "total_chunks": len(chunks), "model_name": model_name})
 
     llm = make_llm(model_name=model_name, temperature=0.2)
     condense_chain = CONDENSE_PROMPT | llm
