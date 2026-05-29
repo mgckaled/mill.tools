@@ -157,10 +157,13 @@ def build_form_view(page: ft.Page, on_start: Callable[[PipelineArgs], None]) -> 
     # ------------------------------------------------------------------
     # Format section
     # ------------------------------------------------------------------
-    format_model_field = ft.TextField(
+    format_model_field = ft.Dropdown(
         label="Modelo de formatação",
-        hint_text="phi4mini-custom",
         value=cfg.get("last_format_model", "phi4mini-custom"),
+        options=[
+            ft.dropdown.Option("phi4mini-custom", "phi4mini-custom"),
+            ft.dropdown.Option("qwen7b-custom", "qwen7b-custom"),
+        ],
         expand=True,
         border_color=ft.Colors.OUTLINE,
         focused_border_color=ft.Colors.PRIMARY,
@@ -181,10 +184,13 @@ def build_form_view(page: ft.Page, on_start: Callable[[PipelineArgs], None]) -> 
     # ------------------------------------------------------------------
     # Analyze section
     # ------------------------------------------------------------------
-    analyzer_model_field = ft.TextField(
+    analyzer_model_field = ft.Dropdown(
         label="Modelo de análise",
-        hint_text="gemini-2.5-flash",
         value=cfg.get("last_analyzer_model", "gemini-2.5-flash"),
+        options=[
+            ft.dropdown.Option("gemini-2.5-flash", "gemini-2.5-flash"),
+            ft.dropdown.Option("qwen7b-custom", "qwen7b-custom"),
+        ],
         expand=True,
         border_color=ft.Colors.OUTLINE,
         focused_border_color=ft.Colors.PRIMARY,
@@ -205,10 +211,13 @@ def build_form_view(page: ft.Page, on_start: Callable[[PipelineArgs], None]) -> 
     # ------------------------------------------------------------------
     # Prompt-ready section
     # ------------------------------------------------------------------
-    prompt_model_field = ft.TextField(
+    prompt_model_field = ft.Dropdown(
         label="Modelo prompt-ready",
-        hint_text="qwen7b-custom",
         value=cfg.get("last_prompt_model", "gemini-2.5-flash"),
+        options=[
+            ft.dropdown.Option("gemini-2.5-flash", "gemini-2.5-flash"),
+            ft.dropdown.Option("qwen7b-custom", "qwen7b-custom"),
+        ],
         expand=True,
         border_color=ft.Colors.OUTLINE,
         focused_border_color=ft.Colors.PRIMARY,
@@ -265,11 +274,11 @@ def build_form_view(page: ft.Page, on_start: Callable[[PipelineArgs], None]) -> 
             language=language_dropdown.value or "auto",
             beam_size=int(beam_slider.value),
             use_format=use_format_switch.value,
-            format_model=(format_model_field.value or "phi4mini-custom").strip(),
+            format_model=format_model_field.value or "phi4mini-custom",
             use_analyze=use_analyze_switch.value,
-            analyzer_model=(analyzer_model_field.value or "gemini-2.5-flash").strip(),
+            analyzer_model=analyzer_model_field.value or "gemini-2.5-flash",
             use_prompt=use_prompt_switch.value,
-            prompt_model=(prompt_model_field.value or "qwen7b-custom").strip(),
+            prompt_model=prompt_model_field.value or "gemini-2.5-flash",
         )
 
         settings.save({
