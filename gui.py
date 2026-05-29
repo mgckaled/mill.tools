@@ -9,10 +9,10 @@ def main(page: ft.Page) -> None:
     """Configura a página raiz e monta o app."""
     page.title = "yt-transcriber"
     page.theme_mode = ft.ThemeMode.DARK
-    page.window.width = 900
-    page.window.height = 700
-    page.window.min_width = 700
-    page.window.min_height = 500
+    page.window.width = 1200
+    page.window.height = 800
+    page.window.min_width = 1000
+    page.window.min_height = 600
     build_app(page)
 
 
