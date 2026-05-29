@@ -17,6 +17,7 @@ Output is saved to transcriptions/prompt_ready/ with the same stem as the source
 """
 
 import logging
+from collections.abc import Callable
 from pathlib import Path
 from time import time
 
@@ -121,7 +122,7 @@ def _extract_body_and_meta(raw_text: str) -> tuple[str, dict]:
     return body.strip(), meta
 
 
-def build_prompt_ready(input_path: Path, model_name: str = DEFAULT_PROMPT_MODEL) -> Path:
+def build_prompt_ready(input_path: Path, model_name: str = DEFAULT_PROMPT_MODEL, on_event: Callable[[str, str, dict], None] | None = None) -> Path:
     """Generate a condensed transcription file optimized for use as LLM context.
 
     Reads the raw transcription, strips metadata header, condenses the body
@@ -142,6 +143,10 @@ def build_prompt_ready(input_path: Path, model_name: str = DEFAULT_PROMPT_MODEL)
     Raises:
         FileNotFoundError: If the input file does not exist.
     """
+    def _emit(type: str, payload: dict = {}) -> None:
+        if on_event:
+            on_event(type, "prompt", payload)
+
     if not input_path.exists():
         logging.error("File not found: %s", input_path)
         raise FileNotFoundError(input_path)
@@ -160,6 +165,7 @@ def build_prompt_ready(input_path: Path, model_name: str = DEFAULT_PROMPT_MODEL)
 
     chunks = _split_for_prompt(body, model_name)
     logging.info("[i] %d chunk(s) to condense (%d chars total)", len(chunks), len(body))
+    _emit("prompt_started", {"filename": input_path.name, "total_chunks": len(chunks)})
 
     llm = make_llm(model_name=model_name, temperature=0.2)
     condense_chain = CONDENSE_PROMPT | llm
@@ -168,11 +174,14 @@ def build_prompt_ready(input_path: Path, model_name: str = DEFAULT_PROMPT_MODEL)
     condensed_chunks = []
     for i, chunk in enumerate(chunks, 1):
         logging.info("[~] Condensing chunk %d/%d...", i, len(chunks))
+        _emit("prompt_chunk_start", {"i": i, "total": len(chunks)})
         t = time()
         response = condense_chain.invoke({"text": chunk})
+        chunk_elapsed = time() - t
         condensed_chunks.append(response.content.strip())
         logging.debug("[d] Chunk %d done in %.1fs | output: %d chars",
-                      i, time() - t, len(response.content))
+                      i, chunk_elapsed, len(response.content))
+        _emit("prompt_chunk_done", {"i": i, "total": len(chunks), "elapsed": round(chunk_elapsed, 1)})
 
     if len(condensed_chunks) > 1:
         logging.info("[~] Merging %d condensed chunks...", len(condensed_chunks))
@@ -206,4 +215,5 @@ def build_prompt_ready(input_path: Path, model_name: str = DEFAULT_PROMPT_MODEL)
     logging.debug("[d] Condensed: %d → %d chars (%.0f%% of original)",
                   len(body), len(final_body), ratio)
     logging.info("[✓] Prompt-ready saved to: %s (%.0fs)", output_path, elapsed)
+    _emit("prompt_done", {"elapsed": round(elapsed, 1), "ratio": ratio, "output_path": str(output_path)})
     return output_path
