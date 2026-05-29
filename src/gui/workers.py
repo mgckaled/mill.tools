@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
+import logging
 import threading
 from dataclasses import dataclass, field
 from pathlib import Path
+from time import time
 from typing import TYPE_CHECKING
 
 from src import analyzer, formatter, prompter, transcriber
+from src.gui.events import LogEventHandler
 from src.utils import (
     AUDIOS_DIR,
     TRANSCRIPTIONS_RAW_DIR,
@@ -68,12 +71,25 @@ def run_pipeline(
     Returns:
         PipelineResult com paths dos arquivos gerados ou mensagem de erro.
     """
+    # captura de estado entre eventos
+    _capture: dict = {}
 
     def on_event(type: str, stage: str, payload: dict) -> None:
         bus.emit(type, stage, payload)
+        if type == "transcribe_done":
+            _capture.update(payload)
 
     def emit(type: str, stage: str = "pipeline", payload: dict | None = None) -> None:
         bus.emit(type, stage, payload or {})
+
+    # instala LogEventHandler no root logger para capturar logs granulares
+    log_handler = LogEventHandler(bus)
+    log_handler.setLevel(logging.DEBUG)
+    log_handler.setFormatter(logging.Formatter("%(message)s"))
+    root_logger = logging.getLogger()
+    root_logger.addHandler(log_handler)
+    original_level = root_logger.level
+    root_logger.setLevel(logging.DEBUG)
 
     result = PipelineResult()
 
@@ -88,21 +104,39 @@ def run_pipeline(
         if cancel_event.is_set():
             return result
 
-        emit("download_start", "download", {"url": args.url})
+        # --- metadados ---
+        emit("metadata_start", "download", {"url": args.url})
         video_id = extract_video_id(args.url)
         meta = fetch_metadata(args.url)
-        audio_slug = video_id[:6]
-        audio_path = AUDIOS_DIR / f"{audio_slug}.mp3"
-        AUDIOS_DIR.mkdir(parents=True, exist_ok=True)
-        download_audio(args.url, audio_path)
-        emit("download_done", "download", {"audio_path": str(audio_path)})
+        emit("metadata_done", "download", {
+            "title": meta.get("title", ""),
+            "channel": meta.get("uploader", ""),
+            "duration": meta.get("duration", 0),
+        })
 
         if cancel_event.is_set():
             return result
 
+        # --- download ou cache ---
+        audio_slug = video_id[:6]
+        audio_path = AUDIOS_DIR / f"{audio_slug}.mp3"
+        AUDIOS_DIR.mkdir(parents=True, exist_ok=True)
+
+        if audio_path.exists():
+            emit("audio_cached", "download", {"audio_path": str(audio_path)})
+        else:
+            emit("download_start", "download", {"url": args.url})
+            download_audio(args.url, audio_path)
+            emit("download_done", "download", {"audio_path": str(audio_path)})
+
+        if cancel_event.is_set():
+            return result
+
+        # --- transcrição ---
         TRANSCRIPTIONS_RAW_DIR.mkdir(parents=True, exist_ok=True)
         output_path = TRANSCRIPTIONS_RAW_DIR / f"transcricao_{audio_slug}.txt"
 
+        pipeline_start = time()
         transcriber.transcribe(
             audio_path=audio_path,
             output_path=output_path,
@@ -116,6 +150,17 @@ def run_pipeline(
             force_overwrite=True,
         )
         result.raw_path = output_path
+
+        # --- resumo de transcrição ---
+        elapsed_transcribe = time() - pipeline_start
+        flagged_count = _capture.get("flagged_count", 0)
+        emit("transcribe_summary", "pipeline", {
+            "title": meta.get("title", "n/a"),
+            "duration": meta.get("duration", 0),
+            "output_path": str(output_path),
+            "elapsed": elapsed_transcribe,
+            "flagged_count": flagged_count,
+        })
 
         if cancel_event.is_set():
             return result
@@ -160,6 +205,10 @@ def run_pipeline(
     except Exception as exc:
         result.error = str(exc)
         emit("pipeline_error", "pipeline", {"message": str(exc)})
+
+    finally:
+        root_logger.removeHandler(log_handler)
+        root_logger.setLevel(original_level)
 
     return result
 
