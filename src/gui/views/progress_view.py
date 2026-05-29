@@ -330,10 +330,11 @@ def build_progress_view(
 
     # --- widgets do painel Pipeline ---
     stage_label = ft.Text(
-        "Aguardando...",
-        size=16,
-        weight=ft.FontWeight.W_500,
-        color=ft.Colors.WHITE,
+        "Inicie o pipeline pelo formulário →",
+        size=14,
+        weight=ft.FontWeight.W_400,
+        color=ft.Colors.ON_SURFACE_VARIANT,
+        italic=True,
     )
 
     progress_bar = ft.ProgressBar(
@@ -342,6 +343,7 @@ def build_progress_view(
         expand=True,
         color=ft.Colors.BLUE_400,
         bgcolor=ft.Colors.GREY_800,
+        visible=False,
     )
 
     log_list = ft.ListView(
@@ -439,6 +441,10 @@ def build_progress_view(
         label = _resolve_stage_label(event)
         if label is not None:
             stage_label.value = label
+            stage_label.color = ft.Colors.WHITE
+            stage_label.italic = False
+            stage_label.size = 16
+            stage_label.weight = ft.FontWeight.W_500
 
         prog = _resolve_progress(event, audio_duration)
         if prog is not None:
@@ -448,6 +454,7 @@ def build_progress_view(
             "transcribe_started", "format_started", "analyze_started",
             "analyze_merge_start", "translation_start", "prompt_started",
         ):
+            progress_bar.visible = True
             progress_bar.value = None
 
         if event.type == "transcribe_summary":
@@ -490,7 +497,13 @@ def build_progress_view(
         """Limpa o log, reseta a barra e desabilita o tab Resultados."""
         log_list.controls.clear()
         progress_bar.value = None
-        stage_label.value = "Iniciando pipeline..."
+        stage_label.value = "Inicie o pipeline pelo formulário →"
+        stage_label.color = ft.Colors.ON_SURFACE_VARIANT
+        stage_label.italic = True
+        stage_label.size = 14
+        stage_label.weight = ft.FontWeight.W_400
+        progress_bar.visible = False
+        progress_bar.value = None
         cancel_button.disabled = False
         audio_duration[0] = 0.0
         tab_btns[1].disabled = True
