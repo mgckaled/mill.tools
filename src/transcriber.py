@@ -68,6 +68,7 @@ def transcribe(
     threads: int,
     beam_size: int,
     on_event: Callable[[str, str, dict], None] | None = None,
+    force_overwrite: bool = False,
 ) -> float | None:
     """Transcribe an audio file using faster-whisper and save plain text output.
 
@@ -95,11 +96,14 @@ def transcribe(
             on_event(type, "transcribe", payload)
 
     if output_path.exists():
-        answer = input(
-            f"[!] Transcription already exists: '{output_path}'. Overwrite? [y/N] ")
-        if answer.strip().lower() != "y":
-            logging.info("Skipping transcription.")
-            return None
+        if force_overwrite:
+            logging.info("[»] Overwriting existing transcription: %s", output_path.name)
+        else:
+            answer = input(
+                f"[!] Transcription already exists: '{output_path}'. Overwrite? [y/N] ")
+            if answer.strip().lower() != "y":
+                logging.info("Skipping transcription.")
+                return None
 
     device, compute_type = _resolve_device(threads)
     logging.debug("[d] Device: %s | compute_type: %s | threads: %d | beam_size: %d",

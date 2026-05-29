@@ -22,11 +22,11 @@ def build_app(page: ft.Page) -> None:
     """
     cfg = settings.load()
     page.theme_mode = (
-        ft.ThemeMode.DARK if cfg.get("theme_mode", "dark") == "dark" else ft.ThemeMode.LIGHT
+        ft.ThemeMode.DARK if cfg.get(
+            "theme_mode", "dark") == "dark" else ft.ThemeMode.LIGHT
     )
 
     cancel_event = threading.Event()
-    _result: dict[str, PipelineResult] = {}
 
     # ------------------------------------------------------------------
     # AppBar com título e botão de tema
@@ -65,7 +65,8 @@ def build_app(page: ft.Page) -> None:
         _show(build_form_view(page, on_start=_on_start))
 
     def _show_progress() -> None:
-        _show(build_progress_view(page, on_cancel=_on_cancel, on_done=_on_pipeline_done))  # type: ignore[arg-type]
+        _show(build_progress_view(page, on_cancel=_on_cancel,
+              on_done=_on_pipeline_done))  # type: ignore[arg-type]
 
     def _show_result(result: PipelineResult) -> None:
         _show(build_result_view(
@@ -83,34 +84,19 @@ def build_app(page: ft.Page) -> None:
     def _on_start(args: PipelineArgs) -> None:
         cancel_event.clear()
         bus = EventBus(page)
-
-        # Captura o resultado do pipeline via pubsub antes de navegar para result_view
-        def _capture_result(event: object) -> None:
-            from src.gui.events import PipelineEvent
-            if not isinstance(event, PipelineEvent):
-                return
-            if event.type == "pipeline_done":
-                p = event.payload
-                _result["last"] = PipelineResult(
-                    raw_path=p.get("raw_path"),
-                    analysis_path=p.get("analysis_path"),
-                    prompt_path=p.get("prompt_path"),
-                )
-                page.pubsub.unsubscribe()
-            elif event.type == "pipeline_error":
-                _result["last"] = PipelineResult(error=event.payload.get("message"))
-                page.pubsub.unsubscribe()
-
-        _result["last"] = PipelineResult()
-        page.pubsub.subscribe(_capture_result)
         _show_progress()
         start_pipeline(args, bus, cancel_event)
 
     def _on_cancel() -> None:
         cancel_event.set()
 
-    def _on_pipeline_done() -> None:
-        _show_result(_result.get("last", PipelineResult()))
+    def _on_pipeline_done(payload: dict) -> None:
+        result = PipelineResult(
+            raw_path=payload.get("raw_path"),
+            analysis_path=payload.get("analysis_path"),
+            prompt_path=payload.get("prompt_path"),
+        )
+        _show_result(result)
 
     # ------------------------------------------------------------------
     # Atalhos de teclado globais

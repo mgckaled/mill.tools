@@ -113,6 +113,7 @@ def run_pipeline(
             threads=args.threads,
             beam_size=args.beam_size,
             on_event=on_event,
+            force_overwrite=True,
         )
         result.raw_path = output_path
 

@@ -173,7 +173,7 @@ def _resolve_stage_label(event: PipelineEvent) -> str | None:
 def build_progress_view(
     page: ft.Page,
     on_cancel: Callable[[], None],
-    on_done: Callable[[], None],
+    on_done: Callable[[dict], None],
 ) -> ft.Control:
     """Retorna o controle raiz da view de progresso.
 
@@ -267,7 +267,7 @@ def build_progress_view(
             cancel_button.disabled = True
             page.update()
             page.pubsub.unsubscribe()
-            on_done()
+            on_done(event.payload)
             return
 
         page.update()
