@@ -26,12 +26,13 @@ def build_result_view(
     raw_path: Path | None,
     analysis_path: Path | None,
     prompt_path: Path | None,
-    on_restart: Callable,
+    on_restart: Callable | None = None,
 ) -> ft.Control:
     """Retorna o controle raiz da view de resultados.
 
     Implementa tab switching manual (ft.Tabs/ft.Tab incompatíveis com Flet 0.85).
     Exibe Transcrição, Análise e Prompt-ready com ações de copiar e abrir pasta.
+    on_restart é opcional — no layout split o usuário reinicia pelo formulário.
     """
     raw_content = _read(raw_path)
     analysis_content = _read(analysis_path)
@@ -121,15 +122,20 @@ def build_result_view(
             duration=2000,
         ))
 
+    action_controls: list[ft.Control] = [
+        ft.IconButton(ft.Icons.FOLDER_OPEN, tooltip="Abrir pasta",
+                      on_click=lambda _: _open_folder(raw_path)),
+        ft.IconButton(ft.Icons.COPY, tooltip="Copiar conteúdo da aba",
+                      on_click=on_copy),
+        ft.Container(expand=True),
+    ]
+    if on_restart is not None:
+        action_controls.append(
+            ft.TextButton("Nova transcrição", on_click=lambda _: on_restart())
+        )
+
     action_row = ft.Row(
-        controls=[
-            ft.IconButton(ft.Icons.FOLDER_OPEN, tooltip="Abrir pasta",
-                          on_click=lambda _: _open_folder(raw_path)),
-            ft.IconButton(ft.Icons.COPY, tooltip="Copiar conteúdo da aba",
-                          on_click=on_copy),
-            ft.Container(expand=True),
-            ft.TextButton("Nova transcrição", on_click=lambda _: on_restart()),
-        ],
+        controls=action_controls,
         vertical_alignment=ft.CrossAxisAlignment.CENTER,
     )
 
