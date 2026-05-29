@@ -398,7 +398,8 @@ def build_progress_view(
     )
 
     # --- painel Resultados ---
-    results_inner = ft.Container(expand=True)
+    # Usa Column com controls (não content) para evitar diff None→tree no Flet 0.85
+    results_inner = ft.Column(controls=[], expand=True)
     results_panel = ft.Column(
         controls=[results_inner],
         expand=True,
@@ -472,7 +473,7 @@ def build_progress_view(
         if event.type == "pipeline_done":
             progress_bar.value = 1.0
             cancel_button.disabled = True
-            page.update()
+            # Não chama page.update() aqui — on_done vai acionar o update final
             on_done(event.payload)
             return
 
@@ -493,7 +494,7 @@ def build_progress_view(
         cancel_button.disabled = False
         audio_duration[0] = 0.0
         tab_btns[1].disabled = True
-        results_inner.content = None
+        results_inner.controls.clear()
         results_panel.visible = False
         pipeline_panel.visible = True
         tab_btns[0].style = ft.ButtonStyle(
@@ -512,12 +513,13 @@ def build_progress_view(
         if not isinstance(result, PipelineResult):
             return
 
-        results_inner.content = build_result_view(
+        results_inner.controls.clear()
+        results_inner.controls.append(build_result_view(
             page,
             raw_path=result.raw_path,
             analysis_path=result.analysis_path,
             prompt_path=result.prompt_path,
-        )
+        ))
         tab_btns[1].disabled = False
         _switch_tab(1)
 
