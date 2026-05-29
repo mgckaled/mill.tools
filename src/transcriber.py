@@ -4,6 +4,7 @@ transcriber.py: Audio transcription, progress display and result summary.
 
 import logging
 import sys
+from collections.abc import Callable
 from pathlib import Path
 from time import time
 
@@ -66,6 +67,7 @@ def transcribe(
     language: str | None,
     threads: int,
     beam_size: int,
+    on_event: Callable[[str, str, dict], None] | None = None,
 ) -> float | None:
     """Transcribe an audio file using faster-whisper and save plain text output.
 
@@ -88,6 +90,10 @@ def transcribe(
     Returns:
         Elapsed transcription time in seconds.
     """
+    def _emit(type: str, payload: dict = {}) -> None:
+        if on_event:
+            on_event(type, "transcribe", payload)
+
     if output_path.exists():
         answer = input(
             f"[!] Transcription already exists: '{output_path}'. Overwrite? [y/N] ")
@@ -101,6 +107,7 @@ def transcribe(
     logging.info("[*] Loading model '%s' on %s (%s)...",
                  model_size, device.upper(), compute_type)
     model_load_start = time()
+    _emit("whisper_loading")
     model = WhisperModel(
         model_size,
         device=device,
@@ -108,9 +115,12 @@ def transcribe(
         cpu_threads=threads if device == "cpu" else 0,
         num_workers=1,
     )
-    logging.debug("[d] Model loaded in %.1fs", time() - model_load_start)
+    elapsed_load = time() - model_load_start
+    logging.debug("[d] Model loaded in %.1fs", elapsed_load)
+    _emit("whisper_loaded", {"elapsed": elapsed_load})
 
     logging.info("[~] Transcribing... (this may take a while for long videos)")
+    _emit("transcribe_started")
 
     try:
         start = time()
@@ -156,6 +166,12 @@ def transcribe(
                     progress_bar.update(int(elapsed_seg))
                     current = segment.end
                     segment_count += 1
+                    _emit("transcribe_segment", {
+                        "text": segment.text,
+                        "start": segment.start,
+                        "end": segment.end,
+                        "is_low_confidence": low_conf,
+                    })
 
         elapsed = time() - start
         txt_size_kb = output_path.stat().st_size / 1024
@@ -168,6 +184,11 @@ def transcribe(
                 "[!] %d segment(s) flagged as low-confidence [?] — review recommended",
                 flagged_count,
             )
+        _emit("transcribe_done", {
+            "elapsed": elapsed,
+            "flagged_count": flagged_count,
+            "output_path": str(output_path),
+        })
         return elapsed
 
     except KeyboardInterrupt:
