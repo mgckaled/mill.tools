@@ -42,10 +42,25 @@ def build_result_view(
     selected: list[int] = [0]
 
     # --- painéis de conteúdo ---
+    _md_style = ft.MarkdownStyleSheet(
+        blockquote_decoration=ft.BoxDecoration(
+            bgcolor=ft.Colors.with_opacity(0.15, ft.Colors.WHITE),
+            border_radius=4,
+        ),
+    )
+
     def _make_panel(text: str) -> ft.Container:
         return ft.Container(
             content=ft.Column(
-                controls=[ft.Markdown(value=text, expand=True, selectable=True)],
+                controls=[
+                    ft.Markdown(
+                        value=text,
+                        expand=True,
+                        selectable=True,
+                        code_theme=ft.MarkdownCodeTheme.ATOM_ONE_DARK,
+                        md_style_sheet=_md_style,
+                    )
+                ],
                 scroll=ft.ScrollMode.AUTO,
                 expand=True,
             ),
