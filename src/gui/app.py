@@ -86,15 +86,53 @@ def build_app(page: ft.Page) -> None:
     progress_panel = build_progress_view(page, on_cancel=_on_cancel, on_done=_on_pipeline_done)
 
     # ------------------------------------------------------------------
+    # Legenda de atalhos de teclado (sempre visível, rodapé esquerdo)
+    # ------------------------------------------------------------------
+
+    def _key_chip(label: str) -> ft.Container:
+        return ft.Container(
+            content=ft.Text(label, size=11, font_family="monospace", color=ft.Colors.ON_SURFACE_VARIANT),
+            padding=ft.Padding(left=6, right=6, top=2, bottom=2),
+            border=ft.Border(
+                left=ft.BorderSide(1, ft.Colors.OUTLINE_VARIANT),
+                right=ft.BorderSide(1, ft.Colors.OUTLINE_VARIANT),
+                top=ft.BorderSide(1, ft.Colors.OUTLINE_VARIANT),
+                bottom=ft.BorderSide(2, ft.Colors.OUTLINE_VARIANT),
+            ),
+            border_radius=4,
+        )
+
+    shortcuts_bar = ft.Container(
+        content=ft.Row(
+            controls=[
+                _key_chip("Ctrl"), ft.Text("+", size=11, color=ft.Colors.ON_SURFACE_VARIANT),
+                _key_chip("Enter"), ft.Text(" Iniciar", size=11, color=ft.Colors.ON_SURFACE_VARIANT),
+                ft.Container(width=12),
+                _key_chip("Esc"), ft.Text(" Cancelar", size=11, color=ft.Colors.ON_SURFACE_VARIANT),
+            ],
+            spacing=3,
+            vertical_alignment=ft.CrossAxisAlignment.CENTER,
+        ),
+        padding=ft.Padding(left=12, right=8, top=6, bottom=6),
+        border=ft.Border(top=ft.BorderSide(1, ft.Colors.OUTLINE_VARIANT)),
+    )
+
+    # ------------------------------------------------------------------
     # Layout split
     # ------------------------------------------------------------------
 
     layout = ft.Row(
         controls=[
             ft.Container(
-                content=form_panel.control,
+                content=ft.Column(
+                    controls=[
+                        ft.Container(content=form_panel.control, expand=True),
+                        shortcuts_bar,
+                    ],
+                    spacing=0,
+                    expand=True,
+                ),
                 width=380,
-                padding=ft.Padding(left=12, right=8, top=8, bottom=8),
             ),
             ft.VerticalDivider(width=1, color=ft.Colors.OUTLINE_VARIANT),
             ft.Container(
