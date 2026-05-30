@@ -501,8 +501,8 @@ def build_progress_view(
         if event.type == "pipeline_done":
             progress_bar.value = 1.0
             cancel_button.disabled = True
-            # Não chama page.update() aqui — _call_on_done vai acionar o update final
-            _call_on_done(event.payload)
+            _call_on_done(event.payload)  # no-op se task_done já processado
+            page.update()  # renderiza "[✓] Pipeline complete." e mudanças de barra
             return
 
         if event.type == "pipeline_error":
@@ -572,6 +572,10 @@ def build_progress_view(
             analysis_path=result.analysis_path,
             prompt_path=result.prompt_path,
         ))
+        # Renderizar o conteúdo ENQUANTO o painel ainda está invisível —
+        # evita diff visible=False → visible=True+conteúdo complexo no Flet 0.85
+        # (mesmo padrão: Column+append em vez de Container content=None→tree)
+        page.update()
         tab_btns[1].disabled = False
         _switch_tab(1)
 
