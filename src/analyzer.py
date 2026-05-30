@@ -21,6 +21,7 @@ import argparse
 import json
 import logging
 import sys
+from collections.abc import Callable
 from datetime import datetime
 from pathlib import Path
 from time import time
@@ -357,7 +358,11 @@ def _format_report(
     return "\n".join(lines)
 
 
-def _ensure_portuguese(analysis: dict, llm: BaseChatModel) -> dict:
+def _ensure_portuguese(
+    analysis: dict,
+    llm: BaseChatModel,
+    on_event: Callable[[str, str, dict], None] | None = None,
+) -> dict:
     """Detect the language of the analysis and translate to PT-BR if needed.
 
     Uses the LLM to detect the language of the summary field. If it's not
@@ -370,6 +375,10 @@ def _ensure_portuguese(analysis: dict, llm: BaseChatModel) -> dict:
     Returns:
         Original analysis if already in Portuguese, or translated version.
     """
+    def _emit(type: str, payload: dict = {}) -> None:
+        if on_event:
+            on_event(type, "analyze", payload)
+
     summary=analysis.get("summary", "")
     if not summary:
         return analysis
@@ -382,17 +391,20 @@ def _ensure_portuguese(analysis: dict, llm: BaseChatModel) -> dict:
     logging.debug("[d] Language raw response: %r → parsed: %r",
                   raw_lang, detected)
     logging.info("[i] Detected language: %s", detected)
+    _emit("language_detected", {"lang": detected})
 
     if detected == "pt":
         return analysis
 
     logging.info("[~] Translating analysis to PT-BR...")
+    _emit("translation_start", {})
     json_text=json.dumps(analysis, ensure_ascii=False, indent=2)
     translate_chain=TRANSLATE_PROMPT | llm
     translated_response=translate_chain.invoke({"json_text": json_text})
     translated=_parse_json_response(translated_response.content)
 
     logging.info("[✓] Translation complete.")
+    _emit("translation_done", {})
     return translated
 
 
@@ -400,6 +412,7 @@ def analyze(
     input_path: Path,
     model_name: str = DEFAULT_MODEL,
     transcription: str | None = None,
+    on_event: Callable[[str, str, dict], None] | None = None,
 ) -> Path:
     """Analyze a transcription file and generate a structured Markdown report.
 
@@ -423,6 +436,10 @@ def analyze(
         FileNotFoundError: If the input file does not exist.
         ValueError: If the LLM returns invalid JSON after all attempts.
     """
+    def _emit(type: str, payload: dict = {}) -> None:
+        if on_event:
+            on_event(type, "analyze", payload)
+
     if not input_path.exists():
         logging.error("File not found: %s", input_path)
         raise FileNotFoundError(input_path)
@@ -445,6 +462,7 @@ def analyze(
                  len(chunks), len(body))
     for i, chunk in enumerate(chunks, 1):
         logging.debug("[d] Chunk %d/%d: %d chars", i, len(chunks), len(chunk))
+    _emit("analyze_started", {"filename": input_path.name, "total_chunks": len(chunks), "model_name": model_name})
 
     llm = make_llm(model_name=model_name, temperature=0.4)      # análise e merge
     llm_util = make_llm(model_name=model_name, temperature=0)   # detecção de idioma e tradução
@@ -453,26 +471,33 @@ def analyze(
 
     if len(chunks) == 1:
         logging.info("[~] Analyzing single chunk...")
+        _emit("analyze_chunk_start", {"i": 1, "total": 1})
         t_chunk=time()
         chain=ANALYSIS_PROMPT | llm
         response=chain.invoke({"text": chunks[0]})
         analysis=_parse_json_response(response.content)
+        chunk_elapsed = time() - t_chunk
         logging.debug("[d] Single chunk done in %.1fs | response: %d chars | keys: %s",
-                      time() - t_chunk, len(response.content), list(analysis.keys()))
+                      chunk_elapsed, len(response.content), list(analysis.keys()))
+        _emit("analyze_chunk_done", {"i": 1, "total": 1, "elapsed": round(chunk_elapsed, 1)})
     else:
         partial_analyses=[]
         for i, chunk in enumerate(chunks, 1):
             logging.info("[~] Analyzing chunk %d/%d...", i, len(chunks))
+            _emit("analyze_chunk_start", {"i": i, "total": len(chunks)})
             t_chunk=time()
             chain=ANALYSIS_PROMPT | llm
             response=chain.invoke({"text": chunk})
             partial=_parse_json_response(response.content)
+            chunk_elapsed = time() - t_chunk
             logging.debug("[d] Chunk %d done in %.1fs | response: %d chars | keys: %s",
-                          i, time() - t_chunk, len(response.content), list(partial.keys()))
+                          i, chunk_elapsed, len(response.content), list(partial.keys()))
+            _emit("analyze_chunk_done", {"i": i, "total": len(chunks), "elapsed": round(chunk_elapsed, 1)})
             partial_analyses.append(partial)
 
         logging.info("[~] Merging %d partial analyses...",
                      len(partial_analyses))
+        _emit("analyze_merge_start", {"total_chunks": len(partial_analyses)})
         t_merge=time()
         merge_input=json.dumps(partial_analyses, ensure_ascii=False, indent=2)
         merge_chain=MERGE_PROMPT | llm
@@ -480,7 +505,7 @@ def analyze(
         analysis=_parse_json_response(merge_response.content)
         logging.debug("[d] Merge done in %.1fs", time() - t_merge)
 
-    analysis = _ensure_portuguese(analysis, llm_util)
+    analysis = _ensure_portuguese(analysis, llm_util, on_event)
 
     elapsed=time() - start
 
@@ -492,6 +517,7 @@ def analyze(
     logging.debug("[d] Report size: %.1f KB", md_size_kb)
 
     logging.info("[✓] Analysis saved to: %s (%.0fs)", output_path, elapsed)
+    _emit("analyze_done", {"elapsed": round(elapsed, 1), "output_path": str(output_path)})
     return output_path
 
 

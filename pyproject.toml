@@ -7,6 +7,7 @@ requires-python = ">=3.13"
 dependencies = [
     "ctranslate2>=4.7.2",
     "faster-whisper>=1.2.1",
+    "flet>=0.28",
     "langchain-google-genai>=2.1.0",
     "langchain-ollama>=0.3.0",
     "langchain-text-splitters>=0.3.0",

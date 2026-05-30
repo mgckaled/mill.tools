@@ -18,6 +18,7 @@ CLI Python para transcrever vídeos do YouTube em texto corrido e gerar análise
 - [yt-dlp](https://github.com/yt-dlp/yt-dlp) no PATH
 - [Ollama](https://ollama.com/download) (apenas se usar modelos locais para `--format`/`--analyze`/`--prompt`)
 - Chave da [Google AI Studio](https://aistudio.google.com/apikey) (apenas se usar modelos Gemini)
+- [Flet](https://flet.dev) — incluído nas dependências do projeto (apenas para a GUI)
 
 ---
 
@@ -61,7 +62,15 @@ O `.env` é carregado automaticamente sempre que `--fm`, `--am` ou `--pm` recebe
 
 ## Uso
 
-### Transcrição
+### GUI desktop
+
+```bash
+uv run gui.py
+```
+
+Abre a interface gráfica com layout split: formulário à esquerda e painel de pipeline à direita. Todos os parâmetros do CLI estão disponíveis na GUI.
+
+### Transcrição (CLI)
 
 ```bash
 uv run main.py <YOUTUBE_URL> [options]
@@ -147,6 +156,7 @@ uv run -m src transcriptions/raw/transcricao_ovabeV.txt --model gemini-2.5-flash
 ```text
 yt-transcriber/
 ├── main.py                    — entry point, CLI
+├── gui.py                     — entry point, GUI desktop (Flet)
 ├── .env.example               — template do .env (GOOGLE_API_KEY para Gemini)
 ├── src/
 │   ├── __init__.py
@@ -156,7 +166,16 @@ yt-transcriber/
 │   ├── formatter.py           — formatação de parágrafos via LLM
 │   ├── analyzer.py            — análise estruturada via LangChain
 │   ├── prompter.py            — condensação para uso como contexto em prompts
-│   └── utils.py               — logging, validação, metadata, download
+│   ├── utils.py               — logging, validação, metadata, download
+│   └── gui/
+│       ├── app.py             — layout split e ciclo de vida do pipeline
+│       ├── events.py          — EventBus, PipelineEvent, LogEventHandler
+│       ├── settings.py        — persistência de configurações
+│       ├── workers.py         — execução do pipeline em thread background
+│       └── views/
+│           ├── form_view.py   — formulário de configuração
+│           ├── progress_view.py — logs em tempo real e barra de progresso
+│           └── result_view.py — resultados em abas (Transcrição/Análise/Prompt-ready)
 ├── ollama/
 │   ├── Modelfile              — config do qwen7b-custom
 │   └── Modelfile.phi4mini     — config do phi4mini-custom
@@ -166,6 +185,56 @@ yt-transcriber/
     ├── analysis/              — análises estruturadas (.md)
     └── prompt_ready/          — versões condensadas para uso como contexto (.txt)
 ```
+
+---
+
+## GUI desktop
+
+A interface gráfica oferece todos os recursos do CLI em um layout split permanente:
+
+```
+┌─ yt-transcriber ──────────────────────────────────────────[☀]┐
+├──────────────────────┬────────────────────────────────────────┤
+│  Vídeo               │  Pipeline    Resultados                │
+│  [URL ____________]  │                                        │
+│                      │  Inicie o pipeline pelo formulário →   │
+│  Transcrição         │  ──────────────────────────────────    │
+│  Whisper  [small ▼]  │  [i] Fetching video metadata...        │
+│  Idioma   [auto  ▼]  │  [i] Title: Como alcancei meu sonho    │
+│  Beam ●──○ 1         │  [»] Audio already exists...           │
+│                      │  [*] Loading model 'small' on CUDA...  │
+│  ☐ Formatar          │  [~] Transcribing...                   │
+│    [phi4mini ▼]      │  [i] Detected language: pt (100%)      │
+│                      │  Eu sempre tive um sonho...            │
+│  ☑ Analisar          │  ────────────────────────────────      │
+│    [gemini   ▼]      │  ╔══ title    : Como alcancei...  ╗    │
+│                      │  ║  duration : 00:05:27           ║    │
+│  ☐ Prompt-ready      │  ║  elapsed  : 55s                ║    │
+│    [gemini   ▼]      │  ╚══════════════════════════════  ╝    │
+│                      │  [✓] Pipeline complete.                 │
+│  [Google API Key]    │                               [Cancelar]│
+│  [⏳ Executando...]  │                                        │
+└──────────────────────┴────────────────────────────────────────┘
+```
+
+### Funcionalidades da GUI
+
+- **Layout split permanente** — formulário sempre visível à esquerda; sem navegação entre telas
+- **Logs em tempo real** com cores por prefixo: `[i]` azul · `[*]` ciano · `[~]` amarelo · `[✓]` verde · `[!]` vermelho · `[»]` cinza · `[d]` cinza escuro
+- **Barra de progresso determinada** durante a transcrição — calcula `segment.end / audio_duration`
+- **Card de resumo** ao fim da transcrição (título, duração, tempo decorrido, segmentos flagados)
+- **Aba Resultados** habilitada automaticamente ao fim do pipeline — com sub-abas Transcrição / Análise / Prompt-ready
+- **Copiar conteúdo** e **abrir pasta** diretamente na aba de resultados
+- **Dropdowns de modelo** para formatação, análise e prompt-ready
+- **Botão Iniciar** desabilita com ampulheta durante execução
+- `Ctrl+Enter` inicia o pipeline · `Esc` cancela
+
+### Atalhos
+
+| Atalho | Ação |
+|---|---|
+| `Ctrl+Enter` | Inicia o pipeline (se URL válida) |
+| `Esc` | Cancela o pipeline em andamento |
 
 ---
 
