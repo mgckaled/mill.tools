@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable
 
 import flet as ft
 
+from src.gui.assets import b64
 from src.gui.events import PipelineEvent
 from src.transcriber import format_elapsed
 from src.utils import format_duration
@@ -367,13 +369,40 @@ def build_progress_view(
         on_click=lambda _: on_cancel(),
     )
 
+    # --- moinho giratório no header do pipeline ---
+    _SPIN_PERIOD = 900  # ms por volta
+    _spinning: list[bool] = [False]
+
+    status_icon = ft.Image(
+        src=b64("mill-symbol.png"),
+        width=22,
+        height=22,
+        rotate=ft.Rotate(angle=0, alignment=ft.Alignment.CENTER),
+        animate_rotation=ft.Animation(_SPIN_PERIOD, ft.AnimationCurve.LINEAR),
+    )
+
+    def _spin_step(e=None) -> None:
+        if _spinning[0]:
+            status_icon.rotate.angle += 2 * math.pi
+            status_icon.update()
+
+    status_icon.on_animation_end = _spin_step
+
+    def _start_spin() -> None:
+        if not _spinning[0]:
+            _spinning[0] = True
+            _spin_step()
+
+    def _stop_spin() -> None:
+        _spinning[0] = False
+
     pipeline_panel = ft.Column(
         controls=[
             ft.Column(
                 controls=[
                     ft.Row(
                         controls=[
-                            ft.Icon(ft.Icons.SETTINGS_SUGGEST_ROUNDED, color=ft.Colors.BLUE_300),
+                            status_icon,
                             stage_label,
                         ],
                         spacing=8,
@@ -462,6 +491,7 @@ def build_progress_view(
         ):
             progress_bar.visible = True
             progress_bar.value = None
+            _start_spin()
 
         if event.type == "transcribe_summary":
             log_list.controls.append(_make_summary_card(event.payload))
@@ -487,12 +517,14 @@ def build_progress_view(
         if event.type == "task_done":
             progress_bar.value = 1.0
             cancel_button.disabled = True
+            _stop_spin()
             _call_on_done(event.payload)
             return
 
         if event.type == "task_error":
             progress_bar.visible = False
             cancel_button.disabled = True
+            _stop_spin()
             _call_on_done({"error": True})
             page.update()
             return
@@ -501,6 +533,7 @@ def build_progress_view(
         if event.type == "pipeline_done":
             progress_bar.value = 1.0
             cancel_button.disabled = True
+            _stop_spin()
             _call_on_done(event.payload)  # no-op se task_done já processado
             page.update()  # renderiza "[✓] Pipeline complete." e mudanças de barra
             return
@@ -508,6 +541,7 @@ def build_progress_view(
         if event.type == "pipeline_error":
             progress_bar.visible = False
             cancel_button.disabled = True
+            _stop_spin()
             _call_on_done({"error": True})
             page.update()
             return
@@ -518,6 +552,7 @@ def build_progress_view(
             stage_label.color = ft.Colors.ON_SURFACE_VARIANT
             stage_label.italic = True
             progress_bar.visible = False
+            _stop_spin()
             _call_on_done({"cancelled": True})
             page.update()
             return
@@ -534,6 +569,7 @@ def build_progress_view(
     def _reset() -> None:
         """Limpa o log, reseta a barra e desabilita o tab Resultados."""
         _done_called[0] = False
+        _stop_spin()
         log_list.controls.clear()
         progress_bar.value = None
         stage_label.value = "Inicie o pipeline pelo formulário →"
