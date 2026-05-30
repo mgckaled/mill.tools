@@ -50,6 +50,7 @@ class PipelineResult:
     analysis_path: Path | None = None
     prompt_path: Path | None = None
     error: str | None = None
+    completed: bool = False  # True apenas quando pipeline_done foi emitido
 
 
 def run_pipeline(
@@ -200,15 +201,19 @@ def run_pipeline(
             )
             result.prompt_path = prompt_path
 
-        emit("pipeline_done", "pipeline", {
+        _done_payload = {
             "raw_path": str(result.raw_path) if result.raw_path else None,
             "analysis_path": str(result.analysis_path) if result.analysis_path else None,
             "prompt_path": str(result.prompt_path) if result.prompt_path else None,
-        })
+        }
+        result.completed = True
+        emit("task_done", "pipeline", _done_payload)       # evento genérico (PR2+)
+        emit("pipeline_done", "pipeline", _done_payload)   # TODO(PR3): remover evento legado
 
     except Exception as exc:
         result.error = str(exc)
-        emit("pipeline_error", "pipeline", {"message": str(exc)})
+        emit("task_error", "pipeline", {"message": str(exc)})    # evento genérico (PR2+)
+        emit("pipeline_error", "pipeline", {"message": str(exc)})  # TODO(PR3): remover evento legado
 
     finally:
         root_logger.removeHandler(log_handler)
@@ -219,10 +224,13 @@ def run_pipeline(
 
 def start_pipeline(
     args: PipelineArgs,
-    bus: EventBus,
+    bus: "EventBus",
     cancel_event: threading.Event,
 ) -> threading.Thread:
     """Inicia o pipeline em uma thread de background e retorna a thread.
+
+    Detecta cancelamento (retorno antecipado sem pipeline_done/pipeline_error)
+    e emite pipeline_cancelled para que o ProgressPanel possa resetar o estado.
 
     Args:
         args: Parâmetros do pipeline.
@@ -232,10 +240,12 @@ def start_pipeline(
     Returns:
         Thread iniciada (daemon=True).
     """
-    thread = threading.Thread(
-        target=run_pipeline,
-        args=(args, bus, cancel_event),
-        daemon=True,
-    )
+    def _run() -> None:
+        result = run_pipeline(args, bus, cancel_event)
+        # Cancelamento: sem completed e sem erro → retorno antecipado via cancel_event
+        if not result.completed and result.error is None:
+            bus.emit("pipeline_cancelled", "pipeline", {})
+
+    thread = threading.Thread(target=_run, daemon=True)
     thread.start()
     return thread

@@ -327,6 +327,12 @@ def build_progress_view(
         on_done: Callable chamado quando pipeline_done é recebido.
     """
     audio_duration: list[float] = [0.0]
+    _done_called: list[bool] = [False]  # guard contra duplo on_done
+
+    def _call_on_done(payload: dict) -> None:
+        if not _done_called[0]:
+            _done_called[0] = True
+            on_done(payload)
 
     # --- widgets do painel Pipeline ---
     stage_label = ft.Text(
@@ -477,11 +483,43 @@ def build_progress_view(
             )
         _trim_log()
 
+        # --- eventos genéricos (usados por todos os módulos em PR3+) ---
+        if event.type == "task_done":
+            progress_bar.value = 1.0
+            cancel_button.disabled = True
+            _call_on_done(event.payload)
+            return
+
+        if event.type == "task_error":
+            progress_bar.visible = False
+            cancel_button.disabled = True
+            _call_on_done({"error": True})
+            page.update()
+            return
+
+        # --- eventos legados de Transcrição (TODO(PR3): remover) ---
         if event.type == "pipeline_done":
             progress_bar.value = 1.0
             cancel_button.disabled = True
-            # Não chama page.update() aqui — on_done vai acionar o update final
-            on_done(event.payload)
+            # Não chama page.update() aqui — _call_on_done vai acionar o update final
+            _call_on_done(event.payload)
+            return
+
+        if event.type == "pipeline_error":
+            progress_bar.visible = False
+            cancel_button.disabled = True
+            _call_on_done({"error": True})
+            page.update()
+            return
+
+        if event.type == "pipeline_cancelled":
+            cancel_button.disabled = False
+            stage_label.value = "Pipeline cancelado."
+            stage_label.color = ft.Colors.ON_SURFACE_VARIANT
+            stage_label.italic = True
+            progress_bar.visible = False
+            _call_on_done({"cancelled": True})
+            page.update()
             return
 
         page.update()
@@ -495,6 +533,7 @@ def build_progress_view(
     # --- métodos do ProgressPanel ---
     def _reset() -> None:
         """Limpa o log, reseta a barra e desabilita o tab Resultados."""
+        _done_called[0] = False
         log_list.controls.clear()
         progress_bar.value = None
         stage_label.value = "Inicie o pipeline pelo formulário →"
