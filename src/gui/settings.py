@@ -1,12 +1,19 @@
-"""Persistência de preferências do usuário em ~/.yt-transcriber/config.json."""
+"""Persistência de preferências do usuário em ~/.mill-tools/config.json."""
 
 from __future__ import annotations
 
 import json
+import shutil
 from pathlib import Path
 
-_CONFIG_DIR = Path.home() / ".yt-transcriber"
+_CONFIG_DIR = Path.home() / ".mill-tools"
 _CONFIG_FILE = _CONFIG_DIR / "config.json"
+
+# Migração automática de ~/.yt-transcriber (executa uma vez, silenciosamente)
+_OLD_CONFIG = Path.home() / ".yt-transcriber" / "config.json"
+if _OLD_CONFIG.exists() and not _CONFIG_FILE.exists():
+    _CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+    shutil.copy(_OLD_CONFIG, _CONFIG_FILE)
 
 _DEFAULTS: dict = {
     "last_whisper_model": "small",

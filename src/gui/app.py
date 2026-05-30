@@ -47,7 +47,7 @@ def build_app(page: ft.Page) -> None:
     )
 
     page.appbar = ft.AppBar(
-        title=ft.Text("yt-transcriber", weight=ft.FontWeight.BOLD),
+        title=ft.Text("mill.tools", weight=ft.FontWeight.BOLD),
         center_title=False,
         actions=[theme_btn],
     )

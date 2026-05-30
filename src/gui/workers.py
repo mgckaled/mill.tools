@@ -12,8 +12,8 @@ from typing import TYPE_CHECKING
 from src import analyzer, formatter, prompter, transcriber
 from src.gui.events import LogEventHandler
 from src.utils import (
-    AUDIOS_DIR,
-    TRANSCRIPTIONS_RAW_DIR,
+    AUDIO_SOURCE_DIR,
+    TRANSCRIPTIONS_TEXT_DIR,
     check_dependencies,
     download_audio,
     extract_video_id,
@@ -123,8 +123,8 @@ def run_pipeline(
 
         # --- download ou cache ---
         audio_slug = video_id[:6]
-        audio_path = AUDIOS_DIR / f"{audio_slug}.mp3"
-        AUDIOS_DIR.mkdir(parents=True, exist_ok=True)
+        audio_path = AUDIO_SOURCE_DIR / f"{audio_slug}.mp3"
+        AUDIO_SOURCE_DIR.mkdir(parents=True, exist_ok=True)
 
         if audio_path.exists():
             emit("audio_cached", "download", {"audio_path": str(audio_path)})
@@ -137,8 +137,8 @@ def run_pipeline(
             return result
 
         # --- transcrição ---
-        TRANSCRIPTIONS_RAW_DIR.mkdir(parents=True, exist_ok=True)
-        output_path = TRANSCRIPTIONS_RAW_DIR / f"transcricao_{audio_slug}.txt"
+        TRANSCRIPTIONS_TEXT_DIR.mkdir(parents=True, exist_ok=True)
+        output_path = TRANSCRIPTIONS_TEXT_DIR / f"transcricao_{audio_slug}.txt"
 
         pipeline_start = time()
         transcriber.transcribe(

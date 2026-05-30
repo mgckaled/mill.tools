@@ -17,10 +17,13 @@ from tqdm import tqdm
 os.environ["HF_HUB_DISABLE_SYMLINKS_WARNING"] = "1"
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
-AUDIOS_DIR = PROJECT_ROOT / "audios"
-TRANSCRIPTIONS_RAW_DIR = PROJECT_ROOT / "transcriptions" / "raw"
-TRANSCRIPTIONS_ANALYSIS_DIR = PROJECT_ROOT / "transcriptions" / "analysis"
-TRANSCRIPTIONS_PROMPT_DIR = PROJECT_ROOT / "transcriptions" / "prompt_ready"
+OUTPUT_DIR               = PROJECT_ROOT / "output"
+AUDIO_SOURCE_DIR         = OUTPUT_DIR / "audio" / "source"
+AUDIO_PROCESSED_DIR      = OUTPUT_DIR / "audio" / "processed"
+VIDEO_PROCESSED_DIR      = OUTPUT_DIR / "video" / "processed"
+TRANSCRIPTIONS_TEXT_DIR  = OUTPUT_DIR / "transcriptions" / "text"
+TRANSCRIPTIONS_ANALYSIS_DIR = OUTPUT_DIR / "transcriptions" / "analysis"
+TRANSCRIPTIONS_DIGEST_DIR = OUTPUT_DIR / "transcriptions" / "digest"
 YOUTUBE_URL_PATTERN = re.compile(
     r"^(https?://)?(www\.)?(youtube\.com/watch\?v=|youtu\.be/)[A-Za-z0-9_-]{11}"
 )
@@ -204,7 +207,7 @@ def download_audio(url: str, audio_path: Path) -> None:
             "[»] Audio already exists, skipping download: %s", audio_path)
         return
 
-    AUDIOS_DIR.mkdir(exist_ok=True)
+    AUDIO_SOURCE_DIR.mkdir(parents=True, exist_ok=True)
     logging.info("[↓] Downloading audio from: %s", url)
 
     try:

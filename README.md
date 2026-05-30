@@ -1,6 +1,6 @@
-# yt-transcriber
+# mill.tools
 
-CLI Python para transcrever vídeos do YouTube em texto corrido e gerar análises estruturadas. Usa [faster-whisper](https://github.com/SYSTRAN/faster-whisper) para transcrição (100% local, com GPU) e [LangChain](https://www.langchain.com/) para formatação, análise e condensação — com escolha de provider via CLI: [Ollama](https://ollama.com) local (default) ou [Google Gemini](https://ai.google.dev/) na nuvem (free tier).
+Multiferramenta pessoal para processamento de áudio, vídeo e transcrição. O módulo de Transcrição usa [faster-whisper](https://github.com/SYSTRAN/faster-whisper) (100% local, com GPU) e [LangChain](https://www.langchain.com/) para formatação, análise e condensação — com escolha de provider: [Ollama](https://ollama.com) local (default) ou [Google Gemini](https://ai.google.dev/) na nuvem (free tier).
 
 ---
 
@@ -85,7 +85,7 @@ uv run main.py <YOUTUBE_URL> --analyze
 ### Análise standalone (sobre transcrição existente)
 
 ```bash
-uv run -m src transcriptions/raw/transcricao_ovabeV.txt
+uv run -m src output/transcriptions/text/transcricao_ovabeV.txt
 ```
 
 ---
@@ -143,10 +143,10 @@ uv run main.py https://www.youtube.com/watch?v=ovabeVoWrA0 \
 uv run main.py https://www.youtube.com/watch?v=ovabeVoWrA0 --format --analyze --am gemini-2.5-flash
 
 # análise standalone sobre transcrição existente
-uv run -m src transcriptions/raw/transcricao_ovabeV.txt
+uv run -m src output/transcriptions/text/transcricao_ovabeV.txt
 
 # análise standalone usando Gemini
-uv run -m src transcriptions/raw/transcricao_ovabeV.txt --model gemini-2.5-flash
+uv run -m src output/transcriptions/text/transcricao_ovabeV.txt --model gemini-2.5-flash
 ```
 
 ---
@@ -154,7 +154,7 @@ uv run -m src transcriptions/raw/transcricao_ovabeV.txt --model gemini-2.5-flash
 ## Estrutura de arquivos
 
 ```text
-yt-transcriber/
+mill-tools/
 ├── main.py                    — entry point, CLI
 ├── gui.py                     — entry point, GUI desktop (Flet)
 ├── .env.example               — template do .env (GOOGLE_API_KEY para Gemini)
@@ -170,21 +170,28 @@ yt-transcriber/
 │   └── gui/
 │       ├── app.py             — layout split e ciclo de vida do pipeline
 │       ├── events.py          — EventBus, PipelineEvent, LogEventHandler
-│       ├── settings.py        — persistência de configurações
+│       ├── settings.py        — persistência de configurações (~/.mill-tools/)
 │       ├── workers.py         — execução do pipeline em thread background
 │       └── views/
 │           ├── form_view.py   — formulário de configuração
 │           ├── progress_view.py — logs em tempo real e barra de progresso
-│           └── result_view.py — resultados em abas (Transcrição/Análise/Prompt-ready)
+│           └── result_view.py — resultados em abas (Transcrição/Análise/Digest)
 ├── ollama/
 │   ├── Modelfile              — config do qwen7b-custom
 │   └── Modelfile.phi4mini     — config do phi4mini-custom
-├── audios/                    — áudios baixados (.mp3)
-└── transcriptions/
-    ├── raw/                   — transcrições brutas (.txt)
-    ├── analysis/              — análises estruturadas (.md)
-    └── prompt_ready/          — versões condensadas para uso como contexto (.txt)
+└── output/
+    ├── audio/
+    │   ├── source/            — áudios baixados de URLs (.mp3)
+    │   └── processed/         — áudios processados/convertidos
+    ├── video/
+    │   └── processed/         — vídeos baixados/convertidos
+    └── transcriptions/
+        ├── text/              — transcrições brutas (.txt)
+        ├── analysis/          — análises estruturadas (.md)
+        └── digest/            — versões condensadas para uso como contexto (.txt)
 ```
+
+> **Arquivos gerados antes da migração** (em `audios/` e `transcriptions/`) continuam acessíveis nos caminhos originais — não foram movidos automaticamente.
 
 ---
 
@@ -193,7 +200,7 @@ yt-transcriber/
 A interface gráfica oferece todos os recursos do CLI em um layout split permanente:
 
 ```
-┌─ yt-transcriber ──────────────────────────────────────────[☀]┐
+┌─ mill.tools ──────────────────────────────────────────────[☀]┐
 ├──────────────────────┬────────────────────────────────────────┤
 │  Vídeo               │  Pipeline    Resultados                │
 │  [URL ____________]  │                                        │
@@ -281,9 +288,9 @@ Relatório estruturado com 10 campos extraídos pelo LLM:
 
 Se o resultado não estiver em português, é traduzido automaticamente para PT-BR. Quando `--format --analyze` são usados em conjunto, a transcrição formatada é incluída no final do relatório.
 
-### Prompt-ready (`.txt`) — `--prompt`
+### Digest (`.txt`) — `--prompt`
 
-Versão condensada da transcrição salva em `transcriptions/prompt_ready/`, com ~40% do tamanho original. Remove cumprimentos, CTAs, patrocinadores e frases de preenchimento, mantendo todo o conteúdo técnico. Otimizado para ser colado como contexto em qualquer prompt de LLM.
+Versão condensada da transcrição salva em `output/transcriptions/digest/`, com ~40% do tamanho original. Remove cumprimentos, CTAs, patrocinadores e frases de preenchimento, mantendo todo o conteúdo técnico. Otimizado para ser colado como contexto em qualquer prompt de LLM.
 
 ---
 

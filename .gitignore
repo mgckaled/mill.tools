@@ -9,9 +9,15 @@ wheels/
 # Virtual environments
 .venv
 
-# Audio and transcription files
-audios/
-transcriptions/
+# Saídas geradas — ignorar conteúdo, preservar estrutura de pastas
+output/**
+!output/
+!output/**/
+!output/**/.gitkeep
+
+# Pastas legadas (ancoradas na raiz para não afetar output/transcriptions/)
+/audios/
+/transcriptions/
 
 # Claude-related files
 CLAUDE.md
