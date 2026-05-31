@@ -5,6 +5,7 @@ import flet as ft
 from src.gui.app import build_app
 from src.gui.assets import WINDOW_ICON
 from src.gui.splash import show_splash
+from src.gui.theme import apply_theme
 
 
 def main(page: ft.Page) -> None:
@@ -16,6 +17,7 @@ def main(page: ft.Page) -> None:
     page.window.min_width = 1000
     page.window.min_height = 600
     page.window.icon = WINDOW_ICON  # Windows-only; caminho absoluto (issue #3438)
+    apply_theme(page)              # define page.theme (light) + page.dark_theme (dark)
     show_splash(page, on_complete=lambda: build_app(page))
 
 
