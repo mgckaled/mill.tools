@@ -1,4 +1,8 @@
 """Fábricas de componentes do Design System."""
+from src.gui.theme.components.help import (
+    help_icon,
+    help_icon_for,
+)
 from src.gui.theme.components.buttons import (
     danger_button,
     primary_button,
@@ -24,6 +28,8 @@ from src.gui.theme.components.layout import (
 )
 
 __all__ = [
+    "help_icon",
+    "help_icon_for",
     "danger_button",
     "primary_button",
     "secondary_button",

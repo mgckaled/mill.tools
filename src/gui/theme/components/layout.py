@@ -6,8 +6,26 @@ import flet as ft
 from src.gui.theme.tokens import Layout, Space, Type
 
 
+def _label_row(text: str, help_key: str | None, page: ft.Page | None) -> ft.Control:
+    from src.gui.theme.components.help import help_icon_for
+    label = ft.Text(
+        text,
+        size=Type.label.size,
+        weight=ft.FontWeight.W_600,
+        color=ft.Colors.ON_SURFACE_VARIANT,
+    )
+    icon = help_icon_for(help_key, page) if help_key else None
+    if icon:
+        return ft.Row(
+            [label, icon],
+            spacing=Space.xs,
+            vertical_alignment=ft.CrossAxisAlignment.CENTER,
+        )
+    return label
+
+
 def section_label(text: str) -> ft.Text:
-    """Rótulo de seção (13px W600 ON_SURFACE_VARIANT) — uso standalone no layout."""
+    """Rótulo de seção simples (13px W600 ON_SURFACE_VARIANT), sem ⓘ."""
     return ft.Text(
         text,
         size=Type.label.size,
@@ -37,20 +55,15 @@ def module_scaffold(form: ft.Control, panel: ft.Control) -> ft.Row:
     )
 
 
-def section(label: str, *controls: ft.Control) -> ft.Column:
-    """Grupo de seção com rótulo label no topo."""
-    return ft.Column(
-        controls=[
-            ft.Text(
-                label,
-                size=Type.label.size,
-                weight=ft.FontWeight.W_600,
-                color=ft.Colors.ON_SURFACE_VARIANT,
-            ),
-            *controls,
-        ],
-        spacing=Space.sm,
-    )
+def section(
+    label: str,
+    *controls: ft.Control,
+    help_key: str | None = None,
+    page: ft.Page | None = None,
+) -> ft.Column:
+    """Grupo de seção com rótulo + ⓘ opcional no topo."""
+    header = _label_row(label, help_key, page)
+    return ft.Column(controls=[header, *controls], spacing=Space.sm)
 
 
 def hairline(vertical: bool = False) -> ft.Control:

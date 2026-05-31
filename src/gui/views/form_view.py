@@ -12,7 +12,7 @@ from typing import Callable
 import flet as ft
 
 from src.gui import settings
-from src.gui.theme.components import hairline, section_label
+from src.gui.theme.components import hairline, section, section_label
 from src.gui.workers import PipelineArgs
 
 
@@ -348,21 +348,24 @@ def build_form_view(page: ft.Page, on_start: Callable[[PipelineArgs], None]) -> 
                         hairline(),
 
                         # --- Formatação ---
-                        section_label("Formatação de parágrafos"),
+                        section("Formatação de parágrafos",
+                                help_key="transcription.format", page=page),
                         use_format_switch,
                         ft.Row(controls=[format_model_field]),
 
                         hairline(),
 
                         # --- Análise ---
-                        section_label("Análise estruturada"),
+                        section("Análise estruturada",
+                                help_key="transcription.analyze", page=page),
                         use_analyze_switch,
                         ft.Row(controls=[analyzer_model_field]),
 
                         hairline(),
 
                         # --- Prompt-ready ---
-                        section_label("Condensação prompt-ready"),
+                        section("Condensação prompt-ready",
+                                help_key="transcription.prompt", page=page),
                         use_prompt_switch,
                         ft.Row(controls=[prompt_model_field]),
 

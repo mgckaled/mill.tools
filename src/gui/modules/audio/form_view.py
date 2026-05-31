@@ -9,7 +9,7 @@ import flet as ft
 
 from src.gui import settings
 from src.gui.components.input_source import InputItem, build_input_source
-from src.gui.theme.components import hairline, section_label, segmented_selector
+from src.gui.theme.components import hairline, help_icon_for, section, segmented_selector
 
 _ALLOWED_EXTS = [
     "mp3", "wav", "flac", "ogg", "opus", "aac", "m4a",
@@ -114,8 +114,13 @@ def build_audio_form(
         active_color=ft.Colors.PRIMARY,
     )
 
+    _embed_icon = help_icon_for("audio.embed_meta", page)
     embed_row = ft.Container(
-        content=embed_switch,
+        content=ft.Row(
+            [embed_switch] + ([_embed_icon] if _embed_icon else []),
+            spacing=4,
+            vertical_alignment=ft.CrossAxisAlignment.CENTER,
+        ),
         visible=False,
         animate_opacity=ft.Animation(150, ft.AnimationCurve.EASE_IN),
     )
@@ -175,21 +180,20 @@ def build_audio_form(
                     spacing=16,
                     controls=[
                         # ── Entrada ───────────────────────────────────────
-                        section_label("Entrada"),
-                        input_source.control,
+                        section("Entrada", input_source.control,
+                                help_key="audio.input", page=page),
 
                         hairline(),
 
                         # ── Formato de saída ──────────────────────────────
-                        section_label("Formato de saída"),
-                        fmt_grid,
+                        section("Formato de saída", fmt_grid,
+                                help_key="audio.format", page=page),
 
                         hairline(),
 
                         # ── Bitrate ───────────────────────────────────────
-                        section_label("Bitrate (kbps)"),
-                        quality_grid,
-                        embed_row,
+                        section("Bitrate (kbps)", quality_grid, embed_row,
+                                help_key="audio.bitrate", page=page),
 
                         hairline(),
 
