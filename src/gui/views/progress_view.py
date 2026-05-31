@@ -275,7 +275,8 @@ def _resolve_stage_label(event: PipelineEvent) -> str | None:
             return f"Item {cur}/{tot}" + (f" — {name}" if name else "")
         case "audio_op_start":
             op = event.payload.get("operation", "")
-            return {"download": "Baixando...", "convert": "Convertendo...", "extract": "Extraindo áudio..."}.get(op, "Processando...")
+            _labels = {"download": "Baixando...", "convert": "Convertendo...", "extract": "Extraindo áudio..."}
+            return _labels.get(op, "Processando...")
         case "audio_op_done":
             return "Concluído."
         case "task_done":
@@ -301,7 +302,10 @@ def _make_summary_card(payload: dict) -> ft.Control:
         ft.Text("=" * 52, size=10, color=Color.log.ok, font_family=Type.FONT_MONO),
         ft.Text(f"  title    : {title}", size=12, color=Color.log.text, font_family=Type.FONT_MONO, selectable=True),
         ft.Text(f"  duration : {duration}", size=12, color=Color.log.text, font_family=Type.FONT_MONO),
-        ft.Text(f"  output   : {Path(output_path).name}", size=12, color=Color.log.text, font_family=Type.FONT_MONO, selectable=True),
+        ft.Text(
+            f"  output   : {Path(output_path).name}",
+            size=12, color=Color.log.text, font_family=Type.FONT_MONO, selectable=True,
+        ),
         ft.Text(f"  elapsed  : {elapsed}", size=12, color=Color.log.text, font_family=Type.FONT_MONO),
     ]
     if flagged:
@@ -396,7 +400,7 @@ def build_progress_view(
     )
 
     # --- moinho giratório no header do pipeline ---
-    _SPIN_PERIOD = 900  # ms por volta
+    _spin_period = 900  # ms por volta
     _spinning: list[bool] = [False]
 
     status_icon = ft.Image(
@@ -404,10 +408,10 @@ def build_progress_view(
         width=22,
         height=22,
         rotate=ft.Rotate(angle=0, alignment=ft.Alignment.CENTER),
-        animate_rotation=ft.Animation(_SPIN_PERIOD, ft.AnimationCurve.LINEAR),
+        animate_rotation=ft.Animation(_spin_period, ft.AnimationCurve.LINEAR),
     )
 
-    def _spin_step(e=None) -> None:
+    def _spin_step(_=None) -> None:
         if _spinning[0]:
             status_icon.rotate.angle += 2 * math.pi
             status_icon.update()
@@ -473,8 +477,8 @@ def build_progress_view(
     tab_btns: list[ft.TextButton] = []
 
     def _switch_tab(idx: int) -> None:
-        pipeline_panel.visible = (idx == 0)
-        results_panel.visible = (idx == 1)
+        pipeline_panel.visible = idx == 0
+        results_panel.visible = idx == 1
         for i, btn in enumerate(tab_btns):
             btn.style = ft.ButtonStyle(
                 color={
@@ -583,7 +587,7 @@ def build_progress_view(
 
     def _trim_log() -> None:
         if len(log_list.controls) > _MAX_LOG_LINES:
-            del log_list.controls[: len(log_list.controls) - _MAX_LOG_LINES]
+            log_list.controls = log_list.controls[-_MAX_LOG_LINES:]
 
     page.pubsub.subscribe(_handle_event)
 
