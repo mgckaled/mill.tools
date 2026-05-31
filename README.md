@@ -23,7 +23,10 @@
 - 🧠 **Pós-processamento por LLM** — formatação em parágrafos, análise estruturada (10 campos) e digest condensado para uso como contexto.
 - 🔀 **Provider flexível** — Ollama local por padrão; Gemini na nuvem por prefixo de modelo, sem mudar o fluxo.
 - 🎵 **Módulo Áudio** — download (YouTube, SoundCloud, etc. via yt-dlp), conversão e extração de áudio, em fila, com capa/metadados embutidos.
-- 🖥️ **GUI desktop** (Flet) com acompanhamento em tempo real estilo CLI, e **CLI** completa para automação.
+- 🖥️ **GUI desktop** (Flet) com acompanhamento em tempo real estilo CLI, barra de progresso determinada e spinner animado.
+- 🔗 **Bridge Áudio → Transcrição** — botão "Transcrever este arquivo" envia o arquivo processado diretamente para o módulo de Transcrição.
+- 🎨 **Design System** — paleta unificada com acento dourado, suporte a temas claro/escuro e contraste WCAG 2.1.
+- ℹ️ **Ajuda contextual** — ícone ⓘ em todos os controles: tooltip no hover, modal com detalhes ao clicar.
 
 ### Módulos
 
@@ -85,7 +88,9 @@ O `.env` é carregado automaticamente quando `--fm`, `--am` ou `--pm` recebe um 
 uv run gui.py
 ```
 
-Abre a interface com **barra lateral de módulos**. Cada módulo tem layout split: formulário à esquerda, painel de acompanhamento (logs em tempo real + barra de progresso) à direita.
+Abre com uma splash screen animada e, em seguida, a interface com **barra lateral de módulos** (NavigationRail). Cada módulo tem layout split: formulário à esquerda, painel de acompanhamento (log em tempo real + barra de progresso + spinner) à direita.
+
+Durante um pipeline em execução a troca de módulo é bloqueada — os logs e a barra de progresso são preservados mesmo ao navegar entre módulos.
 
 ### CLI — Transcrição
 
@@ -230,6 +235,71 @@ Limites do projeto em <https://aistudio.google.com/rate-limit> (RPD reseta à me
 
 ---
 
+## Design System
+
+A GUI usa um Design System interno em `src/gui/theme/`, construído sobre o Material 3 do Flet 0.85. Todos os módulos consomem as mesmas fábricas — adicionar um novo módulo não requer reinventar botões, cores ou espaçamento.
+
+### Paleta
+
+| Token | Dark | Light | Uso |
+|---|---|---|---|
+| `primary` | `#F4A63C` | `#E0982F` | Acento único — botões, foco, seleção ativa |
+| `bg` | `#0E1B2C` | `#F6F8FB` | Fundo da janela |
+| `surface` | `#14233A` | `#FFFFFF` | Painéis e cards |
+| `outline` | `#556E8C` | `#7890A0` | Bordas de containers (3:1 vs bg — WCAG AA) |
+| `outline_variant` | `#364E6A` | `#AEBCC8` | Divisórias hairline (2:1 vs bg) |
+
+Fonte de UI: **Segoe UI** (sistema Windows). Fonte mono: **Consolas** (log, card de resumo).
+
+### Componentes disponíveis
+
+| Fábrica | Módulo | Descrição |
+|---|---|---|
+| `primary_button` | `buttons` | Ação primária — herda dourado do tema |
+| `secondary_button` | `buttons` | Ação secundária — contorno |
+| `danger_button` | `buttons` | Ação destrutiva — vermelho semântico |
+| `segmented_selector` | `buttons` | Grade de chips clicáveis (formato, bitrate…) |
+| `labeled_field` | `inputs` | Rótulo + controle + helper + ⓘ opcional |
+| `switch_row` | `inputs` | Switch com cor ativa do tema |
+| `slider_row` | `inputs` | Slider com rótulo + ⓘ opcional |
+| `log_line` | `feedback` | Linha de log monoespaçada com cor por prefixo |
+| `summary_card` | `feedback` | Card de resumo ao fim do pipeline |
+| `section_title` | `feedback` | Título de seção de resultados |
+| `section_label` | `layout` | Rótulo de seção simples (sem ⓘ) |
+| `section` | `layout` | Grupo rótulo + controles + ⓘ opcional |
+| `hairline` | `layout` | Divisória fina 1px |
+| `module_scaffold` | `layout` | Layout split form \| painel |
+| `help_icon` | `help` | ⓘ com tooltip estilizado e modal opcional |
+| `help_icon_for` | `help` | Lookup no registro central por chave |
+
+### Ajuda contextual (ⓘ)
+
+O arquivo `src/gui/help_content.py` centraliza todo o conteúdo de ajuda, separado da UI. Cada controle recebe uma **chave** (`"módulo.campo"`) — nenhuma string de ajuda fica espalhada nos formulários.
+
+**Comportamento:**
+- **Hover** → tooltip estilizado (fundo `surface_container`, bordas arredondadas, 300 ms de delay)
+- **Clique** (apenas quando há texto longo) → `AlertDialog` com título e corpo detalhado
+
+**Chaves disponíveis:**
+
+| Chave | Tooltip | Modal |
+|---|---|---|
+| `transcription.whisper_model` | Visão geral dos modelos | ✅ Tabela completa + nota de hardware |
+| `transcription.beam_size` | Resumo do beam search | ✅ Explicação técnica |
+| `transcription.language` | Quando fixar o idioma | — |
+| `transcription.format` | O que faz o formatter | — |
+| `transcription.analyze` | O que gera a análise | — |
+| `transcription.prompt` | O que é o digest | — |
+| `transcription.model_stage` | Local vs nuvem | — |
+| `audio.input` | URL vs arquivo local | — |
+| `audio.format` | 'best' vs conversão | — |
+| `audio.bitrate` | Resumo do bitrate | ✅ Quando usar cada valor |
+| `audio.embed_meta` | O que é embutido | — |
+
+Para adicionar ajuda a um novo controle: inserir a chave em `HELP_SHORT` (e opcionalmente `HELP_LONG`) e passar `help_key=` para a fábrica correspondente.
+
+---
+
 ## Estrutura do projeto
 
 ```text
@@ -240,9 +310,19 @@ mill-tools/
 │   ├── transcriber.py · formatter.py · analyzer.py · prompter.py · llm_factory.py · utils.py
 │   ├── core/audio/      — downloader, converter, info (lógica pura, sem Flet)
 │   └── gui/
-│       ├── app.py · splash.py · assets.py · events.py · settings.py · workers.py
-│       ├── components/  — input_source.py (URL + FilePicker)
+│       ├── app.py       — NavigationRail + registry de módulos + navigate_to
+│       ├── splash.py    — animação de entrada (moinho + fade)
+│       ├── assets.py    — helpers de imagem (b64, WINDOW_ICON)
+│       ├── events.py    — EventBus, PipelineEvent (com module_id)
+│       ├── settings.py  — persistência em ~/.mill-tools/config.json
+│       ├── workers.py   — pipeline de Transcrição (thread daemon)
+│       ├── help_content.py — registro central de tooltips e modais (HELP_SHORT/LONG)
+│       ├── components/  — input_source.py (URL + FilePicker, allow_multiple)
 │       ├── modules/     — base.py + transcription/ · audio/ · video/
+│       ├── theme/       — Design System
+│       │   ├── tokens.py    — Color, Type, Space, Radius, Motion, Layout
+│       │   ├── theme.py     — build_theme() + apply_theme()
+│       │   └── components/  — buttons, inputs, feedback, layout, help
 │       └── views/       — form_view · progress_view · result_view
 ├── assets/
 │   ├── logo/            — símbolo e wordmark (SVG/PNG)
