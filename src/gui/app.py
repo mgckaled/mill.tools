@@ -9,7 +9,7 @@ from flet.controls.core.stack import StackFit
 
 from src.gui import settings
 from src.gui.events import EventBus
-from src.gui.modules.audio.view import build_audio_placeholder
+from src.gui.modules.audio.view import build_audio_module
 from src.gui.modules.base import Module
 from src.gui.modules.transcription.view import build_transcription_module, get_form_start_button
 from src.gui.modules.video.view import build_video_placeholder
@@ -58,8 +58,12 @@ def build_app(page: ft.Page) -> None:
     # Módulos
     # ------------------------------------------------------------------
 
+    # nav é populado após navigate_to ser definido — forward reference
+    # necessário porque MODULES depende dos módulos e navigate_to depende de MODULES.
+    nav: list = []
+
     _transcription = build_transcription_module(page, bus, cancel_event, pipeline_running)
-    _audio = build_audio_placeholder()
+    _audio = build_audio_module(page, bus, cancel_event, pipeline_running, nav)
     _video = build_video_placeholder()
 
     MODULES: list[Module] = [_audio, _video, _transcription]
@@ -92,6 +96,8 @@ def build_app(page: ft.Page) -> None:
             m.control.visible = (i == idx)
         MODULES[idx].on_mount(payload or {})
         page.update()
+
+    nav.append(navigate_to)  # resolve a forward reference do módulo Áudio
 
     def _on_rail_change(e: ft.ControlEvent) -> None:
         idx = e.control.selected_index

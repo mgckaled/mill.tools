@@ -4,13 +4,14 @@ from __future__ import annotations
 
 import logging
 import threading
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 from time import time
 from typing import TYPE_CHECKING
 
 from src import analyzer, formatter, prompter, transcriber
 from src.gui.events import LogEventHandler
+from src.core.audio.converter import AUDIO_EXTENSIONS as _AUDIO_EXTS
 from src.utils import (
     AUDIO_SOURCE_DIR,
     TRANSCRIPTIONS_TEXT_DIR,
@@ -72,19 +73,21 @@ def run_pipeline(
     Returns:
         PipelineResult com paths dos arquivos gerados ou mensagem de erro.
     """
+    _MID = "transcription"
+
     # captura de estado entre eventos
     _capture: dict = {}
 
     def on_event(type: str, stage: str, payload: dict) -> None:
-        bus.emit(type, stage, payload)
+        bus.emit(type, stage, payload, module_id=_MID)
         if type == "transcribe_done":
             _capture.update(payload)
 
     def emit(type: str, stage: str = "pipeline", payload: dict | None = None) -> None:
-        bus.emit(type, stage, payload or {})
+        bus.emit(type, stage, payload or {}, module_id=_MID)
 
     # instala LogEventHandler no root logger para capturar logs granulares
-    log_handler = LogEventHandler(bus)
+    log_handler = LogEventHandler(bus, module_id=_MID)
     log_handler.setLevel(logging.INFO)
     log_handler.setFormatter(logging.Formatter("%(message)s"))
     root_logger = logging.getLogger()
@@ -104,49 +107,64 @@ def run_pipeline(
         if cancel_event.is_set():
             return result
 
-        validate_url(args.url)
+        _input = args.url.strip()
+        _local = Path(_input)
 
-        if cancel_event.is_set():
-            return result
-
-        # --- metadados ---
-        emit("metadata_start", "download", {"url": args.url})
-        video_id = extract_video_id(args.url)
-        meta = fetch_metadata(args.url)
-        emit("metadata_done", "download", {
-            "title": meta.get("title", ""),
-            "channel": meta.get("uploader", ""),
-            "duration": meta.get("duration", 0),
-        })
-
-        if cancel_event.is_set():
-            return result
-
-        # --- download ou cache ---
-        audio_slug = video_id[:6]
-        audio_path = AUDIO_SOURCE_DIR / f"{audio_slug}.mp3"
-        AUDIO_SOURCE_DIR.mkdir(parents=True, exist_ok=True)
-
-        if audio_path.exists():
+        # --- arquivo local (bridge do módulo Áudio) ---
+        if _local.is_file():
+            if _local.suffix.lower() not in _AUDIO_EXTS:
+                emit("task_error", "pipeline", {
+                    "message": f"Formato não suportado para transcrição: {_local.suffix}"
+                })
+                return result
+            audio_path = _local
+            meta = {"title": _local.stem, "duration": 0}
             emit("audio_cached", "download", {"audio_path": str(audio_path)})
+
         else:
-            emit("download_start", "download", {"url": args.url})
-            download_audio(args.url, audio_path)
-            emit("download_done", "download", {"audio_path": str(audio_path)})
+            # --- URL: validar, buscar metadados e baixar ---
+            validate_url(_input)
+
+            if cancel_event.is_set():
+                return result
+
+            emit("metadata_start", "download", {"url": _input})
+            video_id = extract_video_id(_input)
+            meta = fetch_metadata(_input)
+            emit("metadata_done", "download", {
+                "title": meta.get("title", ""),
+                "channel": meta.get("uploader", ""),
+                "duration": meta.get("duration", 0),
+            })
+
+            if cancel_event.is_set():
+                return result
+
+            audio_slug = video_id[:6]
+            audio_path = AUDIO_SOURCE_DIR / f"{audio_slug}.mp3"
+            AUDIO_SOURCE_DIR.mkdir(parents=True, exist_ok=True)
+
+            if audio_path.exists():
+                emit("audio_cached", "download", {"audio_path": str(audio_path)})
+            else:
+                emit("download_start", "download", {"url": _input})
+                download_audio(_input, audio_path)
+                emit("download_done", "download", {"audio_path": str(audio_path)})
 
         if cancel_event.is_set():
             return result
 
         # --- transcrição ---
         TRANSCRIPTIONS_TEXT_DIR.mkdir(parents=True, exist_ok=True)
-        output_path = TRANSCRIPTIONS_TEXT_DIR / f"transcricao_{audio_slug}.txt"
+        _slug = audio_slug if not _local.is_file() else audio_path.stem[:6]
+        output_path = TRANSCRIPTIONS_TEXT_DIR / f"transcricao_{_slug}.txt"
 
         pipeline_start = time()
         transcriber.transcribe(
             audio_path=audio_path,
             output_path=output_path,
             meta=meta,
-            url=args.url,
+            url=_input,
             model_size=args.whisper_model,
             language=None if args.language == "auto" else args.language,
             threads=args.threads,
@@ -207,13 +225,11 @@ def run_pipeline(
             "prompt_path": str(result.prompt_path) if result.prompt_path else None,
         }
         result.completed = True
-        emit("task_done", "pipeline", _done_payload)       # evento genérico (PR2+)
-        emit("pipeline_done", "pipeline", _done_payload)   # TODO(PR3): remover evento legado
+        emit("task_done", "pipeline", _done_payload)
 
     except Exception as exc:
         result.error = str(exc)
-        emit("task_error", "pipeline", {"message": str(exc)})    # evento genérico (PR2+)
-        emit("pipeline_error", "pipeline", {"message": str(exc)})  # TODO(PR3): remover evento legado
+        emit("task_error", "pipeline", {"message": str(exc)})
 
     finally:
         root_logger.removeHandler(log_handler)
@@ -244,7 +260,7 @@ def start_pipeline(
         result = run_pipeline(args, bus, cancel_event)
         # Cancelamento: sem completed e sem erro → retorno antecipado via cancel_event
         if not result.completed and result.error is None:
-            bus.emit("pipeline_cancelled", "pipeline", {})
+            bus.emit("pipeline_cancelled", "pipeline", {}, module_id="transcription")
 
     thread = threading.Thread(target=_run, daemon=True)
     thread.start()

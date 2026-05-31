@@ -6,7 +6,6 @@ import threading
 
 import flet as ft
 
-from src.gui import settings
 from src.gui.modules.base import Module
 from src.gui.views.form_view import build_form_view
 from src.gui.views.progress_view import build_progress_view
@@ -64,7 +63,12 @@ def build_transcription_module(
     # ------------------------------------------------------------------
 
     form_panel = build_form_view(page, on_start=_on_start)
-    progress_panel = build_progress_view(page, on_cancel=_on_cancel, on_done=_on_pipeline_done)
+    progress_panel = build_progress_view(
+        page,
+        on_cancel=_on_cancel,
+        on_done=_on_pipeline_done,
+        owner_id="transcription",
+    )
 
     # ------------------------------------------------------------------
     # Legenda de atalhos (rodapé esquerdo)
@@ -138,7 +142,34 @@ def build_transcription_module(
     # ------------------------------------------------------------------
 
     def _on_mount(payload: dict) -> None:
-        pass  # PR3: preencher campo URL/arquivo com payload.get("file")
+        if "file" in payload:
+            _fill_url(str(payload["file"]))
+
+    def _fill_url(path: str) -> None:
+        """Preenche o campo URL do formulário com um caminho local (bridge Áudio → Transcrição)."""
+        # Acessa url_field via walk na árvore do form_panel
+        _walk_fill(form_panel.control, path)
+
+    def _walk_fill(ctrl: ft.Control, path: str) -> bool:
+        """Walk na árvore do form_panel procurando o TextField de URL."""
+        if isinstance(ctrl, ft.TextField) and (
+            "youtube" in (ctrl.hint_text or "").lower()
+            or "url" in (ctrl.hint_text or "").lower()
+        ):
+            ctrl.value = path
+            if ctrl.page:
+                ctrl.update()
+            return True
+        for attr in ("controls", "content", "actions"):
+            child = getattr(ctrl, attr, None)
+            if isinstance(child, list):
+                for c in child:
+                    if c and _walk_fill(c, path):
+                        return True
+            elif child is not None:
+                if _walk_fill(child, path):
+                    return True
+        return False
 
     return Module(
         id="transcription",

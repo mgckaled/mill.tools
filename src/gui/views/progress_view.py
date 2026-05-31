@@ -190,6 +190,29 @@ def _resolve_messages(event: PipelineEvent) -> list[str]:
         case "log":
             msg = p.get("message", "")
             return [msg] if msg else []
+        case "audio_op_start":
+            op = p.get("operation", "")
+            name = p.get("item_name", "")
+            idx = p.get("item_idx", "?")
+            total = p.get("total", "?")
+            verb = {"download": "Baixando", "convert": "Convertendo", "extract": "Extraindo"}.get(op, op)
+            return [f"[~] {verb} ({idx}/{total}): {name}"]
+        case "audio_op_done":
+            path = p.get("output_path", "")
+            elapsed = p.get("elapsed", "")
+            name = Path(path).name if path else path
+            suffix = f" ({elapsed})" if elapsed else ""
+            return [f"[✓] Salvo: {name}{suffix}"]
+        case "queue_progress" | "progress_start" | "progress_update":
+            return []
+        case "task_done":
+            paths = p.get("output_paths", [])
+            if paths:
+                return [f"[✓] Pipeline de áudio concluído — {len(paths)} arquivo(s)."]
+            return ["[✓] Pipeline concluído."]
+        case "task_error":
+            msg = p.get("message", "erro desconhecido")
+            return [f"[!] Erro: {msg}"]
         case _:
             return []
 
@@ -206,6 +229,10 @@ def _resolve_progress(event: PipelineEvent, audio_duration: list[float]) -> floa
         dur = p.get("audio_duration", 0)
         if dur:
             audio_duration[0] = dur
+
+    if t == "progress_update":
+        current = p.get("current", 0.0)
+        return min(float(current), 1.0)
 
     if t == "transcribe_segment" and audio_duration[0] > 0:
         end = p.get("end", 0)
@@ -255,6 +282,21 @@ def _resolve_stage_label(event: PipelineEvent) -> str | None:
         case "pipeline_done":
             return "Pipeline concluído!"
         case "pipeline_error":
+            return "Erro no pipeline."
+        case "queue_progress":
+            p = event.payload
+            name = p.get("item_name", "")
+            cur = p.get("current_item", "?")
+            tot = p.get("total_items", "?")
+            return f"Item {cur}/{tot}" + (f" — {name}" if name else "")
+        case "audio_op_start":
+            op = event.payload.get("operation", "")
+            return {"download": "Baixando...", "convert": "Convertendo...", "extract": "Extraindo áudio..."}.get(op, "Processando...")
+        case "audio_op_done":
+            return "Concluído."
+        case "task_done":
+            return "Pipeline concluído!"
+        case "task_error":
             return "Erro no pipeline."
         case _:
             return None
@@ -316,17 +358,19 @@ def build_progress_view(
     page: ft.Page,
     on_cancel: Callable[[], None],
     on_done: Callable[[dict], None],
+    owner_id: str = "",
+    on_show_results: Callable[[object, ft.Column], None] | None = None,
 ) -> ProgressPanel:
     """Retorna um ProgressPanel com controle raiz e métodos reset/show_results.
-
-    A assinatura permanece compatível com o PR1. O painel agora inclui tabs
-    Pipeline | Resultados: Pipeline sempre visível durante execução; Resultados
-    habilitado e selecionado automaticamente ao fim do pipeline.
 
     Args:
         page: Página Flet.
         on_cancel: Callable chamado ao clicar Cancelar.
         on_done: Callable chamado quando pipeline_done é recebido.
+        owner_id: Identificador do módulo dono (ex: "transcription", "audio").
+            Eventos com module_id diferente são ignorados — evita cross-talk entre painéis.
+        on_show_results: Renderização customizada dos resultados. Recebe (result, results_inner).
+            Se None, usa a renderização padrão de Transcrição (PipelineResult).
     """
     audio_duration: list[float] = [0.0]
     _done_called: list[bool] = [False]  # guard contra duplo on_done
@@ -473,6 +517,10 @@ def build_progress_view(
 
     # --- handler pubsub (assinatura persistente — não cancela entre runs) ---
     def _handle_event(event: PipelineEvent) -> None:
+        # Filtro de cross-talk: ignora eventos de outros módulos
+        if owner_id and event.module_id and event.module_id != owner_id:
+            return
+
         label = _resolve_stage_label(event)
         if label is not None:
             stage_label.value = label
@@ -485,6 +533,7 @@ def build_progress_view(
         if prog is not None:
             progress_bar.value = prog
         elif event.type in (
+            "progress_start",
             "metadata_start", "download_start", "whisper_loading",
             "transcribe_started", "format_started", "analyze_started",
             "analyze_merge_start", "translation_start", "prompt_started",
@@ -594,23 +643,29 @@ def build_progress_view(
         page.update()
 
     def _show_results(result: object) -> None:
-        """Popula o tab Resultados e o seleciona automaticamente."""
-        from src.gui.views.result_view import build_result_view
-        from src.gui.workers import PipelineResult
+        """Popula o tab Resultados e o seleciona automaticamente.
 
-        if not isinstance(result, PipelineResult):
-            return
-
+        Se on_show_results foi fornecido, delega a renderização para ele.
+        Caso contrário, usa a renderização padrão de Transcrição (PipelineResult).
+        """
         results_inner.controls.clear()
-        results_inner.controls.append(build_result_view(
-            page,
-            raw_path=result.raw_path,
-            analysis_path=result.analysis_path,
-            prompt_path=result.prompt_path,
-        ))
+
+        if on_show_results is not None:
+            on_show_results(result, results_inner)
+        else:
+            from src.gui.views.result_view import build_result_view
+            from src.gui.workers import PipelineResult
+
+            if isinstance(result, PipelineResult):
+                results_inner.controls.append(build_result_view(
+                    page,
+                    raw_path=result.raw_path,
+                    analysis_path=result.analysis_path,
+                    prompt_path=result.prompt_path,
+                ))
+
         # Renderizar o conteúdo ENQUANTO o painel ainda está invisível —
         # evita diff visible=False → visible=True+conteúdo complexo no Flet 0.85
-        # (mesmo padrão: Column+append em vez de Container content=None→tree)
         page.update()
         tab_btns[1].disabled = False
         _switch_tab(1)

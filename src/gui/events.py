@@ -15,8 +15,9 @@ class PipelineEvent:
     """Evento emitido pelo worker e recebido pelas views via pubsub."""
 
     type: str
-    stage: str  # "download" | "transcribe" | "format" | "analyze" | "prompt"
+    stage: str  # "download" | "transcribe" | "format" | "analyze" | "prompt" | "audio"
     payload: dict = field(default_factory=dict)
+    module_id: str = ""  # "transcription" | "audio" | "" (legado — passa por todos)
 
 
 class EventBus:
@@ -25,8 +26,14 @@ class EventBus:
     def __init__(self, page: ft.Page) -> None:
         self._page = page
 
-    def emit(self, type: str, stage: str, payload: dict | None = None) -> None:
-        self._page.pubsub.send_all(PipelineEvent(type, stage, payload or {}))
+    def emit(
+        self,
+        type: str,
+        stage: str,
+        payload: dict | None = None,
+        module_id: str = "",
+    ) -> None:
+        self._page.pubsub.send_all(PipelineEvent(type, stage, payload or {}, module_id))
 
 
 class LogEventHandler(logging.Handler):
@@ -58,15 +65,20 @@ class LogEventHandler(logging.Handler):
         "[✓] Prompt-ready saved",
     )
 
-    def __init__(self, bus: EventBus) -> None:
+    def __init__(self, bus: EventBus, module_id: str = "") -> None:
         super().__init__()
         self._bus = bus
+        self._module_id = module_id
 
     def emit(self, record: logging.LogRecord) -> None:
         try:
             msg = self.format(record)
             if any(msg.startswith(p) for p in self._SUPPRESSED_PREFIXES):
                 return
-            self._bus.emit("log", "system", {"message": msg, "level": record.levelname})
+            self._bus.emit(
+                "log", "system",
+                {"message": msg, "level": record.levelname},
+                module_id=self._module_id,
+            )
         except Exception:
             self.handleError(record)
