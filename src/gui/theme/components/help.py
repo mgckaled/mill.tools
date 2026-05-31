@@ -4,7 +4,7 @@ from __future__ import annotations
 import flet as ft
 
 from src.gui.help_content import help_for, help_long_for
-from src.gui.theme.tokens import Radius, Space
+from src.gui.theme.tokens import Radius, Space, Type
 
 
 def help_icon(
@@ -12,12 +12,12 @@ def help_icon(
     long: str | None = None,
     page: ft.Page | None = None,
     size: int = 16,
-) -> ft.Container:
-    """ⓘ com tooltip (short). Se `long` e `page`, clique abre modal."""
+) -> ft.Tooltip:
+    """ⓘ com tooltip estilizado (short). Se `long` e `page`, clique abre modal."""
     icon = ft.Icon(ft.Icons.INFO_OUTLINED, size=size, color=ft.Colors.ON_SURFACE_VARIANT)
-    box = ft.Container(
+
+    inner = ft.Container(
         content=icon,
-        tooltip=ft.Tooltip(message=short, wait_duration=300),
         border_radius=Radius.pill,
         padding=Space.xs,
         ink=long is not None,
@@ -27,7 +27,7 @@ def help_icon(
         icon.color = ft.Colors.PRIMARY if e.data == "true" else ft.Colors.ON_SURFACE_VARIANT
         icon.update()
 
-    box.on_hover = _hover
+    inner.on_hover = _hover
 
     if long is not None and page is not None:
         def _open(_e) -> None:
@@ -43,12 +43,23 @@ def help_icon(
             )
             page.show_dialog(dlg)
 
-        box.on_click = _open
+        inner.on_click = _open
 
-    return box
+    return ft.Tooltip(
+        message=short,
+        wait_duration=300,
+        bgcolor=ft.Colors.SURFACE_CONTAINER,
+        border_radius=Radius.md,
+        padding=ft.Padding(left=Space.lg, right=Space.lg, top=Space.sm, bottom=Space.sm),
+        text_style=ft.TextStyle(
+            color=ft.Colors.ON_SURFACE,
+            size=Type.body.size,
+        ),
+        content=inner,
+    )
 
 
-def help_icon_for(key: str, page: ft.Page | None = None) -> ft.Container | None:
+def help_icon_for(key: str, page: ft.Page | None = None) -> ft.Tooltip | None:
     """Monta a ⓘ a partir do registro. None se a chave não tiver texto curto."""
     short = help_for(key)
     if not short:
