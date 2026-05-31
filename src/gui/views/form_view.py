@@ -332,7 +332,8 @@ def build_form_view(page: ft.Page, on_start: Callable[[PipelineArgs], None]) -> 
                         hairline(),
 
                         # --- Transcrição ---
-                        section_label("Transcrição"),
+                        section("Transcrição",
+                                help_key="transcription.whisper_model", page=page),
                         ft.Row(
                             controls=[whisper_dropdown, language_dropdown],
                             spacing=12,

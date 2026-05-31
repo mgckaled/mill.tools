@@ -56,6 +56,18 @@ HELP_SHORT: dict[str, str] = {
 
 #: Texto longo (opcional) — quando presente, a ⓘ vira clicável e abre um modal.
 HELP_LONG: dict[str, str] = {
+    "transcription.whisper_model": (
+        "Modelos disponíveis, do mais rápido ao mais preciso:\n\n"
+        "• tiny — ultrarápido, ~1 GB VRAM. Boa para testes e áudios simples.\n"
+        "• base — rápido, levemente mais preciso que tiny.\n"
+        "• small — equilíbrio ideal para uso geral. Recomendado como padrão.\n"
+        "• medium — mais preciso em sotaques e vocabulário técnico; ~2–3× mais lento.\n"
+        "• large-v3-turbo — qualidade próxima ao large-v3 com velocidade melhorada.\n"
+        "• large-v3 — máxima precisão disponível; mais lento e exige mais VRAM.\n\n"
+        "Hardware desta máquina: MX150 (2 GB VRAM, Pascal). Para VRAM limitada, "
+        "prefira small ou medium com compute_type int8_float32. "
+        "large-v3 pode causar OOM neste hardware."
+    ),
     "audio.bitrate": (
         "O bitrate define quantos kbps o codec usa em formatos com perda "
         "(mp3, m4a, ogg, opus).\n\n"

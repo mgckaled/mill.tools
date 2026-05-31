@@ -7,17 +7,38 @@ from src.gui.help_content import help_for, help_long_for
 from src.gui.theme.tokens import Radius, Space, Type
 
 
+def _make_tooltip(message: str) -> ft.Tooltip:
+    """Tooltip estilizado com fundo surface_container e bordas arredondadas."""
+    return ft.Tooltip(
+        message=message,
+        wait_duration=300,
+        decoration=ft.BoxDecoration(
+            bgcolor=ft.Colors.SURFACE_CONTAINER,
+            border_radius=Radius.md,
+        ),
+        padding=ft.Padding(
+            left=Space.lg, right=Space.lg,
+            top=Space.sm, bottom=Space.sm,
+        ),
+        text_style=ft.TextStyle(
+            color=ft.Colors.ON_SURFACE,
+            size=Type.body.size,
+        ),
+        prefer_below=True,
+    )
+
+
 def help_icon(
     short: str,
     long: str | None = None,
     page: ft.Page | None = None,
     size: int = 16,
-) -> ft.Tooltip:
+) -> ft.Container:
     """ⓘ com tooltip estilizado (short). Se `long` e `page`, clique abre modal."""
     icon = ft.Icon(ft.Icons.INFO_OUTLINED, size=size, color=ft.Colors.ON_SURFACE_VARIANT)
-
-    inner = ft.Container(
+    box = ft.Container(
         content=icon,
+        tooltip=_make_tooltip(short),
         border_radius=Radius.pill,
         padding=Space.xs,
         ink=long is not None,
@@ -27,7 +48,7 @@ def help_icon(
         icon.color = ft.Colors.PRIMARY if e.data == "true" else ft.Colors.ON_SURFACE_VARIANT
         icon.update()
 
-    inner.on_hover = _hover
+    box.on_hover = _hover
 
     if long is not None and page is not None:
         def _open(_e) -> None:
@@ -43,23 +64,12 @@ def help_icon(
             )
             page.show_dialog(dlg)
 
-        inner.on_click = _open
+        box.on_click = _open
 
-    return ft.Tooltip(
-        message=short,
-        wait_duration=300,
-        bgcolor=ft.Colors.SURFACE_CONTAINER,
-        border_radius=Radius.md,
-        padding=ft.Padding(left=Space.lg, right=Space.lg, top=Space.sm, bottom=Space.sm),
-        text_style=ft.TextStyle(
-            color=ft.Colors.ON_SURFACE,
-            size=Type.body.size,
-        ),
-        content=inner,
-    )
+    return box
 
 
-def help_icon_for(key: str, page: ft.Page | None = None) -> ft.Tooltip | None:
+def help_icon_for(key: str, page: ft.Page | None = None) -> ft.Container | None:
     """Monta a ⓘ a partir do registro. None se a chave não tiver texto curto."""
     short = help_for(key)
     if not short:
