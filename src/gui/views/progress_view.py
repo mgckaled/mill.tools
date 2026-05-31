@@ -11,6 +11,9 @@ import flet as ft
 
 from src.gui.assets import b64
 from src.gui.events import PipelineEvent
+from src.gui.theme.components.buttons import danger_button
+from src.gui.theme.components.feedback import log_line
+from src.gui.theme.tokens import Color, Type
 from src.transcriber import format_elapsed
 from src.utils import format_duration
 
@@ -18,27 +21,8 @@ _MAX_LOG_LINES = 500
 
 
 # ---------------------------------------------------------------------------
-# Helpers de cor e formatação
+# Helpers de formatação
 # ---------------------------------------------------------------------------
-
-def _color_for_prefix(msg: str) -> str:
-    """Retorna cor Flet com base no prefixo estilo CLI da mensagem."""
-    if msg.startswith("[*]"):
-        return ft.Colors.CYAN_300
-    if msg.startswith("[~]"):
-        return ft.Colors.YELLOW_300
-    if msg.startswith("[i]"):
-        return ft.Colors.BLUE_300
-    if msg.startswith("[✓]"):
-        return ft.Colors.GREEN_300
-    if msg.startswith("[!]"):
-        return ft.Colors.RED_300
-    if msg.startswith("[»]"):
-        return ft.Colors.GREY_400
-    if msg.startswith("[d]"):
-        return ft.Colors.GREY_500
-    return ft.Colors.WHITE
-
 
 def _fmt_dur(seconds: int | float) -> str:
     return format_duration(int(seconds))
@@ -314,30 +298,30 @@ def _make_summary_card(payload: dict) -> ft.Control:
     flagged = payload.get("flagged_count", 0)
 
     rows = [
-        ft.Text("=" * 52, size=10, color=ft.Colors.GREEN_300, font_family="monospace"),
-        ft.Text(f"  title    : {title}", size=12, color=ft.Colors.WHITE, font_family="monospace", selectable=True),
-        ft.Text(f"  duration : {duration}", size=12, color=ft.Colors.WHITE, font_family="monospace"),
-        ft.Text(f"  output   : {Path(output_path).name}", size=12, color=ft.Colors.WHITE, font_family="monospace", selectable=True),
-        ft.Text(f"  elapsed  : {elapsed}", size=12, color=ft.Colors.WHITE, font_family="monospace"),
+        ft.Text("=" * 52, size=10, color=Color.log.ok, font_family=Type.FONT_MONO),
+        ft.Text(f"  title    : {title}", size=12, color=Color.log.text, font_family=Type.FONT_MONO, selectable=True),
+        ft.Text(f"  duration : {duration}", size=12, color=Color.log.text, font_family=Type.FONT_MONO),
+        ft.Text(f"  output   : {Path(output_path).name}", size=12, color=Color.log.text, font_family=Type.FONT_MONO, selectable=True),
+        ft.Text(f"  elapsed  : {elapsed}", size=12, color=Color.log.text, font_family=Type.FONT_MONO),
     ]
     if flagged:
         rows.append(ft.Text(
             f"  flagged  : {flagged} segment(s) [?]",
-            size=12, color=ft.Colors.YELLOW_300, font_family="monospace",
+            size=12, color=Color.log.work, font_family=Type.FONT_MONO,
         ))
-    rows.append(ft.Text("=" * 52, size=10, color=ft.Colors.GREEN_300, font_family="monospace"))
+    rows.append(ft.Text("=" * 52, size=10, color=Color.log.ok, font_family=Type.FONT_MONO))
 
     return ft.Container(
         margin=ft.Margin(top=8, bottom=4, left=0, right=0),
         padding=ft.Padding(left=12, right=12, top=8, bottom=8),
         border=ft.Border(
-            left=ft.BorderSide(1, ft.Colors.GREEN_700),
-            right=ft.BorderSide(1, ft.Colors.GREEN_700),
-            top=ft.BorderSide(1, ft.Colors.GREEN_700),
-            bottom=ft.BorderSide(1, ft.Colors.GREEN_700),
+            left=ft.BorderSide(1, ft.Colors.with_opacity(0.5, Color.log.ok)),
+            right=ft.BorderSide(1, ft.Colors.with_opacity(0.5, Color.log.ok)),
+            top=ft.BorderSide(1, ft.Colors.with_opacity(0.5, Color.log.ok)),
+            bottom=ft.BorderSide(1, ft.Colors.with_opacity(0.5, Color.log.ok)),
         ),
         border_radius=6,
-        bgcolor=ft.Colors.with_opacity(0.05, ft.Colors.GREEN_400),
+        bgcolor=ft.Colors.with_opacity(0.05, Color.log.ok),
         content=ft.Column(spacing=2, controls=rows),
     )
 
@@ -393,8 +377,8 @@ def build_progress_view(
         value=None,
         width=float("inf"),
         expand=True,
-        color=ft.Colors.BLUE_400,
-        bgcolor=ft.Colors.GREY_800,
+        color=ft.Colors.PRIMARY,
+        bgcolor=ft.Colors.OUTLINE_VARIANT,
         visible=False,
     )
 
@@ -405,11 +389,9 @@ def build_progress_view(
         auto_scroll=True,
     )
 
-    cancel_button = ft.TextButton(
+    cancel_button = danger_button(
         "Cancelar",
         icon=ft.Icons.CANCEL_OUTLINED,
-        icon_color=ft.Colors.RED_300,
-        style=ft.ButtonStyle(color=ft.Colors.RED_300),
         on_click=lambda _: on_cancel(),
     )
 
@@ -463,13 +445,13 @@ def build_progress_view(
                 content=log_list,
                 expand=True,
                 border=ft.Border(
-                    left=ft.BorderSide(1, ft.Colors.GREY_700),
-                    right=ft.BorderSide(1, ft.Colors.GREY_700),
-                    top=ft.BorderSide(1, ft.Colors.GREY_700),
-                    bottom=ft.BorderSide(1, ft.Colors.GREY_700),
+                    left=ft.BorderSide(1, ft.Colors.OUTLINE_VARIANT),
+                    right=ft.BorderSide(1, ft.Colors.OUTLINE_VARIANT),
+                    top=ft.BorderSide(1, ft.Colors.OUTLINE_VARIANT),
+                    bottom=ft.BorderSide(1, ft.Colors.OUTLINE_VARIANT),
                 ),
                 border_radius=6,
-                bgcolor=ft.Colors.GREY_900,
+                bgcolor=ft.Colors.SURFACE,
             ),
             ft.Row(controls=[cancel_button], alignment=ft.MainAxisAlignment.END),
         ],
@@ -524,7 +506,7 @@ def build_progress_view(
         label = _resolve_stage_label(event)
         if label is not None:
             stage_label.value = label
-            stage_label.color = ft.Colors.WHITE
+            stage_label.color = ft.Colors.ON_SURFACE
             stage_label.italic = False
             stage_label.size = 16
             stage_label.weight = ft.FontWeight.W_500
@@ -550,16 +532,7 @@ def build_progress_view(
 
         msgs = _resolve_messages(event)
         for msg in msgs:
-            color = _color_for_prefix(msg)
-            log_list.controls.append(
-                ft.Text(
-                    msg,
-                    size=12,
-                    color=color,
-                    selectable=True,
-                    font_family="monospace" if msg.startswith("[") else None,
-                )
-            )
+            log_list.controls.append(log_line(msg))
         _trim_log()
 
         # --- eventos genéricos (usados por todos os módulos em PR3+) ---
