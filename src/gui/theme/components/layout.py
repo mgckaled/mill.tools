@@ -6,6 +6,16 @@ import flet as ft
 from src.gui.theme.tokens import Layout, Space, Type
 
 
+def section_label(text: str) -> ft.Text:
+    """Rótulo de seção (13px W600 ON_SURFACE_VARIANT) — uso standalone no layout."""
+    return ft.Text(
+        text,
+        size=Type.label.size,
+        weight=ft.FontWeight.W_600,
+        color=ft.Colors.ON_SURFACE_VARIANT,
+    )
+
+
 def module_scaffold(form: ft.Control, panel: ft.Control) -> ft.Row:
     """Layout padrão dos módulos: form fixo (380px) | divisor | painel expand."""
     return ft.Row(

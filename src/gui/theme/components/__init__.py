@@ -20,6 +20,7 @@ from src.gui.theme.components.layout import (
     hairline,
     module_scaffold,
     section,
+    section_label,
 )
 
 __all__ = [
@@ -37,4 +38,5 @@ __all__ = [
     "hairline",
     "module_scaffold",
     "section",
+    "section_label",
 ]

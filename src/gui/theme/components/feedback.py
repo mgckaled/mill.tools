@@ -17,11 +17,17 @@ _PREFIX_COLORS: dict[str, str] = {
 
 
 def log_line(text: str) -> ft.Text:
-    """Linha de log monoespaçada com cor semântica por prefixo."""
+    """Linha de log monoespaçada com cor semântica por prefixo.
+
+    Linhas com prefixo [x] usam no_wrap=True (linhas de status curtas).
+    Texto sem prefixo (ex: segmentos de transcrição) quebra normalmente.
+    """
     color = Color.log.text
+    is_prefixed = False
     for prefix, c in _PREFIX_COLORS.items():
         if text.startswith(prefix):
             color = c
+            is_prefixed = True
             break
     return ft.Text(
         text,
@@ -29,7 +35,7 @@ def log_line(text: str) -> ft.Text:
         size=Type.mono.size,
         color=color,
         selectable=True,
-        no_wrap=True,
+        no_wrap=is_prefixed,
         overflow=ft.TextOverflow.ELLIPSIS,
     )
 

@@ -63,7 +63,7 @@ class Type:
     """Tipografia — família e escala de tamanho/peso."""
 
     FONT_UI   = "Segoe UI"
-    FONT_MONO = "DejaVu Sans Mono"
+    FONT_MONO = "Consolas"
 
     display     = _TypeSpec(34.0, 600)
     title       = _TypeSpec(22.0, 600)
@@ -73,7 +73,7 @@ class Type:
     body_strong = _TypeSpec(14.0, 600)
     button      = _TypeSpec(14.0, 600)
     caption     = _TypeSpec(12.0, 400)
-    mono        = _TypeSpec(12.5, 400, "DejaVu Sans Mono")
+    mono        = _TypeSpec(12.5, 400, "Consolas")
 
 
 class Space:
