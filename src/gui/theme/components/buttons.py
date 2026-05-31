@@ -16,7 +16,7 @@ def primary_button(
 ) -> ft.FilledButton:
     """Ação primária — herda primary (dourado) do tema automaticamente."""
     return ft.FilledButton(
-        text="Executando..." if loading else text,
+        "Executando..." if loading else text,
         icon=ft.Icons.HOURGLASS_EMPTY if loading else icon,
         disabled=loading,
         on_click=on_click,
@@ -34,7 +34,7 @@ def secondary_button(
 ) -> ft.OutlinedButton:
     """Ação secundária — contorno sem preenchimento."""
     return ft.OutlinedButton(
-        text=text,
+        text,
         icon=icon,
         on_click=on_click,
         style=ft.ButtonStyle(
@@ -51,7 +51,7 @@ def danger_button(
     """Ação destrutiva — ghost vermelho (nunca usa o dourado primário)."""
     err = Color.log.error
     return ft.TextButton(
-        text=text,
+        text,
         icon=icon,
         on_click=on_click,
         style=ft.ButtonStyle(
