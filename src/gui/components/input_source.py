@@ -179,7 +179,7 @@ def build_input_source(
             pick_btn,
             items_border,
         ],
-        spacing=6,
+        spacing=10,
     )
 
     # ── API pública ───────────────────────────────────────────────────────────
