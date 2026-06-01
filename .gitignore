@@ -20,7 +20,6 @@ output/**
 /transcriptions/
 
 # Claude-related files
-CLAUDE.md
 .claude/
 
 # Secrets

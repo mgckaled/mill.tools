@@ -23,6 +23,7 @@
 - 🧠 **Pós-processamento por LLM** — formatação em parágrafos, análise estruturada (10 campos) e digest condensado para uso como contexto.
 - 🔀 **Provider flexível** — Ollama local por padrão; Gemini na nuvem por prefixo de modelo, sem mudar o fluxo.
 - 🎵 **Módulo Áudio** — download (YouTube, SoundCloud, etc. via yt-dlp), conversão e extração de áudio, em fila, com capa/metadados embutidos.
+- 🖼️ **Módulo Imagens** — conversão entre 8 formatos (JPG, PNG, WebP, AVIF, TIFF, BMP, GIF, ICO), controle de qualidade e visor de pré-visualização integrado.
 - 🖥️ **GUI desktop** (Flet) com acompanhamento em tempo real estilo CLI, barra de progresso determinada e spinner animado.
 - 🔗 **Bridge Áudio → Transcrição** — botão "Transcrever este arquivo" envia o arquivo processado diretamente para o módulo de Transcrição.
 - 🎨 **Design System** — paleta unificada com acento dourado, suporte a temas claro/escuro e contraste WCAG 2.1.
@@ -35,7 +36,7 @@
 | **Transcrição** | ✅ | Whisper local + formatação/análise/digest via LLM |
 | **Áudio** | ✅ | Download, conversão e extração de áudio (fila, capa/metadados) |
 | **Vídeo** | 🚧 | Download/conversão/extração (planejado — PR4) |
-| **Imagens** | 🗺️ | Manipulação/conversão (pesquisa em `docs/`) |
+| **Imagens** | ✅ | Conversão de formato/qualidade, download de URL, visor de pré-visualização (PR-IMG-1) |
 
 ---
 
@@ -194,6 +195,10 @@ Versão condensada (~40% do tamanho), sem cumprimentos/CTAs/patrocinadores, mant
 
 Downloads em `source/`; conversões/extrações em `processed/`.
 
+### Imagens — `output/image/`
+
+Downloads de URL em `source/`; imagens convertidas em `processed/`.
+
 ---
 
 ## Modelos
@@ -244,12 +249,12 @@ A GUI usa um Design System interno em `src/gui/theme/`, construído sobre o Mate
 | Token | Dark | Light | Uso |
 |---|---|---|---|
 | `primary` | `#F4A63C` | `#E0982F` | Acento único — botões, foco, seleção ativa |
-| `bg` | `#0E1B2C` | `#F6F8FB` | Fundo da janela |
-| `surface` | `#14233A` | `#FFFFFF` | Painéis e cards |
-| `outline` | `#556E8C` | `#7890A0` | Bordas de containers (3:1 vs bg — WCAG AA) |
-| `outline_variant` | `#364E6A` | `#AEBCC8` | Divisórias hairline (2:1 vs bg) |
+| `bg` | `#101012` | `#F6F8FB` | Fundo da janela |
+| `surface` | `#1E1E22` | `#FFFFFF` | Painéis e cards |
+| `outline` | `#5A5A62` | `#7890A0` | Bordas de containers |
+| `outline_variant` | `#36363C` | `#AEBCC8` | Divisórias hairline |
 
-Fonte de UI: **Segoe UI** (sistema Windows). Fonte mono: **Consolas** (log, card de resumo).
+Fonte de UI: **Verdana**. Fonte mono (log): **JetBrains Mono** / **Consolas** (escala tipográfica `mono`).
 
 ### Componentes disponíveis
 
@@ -258,11 +263,14 @@ Fonte de UI: **Segoe UI** (sistema Windows). Fonte mono: **Consolas** (log, card
 | `primary_button` | `buttons` | Ação primária — herda dourado do tema |
 | `secondary_button` | `buttons` | Ação secundária — contorno |
 | `danger_button` | `buttons` | Ação destrutiva — vermelho semântico |
+| `action_button` | `buttons` | Ação de link/secundária — azul info por padrão, acento configurável |
 | `segmented_selector` | `buttons` | Grade de chips clicáveis (formato, bitrate…) |
+| `output_card` | `cards` | Card de saída — borda colorida, ícone, nome, botão abrir pasta |
 | `labeled_field` | `inputs` | Rótulo + controle + helper + ⓘ opcional |
 | `switch_row` | `inputs` | Switch com cor ativa do tema |
 | `slider_row` | `inputs` | Slider com rótulo + ⓘ opcional |
 | `log_line` | `feedback` | Linha de log monoespaçada com cor por prefixo |
+| `spinner` | `feedback` | Cata-vento animado — retorna `(control, start, stop)` |
 | `summary_card` | `feedback` | Card de resumo ao fim do pipeline |
 | `section_title` | `feedback` | Título de seção de resultados |
 | `section_label` | `layout` | Rótulo de seção simples (sem ⓘ) |
@@ -295,6 +303,9 @@ O arquivo `src/gui/help_content.py` centraliza todo o conteúdo de ajuda, separa
 | `audio.format` | 'best' vs conversão | — |
 | `audio.bitrate` | Resumo do bitrate | ✅ Quando usar cada valor |
 | `audio.embed_meta` | O que é embutido | — |
+| `image.input` | URL direta vs arquivo local | — |
+| `image.format` | Lossy vs lossless, AVIF | — |
+| `image.quality` | Quando e quanto comprimir | — |
 
 Para adicionar ajuda a um novo controle: inserir a chave em `HELP_SHORT` (e opcionalmente `HELP_LONG`) e passar `help_key=` para a fábrica correspondente.
 
@@ -308,7 +319,9 @@ mill-tools/
 ├── gui.py               — entry point GUI (splash → app)
 ├── src/
 │   ├── transcriber.py · formatter.py · analyzer.py · prompter.py · llm_factory.py · utils.py
-│   ├── core/audio/      — downloader, converter, info (lógica pura, sem Flet)
+│   ├── core/
+│   │   ├── audio/       — downloader, converter, info (lógica pura, sem Flet)
+│   │   └── image/       — downloader, converter, info (Pillow; lógica pura, sem Flet)
 │   └── gui/
 │       ├── app.py       — NavigationRail + registry de módulos + navigate_to
 │       ├── splash.py    — animação de entrada (moinho + fade)
@@ -317,19 +330,23 @@ mill-tools/
 │       ├── settings.py  — persistência em ~/.mill-tools/config.json
 │       ├── workers.py   — pipeline de Transcrição (thread daemon)
 │       ├── help_content.py — registro central de tooltips e modais (HELP_SHORT/LONG)
-│       ├── components/  — input_source.py (URL + FilePicker, allow_multiple)
-│       ├── modules/     — base.py + transcription/ · audio/ · video/
+│       ├── components/  — input_source.py (URL + FilePicker, allow_multiple, url_hint)
+│       ├── modules/     — base.py + transcription/ · audio/ · video/ · image/
 │       ├── theme/       — Design System
 │       │   ├── tokens.py    — Color, Type, Space, Radius, Motion, Layout
 │       │   ├── theme.py     — build_theme() + apply_theme()
-│       │   └── components/  — buttons, inputs, feedback, layout, help
+│       │   └── components/  — buttons, inputs, feedback, layout, help, cards
 │       └── views/       — form_view · progress_view · result_view
 ├── assets/
 │   ├── logo/            — símbolo e wordmark (SVG/PNG)
 │   └── icons/           — mill.ico, mill-512.png
 ├── ollama/              — Modelfiles
 ├── docs/                — planos de implementação
-└── output/              — audio/ · video/ · transcriptions/{text,analysis,digest}
+└── output/
+    ├── audio/           — source/ (downloads) · processed/ (conversões)
+    ├── image/           — source/ (downloads de URL) · processed/ (convertidas)
+    ├── video/
+    └── transcriptions/  — text/ · analysis/ · digest/
 ```
 
 ---
@@ -346,5 +363,5 @@ mill-tools/
 ## Roadmap
 
 - **PR3.1** — IA de áudio opcional (denoise via DeepFilterNet; stems via Demucs a avaliar), isolada em extra que não afeta o app base.
-- **PR4** — Módulo Vídeo (download/conversão/extração).
-- **Futuro** — Módulo Imagens (manipulação/conversão com Pillow).
+- **PR4** — Módulo Vídeo (download/conversão/extração, análogo ao Áudio).
+- **Futuro** — melhorias no Módulo Imagens (batch rename, redimensionamento, crop); Módulo de Imagens com IA (upscale/remoção de fundo).
