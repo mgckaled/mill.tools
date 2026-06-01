@@ -16,14 +16,16 @@ def _make_tooltip(message: str) -> ft.Tooltip:
             bgcolor=ft.Colors.SURFACE,
             border_radius=Radius.md,
         ),
+        size_constraints=ft.BoxConstraints(max_width=280),
         padding=ft.Padding(
             left=Space.lg, right=Space.lg,
             top=Space.sm, bottom=Space.sm,
         ),
         text_style=ft.TextStyle(
             color=ft.Colors.ON_SURFACE,
-            size=Type.body.size,
+            size=Type.caption.size,
         ),
+        text_align=ft.TextAlign.LEFT,
         prefer_below=True,
     )
 
