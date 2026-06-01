@@ -174,9 +174,9 @@ def build_image_form(
         page.update()
 
     def _make_card(op_id: str, icon_name: str, label: str) -> ft.Container:
-        ic = ft.Icon(icon_name, size=18, color=ft.Colors.PRIMARY)
+        ic = ft.Icon(icon_name, size=24, color=ft.Colors.PRIMARY)
         tx = ft.Text(
-            label, size=9, text_align=ft.TextAlign.CENTER,
+            label, size=11, text_align=ft.TextAlign.CENTER,
             color=ft.Colors.PRIMARY, max_lines=2,
         )
         _card_icon_refs[op_id] = ic
@@ -186,20 +186,30 @@ def build_image_form(
             content=ft.Column(
                 [ic, tx],
                 horizontal_alignment=ft.CrossAxisAlignment.CENTER,
-                spacing=4, tight=True,
+                spacing=6, tight=True,
             ),
-            width=72, height=58, padding=6, border_radius=8,
+            height=70, padding=8, border_radius=8,
+            expand=True,
             bgcolor=ft.Colors.SURFACE,
             border=ft.Border(left=side, right=side, top=side, bottom=side),
             on_click=lambda e, oid=op_id: _select_op(oid),
             ink=True,
+            alignment=ft.Alignment.CENTER,
         )
         _card_ctr_refs[op_id] = ctr
         return ctr
 
-    card_grid = ft.Row(
-        wrap=True, spacing=6, run_spacing=6,
-        controls=[_make_card(oid, icon, lbl) for oid, icon, lbl in _OPS],
+    # Grade fixa 3 colunas × 4 linhas — spacers invisíveis completam a última linha
+    _cards = [_make_card(oid, icon, lbl) for oid, icon, lbl in _OPS]
+    _cols = 3
+    while len(_cards) % _cols != 0:
+        _cards.append(ft.Container(expand=True))  # slot vazio para alinhar
+    card_grid = ft.Column(
+        spacing=6,
+        controls=[
+            ft.Row(controls=_cards[i:i + _cols], spacing=6)
+            for i in range(0, len(_cards), _cols)
+        ],
     )
 
     # Deixar "convert" ativo visualmente (sem update — ainda não montado)
