@@ -21,8 +21,8 @@ import logging
 
 from src.transcriber import print_summary, transcribe
 from src.utils import (
-    AUDIOS_DIR,
-    TRANSCRIPTIONS_RAW_DIR,
+    AUDIO_SOURCE_DIR,
+    TRANSCRIPTIONS_TEXT_DIR,
     check_dependencies,
     download_audio,
     extract_video_id,
@@ -125,11 +125,11 @@ def main() -> None:
     validate_url(args.url)
 
     video_id = extract_video_id(args.url)
-    audio_path = AUDIOS_DIR / f"{video_id}.mp3"
+    audio_path = AUDIO_SOURCE_DIR / f"{video_id}.mp3"
 
-    TRANSCRIPTIONS_RAW_DIR.mkdir(parents=True, exist_ok=True)
+    TRANSCRIPTIONS_TEXT_DIR.mkdir(parents=True, exist_ok=True)
     output_stem = args.output_name or f"transcricao_{video_id}"
-    output_path = TRANSCRIPTIONS_RAW_DIR / f"{output_stem}.txt"
+    output_path = TRANSCRIPTIONS_TEXT_DIR / f"{output_stem}.txt"
 
     logging.debug("Video ID slug: %s", video_id)
     logging.debug("Audio path: %s", audio_path)

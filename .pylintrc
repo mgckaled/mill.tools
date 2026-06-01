@@ -1,0 +1,11 @@
+[MASTER]
+# Desabilitar checagens que geram falsos positivos com Flet (classes com
+# __init__ gerado dinamicamente que o Pylint não consegue introspeccionar)
+disable=
+    E1101,  # no-member
+    E1121,  # too-many-positional-args
+    E1123,  # unexpected-keyword-arg
+    W0611,  # unused-import
+
+[FORMAT]
+max-line-length=120

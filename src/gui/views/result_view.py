@@ -8,6 +8,8 @@ from typing import Callable
 
 import flet as ft
 
+from src.gui.theme.components import hairline
+
 
 def _read(path: Path | None) -> str:
     if path is None or not Path(path).exists():
@@ -142,7 +144,7 @@ def build_result_view(
     return ft.Column(
         controls=[
             action_row,
-            ft.Divider(height=1),
+            hairline(),
             tab_bar,
             ft.Divider(height=1, color=ft.Colors.OUTLINE_VARIANT),
             content_stack,

@@ -25,7 +25,7 @@ from langchain_core.prompts import ChatPromptTemplate
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 
 from src.llm_factory import is_gemini_model, make_llm
-from src.utils import TRANSCRIPTIONS_PROMPT_DIR
+from src.utils import TRANSCRIPTIONS_DIGEST_DIR
 
 DEFAULT_PROMPT_MODEL = "qwen7b-custom"
 PROMPT_CHUNK_SIZE = 4500
@@ -207,8 +207,8 @@ def build_prompt_ready(input_path: Path, model_name: str = DEFAULT_PROMPT_MODEL,
 
     result = "\n".join(header_parts) + final_body + "\n"
 
-    TRANSCRIPTIONS_PROMPT_DIR.mkdir(parents=True, exist_ok=True)
-    output_path = TRANSCRIPTIONS_PROMPT_DIR / input_path.name
+    TRANSCRIPTIONS_DIGEST_DIR.mkdir(parents=True, exist_ok=True)
+    output_path = TRANSCRIPTIONS_DIGEST_DIR / input_path.name
     output_path.write_text(result, encoding="utf-8")
 
     ratio = len(final_body) / len(body) * 100 if body else 0

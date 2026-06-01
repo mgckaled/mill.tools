@@ -1,24 +1,27 @@
-"""Layout raiz do yt-transcriber GUI — layout split form | pipeline."""
+"""Layout raiz do mill.tools — NavigationRail + sistema de módulos."""
 
 from __future__ import annotations
 
 import threading
 
 import flet as ft
+from flet.controls.core.stack import StackFit
 
 from src.gui import settings
 from src.gui.events import EventBus
-from src.gui.views.form_view import build_form_view
-from src.gui.views.progress_view import build_progress_view
-from src.gui.workers import PipelineArgs, PipelineResult, start_pipeline
+from src.gui.modules.audio.view import build_audio_module
+from src.gui.modules.base import Module
+from src.gui.modules.image.view import build_image_module
+from src.gui.modules.transcription.view import build_transcription_module, get_form_start_button
+from src.gui.modules.video.view import build_video_placeholder
 
 
 def build_app(page: ft.Page) -> None:
-    """Monta o layout split: formulário fixo à esquerda, pipeline expansível à direita.
+    """Monta o layout raiz: NavigationRail + Stack de módulos.
 
-    Não há mais navegação entre views — ambos os painéis são sempre visíveis.
-    O EventBus é criado uma única vez e reutilizado entre execuções. O botão
-    Iniciar é desabilitado durante a execução e reabilitado ao fim.
+    Todos os módulos são montados simultaneamente num ft.Stack; navigate_to
+    alterna visible= em vez de reatribuir content — evita object_patch IndexError
+    do Flet 0.85 que forçou o abandono de ft.Tabs.
     """
     cfg = settings.load()
     page.theme_mode = (
@@ -47,99 +50,102 @@ def build_app(page: ft.Page) -> None:
     )
 
     page.appbar = ft.AppBar(
-        title=ft.Text("yt-transcriber", weight=ft.FontWeight.BOLD),
+        title=ft.Text("mill.tools", weight=ft.FontWeight.BOLD),
         center_title=False,
         actions=[theme_btn],
     )
 
     # ------------------------------------------------------------------
-    # Handlers do ciclo de vida
+    # Módulos
     # ------------------------------------------------------------------
 
-    def _on_start(args: PipelineArgs) -> None:
+    # nav é populado após navigate_to ser definido — forward reference
+    # necessário porque MODULES depende dos módulos e navigate_to depende de MODULES.
+    nav: list = []
+
+    _transcription = build_transcription_module(page, bus, cancel_event, pipeline_running)
+    _audio = build_audio_module(page, bus, cancel_event, pipeline_running, nav)
+    _video = build_video_placeholder()
+    _image = build_image_module(page, bus, cancel_event, pipeline_running)
+
+    MODULES: list[Module] = [_audio, _video, _image, _transcription]
+    _DEFAULT_ID = "transcription"
+
+    current_idx: list[int] = [
+        next(i for i, m in enumerate(MODULES) if m.id == _DEFAULT_ID)
+    ]
+
+    # ------------------------------------------------------------------
+    # navigate_to — visibilidade em vez de reatribuição de content
+    # ------------------------------------------------------------------
+
+    def navigate_to(module_id: str, payload: dict | None = None) -> None:
         if pipeline_running[0]:
+            page.snack_bar = ft.SnackBar(
+                content=ft.Text("Aguarde o pipeline terminar antes de trocar de módulo."),
+                bgcolor=ft.Colors.ORANGE_800,
+            )
+            page.snack_bar.open = True
+            rail.selected_index = current_idx[0]
+            page.update()
             return
-        pipeline_running[0] = True
-        cancel_event.clear()
-        progress_panel.reset()
-        form_panel.set_running(True)
-        start_pipeline(args, bus, cancel_event)
 
-    def _on_cancel() -> None:
-        cancel_event.set()
+        idx = next(i for i, m in enumerate(MODULES) if m.id == module_id)
+        MODULES[current_idx[0]].on_unmount()
+        current_idx[0] = idx
+        rail.selected_index = idx
+        for i, m in enumerate(MODULES):
+            m.control.visible = (i == idx)
+        MODULES[idx].on_mount(payload or {})
+        page.update()
 
-    def _on_pipeline_done(payload: dict) -> None:
-        pipeline_running[0] = False
-        form_panel.set_running(False)
-        result = PipelineResult(
-            raw_path=payload.get("raw_path"),
-            analysis_path=payload.get("analysis_path"),
-            prompt_path=payload.get("prompt_path"),
-        )
-        progress_panel.show_results(result)
+    nav.append(navigate_to)  # resolve a forward reference do módulo Áudio
+
+    def _on_rail_change(e: ft.ControlEvent) -> None:
+        idx = e.control.selected_index
+        navigate_to(MODULES[idx].id)
 
     # ------------------------------------------------------------------
-    # Painéis
+    # NavigationRail
     # ------------------------------------------------------------------
 
-    form_panel = build_form_view(page, on_start=_on_start)
-    progress_panel = build_progress_view(page, on_cancel=_on_cancel, on_done=_on_pipeline_done)
-
-    # ------------------------------------------------------------------
-    # Legenda de atalhos de teclado (sempre visível, rodapé esquerdo)
-    # ------------------------------------------------------------------
-
-    def _key_chip(label: str) -> ft.Container:
-        return ft.Container(
-            content=ft.Text(label, size=11, font_family="monospace", color=ft.Colors.ON_SURFACE_VARIANT),
-            padding=ft.Padding(left=6, right=6, top=2, bottom=2),
-            border=ft.Border(
-                left=ft.BorderSide(1, ft.Colors.OUTLINE_VARIANT),
-                right=ft.BorderSide(1, ft.Colors.OUTLINE_VARIANT),
-                top=ft.BorderSide(1, ft.Colors.OUTLINE_VARIANT),
-                bottom=ft.BorderSide(2, ft.Colors.OUTLINE_VARIANT),
-            ),
-            border_radius=4,
-        )
-
-    shortcuts_bar = ft.Container(
-        content=ft.Row(
-            controls=[
-                _key_chip("Ctrl"), ft.Text("+", size=11, color=ft.Colors.ON_SURFACE_VARIANT),
-                _key_chip("Enter"), ft.Text(" Iniciar", size=11, color=ft.Colors.ON_SURFACE_VARIANT),
-                ft.Container(width=12),
-                _key_chip("Esc"), ft.Text(" Cancelar", size=11, color=ft.Colors.ON_SURFACE_VARIANT),
-            ],
-            spacing=3,
-            vertical_alignment=ft.CrossAxisAlignment.CENTER,
-        ),
-        padding=ft.Padding(left=12, right=8, top=6, bottom=6),
-        border=ft.Border(top=ft.BorderSide(1, ft.Colors.OUTLINE_VARIANT)),
+    rail = ft.NavigationRail(
+        selected_index=current_idx[0],
+        label_type=ft.NavigationRailLabelType.ALL,
+        min_width=80,
+        destinations=[
+            ft.NavigationRailDestination(
+                icon=m.icon,
+                selected_icon=m.selected_icon,
+                label=m.label,
+            )
+            for m in MODULES
+        ],
+        on_change=_on_rail_change,
     )
 
     # ------------------------------------------------------------------
-    # Layout split
+    # Stack — todos os módulos montados; só um visível por vez
+    # ------------------------------------------------------------------
+
+    for m in MODULES:
+        m.control.visible = (m.id == _DEFAULT_ID)
+
+    module_stack = ft.Stack(
+        controls=[m.control for m in MODULES],
+        expand=True,
+        fit=StackFit.EXPAND,
+    )
+
+    # ------------------------------------------------------------------
+    # Layout raiz
     # ------------------------------------------------------------------
 
     layout = ft.Row(
         controls=[
-            ft.Container(
-                content=ft.Column(
-                    controls=[
-                        ft.Container(content=form_panel.control, expand=True),
-                        shortcuts_bar,
-                    ],
-                    spacing=0,
-                    expand=True,
-                ),
-                width=380,
-            ),
+            rail,
             ft.VerticalDivider(width=1, color=ft.Colors.OUTLINE_VARIANT),
-            ft.Container(
-                content=progress_panel.control,
-                expand=True,
-                padding=ft.Padding(left=12, right=12, top=8, bottom=8),
-            ),
+            ft.Container(content=module_stack, expand=True),
         ],
         expand=True,
         spacing=0,
@@ -147,34 +153,21 @@ def build_app(page: ft.Page) -> None:
     )
 
     # ------------------------------------------------------------------
-    # Atalhos de teclado
+    # Atalhos de teclado (delegam para o módulo ativo)
     # ------------------------------------------------------------------
 
     def _on_keyboard(e: ft.KeyboardEvent) -> None:
-        if e.ctrl and e.key == "Enter" and not pipeline_running[0]:
-            for ctrl in _walk(page):
-                if (
-                    isinstance(ctrl, ft.FilledButton)
-                    and getattr(ctrl, "text", "") == "Iniciar"
-                    and not ctrl.disabled
-                    and ctrl.on_click
-                ):
-                    ctrl.on_click(e)
-                    break
-        if e.key == "Escape" and pipeline_running[0]:
-            _on_cancel()
+        active_module = MODULES[current_idx[0]]
+        if active_module.id != "transcription":
+            return
 
-    def _walk(root):
-        queue = [root]
-        while queue:
-            item = queue.pop(0)
-            yield item
-            for attr in ("controls", "content", "actions"):
-                child = getattr(item, attr, None)
-                if isinstance(child, list):
-                    queue.extend(c for c in child if c is not None)
-                elif child is not None:
-                    queue.append(child)
+        if e.ctrl and e.key == "Enter" and not pipeline_running[0]:
+            btn = get_form_start_button(active_module.control)
+            if btn and not btn.disabled and btn.on_click:
+                btn.on_click(e)
+
+        if e.key == "Escape" and pipeline_running[0]:
+            cancel_event.set()
 
     page.on_keyboard_event = _on_keyboard
 

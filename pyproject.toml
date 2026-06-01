@@ -1,7 +1,7 @@
 [project]
-name = "yt-transcriber"
+name = "mill-tools"
 version = "0.1.0"
-description = "CLI para transcrever vídeos do YouTube e analisar com LLM local."
+description = "Multiferramenta pessoal para processamento de áudio, vídeo e transcrição."
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
@@ -13,6 +13,7 @@ dependencies = [
     "langchain-text-splitters>=0.3.0",
     "python-dotenv>=1.0.1",
     "tqdm>=4.67.3",
+    "pillow>=12",
     "yt-dlp>=2026.3.17",
 ]
 

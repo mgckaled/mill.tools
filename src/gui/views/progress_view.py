@@ -9,6 +9,8 @@ from typing import Callable
 import flet as ft
 
 from src.gui.events import PipelineEvent
+from src.gui.theme.components import danger_button, log_line, spinner
+from src.gui.theme.tokens import Color, Type
 from src.transcriber import format_elapsed
 from src.utils import format_duration
 
@@ -16,27 +18,8 @@ _MAX_LOG_LINES = 500
 
 
 # ---------------------------------------------------------------------------
-# Helpers de cor e formatação
+# Helpers de formatação
 # ---------------------------------------------------------------------------
-
-def _color_for_prefix(msg: str) -> str:
-    """Retorna cor Flet com base no prefixo estilo CLI da mensagem."""
-    if msg.startswith("[*]"):
-        return ft.Colors.CYAN_300
-    if msg.startswith("[~]"):
-        return ft.Colors.YELLOW_300
-    if msg.startswith("[i]"):
-        return ft.Colors.BLUE_300
-    if msg.startswith("[✓]"):
-        return ft.Colors.GREEN_300
-    if msg.startswith("[!]"):
-        return ft.Colors.RED_300
-    if msg.startswith("[»]"):
-        return ft.Colors.GREY_400
-    if msg.startswith("[d]"):
-        return ft.Colors.GREY_500
-    return ft.Colors.WHITE
-
 
 def _fmt_dur(seconds: int | float) -> str:
     return format_duration(int(seconds))
@@ -188,6 +171,29 @@ def _resolve_messages(event: PipelineEvent) -> list[str]:
         case "log":
             msg = p.get("message", "")
             return [msg] if msg else []
+        case "audio_op_start":
+            op = p.get("operation", "")
+            name = p.get("item_name", "")
+            idx = p.get("item_idx", "?")
+            total = p.get("total", "?")
+            verb = {"download": "Baixando", "convert": "Convertendo", "extract": "Extraindo"}.get(op, op)
+            return [f"[~] {verb} ({idx}/{total}): {name}"]
+        case "audio_op_done":
+            path = p.get("output_path", "")
+            elapsed = p.get("elapsed", "")
+            name = Path(path).name if path else path
+            suffix = f" ({elapsed})" if elapsed else ""
+            return [f"[✓] Salvo: {name}{suffix}"]
+        case "queue_progress" | "progress_start" | "progress_update":
+            return []
+        case "task_done":
+            paths = p.get("output_paths", [])
+            if paths:
+                return [f"[✓] Pipeline de áudio concluído — {len(paths)} arquivo(s)."]
+            return ["[✓] Pipeline concluído."]
+        case "task_error":
+            msg = p.get("message", "erro desconhecido")
+            return [f"[!] Erro: {msg}"]
         case _:
             return []
 
@@ -204,6 +210,10 @@ def _resolve_progress(event: PipelineEvent, audio_duration: list[float]) -> floa
         dur = p.get("audio_duration", 0)
         if dur:
             audio_duration[0] = dur
+
+    if t == "progress_update":
+        current = p.get("current", 0.0)
+        return min(float(current), 1.0)
 
     if t == "transcribe_segment" and audio_duration[0] > 0:
         end = p.get("end", 0)
@@ -254,6 +264,22 @@ def _resolve_stage_label(event: PipelineEvent) -> str | None:
             return "Pipeline concluído!"
         case "pipeline_error":
             return "Erro no pipeline."
+        case "queue_progress":
+            p = event.payload
+            name = p.get("item_name", "")
+            cur = p.get("current_item", "?")
+            tot = p.get("total_items", "?")
+            return f"Item {cur}/{tot}" + (f" — {name}" if name else "")
+        case "audio_op_start":
+            op = event.payload.get("operation", "")
+            _labels = {"download": "Baixando...", "convert": "Convertendo...", "extract": "Extraindo áudio..."}
+            return _labels.get(op, "Processando...")
+        case "audio_op_done":
+            return "Concluído."
+        case "task_done":
+            return "Pipeline concluído!"
+        case "task_error":
+            return "Erro no pipeline."
         case _:
             return None
 
@@ -270,30 +296,33 @@ def _make_summary_card(payload: dict) -> ft.Control:
     flagged = payload.get("flagged_count", 0)
 
     rows = [
-        ft.Text("=" * 52, size=10, color=ft.Colors.GREEN_300, font_family="monospace"),
-        ft.Text(f"  title    : {title}", size=12, color=ft.Colors.WHITE, font_family="monospace", selectable=True),
-        ft.Text(f"  duration : {duration}", size=12, color=ft.Colors.WHITE, font_family="monospace"),
-        ft.Text(f"  output   : {Path(output_path).name}", size=12, color=ft.Colors.WHITE, font_family="monospace", selectable=True),
-        ft.Text(f"  elapsed  : {elapsed}", size=12, color=ft.Colors.WHITE, font_family="monospace"),
+        ft.Text("=" * 52, size=10, color=Color.log.ok, font_family=Type.FONT_MONO),
+        ft.Text(f"  title    : {title}", size=12, color=Color.log.text, font_family=Type.FONT_MONO, selectable=True),
+        ft.Text(f"  duration : {duration}", size=12, color=Color.log.text, font_family=Type.FONT_MONO),
+        ft.Text(
+            f"  output   : {Path(output_path).name}",
+            size=12, color=Color.log.text, font_family=Type.FONT_MONO, selectable=True,
+        ),
+        ft.Text(f"  elapsed  : {elapsed}", size=12, color=Color.log.text, font_family=Type.FONT_MONO),
     ]
     if flagged:
         rows.append(ft.Text(
             f"  flagged  : {flagged} segment(s) [?]",
-            size=12, color=ft.Colors.YELLOW_300, font_family="monospace",
+            size=12, color=Color.log.work, font_family=Type.FONT_MONO,
         ))
-    rows.append(ft.Text("=" * 52, size=10, color=ft.Colors.GREEN_300, font_family="monospace"))
+    rows.append(ft.Text("=" * 52, size=10, color=Color.log.ok, font_family=Type.FONT_MONO))
 
     return ft.Container(
         margin=ft.Margin(top=8, bottom=4, left=0, right=0),
         padding=ft.Padding(left=12, right=12, top=8, bottom=8),
         border=ft.Border(
-            left=ft.BorderSide(1, ft.Colors.GREEN_700),
-            right=ft.BorderSide(1, ft.Colors.GREEN_700),
-            top=ft.BorderSide(1, ft.Colors.GREEN_700),
-            bottom=ft.BorderSide(1, ft.Colors.GREEN_700),
+            left=ft.BorderSide(1, ft.Colors.with_opacity(0.5, Color.log.ok)),
+            right=ft.BorderSide(1, ft.Colors.with_opacity(0.5, Color.log.ok)),
+            top=ft.BorderSide(1, ft.Colors.with_opacity(0.5, Color.log.ok)),
+            bottom=ft.BorderSide(1, ft.Colors.with_opacity(0.5, Color.log.ok)),
         ),
         border_radius=6,
-        bgcolor=ft.Colors.with_opacity(0.05, ft.Colors.GREEN_400),
+        bgcolor=ft.Colors.with_opacity(0.05, Color.log.ok),
         content=ft.Column(spacing=2, controls=rows),
     )
 
@@ -314,19 +343,27 @@ def build_progress_view(
     page: ft.Page,
     on_cancel: Callable[[], None],
     on_done: Callable[[dict], None],
+    owner_id: str = "",
+    on_show_results: Callable[[object, ft.Column], None] | None = None,
 ) -> ProgressPanel:
     """Retorna um ProgressPanel com controle raiz e métodos reset/show_results.
-
-    A assinatura permanece compatível com o PR1. O painel agora inclui tabs
-    Pipeline | Resultados: Pipeline sempre visível durante execução; Resultados
-    habilitado e selecionado automaticamente ao fim do pipeline.
 
     Args:
         page: Página Flet.
         on_cancel: Callable chamado ao clicar Cancelar.
         on_done: Callable chamado quando pipeline_done é recebido.
+        owner_id: Identificador do módulo dono (ex: "transcription", "audio").
+            Eventos com module_id diferente são ignorados — evita cross-talk entre painéis.
+        on_show_results: Renderização customizada dos resultados. Recebe (result, results_inner).
+            Se None, usa a renderização padrão de Transcrição (PipelineResult).
     """
     audio_duration: list[float] = [0.0]
+    _done_called: list[bool] = [False]  # guard contra duplo on_done
+
+    def _call_on_done(payload: dict) -> None:
+        if not _done_called[0]:
+            _done_called[0] = True
+            on_done(payload)
 
     # --- widgets do painel Pipeline ---
     stage_label = ft.Text(
@@ -341,8 +378,8 @@ def build_progress_view(
         value=None,
         width=float("inf"),
         expand=True,
-        color=ft.Colors.BLUE_400,
-        bgcolor=ft.Colors.GREY_800,
+        color=ft.Colors.PRIMARY,
+        bgcolor=ft.Colors.OUTLINE_VARIANT,
         visible=False,
     )
 
@@ -353,13 +390,14 @@ def build_progress_view(
         auto_scroll=True,
     )
 
-    cancel_button = ft.TextButton(
+    cancel_button = danger_button(
         "Cancelar",
         icon=ft.Icons.CANCEL_OUTLINED,
-        icon_color=ft.Colors.RED_300,
-        style=ft.ButtonStyle(color=ft.Colors.RED_300),
         on_click=lambda _: on_cancel(),
     )
+
+    # --- moinho giratório no header do pipeline ---
+    status_icon, _start_spin, _stop_spin = spinner()
 
     pipeline_panel = ft.Column(
         controls=[
@@ -367,7 +405,7 @@ def build_progress_view(
                 controls=[
                     ft.Row(
                         controls=[
-                            ft.Icon(ft.Icons.SETTINGS_SUGGEST_ROUNDED, color=ft.Colors.BLUE_300),
+                            status_icon,
                             stage_label,
                         ],
                         spacing=8,
@@ -384,13 +422,13 @@ def build_progress_view(
                 content=log_list,
                 expand=True,
                 border=ft.Border(
-                    left=ft.BorderSide(1, ft.Colors.GREY_700),
-                    right=ft.BorderSide(1, ft.Colors.GREY_700),
-                    top=ft.BorderSide(1, ft.Colors.GREY_700),
-                    bottom=ft.BorderSide(1, ft.Colors.GREY_700),
+                    left=ft.BorderSide(1, ft.Colors.OUTLINE_VARIANT),
+                    right=ft.BorderSide(1, ft.Colors.OUTLINE_VARIANT),
+                    top=ft.BorderSide(1, ft.Colors.OUTLINE_VARIANT),
+                    bottom=ft.BorderSide(1, ft.Colors.OUTLINE_VARIANT),
                 ),
                 border_radius=6,
-                bgcolor=ft.Colors.GREY_900,
+                bgcolor=ft.Colors.SURFACE,
             ),
             ft.Row(controls=[cancel_button], alignment=ft.MainAxisAlignment.END),
         ],
@@ -412,8 +450,8 @@ def build_progress_view(
     tab_btns: list[ft.TextButton] = []
 
     def _switch_tab(idx: int) -> None:
-        pipeline_panel.visible = (idx == 0)
-        results_panel.visible = (idx == 1)
+        pipeline_panel.visible = idx == 0
+        results_panel.visible = idx == 1
         for i, btn in enumerate(tab_btns):
             btn.style = ft.ButtonStyle(
                 color={
@@ -438,10 +476,14 @@ def build_progress_view(
 
     # --- handler pubsub (assinatura persistente — não cancela entre runs) ---
     def _handle_event(event: PipelineEvent) -> None:
+        # Filtro de cross-talk: ignora eventos de outros módulos
+        if owner_id and event.module_id and event.module_id != owner_id:
+            return
+
         label = _resolve_stage_label(event)
         if label is not None:
             stage_label.value = label
-            stage_label.color = ft.Colors.WHITE
+            stage_label.color = ft.Colors.ON_SURFACE
             stage_label.italic = False
             stage_label.size = 16
             stage_label.weight = ft.FontWeight.W_500
@@ -450,12 +492,14 @@ def build_progress_view(
         if prog is not None:
             progress_bar.value = prog
         elif event.type in (
+            "progress_start",
             "metadata_start", "download_start", "whisper_loading",
             "transcribe_started", "format_started", "analyze_started",
             "analyze_merge_start", "translation_start", "prompt_started",
         ):
             progress_bar.visible = True
             progress_bar.value = None
+            _start_spin()
 
         if event.type == "transcribe_summary":
             log_list.controls.append(_make_summary_card(event.payload))
@@ -465,36 +509,66 @@ def build_progress_view(
 
         msgs = _resolve_messages(event)
         for msg in msgs:
-            color = _color_for_prefix(msg)
-            log_list.controls.append(
-                ft.Text(
-                    msg,
-                    size=12,
-                    color=color,
-                    selectable=True,
-                    font_family="monospace" if msg.startswith("[") else None,
-                )
-            )
+            log_list.controls.append(log_line(msg))
         _trim_log()
 
+        # --- eventos genéricos (usados por todos os módulos em PR3+) ---
+        if event.type == "task_done":
+            progress_bar.value = 1.0
+            cancel_button.disabled = True
+            _stop_spin()
+            _call_on_done(event.payload)
+            return
+
+        if event.type == "task_error":
+            progress_bar.visible = False
+            cancel_button.disabled = True
+            _stop_spin()
+            _call_on_done({"error": True})
+            page.update()
+            return
+
+        # --- eventos legados de Transcrição (TODO(PR3): remover) ---
         if event.type == "pipeline_done":
             progress_bar.value = 1.0
             cancel_button.disabled = True
-            # Não chama page.update() aqui — on_done vai acionar o update final
-            on_done(event.payload)
+            _stop_spin()
+            _call_on_done(event.payload)  # no-op se task_done já processado
+            page.update()  # renderiza "[✓] Pipeline complete." e mudanças de barra
+            return
+
+        if event.type == "pipeline_error":
+            progress_bar.visible = False
+            cancel_button.disabled = True
+            _stop_spin()
+            _call_on_done({"error": True})
+            page.update()
+            return
+
+        if event.type == "pipeline_cancelled":
+            cancel_button.disabled = False
+            stage_label.value = "Pipeline cancelado."
+            stage_label.color = ft.Colors.ON_SURFACE_VARIANT
+            stage_label.italic = True
+            progress_bar.visible = False
+            _stop_spin()
+            _call_on_done({"cancelled": True})
+            page.update()
             return
 
         page.update()
 
     def _trim_log() -> None:
         if len(log_list.controls) > _MAX_LOG_LINES:
-            del log_list.controls[: len(log_list.controls) - _MAX_LOG_LINES]
+            log_list.controls = log_list.controls[-_MAX_LOG_LINES:]
 
     page.pubsub.subscribe(_handle_event)
 
     # --- métodos do ProgressPanel ---
     def _reset() -> None:
         """Limpa o log, reseta a barra e desabilita o tab Resultados."""
+        _done_called[0] = False
+        _stop_spin()
         log_list.controls.clear()
         progress_bar.value = None
         stage_label.value = "Inicie o pipeline pelo formulário →"
@@ -519,20 +593,30 @@ def build_progress_view(
         page.update()
 
     def _show_results(result: object) -> None:
-        """Popula o tab Resultados e o seleciona automaticamente."""
-        from src.gui.views.result_view import build_result_view
-        from src.gui.workers import PipelineResult
+        """Popula o tab Resultados e o seleciona automaticamente.
 
-        if not isinstance(result, PipelineResult):
-            return
-
+        Se on_show_results foi fornecido, delega a renderização para ele.
+        Caso contrário, usa a renderização padrão de Transcrição (PipelineResult).
+        """
         results_inner.controls.clear()
-        results_inner.controls.append(build_result_view(
-            page,
-            raw_path=result.raw_path,
-            analysis_path=result.analysis_path,
-            prompt_path=result.prompt_path,
-        ))
+
+        if on_show_results is not None:
+            on_show_results(result, results_inner)
+        else:
+            from src.gui.views.result_view import build_result_view
+            from src.gui.workers import PipelineResult
+
+            if isinstance(result, PipelineResult):
+                results_inner.controls.append(build_result_view(
+                    page,
+                    raw_path=result.raw_path,
+                    analysis_path=result.analysis_path,
+                    prompt_path=result.prompt_path,
+                ))
+
+        # Renderizar o conteúdo ENQUANTO o painel ainda está invisível —
+        # evita diff visible=False → visible=True+conteúdo complexo no Flet 0.85
+        page.update()
         tab_btns[1].disabled = False
         _switch_tab(1)
 

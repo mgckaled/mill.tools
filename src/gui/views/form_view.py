@@ -12,6 +12,7 @@ from typing import Callable
 import flet as ft
 
 from src.gui import settings
+from src.gui.theme.components import hairline, section, section_label
 from src.gui.workers import PipelineArgs
 
 
@@ -308,17 +309,6 @@ def build_form_view(page: ft.Page, on_start: Callable[[PipelineArgs], None]) -> 
     # Layout helpers
     # ------------------------------------------------------------------
 
-    def _section_label(text: str) -> ft.Text:
-        return ft.Text(
-            text,
-            size=13,
-            weight=ft.FontWeight.W_600,
-            color=ft.Colors.ON_SURFACE_VARIANT,
-        )
-
-    def _divider() -> ft.Divider:
-        return ft.Divider(height=1, color=ft.Colors.OUTLINE_VARIANT)
-
     # ------------------------------------------------------------------
     # Root control
     # ------------------------------------------------------------------
@@ -332,17 +322,18 @@ def build_form_view(page: ft.Page, on_start: Callable[[PipelineArgs], None]) -> 
                     spacing=16,
                     controls=[
                         # --- URL ---
-                        _section_label("Vídeo"),
+                        section_label("Vídeo"),
                         ft.Row(
                             controls=[url_field],
                             vertical_alignment=ft.CrossAxisAlignment.START,
                         ),
                         url_error,
 
-                        _divider(),
+                        hairline(),
 
                         # --- Transcrição ---
-                        _section_label("Transcrição"),
+                        section("Transcrição",
+                                help_key="transcription.whisper_model", page=page),
                         ft.Row(
                             controls=[whisper_dropdown, language_dropdown],
                             spacing=12,
@@ -355,31 +346,34 @@ def build_form_view(page: ft.Page, on_start: Callable[[PipelineArgs], None]) -> 
                             ],
                         ),
 
-                        _divider(),
+                        hairline(),
 
                         # --- Formatação ---
-                        _section_label("Formatação de parágrafos"),
+                        section("Formatação de parágrafos",
+                                help_key="transcription.format", page=page),
                         use_format_switch,
                         ft.Row(controls=[format_model_field]),
 
-                        _divider(),
+                        hairline(),
 
                         # --- Análise ---
-                        _section_label("Análise estruturada"),
+                        section("Análise estruturada",
+                                help_key="transcription.analyze", page=page),
                         use_analyze_switch,
                         ft.Row(controls=[analyzer_model_field]),
 
-                        _divider(),
+                        hairline(),
 
                         # --- Prompt-ready ---
-                        _section_label("Condensação prompt-ready"),
+                        section("Condensação prompt-ready",
+                                help_key="transcription.prompt", page=page),
                         use_prompt_switch,
                         ft.Row(controls=[prompt_model_field]),
 
-                        _divider(),
+                        hairline(),
 
                         # --- API Key ---
-                        _section_label("Credenciais"),
+                        section_label("Credenciais"),
                         ft.Row(controls=[api_key_field]),
                         ft.Text(
                             "Necessária apenas para modelos Gemini. Salva automaticamente no .env.",
@@ -388,7 +382,7 @@ def build_form_view(page: ft.Page, on_start: Callable[[PipelineArgs], None]) -> 
                             italic=True,
                         ),
 
-                        _divider(),
+                        hairline(),
 
                         # --- Botão ---
                         ft.Row(

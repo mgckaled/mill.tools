@@ -1,62 +1,83 @@
-# yt-transcriber
+<div align="center">
 
-CLI Python para transcrever vídeos do YouTube em texto corrido e gerar análises estruturadas. Usa [faster-whisper](https://github.com/SYSTRAN/faster-whisper) para transcrição (100% local, com GPU) e [LangChain](https://www.langchain.com/) para formatação, análise e condensação — com escolha de provider via CLI: [Ollama](https://ollama.com) local (default) ou [Google Gemini](https://ai.google.dev/) na nuvem (free tier).
+<img src="assets/logo/mill-logo-wordmark.png" alt="mill.tools" width="380">
+
+**Multiferramenta pessoal para áudio, vídeo e transcrição — local-first, com GUI e CLI.**
+
+![Python](https://img.shields.io/badge/Python-3.13+-3776AB?logo=python&logoColor=white)
+![uv](https://img.shields.io/badge/uv-managed-DE5FE9)
+![Flet](https://img.shields.io/badge/GUI-Flet%200.85-02569B)
+![Whisper](https://img.shields.io/badge/faster--whisper-GPU-FFB000)
+
+</div>
 
 ---
 
-## Como funciona
+## Visão geral
 
-**yt-dlp busca metadados** → **yt-dlp baixa só o áudio em MP3** → **Whisper carrega na GPU (CUDA int8_float32)** → **VAD filtra silêncio e ruído** → **Whisper detecta idioma e transcreve segmento por segmento** → **segmentos de baixa confiança recebem marcador `[?]` no `.txt`** → **`--format`: phi4mini-custom insere quebras de parágrafo sem alterar palavras** → **`--analyze`: qwen7b-custom extrai 10 campos em JSON — `summary`, `key_points`, `action_items`, `key_concepts`, `tools_mentioned`, `metrics`, `quotes`, `assumptions`, `vocabulary`, `sentiment_arc` — traduz para PT-BR se necessário e gera `.md`** → **`--prompt`: qwen7b-custom condensa a transcrição para ~40% do tamanho removendo filler e CTAs, salva em `prompt_ready/`**
+**mill.tools** é uma multiferramenta extensível, organizada em **módulos** acessíveis por uma barra lateral na GUI desktop (e via CLI). A transcrição roda **100% local** com [faster-whisper](https://github.com/SYSTRAN/faster-whisper) (aceleração GPU, sem PyTorch) e usa [LangChain](https://www.langchain.com/) para formatação, análise e condensação — com escolha de provider: [Ollama](https://ollama.com) local (padrão) ou [Google Gemini](https://ai.google.dev/) na nuvem (free tier).
+
+### Recursos
+
+- 🎙️ **Transcrição local** com Whisper (faster-whisper / GPU), detecção automática de idioma e marcação de trechos de baixa confiança.
+- 🧠 **Pós-processamento por LLM** — formatação em parágrafos, análise estruturada (10 campos) e digest condensado para uso como contexto.
+- 🔀 **Provider flexível** — Ollama local por padrão; Gemini na nuvem por prefixo de modelo, sem mudar o fluxo.
+- 🎵 **Módulo Áudio** — download (YouTube, SoundCloud, etc. via yt-dlp), conversão e extração de áudio, em fila, com capa/metadados embutidos.
+- 🖼️ **Módulo Imagens** — conversão entre 8 formatos (JPG, PNG, WebP, AVIF, TIFF, BMP, GIF, ICO), controle de qualidade e visor de pré-visualização integrado.
+- 🖥️ **GUI desktop** (Flet) com acompanhamento em tempo real estilo CLI, barra de progresso determinada e spinner animado.
+- 🔗 **Bridge Áudio → Transcrição** — botão "Transcrever este arquivo" envia o arquivo processado diretamente para o módulo de Transcrição.
+- 🎨 **Design System** — paleta unificada com acento dourado, suporte a temas claro/escuro e contraste WCAG 2.1.
+- ℹ️ **Ajuda contextual** — ícone ⓘ em todos os controles: tooltip no hover, modal com detalhes ao clicar.
+
+### Módulos
+
+| Módulo | Status | O que faz |
+|---|---|---|
+| **Transcrição** | ✅ | Whisper local + formatação/análise/digest via LLM |
+| **Áudio** | ✅ | Download, conversão e extração de áudio (fila, capa/metadados) |
+| **Vídeo** | 🚧 | Download/conversão/extração (planejado — PR4) |
+| **Imagens** | ✅ | Conversão de formato/qualidade, download de URL, visor de pré-visualização (PR-IMG-1) |
 
 ---
 
 ## Requisitos
 
-- Python 3.13+
+- [Python 3.13+](https://www.python.org/)
 - [uv](https://docs.astral.sh/uv/)
 - [ffmpeg](https://ffmpeg.org/download.html) no PATH
 - [yt-dlp](https://github.com/yt-dlp/yt-dlp) no PATH
-- [Ollama](https://ollama.com/download) (apenas se usar modelos locais para `--format`/`--analyze`/`--prompt`)
-- Chave da [Google AI Studio](https://aistudio.google.com/apikey) (apenas se usar modelos Gemini)
-- [Flet](https://flet.dev) — incluído nas dependências do projeto (apenas para a GUI)
+- [Ollama](https://ollama.com/download) — apenas se usar modelos locais (`--format`/`--analyze`/`--prompt`)
+- Chave da [Google AI Studio](https://aistudio.google.com/apikey) — apenas se usar modelos Gemini
 
 ---
 
-## Setup
+## Instalação
 
 ```bash
-git clone https://github.com/your-username/yt-transcriber
-cd yt-transcriber
+git clone https://github.com/your-username/mill-tools
+cd mill-tools
 uv sync
 ```
 
-### Opção A — usar modelos locais (Ollama)
-
-Instale o Ollama e configure os modelos:
+### Opção A — modelos locais (Ollama)
 
 ```bash
-# modelo para análise
+# análise
 ollama pull qwen2.5:7b
 ollama create qwen7b-custom -f ollama/Modelfile
 
-# modelo para formatação de parágrafos
+# formatação de parágrafos
 ollama pull phi4-mini
 ollama create phi4mini-custom -f ollama/Modelfile.phi4mini
 ```
 
-### Opção B — usar Google Gemini (free tier)
-
-1. Gere uma chave em https://aistudio.google.com/apikey
-2. Copie `.env.example` para `.env` e cole a chave:
+### Opção B — Google Gemini (free tier)
 
 ```bash
-cp .env.example .env
-# edite .env e preencha GOOGLE_API_KEY=...
+cp .env.example .env       # edite e preencha GOOGLE_API_KEY=...
 ```
 
-O `.env` é carregado automaticamente sempre que `--fm`, `--am` ou `--pm` receber um nome de modelo iniciado por `gemini`. O Ollama continua sendo o default — nada quebra se você não criar o `.env`.
-
-**Modelo recomendado:** `gemini-2.5-flash` — free tier robusto, contexto de 1M tokens (dispensa chunking), bom em saída JSON estruturada.
+O `.env` é carregado automaticamente quando `--fm`, `--am` ou `--pm` recebe um modelo iniciado por `gemini`. O Ollama continua sendo o padrão — nada quebra se você não criar o `.env`. **Modelo recomendado:** `gemini-2.5-flash` (free tier robusto, contexto de 1M tokens, boa saída JSON).
 
 ---
 
@@ -68,29 +89,24 @@ O `.env` é carregado automaticamente sempre que `--fm`, `--am` ou `--pm` recebe
 uv run gui.py
 ```
 
-Abre a interface gráfica com layout split: formulário à esquerda e painel de pipeline à direita. Todos os parâmetros do CLI estão disponíveis na GUI.
+Abre com uma splash screen animada e, em seguida, a interface com **barra lateral de módulos** (NavigationRail). Cada módulo tem layout split: formulário à esquerda, painel de acompanhamento (log em tempo real + barra de progresso + spinner) à direita.
 
-### Transcrição (CLI)
+Durante um pipeline em execução a troca de módulo é bloqueada — os logs e a barra de progresso são preservados mesmo ao navegar entre módulos.
 
-```bash
-uv run main.py <YOUTUBE_URL> [options]
-```
-
-### Transcrição + análise
+### CLI — Transcrição
 
 ```bash
-uv run main.py <YOUTUBE_URL> --analyze
+# básico (idioma automático)
+uv run main.py <YOUTUBE_URL>
+
+# + formatação e análise
+uv run main.py <YOUTUBE_URL> --format --analyze
+
+# análise standalone (sobre transcrição existente)
+uv run -m src output/transcriptions/text/transcricao_ovabeV.txt
 ```
 
-### Análise standalone (sobre transcrição existente)
-
-```bash
-uv run -m src transcriptions/raw/transcricao_ovabeV.txt
-```
-
----
-
-## Flags
+### Referência de flags
 
 | Flag            | Default           | Descrição                                                    |
 | --------------- | ----------------- | ------------------------------------------------------------ |
@@ -103,144 +119,41 @@ uv run -m src transcriptions/raw/transcricao_ovabeV.txt
 | `--fm`          | `phi4mini-custom` | Modelo para formatação — Ollama tag ou `gemini-*`            |
 | `--analyze`     | off               | Roda análise estruturada após transcrição                    |
 | `--am`          | `qwen7b-custom`   | Modelo para análise — Ollama tag ou `gemini-*`               |
-| `--prompt`      | off               | Gera versão condensada para uso como contexto em prompts     |
+| `--prompt`      | off               | Gera versão condensada (digest)                              |
 | `--pm`          | `qwen7b-custom`   | Modelo para condensação — Ollama tag ou `gemini-*`           |
 | `--verbose`     | off               | Ativa logging DEBUG                                          |
 
----
-
-## Exemplos
+### Exemplos
 
 ```bash
-# transcrição básica (detecção automática de idioma)
-uv run main.py https://www.youtube.com/watch?v=ovabeVoWrA0
-
 # forçar idioma + maior precisão
-uv run main.py https://www.youtube.com/watch?v=ovabeVoWrA0 --language pt --beam-size 3
+uv run main.py <URL> --language pt --beam-size 3
 
-# transcrição + formatação de parágrafos
-uv run main.py https://www.youtube.com/watch?v=ovabeVoWrA0 --format
+# pipeline completo: formatação + análise (transcrição incluída no relatório)
+uv run main.py <URL> --format --analyze
 
-# transcrição + análise estruturada
-uv run main.py https://www.youtube.com/watch?v=ovabeVoWrA0 --analyze
-
-# pipeline completo: formatação + análise com transcrição no relatório
-uv run main.py https://www.youtube.com/watch?v=ovabeVoWrA0 --format --analyze
-
-# gerar versão condensada para uso como contexto em prompts
-uv run main.py https://www.youtube.com/watch?v=ovabeVoWrA0 --prompt
-
-# whisper medium + modelos customizados
-uv run main.py https://www.youtube.com/watch?v=ovabeVoWrA0 --wm medium --fm phi4mini-custom --am qwen7b-custom --format --analyze --prompt
-
-# tudo na nuvem: Whisper local + Gemini nas 3 etapas (requer GOOGLE_API_KEY no .env)
-uv run main.py https://www.youtube.com/watch?v=ovabeVoWrA0 \
-  --format --fm gemini-2.5-flash \
+# tudo na nuvem: Whisper local + Gemini nas 3 etapas (requer GOOGLE_API_KEY)
+uv run main.py <URL> \
+  --format  --fm gemini-2.5-flash \
   --analyze --am gemini-2.5-flash \
   --prompt  --pm gemini-2.5-flash
 
-# híbrido: formatação local rápida + análise mais sofisticada via Gemini
-uv run main.py https://www.youtube.com/watch?v=ovabeVoWrA0 --format --analyze --am gemini-2.5-flash
-
-# análise standalone sobre transcrição existente
-uv run -m src transcriptions/raw/transcricao_ovabeV.txt
+# híbrido: formatação local rápida + análise sofisticada via Gemini
+uv run main.py <URL> --format --analyze --am gemini-2.5-flash
 
 # análise standalone usando Gemini
-uv run -m src transcriptions/raw/transcricao_ovabeV.txt --model gemini-2.5-flash
+uv run -m src output/transcriptions/text/transcricao_ovabeV.txt --model gemini-2.5-flash
 ```
 
 ---
 
-## Estrutura de arquivos
+## Saídas
 
-```text
-yt-transcriber/
-├── main.py                    — entry point, CLI
-├── gui.py                     — entry point, GUI desktop (Flet)
-├── .env.example               — template do .env (GOOGLE_API_KEY para Gemini)
-├── src/
-│   ├── __init__.py
-│   ├── __main__.py            — entry point do analyzer standalone
-│   ├── transcriber.py         — transcrição via faster-whisper
-│   ├── llm_factory.py         — roteia gemini-* → Google, demais → Ollama
-│   ├── formatter.py           — formatação de parágrafos via LLM
-│   ├── analyzer.py            — análise estruturada via LangChain
-│   ├── prompter.py            — condensação para uso como contexto em prompts
-│   ├── utils.py               — logging, validação, metadata, download
-│   └── gui/
-│       ├── app.py             — layout split e ciclo de vida do pipeline
-│       ├── events.py          — EventBus, PipelineEvent, LogEventHandler
-│       ├── settings.py        — persistência de configurações
-│       ├── workers.py         — execução do pipeline em thread background
-│       └── views/
-│           ├── form_view.py   — formulário de configuração
-│           ├── progress_view.py — logs em tempo real e barra de progresso
-│           └── result_view.py — resultados em abas (Transcrição/Análise/Prompt-ready)
-├── ollama/
-│   ├── Modelfile              — config do qwen7b-custom
-│   └── Modelfile.phi4mini     — config do phi4mini-custom
-├── audios/                    — áudios baixados (.mp3)
-└── transcriptions/
-    ├── raw/                   — transcrições brutas (.txt)
-    ├── analysis/              — análises estruturadas (.md)
-    └── prompt_ready/          — versões condensadas para uso como contexto (.txt)
-```
+Tudo é gravado em `output/`, organizado por tipo.
 
----
+### Transcrição — `output/transcriptions/text/*.txt`
 
-## GUI desktop
-
-A interface gráfica oferece todos os recursos do CLI em um layout split permanente:
-
-```
-┌─ yt-transcriber ──────────────────────────────────────────[☀]┐
-├──────────────────────┬────────────────────────────────────────┤
-│  Vídeo               │  Pipeline    Resultados                │
-│  [URL ____________]  │                                        │
-│                      │  Inicie o pipeline pelo formulário →   │
-│  Transcrição         │  ──────────────────────────────────    │
-│  Whisper  [small ▼]  │  [i] Fetching video metadata...        │
-│  Idioma   [auto  ▼]  │  [i] Title: Como alcancei meu sonho    │
-│  Beam ●──○ 1         │  [»] Audio already exists...           │
-│                      │  [*] Loading model 'small' on CUDA...  │
-│  ☐ Formatar          │  [~] Transcribing...                   │
-│    [phi4mini ▼]      │  [i] Detected language: pt (100%)      │
-│                      │  Eu sempre tive um sonho...            │
-│  ☑ Analisar          │  ────────────────────────────────      │
-│    [gemini   ▼]      │  ╔══ title    : Como alcancei...  ╗    │
-│                      │  ║  duration : 00:05:27           ║    │
-│  ☐ Prompt-ready      │  ║  elapsed  : 55s                ║    │
-│    [gemini   ▼]      │  ╚══════════════════════════════  ╝    │
-│                      │  [✓] Pipeline complete.                 │
-│  [Google API Key]    │                               [Cancelar]│
-│  [⏳ Executando...]  │                                        │
-└──────────────────────┴────────────────────────────────────────┘
-```
-
-### Funcionalidades da GUI
-
-- **Layout split permanente** — formulário sempre visível à esquerda; sem navegação entre telas
-- **Logs em tempo real** com cores por prefixo: `[i]` azul · `[*]` ciano · `[~]` amarelo · `[✓]` verde · `[!]` vermelho · `[»]` cinza · `[d]` cinza escuro
-- **Barra de progresso determinada** durante a transcrição — calcula `segment.end / audio_duration`
-- **Card de resumo** ao fim da transcrição (título, duração, tempo decorrido, segmentos flagados)
-- **Aba Resultados** habilitada automaticamente ao fim do pipeline — com sub-abas Transcrição / Análise / Prompt-ready
-- **Copiar conteúdo** e **abrir pasta** diretamente na aba de resultados
-- **Dropdowns de modelo** para formatação, análise e prompt-ready
-- **Botão Iniciar** desabilita com ampulheta durante execução
-- `Ctrl+Enter` inicia o pipeline · `Esc` cancela
-
-### Atalhos
-
-| Atalho | Ação |
-|---|---|
-| `Ctrl+Enter` | Inicia o pipeline (se URL válida) |
-| `Esc` | Cancela o pipeline em andamento |
-
----
-
-## Output
-
-Cada transcrição (.txt) começa com um cabeçalho de metadados:
+Cabeçalho de metadados seguido do texto corrido:
 
 ```text
 title:        Claude Design Full Course
@@ -248,102 +161,207 @@ channel:      Some Channel
 upload_date:  2024-03-15
 duration:     02:14:33
 language:     en
-tags:         design, ai, figma, ...
 url:          https://www.youtube.com/watch?v=ovabeVoWrA0
-
 ----------------------------------------------------------------
-
 [transcription text...]
 ```
 
-### Transcrição (`.txt`)
+Segmentos de baixa confiança são marcados com `[?]` no texto (revisão manual sugerida). Critérios: `avg_logprob < -1.0` ou `no_speech_prob > 0.6`. O total de flags é exibido ao final.
 
-Cabeçalho de metadados seguido do texto corrido. Segmentos onde o Whisper teve baixa confiança são sinalizados com `[?]` diretamente no texto — indicam trechos que merecem revisão manual (ruído, sotaque, vocabulário incomum). O terminal exibe a contagem de segmentos flagados ao final da transcrição.
-
-Critérios de flag: `avg_logprob < -1.0` (probabilidade média dos tokens abaixo do limiar) ou `no_speech_prob > 0.6` (alta chance de o trecho ser silêncio ou ruído).
-
-### Análise (`.md`) — `--analyze`
+### Análise — `output/transcriptions/analysis/*.md` (`--analyze`)
 
 Relatório estruturado com 10 campos extraídos pelo LLM:
 
 | Campo | Descrição |
 | ----- | --------- |
-| `summary` | Parágrafo de 3–5 frases resumindo o conteúdo principal |
-| `key_points` | 5–10 pontos-chave como frases completas (mín. 12 palavras), explicando o *como* e o *por quê* |
-| `action_items` | Passos práticos ou recomendações mencionados no vídeo |
-| `key_concepts` | Conceitos técnicos centrais no formato `Termo: definição` |
-| `tools_mentioned` | Ferramentas, bibliotecas, plataformas ou tecnologias citadas |
-| `metrics` | Números, estatísticas e quantidades com contexto |
-| `quotes` | Frases marcantes ou citações quase literais do speaker |
-| `assumptions` | Premissas implícitas que o speaker toma como verdade |
-| `vocabulary` | Jargões e termos de nicho no formato `Termo: definição` |
-| `sentiment_arc` | Evolução do tom ao longo do vídeo em uma frase |
+| `summary` | Resumo de 3–5 frases do conteúdo principal |
+| `key_points` | 5–10 pontos-chave (frases completas, o *como* e o *porquê*) |
+| `action_items` | Passos práticos ou recomendações |
+| `key_concepts` | Conceitos centrais no formato `Termo: definição` |
+| `tools_mentioned` | Ferramentas, bibliotecas, plataformas citadas |
+| `metrics` | Números e estatísticas com contexto |
+| `quotes` | Frases marcantes / citações |
+| `assumptions` | Premissas implícitas do speaker |
+| `vocabulary` | Jargões no formato `Termo: definição` |
+| `sentiment_arc` | Evolução do tom em uma frase |
 
-Se o resultado não estiver em português, é traduzido automaticamente para PT-BR. Quando `--format --analyze` são usados em conjunto, a transcrição formatada é incluída no final do relatório.
+Resultados fora do português são traduzidos automaticamente para PT-BR. Com `--format --analyze`, a transcrição formatada é incluída no fim do relatório.
 
-### Prompt-ready (`.txt`) — `--prompt`
+### Digest — `output/transcriptions/digest/*.txt` (`--prompt`)
 
-Versão condensada da transcrição salva em `transcriptions/prompt_ready/`, com ~40% do tamanho original. Remove cumprimentos, CTAs, patrocinadores e frases de preenchimento, mantendo todo o conteúdo técnico. Otimizado para ser colado como contexto em qualquer prompt de LLM.
+Versão condensada (~40% do tamanho), sem cumprimentos/CTAs/patrocinadores, mantendo todo o conteúdo técnico. Otimizada para colar como contexto em prompts de LLM.
+
+### Áudio — `output/audio/`
+
+Downloads em `source/`; conversões/extrações em `processed/`.
+
+### Imagens — `output/image/`
+
+Downloads de URL em `source/`; imagens convertidas em `processed/`.
 
 ---
 
-## Modelos Whisper
+## Modelos
 
-| Modelo           | Velocidade | Precisão  |
-| ---------------- | ---------- | --------- |
-| `tiny`           | mais rápido|  baixa    |
-| `small`          | rápido     | boa       |
-| `medium`         | moderado   | muito boa |
-| `large-v3-turbo` | lento      | excelente |
-| `large-v3`       | mais lento | melhor    |
+### Whisper
 
-## Modelos Ollama (locais, default)
+| Modelo           | Velocidade  | Precisão  |
+| ---------------- | ----------- | --------- |
+| `tiny`           | mais rápido | baixa     |
+| `small`          | rápido      | boa       |
+| `medium`         | moderado    | muito boa |
+| `large-v3-turbo` | lento       | excelente |
+| `large-v3`       | mais lento  | melhor    |
 
-| Modelo             | Uso          | Tamanho | Qualidade |
-| ------------------ | ------------ | ------- | --------- |
-| `phi4mini-custom`  | `--format`   | 2.5 GB  | básica    |
-| `qwen7b-custom`    | `--analyze`  | 4.7 GB  | boa       |
+### Ollama (local, padrão)
 
-## Modelos Gemini (nuvem, free tier)
+| Modelo            | Uso          | Tamanho | Qualidade |
+| ----------------- | ------------ | ------- | --------- |
+| `phi4mini-custom` | `--format`   | 2.5 GB  | básica    |
+| `qwen7b-custom`   | `--analyze`  | 4.7 GB  | boa       |
 
-Para usar Gemini em qualquer uma das três etapas, passe o nome do modelo via `--fm`, `--am` ou `--pm`. Roteamento é por prefixo — qualquer nome começando com `gemini` vai para o Google.
-
-| Modelo                  | Uso recomendado          | Free tier (RPD) | Contexto |
-| ----------------------- | ------------------------ | --------------- | -------- |
-| `gemini-2.5-flash`      | `--analyze`, `--prompt`  | sim             | 1M       |
-| `gemini-2.5-flash-lite` | `--format` (mais rápido) | sim             | 1M       |
-
-Como Gemini tem janela de 1M tokens, o `--analyze` e o `--prompt` **dispensam chunking** quando o provider é Gemini — processam o texto inteiro em uma única chamada, mais coerente e gastando menos requests do RPD. O `--format` mantém chunking porque a tarefa é localizada por parágrafo.
-
-Consulte os limites ativos do seu projeto em <https://aistudio.google.com/rate-limit>. Cotas são por projeto e RPD reseta à meia-noite do horário do Pacífico (≈ 04:00 BRT).
-
-Os modelos customizados são criados a partir dos Modelfiles em `ollama/`. Ajuste os parâmetros conforme o seu hardware:
-
-```text
-FROM qwen2.5:7b
-
-# Número de camadas offloadas para GPU (0 = só CPU, -1 = tudo na GPU)
-PARAMETER num_gpu 10
-
-# Threads CPU usadas nas camadas que ficam na CPU
-PARAMETER num_thread 4
-
-# Tamanho do contexto em tokens (padrão do modelo base se omitido)
-PARAMETER num_ctx 4096
-
-# Temperatura: 0.0 = determinístico, 1.0 = criativo
-PARAMETER temperature 0.3
-
-# Penaliza repetição de tokens recentes
-PARAMETER repeat_penalty 1.1
-
-# System prompt fixo (opcional)
-SYSTEM """Você é um assistente especializado em análise de conteúdo."""
-```
-
-Depois de editar, recrie o modelo:
+Os modelos customizados vêm dos Modelfiles em `ollama/`. Ajuste conforme o hardware (`num_gpu`, `num_thread`, `num_ctx`, `temperature`) e recrie:
 
 ```bash
 ollama create qwen7b-custom -f ollama/Modelfile
 ollama create phi4mini-custom -f ollama/Modelfile.phi4mini
 ```
+
+### Gemini (nuvem, free tier)
+
+Roteamento por prefixo: qualquer nome começando com `gemini` vai para o Google. Como a janela é de 1M tokens, `--analyze` e `--prompt` **dispensam chunking** com Gemini (processam o texto inteiro de uma vez); `--format` mantém chunking por ser tarefa localizada.
+
+| Modelo                  | Uso recomendado          | Free tier | Contexto |
+| ----------------------- | ------------------------ | --------- | -------- |
+| `gemini-2.5-flash`      | `--analyze`, `--prompt`  | sim       | 1M       |
+| `gemini-2.5-flash-lite` | `--format` (mais rápido) | sim       | 1M       |
+
+Limites do projeto em <https://aistudio.google.com/rate-limit> (RPD reseta à meia-noite do Pacífico, ≈ 04:00 BRT).
+
+---
+
+## Design System
+
+A GUI usa um Design System interno em `src/gui/theme/`, construído sobre o Material 3 do Flet 0.85. Todos os módulos consomem as mesmas fábricas — adicionar um novo módulo não requer reinventar botões, cores ou espaçamento.
+
+### Paleta
+
+| Token | Dark | Light | Uso |
+|---|---|---|---|
+| `primary` | `#F4A63C` | `#E0982F` | Acento único — botões, foco, seleção ativa |
+| `bg` | `#101012` | `#F6F8FB` | Fundo da janela |
+| `surface` | `#1E1E22` | `#FFFFFF` | Painéis e cards |
+| `outline` | `#5A5A62` | `#7890A0` | Bordas de containers |
+| `outline_variant` | `#36363C` | `#AEBCC8` | Divisórias hairline |
+
+Fonte de UI: **Verdana**. Fonte mono (log): **JetBrains Mono** / **Consolas** (escala tipográfica `mono`).
+
+### Componentes disponíveis
+
+| Fábrica | Módulo | Descrição |
+|---|---|---|
+| `primary_button` | `buttons` | Ação primária — herda dourado do tema |
+| `secondary_button` | `buttons` | Ação secundária — contorno |
+| `danger_button` | `buttons` | Ação destrutiva — vermelho semântico |
+| `action_button` | `buttons` | Ação de link/secundária — azul info por padrão, acento configurável |
+| `segmented_selector` | `buttons` | Grade de chips clicáveis (formato, bitrate…) |
+| `output_card` | `cards` | Card de saída — borda colorida, ícone, nome, botão abrir pasta |
+| `labeled_field` | `inputs` | Rótulo + controle + helper + ⓘ opcional |
+| `switch_row` | `inputs` | Switch com cor ativa do tema |
+| `slider_row` | `inputs` | Slider com rótulo + ⓘ opcional |
+| `log_line` | `feedback` | Linha de log monoespaçada com cor por prefixo |
+| `spinner` | `feedback` | Cata-vento animado — retorna `(control, start, stop)` |
+| `summary_card` | `feedback` | Card de resumo ao fim do pipeline |
+| `section_title` | `feedback` | Título de seção de resultados |
+| `section_label` | `layout` | Rótulo de seção simples (sem ⓘ) |
+| `section` | `layout` | Grupo rótulo + controles + ⓘ opcional |
+| `hairline` | `layout` | Divisória fina 1px |
+| `module_scaffold` | `layout` | Layout split form \| painel |
+| `help_icon` | `help` | ⓘ com tooltip estilizado e modal opcional |
+| `help_icon_for` | `help` | Lookup no registro central por chave |
+
+### Ajuda contextual (ⓘ)
+
+O arquivo `src/gui/help_content.py` centraliza todo o conteúdo de ajuda, separado da UI. Cada controle recebe uma **chave** (`"módulo.campo"`) — nenhuma string de ajuda fica espalhada nos formulários.
+
+**Comportamento:**
+- **Hover** → tooltip estilizado (fundo `surface_container`, bordas arredondadas, 300 ms de delay)
+- **Clique** (apenas quando há texto longo) → `AlertDialog` com título e corpo detalhado
+
+**Chaves disponíveis:**
+
+| Chave | Tooltip | Modal |
+|---|---|---|
+| `transcription.whisper_model` | Visão geral dos modelos | ✅ Tabela completa + nota de hardware |
+| `transcription.beam_size` | Resumo do beam search | ✅ Explicação técnica |
+| `transcription.language` | Quando fixar o idioma | — |
+| `transcription.format` | O que faz o formatter | — |
+| `transcription.analyze` | O que gera a análise | — |
+| `transcription.prompt` | O que é o digest | — |
+| `transcription.model_stage` | Local vs nuvem | — |
+| `audio.input` | URL vs arquivo local | — |
+| `audio.format` | 'best' vs conversão | — |
+| `audio.bitrate` | Resumo do bitrate | ✅ Quando usar cada valor |
+| `audio.embed_meta` | O que é embutido | — |
+| `image.input` | URL direta vs arquivo local | — |
+| `image.format` | Lossy vs lossless, AVIF | — |
+| `image.quality` | Quando e quanto comprimir | — |
+
+Para adicionar ajuda a um novo controle: inserir a chave em `HELP_SHORT` (e opcionalmente `HELP_LONG`) e passar `help_key=` para a fábrica correspondente.
+
+---
+
+## Estrutura do projeto
+
+```text
+mill-tools/
+├── main.py              — entry point CLI
+├── gui.py               — entry point GUI (splash → app)
+├── src/
+│   ├── transcriber.py · formatter.py · analyzer.py · prompter.py · llm_factory.py · utils.py
+│   ├── core/
+│   │   ├── audio/       — downloader, converter, info (lógica pura, sem Flet)
+│   │   └── image/       — downloader, converter, info (Pillow; lógica pura, sem Flet)
+│   └── gui/
+│       ├── app.py       — NavigationRail + registry de módulos + navigate_to
+│       ├── splash.py    — animação de entrada (moinho + fade)
+│       ├── assets.py    — helpers de imagem (b64, WINDOW_ICON)
+│       ├── events.py    — EventBus, PipelineEvent (com module_id)
+│       ├── settings.py  — persistência em ~/.mill-tools/config.json
+│       ├── workers.py   — pipeline de Transcrição (thread daemon)
+│       ├── help_content.py — registro central de tooltips e modais (HELP_SHORT/LONG)
+│       ├── components/  — input_source.py (URL + FilePicker, allow_multiple, url_hint)
+│       ├── modules/     — base.py + transcription/ · audio/ · video/ · image/
+│       ├── theme/       — Design System
+│       │   ├── tokens.py    — Color, Type, Space, Radius, Motion, Layout
+│       │   ├── theme.py     — build_theme() + apply_theme()
+│       │   └── components/  — buttons, inputs, feedback, layout, help, cards
+│       └── views/       — form_view · progress_view · result_view
+├── assets/
+│   ├── logo/            — símbolo e wordmark (SVG/PNG)
+│   └── icons/           — mill.ico, mill-512.png
+├── ollama/              — Modelfiles
+├── docs/                — planos de implementação
+└── output/
+    ├── audio/           — source/ (downloads) · processed/ (conversões)
+    ├── image/           — source/ (downloads de URL) · processed/ (convertidas)
+    ├── video/
+    └── transcriptions/  — text/ · analysis/ · digest/
+```
+
+---
+
+## Atalhos da GUI
+
+| Atalho | Ação |
+|---|---|
+| `Ctrl+Enter` | Inicia o pipeline (se a entrada for válida) |
+| `Esc` | Cancela o pipeline em andamento |
+
+---
+
+## Roadmap
+
+- **PR3.1** — IA de áudio opcional (denoise via DeepFilterNet; stems via Demucs a avaliar), isolada em extra que não afeta o app base.
+- **PR4** — Módulo Vídeo (download/conversão/extração, análogo ao Áudio).
+- **Futuro** — melhorias no Módulo Imagens (batch rename, redimensionamento, crop); Módulo de Imagens com IA (upscale/remoção de fundo).
