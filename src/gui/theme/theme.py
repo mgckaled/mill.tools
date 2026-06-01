@@ -37,9 +37,9 @@ def _text_theme() -> ft.TextTheme:
         display_large=ft.TextStyle(size=34, weight=ft.FontWeight.W_600),
         title_large=ft.TextStyle(size=22, weight=ft.FontWeight.W_600),
         headline_small=ft.TextStyle(size=18, weight=ft.FontWeight.W_600),
-        label_large=ft.TextStyle(size=13, weight=ft.FontWeight.W_600),
-        body_medium=ft.TextStyle(size=14),
-        body_small=ft.TextStyle(size=12),
+        label_large=ft.TextStyle(size=14, weight=ft.FontWeight.W_600),
+        body_medium=ft.TextStyle(size=15),
+        body_small=ft.TextStyle(size=13),
     )
 
 

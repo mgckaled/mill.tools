@@ -72,12 +72,12 @@ class Type:
     display = _TypeSpec(34.0, 600)
     title = _TypeSpec(22.0, 600)
     heading = _TypeSpec(18.0, 600)
-    label = _TypeSpec(13.0, 600)
-    body = _TypeSpec(15.0, 400)
-    body_strong = _TypeSpec(15.0, 600)
+    label = _TypeSpec(14.0, 600)
+    body = _TypeSpec(16.0, 400)
+    body_strong = _TypeSpec(16.0, 600)
     button = _TypeSpec(16.0, 600)
-    caption = _TypeSpec(13.0, 400)
-    mono = _TypeSpec(12.5, 400, "JetBrains Mono")
+    caption = _TypeSpec(14.0, 400)
+    mono = _TypeSpec(13, 300, "JetBrains Mono")
 
 
 class Space:
