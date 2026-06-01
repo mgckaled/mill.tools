@@ -8,16 +8,20 @@ from src.gui.splash import show_splash
 from src.gui.theme import apply_theme
 
 
-def main(page: ft.Page) -> None:
+async def main(page: ft.Page) -> None:
     """Configura a página raiz e monta o app."""
     page.title = "mill.tools"
     page.theme_mode = ft.ThemeMode.DARK
-    page.window.width = 1200
+    page.window.width = 1380
     page.window.height = 800
     page.window.min_width = 1000
     page.window.min_height = 600
-    page.window.icon = WINDOW_ICON  # Windows-only; caminho absoluto (issue #3438)
-    apply_theme(page)              # define page.theme (light) + page.dark_theme (dark)
+    page.update()
+    await page.window.center()
+    # Windows-only; caminho absoluto (issue #3438)
+    page.window.icon = WINDOW_ICON
+    # define page.theme (light) + page.dark_theme (dark)
+    apply_theme(page)
     show_splash(page, on_complete=lambda: build_app(page))
 
 

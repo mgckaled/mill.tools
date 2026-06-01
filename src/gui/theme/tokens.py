@@ -77,7 +77,7 @@ class Type:
     body_strong = _TypeSpec(15.0, 600)
     button = _TypeSpec(16.0, 600)
     caption = _TypeSpec(13.0, 400)
-    mono = _TypeSpec(12.5, 400, "Consolas")
+    mono = _TypeSpec(12.5, 400, "JetBrains Mono")
 
 
 class Space:
