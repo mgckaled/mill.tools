@@ -287,6 +287,7 @@ def build_image_form(
     resize_block = ft.Column(
         visible=False, spacing=Space.sm,
         controls=[
+            ft.Row([section_label("Redimensionar"), ft.Container(expand=True), help_icon_for("image.resize", page)], vertical_alignment=ft.CrossAxisAlignment.CENTER),
             section_label("Modo"),
             _rsz_grid,
             ft.Row([section_label("Dimensões")]),
@@ -375,6 +376,7 @@ def build_image_form(
     crop_block = ft.Column(
         visible=False, spacing=Space.sm,
         controls=[
+            ft.Row([section_label("Cortar"), ft.Container(expand=True), help_icon_for("image.crop", page)], vertical_alignment=ft.CrossAxisAlignment.CENTER),
             section_label("Modo"), _crop_grid,
             _crop_manual_col, _crop_ratio_col, _crop_autotrim_col,
         ],
@@ -413,6 +415,7 @@ def build_image_form(
     rotate_block = ft.Column(
         visible=False, spacing=Space.sm,
         controls=[
+            ft.Row([section_label("Girar"), ft.Container(expand=True), help_icon_for("image.rotate", page)], vertical_alignment=ft.CrossAxisAlignment.CENTER),
             section_label("Ângulo (sentido horário)"), _rot_grid,
             _rotate_flip_h_sw, _rotate_flip_v_sw, _rotate_exif_sw,
         ],
@@ -561,6 +564,7 @@ def build_image_form(
     watermark_block = ft.Column(
         visible=False, spacing=Space.sm,
         controls=[
+            ft.Row([section_label("Marca d'água"), ft.Container(expand=True), help_icon_for("image.watermark", page)], vertical_alignment=ft.CrossAxisAlignment.CENTER),
             section_label("Modo"), _wm_mode_grid,
             _wm_text_col, _wm_image_col,
             section_label("Posição"), _wm_pos_grid,
@@ -609,6 +613,7 @@ def build_image_form(
     border_block = ft.Column(
         visible=False, spacing=Space.sm,
         controls=[
+            ft.Row([section_label("Borda"), ft.Container(expand=True), help_icon_for("image.border", page)], vertical_alignment=ft.CrossAxisAlignment.CENTER),
             ft.Row([section_label("Espessura"), ft.Container(expand=True), _border_padding_lbl]),
             ft.Row([_border_padding_slider], spacing=0),
             _border_color_tf,
@@ -656,6 +661,7 @@ def build_image_form(
     adjust_block = ft.Column(
         visible=False, spacing=Space.sm,
         controls=[
+            ft.Row([section_label("Ajustes"), ft.Container(expand=True), help_icon_for("image.adjust", page)], vertical_alignment=ft.CrossAxisAlignment.CENTER),
             _adj_bright_col, _adj_contrast_col,
             _adj_color_col, _adj_sharpness_col,
         ],
@@ -678,7 +684,10 @@ def build_image_form(
 
     filter_block = ft.Column(
         visible=False, spacing=Space.sm,
-        controls=[section_label("Tipo de filtro"), _flt_grid],
+        controls=[
+            ft.Row([section_label("Filtros"), ft.Container(expand=True), help_icon_for("image.filter", page)], vertical_alignment=ft.CrossAxisAlignment.CENTER),
+            section_label("Tipo de filtro"), _flt_grid,
+        ],
     )
     _param_blocks["filter"] = filter_block
 
@@ -696,6 +705,7 @@ def build_image_form(
     favicon_block = ft.Column(
         visible=False, spacing=Space.sm,
         controls=[
+            ft.Row([section_label("Favicon"), ft.Container(expand=True), help_icon_for("image.favicon", page)], vertical_alignment=ft.CrossAxisAlignment.CENTER),
             section_label("Tamanhos (.ico multires)"),
             ft.Row(
                 [_favicon_checks[s] for s in _favicon_all_sizes],
@@ -751,6 +761,7 @@ def build_image_form(
     contact_sheet_block = ft.Column(
         visible=False, spacing=Space.sm,
         controls=[
+            ft.Row([section_label("Colagem"), ft.Container(expand=True), help_icon_for("image.contact_sheet", page)], vertical_alignment=ft.CrossAxisAlignment.CENTER),
             _cs_cols_col, _cs_thumb_col, _cs_gap_col, _cs_bg_color_tf,
         ],
     )
