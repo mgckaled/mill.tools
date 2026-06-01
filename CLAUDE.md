@@ -130,7 +130,7 @@ Conversão de imagens entre 8 formatos com visor de pré-visualização integrad
 
 ## Splash + spinner (branding)
 
-- **Splash** (`gui/splash.py`): `show_splash(page, on_complete)` mostra o cata-vento (fade-in + scale + uma volta) sobre o azul-escuro do GUI e, ao fim, chama `build_app`. Roda no event loop via `page.run_task`.
+- **Splash** (`gui/splash.py`): `show_splash(page, on_complete)` mostra o cata-vento (fade-in + scale + uma volta) e, ao fim, chama `build_app`. Roda no event loop via `page.run_task`. Cores lidas de `Color.dark.*` (tokens DS) — sem literais hardcoded.
 - **Spinner do header**: no `ProgressPanel`, a engrenagem foi trocada por um `ft.Image` do cata-vento que **gira continuamente enquanto o pipeline trabalha** (giro encadeado via `on_animation_end`, curva **LINEAR**) e **para na vertical** ao terminar.
 - **Assets** (`gui/assets.py`): `b64(name)` lê de `assets/logo/` e retorna **bytes** (Flet 0.85: `ft.Image(src=bytes)`); `WINDOW_ICON` aponta para `assets/icons/mill.ico` (use em `page.window.icon`, Windows-only).
 
@@ -251,8 +251,8 @@ Iniciada com `uv run gui.py`. Flutter desktop no Windows.
 | `ft.Column(controls=[]).append()` | preferir a `Container(content=None)` (diff None→árvore quebra) |
 | `ft.ImageFit.CONTAIN` | `ft.BoxFit.CONTAIN` — `ft.ImageFit` não existe no 0.85 |
 | `control.page` antes do mount | lança `RuntimeError` (não retorna `None`) — proteger com `try/except RuntimeError` |
-| `ColorScheme.surface` vs page.bgcolor | `surface` → `ft.Colors.SURFACE` (painéis/cards) — **não** controla o fundo do Scaffold. Usar `page.bgcolor` explícito + `sync_page_bgcolor()` do DS |
-| `surface_container_low` / `surface_container` no ColorScheme | não reconhecidos pelo Flet 0.85 — são ignorados silenciosamente. Usar `surface` + `surface_variant` |
+| `ColorScheme.surface` vs page.bgcolor | `surface` → `ft.Colors.SURFACE` (painéis/cards) — **não** controla o fundo do Scaffold. Usar `page.bgcolor` explícito via `sync_page_bgcolor(page)` do DS |
+| `surface_variant` / `surface_container_low` / `surface_container` no ColorScheme | kwargs inválidos no Flet 0.85 — geram `TypeError`. Campos suportados: `surface`, `on_surface`, `on_surface_variant`, `outline`, `outline_variant` |
 
 ### Eventos do pipeline
 

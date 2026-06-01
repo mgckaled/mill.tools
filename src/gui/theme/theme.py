@@ -22,7 +22,6 @@ def _color_scheme(dark: bool) -> ft.ColorScheme:
         # O fundo da página é controlado por page.bgcolor via sync_page_bgcolor().
         surface=c.surface,              # "#1E1E22" → painéis, cards
         on_surface=c.text,
-        surface_variant=c.surface_variant,   # "#2A2A30" → chips, inputs, hover
         on_surface_variant=c.text_secondary,
         # contornos
         outline=c.outline,

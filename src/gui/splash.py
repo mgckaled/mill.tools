@@ -8,8 +8,11 @@ from typing import Callable
 import flet as ft
 
 from src.gui.assets import b64
+from src.gui.theme.tokens import Color
 
-BG, GOLD, LIGHT = "#0E1B2C", "#F4A63C", "#EAF0F6"
+BG   = Color.dark.bg       # fundo do splash = fundo da janela dark
+GOLD = Color.dark.primary  # acento dourado
+LIGHT = Color.dark.text    # texto "mill"
 
 
 def show_splash(page: ft.Page, on_complete: Callable[[], None]) -> None:
