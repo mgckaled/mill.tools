@@ -67,6 +67,47 @@ HELP_SHORT: dict[str, str] = {
         "Qualidade de compressão (50–100) para formatos com perda (JPG/WebP). "
         "Maior = melhor imagem e arquivo maior. Ignorada em formatos sem perda."
     ),
+    "image.resize": (
+        "Caber: redimensiona proporcionalmente dentro do limite. "
+        "Exato: força as dimensões (pode distorcer). "
+        "Escala %: reduz ou amplia na porcentagem indicada."
+    ),
+    "image.crop": (
+        "Manual: define região em px (0 = até a borda). "
+        "Proporção: recorta o maior retângulo da proporção escolhida, centralizado. "
+        "Auto-trim: remove bordas da cor indicada."
+    ),
+    "image.rotate": (
+        "Ângulo em múltiplos de 90°. EXIF auto corrige a orientação registrada pela câmera. "
+        "Espelhar H/V é independente do ângulo."
+    ),
+    "image.watermark": (
+        "Texto: fonte embutida, sem dependência do sistema. "
+        "Imagem: sobreposição redimensionada a 25% da largura. "
+        "Opacidade 0 = invisível, 100 = sólida."
+    ),
+    "image.border": (
+        "Adiciona borda sólida em torno da imagem. "
+        "'Preencher alpha' substitui transparência pela cor da borda antes — "
+        "necessário para salvar em JPEG."
+    ),
+    "image.adjust": (
+        "Sliders de 0.1 a 2.0; 1.0 = sem alteração. "
+        "Brilho e Contraste são os mais impactantes. "
+        "Saturação 0.1 ≈ preto e branco."
+    ),
+    "image.filter": (
+        "Blur/Sharpen: convolução. Autocontraste: estica o histograma. "
+        "Equalizar: redistribui histograma. Grayscale: tons de cinza."
+    ),
+    "image.favicon": (
+        "Gera um .ico com múltiplas resoluções embutidas. "
+        "Marque os tamanhos desejados."
+    ),
+    "image.contact_sheet": (
+        "Monta uma grade com todas as imagens da fila. "
+        "O resultado é uma única imagem de saída."
+    ),
 }
 
 #: Texto longo (opcional) — quando presente, a ⓘ vira clicável e abre um modal.

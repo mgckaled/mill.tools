@@ -1,4 +1,4 @@
-"""Módulo Imagens — conversão com visor de pré-visualização."""
+"""Módulo Imagens — operações de imagem com visor Before/After."""
 from __future__ import annotations
 
 import subprocess
@@ -27,6 +27,13 @@ if TYPE_CHECKING:
 _MODULE_ID = "image"
 _MAX_LOG = 300
 
+# 1×1 px PNG transparente — src obrigatório no Flet 0.85
+_BLANK_PNG = (
+    b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01"
+    b"\x08\x06\x00\x00\x00\x1f\x15\xc4\x89\x00\x00\x00\nIDATx\x9cc\x00\x01"
+    b"\x00\x00\x05\x00\x01\r\n-\xb4\x00\x00\x00\x00IEND\xaeB`\x82"
+)
+
 
 def build_image_module(
     page: ft.Page,
@@ -34,7 +41,7 @@ def build_image_module(
     cancel_event: threading.Event,
     pipeline_running: list[bool],
 ) -> Module:
-    """Constrói o módulo Imagens — form | visor + log compacto.
+    """Constrói o módulo Imagens — form | Before/After viewer + log compacto.
 
     Args:
         page: Página Flet.
@@ -44,43 +51,59 @@ def build_image_module(
     """
 
     # ------------------------------------------------------------------
-    # Painel direito — visor + CLI compacto
+    # Visor Before/After
     # ------------------------------------------------------------------
 
-    # Visor de pré-visualização — src é obrigatório no Flet 0.85; usa 1×1 px transparente
-    _BLANK_PNG = (
-        b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01"
-        b"\x08\x06\x00\x00\x00\x1f\x15\xc4\x89\x00\x00\x00\nIDATx\x9cc\x00\x01"
-        b"\x00\x00\x05\x00\x01\r\n-\xb4\x00\x00\x00\x00IEND\xaeB`\x82"
+    _last_input_thumb: list[bytes | None] = [None]
+
+    # Imagens
+    _img_single = ft.Image(_BLANK_PNG, fit=ft.BoxFit.CONTAIN, expand=True)
+    _img_before = ft.Image(_BLANK_PNG, fit=ft.BoxFit.CONTAIN, expand=True)
+    _img_after  = ft.Image(_BLANK_PNG, fit=ft.BoxFit.CONTAIN, expand=True)
+
+    # Placeholder
+    _placeholder = ft.Container(
+        content=ft.Text(
+            "Selecione imagens para começar",
+            color=ft.Colors.ON_SURFACE_VARIANT, italic=True, size=13,
+        ),
+        alignment=ft.Alignment.CENTER,
+        expand=True,
+        visible=True,
     )
-    preview_img = ft.Image(
-        _BLANK_PNG,
-        fit=ft.BoxFit.CONTAIN,
+
+    # Single pane: placeholder OU imagem única
+    _single_img_ctr = ft.Container(
+        content=_img_single, alignment=ft.Alignment.CENTER,
+        expand=True, visible=False,
+    )
+    _single_pane = ft.Stack(
+        [_placeholder, _single_img_ctr],
         expand=True,
     )
-    preview_placeholder = ft.Text(
-        "Selecione imagens para começar",
-        color=ft.Colors.ON_SURFACE_VARIANT,
-        italic=True,
-        size=13,
+
+    # Before/After pane
+    _before_col = ft.Column(
+        [
+            ft.Text("Antes", size=10, color=ft.Colors.ON_SURFACE_VARIANT),
+            ft.Container(content=_img_before, expand=True, alignment=ft.Alignment.CENTER),
+        ],
+        expand=True, spacing=4,
     )
+    _after_col = ft.Column(
+        [
+            ft.Text("Depois", size=10, color=ft.Colors.ON_SURFACE_VARIANT),
+            ft.Container(content=_img_after, expand=True, alignment=ft.Alignment.CENTER),
+        ],
+        expand=True, spacing=4,
+    )
+    _before_after_row = ft.Row(
+        [_before_col, ft.VerticalDivider(width=1), _after_col],
+        expand=True, visible=False,
+    )
+
     preview_container = ft.Container(
-        content=ft.Stack(
-            controls=[
-                ft.Container(
-                    content=preview_placeholder,
-                    alignment=ft.Alignment.CENTER,
-                    expand=True,
-                ),
-                ft.Container(
-                    content=preview_img,
-                    alignment=ft.Alignment.CENTER,
-                    expand=True,
-                    visible=False,
-                ),
-            ],
-            expand=True,
-        ),
+        content=ft.Row([_single_pane, _before_after_row], expand=True),
         expand=True,
         alignment=ft.Alignment.CENTER,
         border=ft.Border(
@@ -92,20 +115,29 @@ def build_image_module(
         border_radius=6,
         bgcolor=Color.dark.surface_variant,
     )
-    _preview_stack: ft.Stack = preview_container.content  # type: ignore[assignment]
-    _preview_placeholder_ctr: ft.Container = _preview_stack.controls[0]  # type: ignore[index]
-    _preview_img_ctr: ft.Container = _preview_stack.controls[1]  # type: ignore[index]
 
-    def _set_preview(data: bytes | None) -> None:
-        if data:
-            preview_img.src = data
-            _preview_placeholder_ctr.visible = False
-            _preview_img_ctr.visible = True
+    def _show_single(thumb: bytes | None = None) -> None:
+        """Mostra single view. thumb=None → placeholder."""
+        _single_pane.visible = True
+        _before_after_row.visible = False
+        if thumb:
+            _img_single.src = thumb
+            _single_img_ctr.visible = True
+            _placeholder.visible = False
         else:
-            _preview_placeholder_ctr.visible = True
-            _preview_img_ctr.visible = False
+            _single_img_ctr.visible = False
+            _placeholder.visible = True
 
-    # Spinner + stage label
+    def _show_before_after(before: bytes, after: bytes) -> None:
+        _single_pane.visible = False
+        _before_after_row.visible = True
+        _img_before.src = before
+        _img_after.src = after
+
+    # ------------------------------------------------------------------
+    # Painel direito — spinner, barra, log
+    # ------------------------------------------------------------------
+
     spin_img, _start_spin, _stop_spin = spinner()
 
     stage_label = ft.Text(
@@ -115,7 +147,6 @@ def build_image_module(
         italic=True,
     )
 
-    # Barra de progresso
     progress_bar = ft.ProgressBar(
         value=None,
         expand=True,
@@ -124,7 +155,6 @@ def build_image_module(
         visible=False,
     )
 
-    # Log compacto
     log_list = ft.ListView(
         spacing=2,
         padding=ft.Padding(left=6, right=6, top=4, bottom=4),
@@ -136,14 +166,12 @@ def build_image_module(
         if len(log_list.controls) > _MAX_LOG:
             log_list.controls = log_list.controls[-_MAX_LOG:]
 
-    # Botão Cancelar
     cancel_btn = danger_button(
         "Cancelar",
         icon=ft.Icons.CANCEL_OUTLINED,
         on_click=lambda _: cancel_event.set(),
     )
 
-    # Botão "Abrir pasta de saída"
     def _open_output_folder(_e) -> None:
         from src.utils import IMAGE_PROCESSED_DIR
         IMAGE_PROCESSED_DIR.mkdir(parents=True, exist_ok=True)
@@ -201,14 +229,12 @@ def build_image_module(
         t = event.type
         p = event.payload
 
-        # Stage label
         _label = _resolve_stage_label(event)
         if _label is not None:
             stage_label.value = _label
             stage_label.color = ft.Colors.ON_SURFACE
             stage_label.italic = False
 
-        # Progresso
         if t == "progress_start":
             progress_bar.visible = True
             progress_bar.value = None
@@ -219,26 +245,25 @@ def build_image_module(
             tot = p.get("total_items", 1)
             progress_bar.value = (cur - 1) / max(tot, 1)
 
-        # Visor — input thumbnail
         elif t == "image_op_start":
             thumb = p.get("thumb")
-            if thumb:
-                _set_preview(thumb)
+            _last_input_thumb[0] = thumb
+            _show_single(thumb)
 
-        # Visor — resultado thumbnail
         elif t == "image_op_done":
-            thumb = p.get("thumb")
-            if thumb:
-                _set_preview(thumb)
+            out_thumb = p.get("thumb")
+            in_thumb = _last_input_thumb[0]
+            if in_thumb and out_thumb:
+                _show_before_after(in_thumb, out_thumb)
+            elif out_thumb:
+                _show_single(out_thumb)
             cur_item = p.get("item_idx", 1)
             tot_items = p.get("total_items", 1)
             progress_bar.value = cur_item / max(tot_items, 1)
 
-        # Log lines
         for msg in _resolve_messages(event):
             _append_log(msg)
 
-        # Fim
         if t == "task_done":
             progress_bar.value = 1.0
             cancel_btn.disabled = True
@@ -271,7 +296,8 @@ def build_image_module(
         stage_label.value = "Iniciando..."
         stage_label.color = ft.Colors.ON_SURFACE
         stage_label.italic = False
-        _set_preview(None)
+        _show_single(None)
+        _last_input_thumb[0] = None
         form_panel.set_running(True)
         page.update()
         start_image_pipeline(args, bus, cancel_event, pipeline_running)
@@ -318,6 +344,37 @@ def _fmt_size(b: int) -> str:
     return f"{b / (1024 * 1024):.1f} MB"
 
 
+_OP_VERBS: dict[str, str] = {
+    "download":      "Baixando",
+    "convert":       "Convertendo",
+    "resize":        "Redimensionando",
+    "crop":          "Cortando",
+    "rotate":        "Rotacionando",
+    "watermark":     "Aplicando marca d'água",
+    "border":        "Adicionando borda",
+    "adjust":        "Ajustando",
+    "filter":        "Aplicando filtro",
+    "favicon":       "Gerando favicon",
+    "contact_sheet": "Montando colagem",
+    "remove_bg":     "Removendo fundo",
+}
+
+_OP_LABELS: dict[str, str] = {
+    "download":      "Baixando...",
+    "convert":       "Convertendo...",
+    "resize":        "Redimensionando...",
+    "crop":          "Cortando...",
+    "rotate":        "Rotacionando...",
+    "watermark":     "Marca d'água...",
+    "border":        "Adicionando borda...",
+    "adjust":        "Ajustando...",
+    "filter":        "Aplicando filtro...",
+    "favicon":       "Gerando favicon...",
+    "contact_sheet": "Montando colagem...",
+    "remove_bg":     "Removendo fundo...",
+}
+
+
 def _resolve_messages(event: PipelineEvent) -> list[str]:
     p = event.payload
     t = event.type
@@ -325,7 +382,7 @@ def _resolve_messages(event: PipelineEvent) -> list[str]:
         case "image_op_start":
             op = p.get("operation", "")
             name = p.get("item_name", "")
-            verb = {"download": "Baixando", "convert": "Convertendo"}.get(op, op)
+            verb = _OP_VERBS.get(op, "Processando")
             return [f"[~] {verb}: {name}"]
         case "image_op_done":
             path = p.get("output_path", "")
@@ -367,7 +424,7 @@ def _resolve_stage_label(event: PipelineEvent) -> str | None:
             return f"Item {cur}/{tot}" + (f" — {name}" if name else "")
         case "image_op_start":
             op = p.get("operation", "")
-            return {"download": "Baixando...", "convert": "Convertendo..."}.get(op, "Processando...")
+            return _OP_LABELS.get(op, "Processando...")
         case "image_op_done":
             return "Concluído."
         case "image_op_error":
