@@ -9,6 +9,7 @@ from flet.controls.core.stack import StackFit
 
 from src.gui import settings
 from src.gui.events import EventBus
+from src.gui.theme import sync_page_bgcolor
 from src.gui.modules.audio.view import build_audio_module
 from src.gui.modules.base import Module
 from src.gui.modules.image.view import build_image_module
@@ -27,6 +28,7 @@ def build_app(page: ft.Page) -> None:
     page.theme_mode = (
         ft.ThemeMode.DARK if cfg.get("theme_mode", "dark") == "dark" else ft.ThemeMode.LIGHT
     )
+    sync_page_bgcolor(page)  # re-sincroniza após ler o tema salvo
 
     cancel_event = threading.Event()
     bus = EventBus(page)
@@ -39,6 +41,7 @@ def build_app(page: ft.Page) -> None:
     def _toggle_theme(_e) -> None:
         is_dark = page.theme_mode == ft.ThemeMode.DARK
         page.theme_mode = ft.ThemeMode.LIGHT if is_dark else ft.ThemeMode.DARK
+        sync_page_bgcolor(page)
         theme_btn.icon = ft.Icons.DARK_MODE if is_dark else ft.Icons.LIGHT_MODE
         settings.set("theme_mode", "light" if is_dark else "dark")
         page.update()

@@ -251,6 +251,8 @@ Iniciada com `uv run gui.py`. Flutter desktop no Windows.
 | `ft.Column(controls=[]).append()` | preferir a `Container(content=None)` (diff None→árvore quebra) |
 | `ft.ImageFit.CONTAIN` | `ft.BoxFit.CONTAIN` — `ft.ImageFit` não existe no 0.85 |
 | `control.page` antes do mount | lança `RuntimeError` (não retorna `None`) — proteger com `try/except RuntimeError` |
+| `ColorScheme.surface` vs page.bgcolor | `surface` → `ft.Colors.SURFACE` (painéis/cards) — **não** controla o fundo do Scaffold. Usar `page.bgcolor` explícito + `sync_page_bgcolor()` do DS |
+| `surface_container_low` / `surface_container` no ColorScheme | não reconhecidos pelo Flet 0.85 — são ignorados silenciosamente. Usar `surface` + `surface_variant` |
 
 ### Eventos do pipeline
 
