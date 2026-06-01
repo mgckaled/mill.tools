@@ -52,6 +52,21 @@ HELP_SHORT: dict[str, str] = {
         "Embute título, autor e capa no arquivo de saída. "
         "Em ogg/opus a capa pode ser omitida automaticamente."
     ),
+    # --- Imagens ---
+    "image.input": (
+        "Cole URLs diretas de imagens ou selecione arquivos locais. "
+        "URLs são baixadas; arquivos locais são convertidos. "
+        "Link de página HTML de banco de imagens não funciona — use o link direto do arquivo."
+    ),
+    "image.format": (
+        "Formato de saída. PNG/TIFF/BMP são sem perda; "
+        "JPG/WebP usam compressão com perda (controlada pela qualidade); "
+        "AVIF é moderno e compacto."
+    ),
+    "image.quality": (
+        "Qualidade de compressão (50–100) para formatos com perda (JPG/WebP). "
+        "Maior = melhor imagem e arquivo maior. Ignorada em formatos sem perda."
+    ),
 }
 
 #: Texto longo (opcional) — quando presente, a ⓘ vira clicável e abre um modal.

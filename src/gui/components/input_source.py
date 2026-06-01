@@ -32,6 +32,7 @@ def build_input_source(
     page: ft.Page,
     allowed_extensions: list[str],
     on_change: Callable[[list[InputItem]], None] | None = None,
+    url_hint: str | None = None,
 ) -> InputSource:
     """Constrói o componente InputSource.
 
@@ -48,7 +49,7 @@ def build_input_source(
     # ── widgets ──────────────────────────────────────────────────────────────
 
     url_field = ft.TextField(
-        hint_text="URL (YouTube, SoundCloud…)",
+        hint_text=url_hint or "URL (YouTube, SoundCloud…)",
         border_color=ft.Colors.OUTLINE_VARIANT,
         focused_border_color=ft.Colors.BLUE_400,
         text_size=13,

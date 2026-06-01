@@ -2,17 +2,14 @@
 
 from __future__ import annotations
 
-import math
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable
 
 import flet as ft
 
-from src.gui.assets import b64
 from src.gui.events import PipelineEvent
-from src.gui.theme.components.buttons import danger_button
-from src.gui.theme.components.feedback import log_line
+from src.gui.theme.components import danger_button, log_line, spinner
 from src.gui.theme.tokens import Color, Type
 from src.transcriber import format_elapsed
 from src.utils import format_duration
@@ -400,31 +397,7 @@ def build_progress_view(
     )
 
     # --- moinho giratório no header do pipeline ---
-    _spin_period = 900  # ms por volta
-    _spinning: list[bool] = [False]
-
-    status_icon = ft.Image(
-        src=b64("mill-symbol.png"),
-        width=22,
-        height=22,
-        rotate=ft.Rotate(angle=0, alignment=ft.Alignment.CENTER),
-        animate_rotation=ft.Animation(_spin_period, ft.AnimationCurve.LINEAR),
-    )
-
-    def _spin_step(_=None) -> None:
-        if _spinning[0]:
-            status_icon.rotate.angle += 2 * math.pi
-            status_icon.update()
-
-    status_icon.on_animation_end = _spin_step
-
-    def _start_spin() -> None:
-        if not _spinning[0]:
-            _spinning[0] = True
-            _spin_step()
-
-    def _stop_spin() -> None:
-        _spinning[0] = False
+    status_icon, _start_spin, _stop_spin = spinner()
 
     pipeline_panel = ft.Column(
         controls=[

@@ -11,6 +11,7 @@ from src.gui import settings
 from src.gui.events import EventBus
 from src.gui.modules.audio.view import build_audio_module
 from src.gui.modules.base import Module
+from src.gui.modules.image.view import build_image_module
 from src.gui.modules.transcription.view import build_transcription_module, get_form_start_button
 from src.gui.modules.video.view import build_video_placeholder
 
@@ -65,8 +66,9 @@ def build_app(page: ft.Page) -> None:
     _transcription = build_transcription_module(page, bus, cancel_event, pipeline_running)
     _audio = build_audio_module(page, bus, cancel_event, pipeline_running, nav)
     _video = build_video_placeholder()
+    _image = build_image_module(page, bus, cancel_event, pipeline_running)
 
-    MODULES: list[Module] = [_audio, _video, _transcription]
+    MODULES: list[Module] = [_audio, _video, _image, _transcription]
     _DEFAULT_ID = "transcription"
 
     current_idx: list[int] = [

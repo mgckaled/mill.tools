@@ -43,6 +43,30 @@ def secondary_button(
     )
 
 
+def action_button(
+    text: str,
+    icon: str | None = None,
+    on_click: Callable | None = None,
+    accent: str | None = None,
+) -> ft.TextButton:
+    """Ação de link/secundária — azul info do DS por padrão; aceita acento customizado."""
+    from src.gui.theme.tokens import Color
+    c = accent or Color.log.info
+    return ft.TextButton(
+        text,
+        icon=icon,
+        on_click=on_click,
+        style=ft.ButtonStyle(
+            color={
+                ft.ControlState.DEFAULT: c,
+                ft.ControlState.HOVERED: c,
+                ft.ControlState.PRESSED: c,
+            },
+            overlay_color=ft.Colors.with_opacity(0.1, c),
+        ),
+    )
+
+
 def danger_button(
     text: str,
     icon: str | None = None,

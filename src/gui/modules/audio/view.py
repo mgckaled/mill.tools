@@ -11,6 +11,8 @@ import flet as ft
 from src.gui.modules.audio.form_view import AudioArgs, AudioFormPanel, build_audio_form
 from src.gui.modules.audio.worker import start_audio_pipeline
 from src.gui.modules.base import Module
+from src.gui.theme.components import action_button, output_card
+from src.gui.theme.tokens import Color
 from src.gui.views.progress_view import ProgressPanel, build_progress_view
 
 if TYPE_CHECKING:
@@ -85,82 +87,22 @@ def build_audio_module(
             results_col.controls.append(_make_output_card(p))
 
     def _make_output_card(p: Path) -> ft.Control:
-        def _open_folder(_e) -> None:
-            import subprocess
-            import platform
-            if platform.system() == "Windows":
-                subprocess.run(["explorer", "/select,", str(p)], check=False)
-
-        def _transcribe(_e, _path=str(p)) -> None:
-            if nav:
-                nav[0]("transcription", {"file": _path})
-
         suffix = p.suffix.lower()
         is_audio = suffix in {".mp3", ".wav", ".flac", ".ogg", ".opus", ".aac", ".m4a"}
+        icon = ft.Icons.AUDIO_FILE_OUTLINED if is_audio else ft.Icons.VIDEO_FILE_OUTLINED
 
-        return ft.Container(
-            margin=ft.Margin(top=6, bottom=2, left=0, right=0),
-            padding=ft.Padding(left=12, right=12, top=8, bottom=8),
-            border=ft.Border(
-                left=ft.BorderSide(1, ft.Colors.BLUE_700),
-                right=ft.BorderSide(1, ft.Colors.BLUE_700),
-                top=ft.BorderSide(1, ft.Colors.BLUE_700),
-                bottom=ft.BorderSide(1, ft.Colors.BLUE_700),
-            ),
-            border_radius=6,
-            bgcolor=ft.Colors.with_opacity(0.05, ft.Colors.BLUE_400),
-            content=ft.Column(
-                controls=[
-                    ft.Row(
-                        controls=[
-                            ft.Icon(ft.Icons.AUDIO_FILE_OUTLINED, size=16, color=ft.Colors.BLUE_300),
-                            ft.Text(
-                                p.name,
-                                size=12,
-                                color=ft.Colors.WHITE,
-                                font_family="monospace",
-                                expand=True,
-                                selectable=True,
-                                overflow=ft.TextOverflow.ELLIPSIS,
-                                no_wrap=True,
-                            ),
-                        ],
-                        spacing=6,
-                        vertical_alignment=ft.CrossAxisAlignment.CENTER,
-                    ),
-                    ft.Text(
-                        str(p.parent),
-                        size=11,
-                        color=ft.Colors.GREY_400,
-                        font_family="monospace",
-                        selectable=True,
-                        overflow=ft.TextOverflow.ELLIPSIS,
-                        no_wrap=True,
-                    ),
-                    ft.Row(
-                        controls=[
-                            ft.TextButton(
-                                "Abrir pasta",
-                                icon=ft.Icons.FOLDER_OPEN_OUTLINED,
-                                on_click=_open_folder,
-                                style=ft.ButtonStyle(color=ft.Colors.BLUE_300),
-                            ),
-                            *(
-                                [ft.TextButton(
-                                    "Transcrever",
-                                    icon=ft.Icons.SUBTITLES_OUTLINED,
-                                    on_click=_transcribe,
-                                    style=ft.ButtonStyle(color=ft.Colors.GREEN_300),
-                                )]
-                                if is_audio else []
-                            ),
-                        ],
-                        spacing=4,
-                    ),
-                ],
-                spacing=4,
-            ),
-        )
+        extra: list[ft.Control] = []
+        if is_audio and nav:
+            def _transcribe(_e, _path=str(p)) -> None:
+                nav[0]("transcription", {"file": _path})
+            extra.append(action_button(
+                "Transcrever",
+                icon=ft.Icons.SUBTITLES_OUTLINED,
+                on_click=_transcribe,
+                accent=Color.log.ok,
+            ))
+
+        return output_card(p, icon=icon, extra_actions=extra)
 
     # ------------------------------------------------------------------
     # Painéis

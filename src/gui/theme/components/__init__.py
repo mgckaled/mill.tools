@@ -4,15 +4,20 @@ from src.gui.theme.components.help import (
     help_icon_for,
 )
 from src.gui.theme.components.buttons import (
+    action_button,
     danger_button,
     primary_button,
     secondary_button,
     segmented_selector,
 )
+from src.gui.theme.components.cards import (
+    output_card,
+)
 from src.gui.theme.components.feedback import (
     helper_text,
     log_line,
     section_title,
+    spinner,
     summary_card,
 )
 from src.gui.theme.components.inputs import (
@@ -30,13 +35,16 @@ from src.gui.theme.components.layout import (
 __all__ = [
     "help_icon",
     "help_icon_for",
+    "action_button",
     "danger_button",
     "primary_button",
     "secondary_button",
     "segmented_selector",
+    "output_card",
     "helper_text",
     "log_line",
     "section_title",
+    "spinner",
     "summary_card",
     "labeled_field",
     "slider_row",

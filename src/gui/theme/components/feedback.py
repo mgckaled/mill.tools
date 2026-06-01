@@ -1,9 +1,12 @@
-"""Fábricas de feedback visual: log, títulos, cards de resumo."""
+"""Fábricas de feedback visual: log, títulos, cards de resumo, spinner."""
 from __future__ import annotations
+
+import math
+from typing import Callable
 
 import flet as ft
 
-from src.gui.theme.tokens import Color, Radius, Space, Type
+from src.gui.theme.tokens import Color, Motion, Radius, Space, Type
 
 _PREFIX_COLORS: dict[str, str] = {
     "[i]": Color.log.info,
@@ -48,6 +51,42 @@ def section_title(text: str) -> ft.Text:
 def helper_text(text: str) -> ft.Text:
     """Texto de apoio caption em cor secundária."""
     return ft.Text(text, size=Type.caption.size, color=ft.Colors.ON_SURFACE_VARIANT)
+
+
+def spinner() -> tuple[ft.Image, Callable[[], None], Callable[[], None]]:
+    """Cata-vento animado do mill.tools.
+
+    Returns:
+        (control, start, stop) — gira continuamente enquanto start() estiver ativo;
+        stop() interrompe sem resetar o ângulo.
+    """
+    from src.gui.assets import b64
+
+    _spinning: list[bool] = [False]
+    img = ft.Image(
+        src=b64("mill-symbol.png"),
+        width=22,
+        height=22,
+        rotate=ft.Rotate(angle=0, alignment=ft.Alignment.CENTER),
+        animate_rotation=ft.Animation(Motion.spin, ft.AnimationCurve.LINEAR),
+    )
+
+    def _step(_=None) -> None:
+        if _spinning[0]:
+            img.rotate.angle += 2 * math.pi
+            img.update()
+
+    img.on_animation_end = _step
+
+    def start() -> None:
+        if not _spinning[0]:
+            _spinning[0] = True
+            _step()
+
+    def stop() -> None:
+        _spinning[0] = False
+
+    return img, start, stop
 
 
 def summary_card(content: ft.Control) -> ft.Container:

@@ -1,0 +1,1 @@
+"""Módulo GUI de imagens."""
