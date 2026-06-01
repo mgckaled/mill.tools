@@ -28,3 +28,6 @@ output/**
 
 # personal notes
 notes.md
+
+# implementation plans (working artifacts, not versioned)
+docs/*_PLAN.md
