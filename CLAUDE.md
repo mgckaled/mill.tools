@@ -26,200 +26,119 @@ Multiferramenta pessoal extensível para processamento de áudio, vídeo e trans
 ## Estrutura
 
 ```
-main.py                          — entry point, CLI (argparse)
-gui.py                           — entry point, GUI desktop (Flet); mostra splash → build_app
+main.py                          — entry point CLI (argparse)
+gui.py                           — entry point GUI (splash → build_app)
 src/
-├── __init__.py
-├── __main__.py                  — entry point do analyzer standalone
-├── transcriber.py               — transcribe(), _resolve_device(), print_summary()
-├── formatter.py                 — format_transcription(), parágrafos via LLM
-├── analyzer.py                  — analyze(), análise estruturada via LangChain
-├── prompter.py                  — build_prompt_ready(), condensação prompt-ready
+├── transcriber.py · formatter.py · analyzer.py · prompter.py
 ├── llm_factory.py               — roteamento gemini-* → Google, demais → Ollama
 ├── utils.py                     — logging, validação, metadata, download, paths de output
-├── core/                        — lógica pura (sem Flet), reutilizável por CLI e GUI
+├── core/
 │   ├── audio/
-│   │   ├── downloader.py        — yt-dlp: URL → output/audio/source/ (embed_meta, fallback ogg/opus)
+│   │   ├── downloader.py        — yt-dlp: URL → output/audio/source/
 │   │   ├── converter.py         — ffmpeg (-progress pipe:1): convert_audio(), extract_audio()
-│   │   └── info.py              — get_duration_ffprobe() (duração via ffprobe)
+│   │   └── info.py              — get_duration_ffprobe()
 │   └── image/
-│       ├── downloader.py        — urllib: URL → output/image/source/ (valida com Pillow)
-│       ├── converter.py         — convert_image(): EXIF transpose, RGBA→RGB, quality só para lossy
-│       └── info.py              — image_info() + thumbnail_bytes() (miniatura para o visor)
+│       ├── downloader.py        — urllib: URL → output/image/source/
+│       ├── converter.py         — convert_image(): EXIF transpose, RGBA→RGB, quality lossy
+│       ├── transform.py         — 9 funções de manipulação (resize/crop/rotate/watermark/border/adjust/filter/favicon/contact_sheet)
+│       └── info.py              — image_info() + thumbnail_bytes()
 └── gui/
     ├── app.py                   — build_app(): NavigationRail + registry de módulos + navigate_to
-    ├── splash.py                — show_splash(): tela de abertura (cata-vento + fade) → build_app
-    ├── assets.py                — b64() (bytes p/ ft.Image), WINDOW_ICON (path do .ico)
+    ├── splash.py                — show_splash(): cata-vento + fade → build_app
+    ├── assets.py                — b64() (bytes p/ ft.Image), WINDOW_ICON
     ├── events.py                — EventBus, PipelineEvent (com module_id), LogEventHandler
     ├── settings.py              — persistência em ~/.mill-tools/config.json
     ├── workers.py               — pipeline de Transcrição em thread (module_id="transcription")
+    ├── help_content.py          — HELP_SHORT/LONG: registro central de tooltips/modais
     ├── components/
-    │   └── input_source.py      — InputItem, InputSource (URL + FilePicker, allow_multiple, url_hint)
-    ├── modules/                 — sistema de módulos da sidebar
+    │   └── input_source.py      — InputItem, InputSource (URL + FilePicker, allow_multiple)
+    ├── modules/
     │   ├── base.py              — dataclass Module (id, label, icon, control, on_mount/on_unmount)
-    │   ├── transcription/view.py — build_transcription_module() (owner_id="transcription")
-    │   ├── audio/               — form_view.py, worker.py, view.py (módulo Áudio, PR3)
-    │   ├── image/               — form_view.py, worker.py, view.py (módulo Imagens, PR-IMG-1)
+    │   ├── transcription/view.py
+    │   ├── audio/               — form_view.py, worker.py, view.py
+    │   ├── image/               — form_view.py, worker.py, view.py (PR-IMG-2A)
     │   └── video/view.py        — placeholder (PR4)
     └── views/
         ├── form_view.py         — formulário de Transcrição → FormPanel
         ├── progress_view.py     — ProgressPanel (logs/barra/spinner), filtro por owner_id
         └── result_view.py       — resultados em abas (Transcrição/Análise/Digest)
-assets/
-├── logo/                        — mill-symbol.(svg|png), mill-logo-wordmark*.(svg|png), mill-icon-256.png
-└── icons/                       — mill.ico (multi-res), mill-512.png (p/ flet build)
-ollama/
-├── Modelfile                    — config do qwen7b-custom
-└── Modelfile.phi4mini           — config do phi4mini-custom
-docs/                            — planos de implementação (migração, PRs, splash, ícone, etc.)
-output/
-├── audio/
-│   ├── source/                  — áudios baixados de URLs
-│   └── processed/               — áudios convertidos/extraídos de vídeo
-├── image/
-│   ├── source/                  — imagens baixadas de URL
-│   └── processed/               — imagens convertidas
-├── video/
-│   └── processed/               — vídeos baixados/convertidos (PR4)
-└── transcriptions/
-    ├── text/                    — transcrições brutas (.txt)
-    ├── analysis/                — análises estruturadas (.md)
-    └── digest/                  — versões condensadas prompt-ready (.txt)
 ```
-
-> Arquivos gerados antes da migração (em `audios/` e `transcriptions/`) ficam nos caminhos originais — não foram movidos.
 
 ## Sistema de módulos (GUI)
 
 A GUI é dividida em módulos selecionáveis numa **NavigationRail** à esquerda. Estado:
-**Áudio** (PR3, completo), **Vídeo** (placeholder, PR4), **Imagens** (PR-IMG-1, completo), **Transcrição** (completo).
+**Áudio** (PR3, completo), **Vídeo** (placeholder, PR4), **Imagens** (PR-IMG-2A, completo), **Transcrição** (completo).
 Ordem na rail: Áudio → Vídeo → Imagens → Transcrição.
 
-- **Registry** (`app.py`): `MODULES: list[Module]` é a fonte única; a rail e o conteúdo são gerados dele. Adicionar um módulo = uma entrada na lista.
-- **Module** (`modules/base.py`): dataclass com `id`, `label`, `icon`, `selected_icon`, `control`, `on_mount(payload)`, `on_unmount()`. O `control` é construído uma vez; trocar de aba **não** destrói o estado (log/barra/resultado preservados).
-- **navigate_to(module_id, payload)**: alterna **visibilidade** dos controles num `ft.Stack` (não reatribui `content` — evita o `object_patch` IndexError do Flet 0.85). **Bloqueia a troca** enquanto `pipeline_running[0]` for `True` (mostra SnackBar e restaura a seleção da rail).
-- **Bridge Áudio → Transcrição**: o botão "Transcrever este arquivo" chama `navigate_to("transcription", {"file": path})`; o `on_mount` do módulo de Transcrição preenche o campo de URL com o caminho (localiza o `url_field` percorrendo a árvore de controles).
-- **Escopo de eventos por módulo**: cada `ProgressPanel` recebe um `owner_id` e ignora eventos cujo `module_id` não casa — evita cross-talk entre os painéis dos módulos (todos recebem todo evento via `pubsub.send_all`).
+- **Registry** (`app.py`): `MODULES: list[Module]` é a fonte única. Adicionar um módulo = uma entrada na lista.
+- **Module** (`modules/base.py`): dataclass com `id`, `label`, `icon`, `selected_icon`, `control`, `on_mount(payload)`, `on_unmount()`. O `control` é construído uma vez; trocar de aba **não** destrói o estado.
+- **navigate_to(module_id, payload)**: alterna **visibilidade** dos controles num `ft.Stack` (não reatribui `content` — evita o `object_patch` IndexError do Flet 0.85). **Bloqueia a troca** enquanto `pipeline_running[0]` for `True`.
+- **Bridge Áudio → Transcrição**: `navigate_to("transcription", {"file": path})` — o `on_mount` preenche o campo URL percorrendo a árvore de controles.
+- **Escopo de eventos por módulo**: cada `ProgressPanel` recebe um `owner_id` e ignora eventos cujo `module_id` não casa.
 
 ## Módulo Áudio (PR3)
 
-Substitui o placeholder por download/conversão/extração de áudio.
+- **Operações** (auto-detectadas): URL → download; vídeo local → extração; áudio local → conversão.
+- **Entrada**: URL + FilePicker via `page.services`, `allow_multiple=True`. Arrastar do SO fora de escopo.
+- **Formato/qualidade**: `best`/mp3/m4a/wav/ogg/opus + bitrate (320…64 kb/s). `best` sem reencode.
+- **Capa + metadados**: embutidos por padrão; switch desligável. Fallback gracioso em ogg/opus.
+- **Fila sequencial**: um item por vez. Progresso via `queue_progress` + `progress_update`.
+- **Saída**: downloads → `output/audio/source/`; convertidos → `output/audio/processed/`.
 
-- **Operações** (auto-detectadas por item da fila): `url` → download; arquivo de **vídeo** → extração; arquivo de **áudio** → conversão.
-- **Entrada** (`components/input_source.py`): duas fontes — **URL** (TextField) e **seleção de arquivos** (`FilePicker` via `page.services`, `allow_multiple=True`). Cada item é `InputItem(kind="url"|"local", value)`. (Arrastar do SO ficou **fora de escopo** — não é nativo no Flet.)
-- **Formato/qualidade**: `best`/mp3/m4a/wav/ogg/opus + bitrate (320…64 kb/s, só lossy). `best` preserva o codec da fonte sem reencode.
-- **Capa + metadados**: embutidos por padrão (`--embed-metadata --embed-thumbnail`), switch desligável visível só quando há itens de URL. Fallback gracioso em ogg/opus (omite a capa, segue só com metadados).
-- **Fila sequencial**: um item por vez (serializa CPU/ffmpeg e a GPU). Progresso via `queue_progress` (item N/M) + `progress_update` (item atual).
-- **Core** (`core/audio/`): funções puras, sem Flet. Download via yt-dlp (`postprocessor_hooks`); conversão/extração via ffmpeg com `-progress pipe:1 -nostats` + `ffprobe` para duração (barra determinada; cai para indeterminada se não houver duração).
-- **Saída**: downloads → `output/audio/source/`; convertidos/extraídos → `output/audio/processed/`.
+> IA de áudio planejada para **PR3.1** (DeepFilterNet/Demucs), isolada em extra opcional torch.
 
-> IA de áudio (denoise/stems) **não** está no PR3 — planejada para o **PR3.1** (DeepFilterNet primeiro; Demucs a decidir), isolada em extra opcional torch.
+## Módulo Imagens (PR-IMG-2A)
 
-## Módulo Imagens (PR-IMG-1)
+Conversão e manipulação de imagens com visor Before/After integrado.
 
-Conversão de imagens entre 8 formatos com visor de pré-visualização integrado.
-
-- **Formatos**: JPG, PNG, WebP, AVIF, TIFF, BMP, GIF, ICO. `LOSSY_FMTS = {"jpg", "webp"}` — slider de qualidade ativo só para estes.
-- **Entrada** (`components/input_source.py`): URL direta (urllib, validada com Pillow) ou arquivos locais (`FilePicker`). `url_hint` parametrizável.
-- **Qualidade**: slider 50–100 (só para lossy). `on_change` atualiza estado interno; `on_change_end` atualiza o texto do valor — separa para evitar o disparo espúrio do Flet na renderização inicial.
-- **Visor**: `ft.Image` com `_BLANK_PNG` (1×1 px transparente) como `src` inicial obrigatório. Placeholder + imagem num `ft.Stack`, alternados por `visible=`. Miniatura gerada via `thumbnail_bytes()` (Pillow, `Image.thumbnail()`, máx 600 px).
-- **Core** (`core/image/`): `download_image()` (urllib + User-Agent + verify), `convert_image()` (EXIF transpose, RGBA→RGB flatten para JPEG, `optimize=True` para PNG), `image_info()`, `thumbnail_bytes()`.
-- **Fila sequencial**: erro por item não interrompe a fila. Eventos: `image_op_start` (com thumb), `image_op_done` (com thumb, elapsed, src_size_bytes, out_size_bytes), `image_op_error`.
-- **Saída**: downloads → `output/image/source/`; convertidas → `output/image/processed/`.
-- **Paths** (`utils.py`): `IMAGE_SOURCE_DIR`, `IMAGE_PROCESSED_DIR`.
+- **Operações** (10, selecionadas via card grid 3 colunas): `convert`, `resize` (caber/exato/escala%), `crop` (manual/proporção/auto-trim), `rotate` (ângulo/flip/EXIF), `watermark` (texto ou imagem), `border`, `adjust` (brilho/contraste/saturação/nitidez), `filter` (blur/sharpen/autocontrast/equalizar/cinza), `favicon` (.ico multires), `contact_sheet` (N→1).
+- **Core** (`core/image/transform.py`): 9 funções puras. Helpers: `_out_path` (colisão _1/_2…), `_save` (replica lógica de converter.py), `_hex_rgb`, `_ensure_rgb`. `contact_sheet` é N→1 — tratado antes do loop em `_run_contact_sheet(args, cancel_event, emit)`.
+- **GUI** (`form_view.py`): `ImageArgs` com 30+ campos. Card grid `expand=True` em rows de 3. Blocos de parâmetros condicionais com sub-visibilidade (resize/crop/watermark). Formato: segmented selector para `convert`; Dropdown com "Preservar original" para demais; oculto para `favicon`.
+- **Visor Before/After**: `_single_pane` (placeholder ou input thumb) e `_before_after_row` (Antes/Depois em `ft.Row`) num `ft.Row` pai, toggle por `visible=`. `_last_input_thumb` preserva o thumb do input para o split após `image_op_done`.
+- **Formatos**: JPG, PNG, WebP, AVIF, TIFF, BMP, GIF, ICO. `LOSSY_FMTS = {"jpg", "jpeg", "webp"}`.
+- **Saída**: downloads → `output/image/source/`; processadas → `output/image/processed/`.
 
 ## Splash + spinner (branding)
 
-- **Splash** (`gui/splash.py`): `show_splash(page, on_complete)` mostra o cata-vento (fade-in + scale + uma volta) e, ao fim, chama `build_app`. Roda no event loop via `page.run_task`. Cores lidas de `Color.dark.*` (tokens DS) — sem literais hardcoded.
-- **Spinner do header**: no `ProgressPanel`, a engrenagem foi trocada por um `ft.Image` do cata-vento que **gira continuamente enquanto o pipeline trabalha** (giro encadeado via `on_animation_end`, curva **LINEAR**) e **para na vertical** ao terminar.
-- **Assets** (`gui/assets.py`): `b64(name)` lê de `assets/logo/` e retorna **bytes** (Flet 0.85: `ft.Image(src=bytes)`); `WINDOW_ICON` aponta para `assets/icons/mill.ico` (use em `page.window.icon`, Windows-only).
+- **Splash** (`gui/splash.py`): fade-in + scale + uma volta do cata-vento, então chama `build_app`. Cores via `Color.dark.*` — sem literais hardcoded.
+- **Spinner**: `ft.Image` do cata-vento, giro encadeado via `on_animation_end` (curva LINEAR). Para na vertical ao terminar.
+- **Assets** (`gui/assets.py`): `b64(name)` retorna bytes; `WINDOW_ICON` → `assets/icons/mill.ico`.
 
 ## Comandos
 
 ```bash
-# GUI desktop
-uv run gui.py
-
-# Transcrição básica (CLI)
-uv run main.py <YOUTUBE_URL>
-
-# Opções comuns
-uv run main.py <URL> --wm medium --language pt --verbose
-uv run main.py <URL> --format               # + parágrafos
-uv run main.py <URL> --analyze              # + análise estruturada
-uv run main.py <URL> --format --analyze     # pipeline completo
-uv run main.py <URL> --prompt               # versão condensada (digest)
-
-# Provider na nuvem (requer GOOGLE_API_KEY no .env)
-uv run main.py <URL> --analyze --am gemini-2.5-flash
-
-# Análise standalone (sobre transcrição existente)
-uv run -m src output/transcriptions/text/transcricao_ovabeV.txt
-
-# Ollama direto
-ollama run qwen7b-custom "prompt aqui"
+uv run gui.py                                        # GUI desktop
+uv run main.py <YOUTUBE_URL>                         # transcrição básica
+uv run main.py <URL> --format --analyze              # pipeline completo
+uv run main.py <URL> --analyze --am gemini-2.5-flash # análise via Gemini
+uv run -m src output/transcriptions/text/<file>.txt  # análise standalone
 ```
-
-## CLI flags (módulo Transcrição)
-
-| Flag            | Default           | Descrição                                                     |
-|-----------------|-------------------|---------------------------------------------------------------|
-| `--wm`          | small             | Whisper model: tiny/base/small/medium/large-v3-turbo/large-v3 |
-| `--language`    | auto              | Código do idioma (pt, en, etc.)                               |
-| `--threads`     | 2                 | Threads CPU (só em fallback CPU)                              |
-| `--beam-size`   | 1                 | Beam size (1=rápido, 5=preciso)                               |
-| `--output-name` | None              | Nome customizado do arquivo de saída                          |
-| `--format`      | False             | Insere quebras de parágrafo via LLM                           |
-| `--fm`          | phi4mini-custom   | Modelo de formatação — Ollama tag ou `gemini-*`               |
-| `--analyze`     | False             | Roda análise estruturada após transcrição                     |
-| `--am`          | qwen7b-custom     | Modelo de análise — Ollama tag ou `gemini-*`                  |
-| `--prompt`      | False             | Gera versão condensada (digest)                               |
-| `--pm`          | qwen7b-custom     | Modelo de condensação — Ollama tag ou `gemini-*`              |
-| `--verbose`     | False             | Ativa logging DEBUG                                           |
 
 ## Convenções de código
 
 - Docstrings em todas as funções e módulos
-- Logging via handler dedicado — nunca usar print() para logs
+- Logging via handler dedicado — nunca usar `print()` para logs
 - Core (`src/core/`) é puro: sem dependência de Flet, reutilizável por CLI e GUI
 - Linter: ruff · Testes: pytest (dev dependency)
-- Slugs de áudio: 6 primeiros chars alfanuméricos do video ID
 
 ## Dependências externas (PATH)
 
 - `yt-dlp` e `ffmpeg`/`ffprobe` — verificados em runtime por `check_dependencies()`
 
-## Formatter
+## LLM pipeline (Formatter / Analyzer / Prompter)
 
-LangChain + LLM para inserir quebras de parágrafo, preservando o texto original.
-- **Chunking**: `RecursiveCharacterTextSplitter` (4500 chars, 150 overlap)
-- **Output**: reescreve o `.txt` com parágrafos; retorna o body para o analyzer
-- **Modelo padrão**: phi4mini-custom
-
-## Analyzer
-
-LangChain + LLM para análise estruturada. Standalone (`uv run -m src <arquivo>`) ou via `--analyze`.
-- **Chunking**: 4500 chars, 300 overlap — merge das análises parciais
-- **Output**: `.md` com header + summary, key_points, action_items, key_concepts, tools_mentioned, metrics, quotes, assumptions, vocabulary, sentiment_arc
-- **Modelo padrão**: qwen7b-custom · **Tradução automática** para PT-BR · temperaturas 0.4 (análise) / 0.0 (idioma/tradução)
-
-## Prompter
-
-Versão condensada para uso como contexto em prompts. Via `--prompt`.
-- **Chunking**: 4500 chars, 200 overlap · **Output**: `.txt` em `output/transcriptions/digest/`
-- **Remove** cumprimentos/CTAs/patrocinadores/preenchimento; **mantém** todo conteúdo técnico
-- **Compressão**: ~40% · **Modelo padrão**: qwen7b-custom
+- **Formatter**: `RecursiveCharacterTextSplitter` 4500 chars/150 overlap. Modelo padrão: `phi4mini-custom`.
+- **Analyzer**: 4500 chars/300 overlap, merge parcial. 10 campos, tradução automática PT-BR. Modelo padrão: `qwen7b-custom`. Temperaturas 0.4 (análise) / 0.0 (tradução).
+- **Prompter**: 4500 chars/200 overlap, ~40% de compressão. Remove CTAs/patrocinadores. Modelo padrão: `qwen7b-custom`.
 
 ## Métricas de qualidade de transcrição
 
-`transcriber.py` sinaliza segmentos de baixa confiança com `[?]` no `.txt`:
-- `avg_logprob < -1.0` (tokens incertos) ou `no_speech_prob > 0.6` (silêncio/ruído)
-- Log final informa a contagem total de segmentos flagados
+`transcriber.py` sinaliza segmentos com `[?]`: `avg_logprob < -1.0` (tokens incertos) ou `no_speech_prob > 0.6` (silêncio/ruído).
 
 ## Ollama
 
-- **qwen7b-custom**: Qwen 2.5 7B, usado em `--analyze` (`ollama/Modelfile`)
-- **phi4mini-custom**: Phi-4 Mini 3.8B, usado em `--format` (`ollama/Modelfile.phi4mini`)
+- **qwen7b-custom**: Qwen 2.5 7B — `--analyze` (`ollama/Modelfile`)
+- **phi4mini-custom**: Phi-4 Mini 3.8B — `--format` (`ollama/Modelfile.phi4mini`)
 - `num_gpu` controla camadas na GPU; `num_thread` controla threads CPU
 
 ## GUI Desktop (Flet 0.85)
@@ -230,10 +149,8 @@ Iniciada com `uv run gui.py`. Flutter desktop no Windows.
 
 - **Sidebar (NavigationRail)** + `ft.Stack` com todos os módulos montados; só um visível por vez (toggle de `visible`).
 - **EventBus** (`events.py`): publica `PipelineEvent(type, stage, payload, module_id)` via `page.pubsub.send_all()` (thread-safe). Worker em thread daemon; UI atualiza na thread principal.
-- **LogEventHandler**: captura `logging.INFO` e encaminha como eventos `log` (nível INFO evita flood de libs terceiras; `_SUPPRESSED_PREFIXES` filtra duplicados). Recebe `module_id`.
-- **ProgressPanel** (`progress_view.py`): filtra por `owner_id`; spinner do cata-vento; `on_show_results` customizável por módulo (a Transcrição mostra abas; o Áudio mostra resultados + botão "Transcrever este arquivo").
-- **FormPanel** (`form_view.py`): `set_running(bool)` desabilita o botão Iniciar com ampulheta.
-- **Design System** (`theme/components/`): todos os módulos importam **exclusivamente** via `src.gui.theme.components` (o `__init__` é a interface pública). Cross-imports internos entre submódulos do DS são permitidos. Fábricas disponíveis: `primary_button`, `secondary_button`, `danger_button`, `action_button` (link-style, acento configurável), `segmented_selector`, `output_card` (card com borda colorida + botão abrir pasta), `spinner()` → `(control, start, stop)`, `log_line`, `summary_card`, `section_title`, `labeled_field`, `slider_row`, `switch_row`, `hairline`, `module_scaffold`, `section`, `section_label`, `help_icon`, `help_icon_for`.
+- **LogEventHandler**: captura `logging.INFO` e encaminha como eventos `log`. `_SUPPRESSED_PREFIXES` filtra duplicados. Recebe `module_id`.
+- **Design System** (`theme/components/`): importar **exclusivamente** via `src.gui.theme.components`. Fábricas: `primary_button`, `secondary_button`, `danger_button`, `action_button`, `segmented_selector`, `output_card`, `spinner()` → `(control, start, stop)`, `log_line`, `summary_card`, `section_title`, `labeled_field`, `slider_row`, `switch_row`, `hairline`, `module_scaffold`, `section`, `section_label`, `help_icon`, `help_icon_for`.
 
 ### Flet 0.85 — quirks conhecidos
 
@@ -242,22 +159,22 @@ Iniciada com `uv run gui.py`. Flutter desktop no Windows.
 | `ft.Tabs`/`ft.Tab` | abas manuais com `TextButton` + `visible=` |
 | `ft.border.all(w, c)` | `ft.Border(left=ft.BorderSide(...), ...)` |
 | `ft.alignment.center` | `ft.Alignment.CENTER` |
-| `ft.Image(src_base64=...)` | `ft.Image(src=<bytes>)` — `src` é posicional e **obrigatório** mesmo para imagem vazia |
+| `ft.Image(src_base64=...)` | `ft.Image(src=<bytes>)` — `src` posicional e **obrigatório** mesmo para imagem vazia |
 | `rotate=<float>` | `ft.Rotate(angle=, alignment=ft.Alignment.CENTER)`; animar mutando `.angle` |
 | `animate_*` | `int` (ms, LINEAR), `bool` ou `ft.Animation(dur, ft.AnimationCurve.X)` |
-| FilePicker | adicionar via `page.services`; resultado por callback (assíncrono) |
-| trocar `Container.content` em runtime | reatribuir árvore quebra o patcher → usar toggle de `visible` num Stack |
+| FilePicker | `page.services.append(picker)` + async `await picker.pick_files(...)` |
+| trocar `Container.content` em runtime | reatribuir árvore quebra o patcher → toggle de `visible` num Stack |
 | `page.update()` em cascata | causa IndexError no `object_patch` — um update por evento |
-| `ft.Column(controls=[]).append()` | preferir a `Container(content=None)` (diff None→árvore quebra) |
+| `ft.Column(controls=[]).append()` | preferir `Container(content=None)` (diff None→árvore quebra) |
 | `ft.ImageFit.CONTAIN` | `ft.BoxFit.CONTAIN` — `ft.ImageFit` não existe no 0.85 |
-| `control.page` antes do mount | lança `RuntimeError` (não retorna `None`) — proteger com `try/except RuntimeError` |
-| `ColorScheme.surface` vs page.bgcolor | `surface` → `ft.Colors.SURFACE` (painéis/cards) — **não** controla o fundo do Scaffold. Usar `page.bgcolor` explícito via `sync_page_bgcolor(page)` do DS |
-| `surface_variant` / `surface_container_low` / `surface_container` no ColorScheme | kwargs inválidos no Flet 0.85 — geram `TypeError`. Campos suportados: `surface`, `on_surface`, `on_surface_variant`, `outline`, `outline_variant` |
-| `ft.Colors.SURFACE_VARIANT` / `ft.Colors.SURFACE_CONTAINER` | não existem no Flet 0.85 — geram `AttributeError`. Usar `ft.Colors.SURFACE` para fundos de painéis/tooltips elevados |
+| `control.page` antes do mount | lança `RuntimeError` — proteger com `try/except RuntimeError` |
+| `ColorScheme.surface` vs page.bgcolor | `surface` → `ft.Colors.SURFACE` (painéis). `page.bgcolor` explícito via `sync_page_bgcolor(page)` |
+| `surface_variant` / `surface_container_*` no ColorScheme | kwargs inválidos — geram `TypeError`. Suportados: `surface`, `on_surface`, `on_surface_variant`, `outline`, `outline_variant` |
+| `ft.Colors.SURFACE_VARIANT` / `SURFACE_CONTAINER` | não existem no 0.85 — geram `AttributeError`. Usar `ft.Colors.SURFACE` |
 
 ### Eventos do pipeline
 
-`PipelineEvent(type, stage, payload, module_id)`. `module_id` ∈ {`"transcription"`, `"audio"`, `"image"`, `""` (legado/global)}. O `ProgressPanel` ignora eventos cujo `module_id` ≠ `owner_id`.
+`PipelineEvent(type, stage, payload, module_id)`. `module_id` ∈ {`"transcription"`, `"audio"`, `"image"`, `""` (legado)}. O `ProgressPanel` ignora eventos cujo `module_id` ≠ `owner_id`.
 
 **Genéricos (todos os módulos):**
 
@@ -269,8 +186,6 @@ Iniciada com `uv run gui.py`. Flutter desktop no Windows.
 | `task_done` | `output_path(s)` | barra 1.0, para spinner, habilita Resultados |
 | `task_error` | `message` | log de erro, para spinner |
 | `log` | `message`, `level` | passthrough colorido |
-
-> Os eventos legados `pipeline_done`/`pipeline_error` foram **removidos** — a Transcrição agora usa `task_done`/`task_error`.
 
 **Áudio (stage="audio"):** `audio_op_start` (`operation`, `item_name`, `item_idx`, `total`), `audio_op_done` (`output_path`, `elapsed`).
 
@@ -302,11 +217,12 @@ Iniciada com `uv run gui.py`. Flutter desktop no Windows.
 
 ### GPU — sobrecarga e estabilidade (MX150 / Pascal)
 
-Flet (DirectX) e Whisper (CUDA) disputam a MX150. Uso simultâneo pode causar BSOD `WIN32K_POWER_WATCHDOG_TIMEOUT`. Mitigações: `LogEventHandler` em INFO; libs ruidosas capadas em WARNING; fila de áudio sequencial. Se persistir: forçar `python.exe` em "Economia de energia" (iGPU Intel) nas configurações de gráficos do Windows. O Flet 0.85 desktop não expõe `--disable-gpu`.
+Flet (DirectX) e Whisper (CUDA) disputam a MX150. Uso simultâneo pode causar BSOD `WIN32K_POWER_WATCHDOG_TIMEOUT`. Mitigações: `LogEventHandler` em INFO; libs ruidosas capadas em WARNING; fila de áudio sequencial. Se persistir: forçar `python.exe` em "Economia de energia" (iGPU Intel) nas configurações de gráficos do Windows.
 
 ## Roadmap
 
 - **PR3.1** — IA de áudio opcional (extra `[ai-audio]`): DeepFilterNet (denoise, CPU); Demucs (stems) a decidir.
 - **PR4** — Módulo Vídeo (análogo ao Áudio: mesmo InputSource, fila e eventos).
-- **Futuro** — melhorias no Módulo Imagens (batch rename, redimensionamento, crop); IA de imagens (upscale/remoção de fundo).
+- **PR-IMG-2B** — `remove_bg` (rembg), delta mínimo sobre o PR-IMG-2A.
+- **Futuro** — melhorias no Módulo Imagens (batch rename, redimensionamento guiado); IA de imagens (upscale).
 - **Fora de escopo (definitivo)** — arrastar arquivos do SO (não nativo no Flet).

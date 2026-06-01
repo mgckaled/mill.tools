@@ -23,7 +23,7 @@
 - 🧠 **Pós-processamento por LLM** — formatação em parágrafos, análise estruturada (10 campos) e digest condensado para uso como contexto.
 - 🔀 **Provider flexível** — Ollama local por padrão; Gemini na nuvem por prefixo de modelo, sem mudar o fluxo.
 - 🎵 **Módulo Áudio** — download (YouTube, SoundCloud, etc. via yt-dlp), conversão e extração de áudio, em fila, com capa/metadados embutidos.
-- 🖼️ **Módulo Imagens** — conversão entre 8 formatos (JPG, PNG, WebP, AVIF, TIFF, BMP, GIF, ICO), controle de qualidade e visor de pré-visualização integrado.
+- 🖼️ **Módulo Imagens** — 10 operações de manipulação (conversão, redimensionamento, corte, rotação, marca d'água, borda, ajustes, filtros, favicon, colagem), visor Before/After integrado.
 - 🖥️ **GUI desktop** (Flet) com acompanhamento em tempo real estilo CLI, barra de progresso determinada e spinner animado.
 - 🔗 **Bridge Áudio → Transcrição** — botão "Transcrever este arquivo" envia o arquivo processado diretamente para o módulo de Transcrição.
 - 🎨 **Design System** — paleta unificada com acento dourado, suporte a temas claro/escuro e contraste WCAG 2.1.
@@ -36,7 +36,7 @@
 | **Transcrição** | ✅ | Whisper local + formatação/análise/digest via LLM |
 | **Áudio** | ✅ | Download, conversão e extração de áudio (fila, capa/metadados) |
 | **Vídeo** | 🚧 | Download/conversão/extração (planejado — PR4) |
-| **Imagens** | ✅ | Conversão de formato/qualidade, download de URL, visor de pré-visualização (PR-IMG-1) |
+| **Imagens** | ✅ | 10 operações de manipulação + conversão de formato + visor Before/After |
 
 ---
 
@@ -197,7 +197,26 @@ Downloads em `source/`; conversões/extrações em `processed/`.
 
 ### Imagens — `output/image/`
 
-Downloads de URL em `source/`; imagens convertidas em `processed/`.
+Downloads de URL em `source/`; imagens processadas em `processed/`.
+
+---
+
+## Módulo Imagens — operações disponíveis
+
+| Operação | O que faz |
+|---|---|
+| **Converter** | Converte entre 8 formatos: JPG, PNG, WebP, AVIF, TIFF, BMP, GIF, ICO |
+| **Redimensionar** | Caber (proporcional), Exato (força dimensões) ou Escala % |
+| **Cortar** | Manual (px), Proporção (16:9, 4:3…) ou Auto-trim (remove borda por cor) |
+| **Girar** | Ângulo 90°/180°/270°, espelhamento H/V, correção automática EXIF |
+| **Marca d'água** | Texto ou imagem sobreposta, com posição e opacidade configuráveis |
+| **Borda** | Borda sólida configurável, com opção de preencher alpha pela cor |
+| **Ajustes** | Brilho, contraste, saturação e nitidez (sliders 0.1–2.0) |
+| **Filtros** | Blur, Nitidez, Autocontraste, Equalizar, Escala de cinza |
+| **Favicon** | Gera `.ico` com múltiplas resoluções embutidas (16–256 px) |
+| **Colagem** | Monta grade de miniaturas de N imagens em uma única saída |
+
+O visor **Before/After** mostra a imagem original e o resultado lado a lado após cada operação.
 
 ---
 
@@ -285,7 +304,7 @@ Fonte de UI: **Verdana**. Fonte mono (log): **JetBrains Mono** / **Consolas** (e
 O arquivo `src/gui/help_content.py` centraliza todo o conteúdo de ajuda, separado da UI. Cada controle recebe uma **chave** (`"módulo.campo"`) — nenhuma string de ajuda fica espalhada nos formulários.
 
 **Comportamento:**
-- **Hover** → tooltip estilizado (fundo `surface_container`, bordas arredondadas, 300 ms de delay)
+- **Hover** → tooltip estilizado (300 ms de delay)
 - **Clique** (apenas quando há texto longo) → `AlertDialog` com título e corpo detalhado
 
 **Chaves disponíveis:**
@@ -306,6 +325,15 @@ O arquivo `src/gui/help_content.py` centraliza todo o conteúdo de ajuda, separa
 | `image.input` | URL direta vs arquivo local | — |
 | `image.format` | Lossy vs lossless, AVIF | — |
 | `image.quality` | Quando e quanto comprimir | — |
+| `image.resize` | Modos de redimensionamento | — |
+| `image.crop` | Modos de corte | — |
+| `image.rotate` | Ângulo, flip e EXIF | — |
+| `image.watermark` | Texto vs imagem, opacidade | — |
+| `image.border` | Padding, cor e alpha | — |
+| `image.adjust` | Sliders de ajuste | — |
+| `image.filter` | Tipos de filtro | — |
+| `image.favicon` | Tamanhos e formato .ico | — |
+| `image.contact_sheet` | Grade N→1 | — |
 
 Para adicionar ajuda a um novo controle: inserir a chave em `HELP_SHORT` (e opcionalmente `HELP_LONG`) e passar `help_key=` para a fábrica correspondente.
 
@@ -321,7 +349,7 @@ mill-tools/
 │   ├── transcriber.py · formatter.py · analyzer.py · prompter.py · llm_factory.py · utils.py
 │   ├── core/
 │   │   ├── audio/       — downloader, converter, info (lógica pura, sem Flet)
-│   │   └── image/       — downloader, converter, info (Pillow; lógica pura, sem Flet)
+│   │   └── image/       — downloader, converter, transform, info (Pillow; lógica pura, sem Flet)
 │   └── gui/
 │       ├── app.py       — NavigationRail + registry de módulos + navigate_to
 │       ├── splash.py    — animação de entrada (moinho + fade)
@@ -344,7 +372,7 @@ mill-tools/
 ├── docs/                — planos de implementação
 └── output/
     ├── audio/           — source/ (downloads) · processed/ (conversões)
-    ├── image/           — source/ (downloads de URL) · processed/ (convertidas)
+    ├── image/           — source/ (downloads de URL) · processed/ (processadas)
     ├── video/
     └── transcriptions/  — text/ · analysis/ · digest/
 ```
@@ -363,5 +391,6 @@ mill-tools/
 ## Roadmap
 
 - **PR3.1** — IA de áudio opcional (denoise via DeepFilterNet; stems via Demucs a avaliar), isolada em extra que não afeta o app base.
+- **PR-IMG-2B** — remoção de fundo (`rembg`), delta mínimo sobre o PR-IMG-2A.
 - **PR4** — Módulo Vídeo (download/conversão/extração, análogo ao Áudio).
-- **Futuro** — melhorias no Módulo Imagens (batch rename, redimensionamento, crop); Módulo de Imagens com IA (upscale/remoção de fundo).
+- **Futuro** — melhorias no Módulo Imagens (batch rename, redimensionamento guiado); IA de imagens (upscale).
