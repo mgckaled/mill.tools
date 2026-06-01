@@ -93,7 +93,7 @@ def summary_card(content: ft.Control) -> ft.Container:
     """Card de resumo com fundo surface_variant, borda e raio lg."""
     return ft.Container(
         content=content,
-        bgcolor=ft.Colors.SURFACE_CONTAINER,
+        bgcolor=Color.dark.surface_variant,
         border=ft.Border(
             left=ft.BorderSide(1, ft.Colors.OUTLINE),
             right=ft.BorderSide(1, ft.Colors.OUTLINE),

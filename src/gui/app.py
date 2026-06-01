@@ -86,7 +86,7 @@ def build_app(page: ft.Page) -> None:
         if pipeline_running[0]:
             page.snack_bar = ft.SnackBar(
                 content=ft.Text("Aguarde o pipeline terminar antes de trocar de módulo."),
-                bgcolor=ft.Colors.ORANGE_800,
+                bgcolor=ft.Colors.ERROR,
             )
             page.snack_bar.open = True
             rail.selected_index = current_idx[0]
@@ -147,8 +147,8 @@ def build_app(page: ft.Page) -> None:
     layout = ft.Row(
         controls=[
             rail,
-            ft.VerticalDivider(width=1, color=ft.Colors.OUTLINE_VARIANT),
-            ft.Container(content=module_stack, expand=True),
+            ft.VerticalDivider(width=2, thickness=1.5, color=ft.Colors.OUTLINE_VARIANT),
+            ft.Container(content=module_stack, expand=True, bgcolor=ft.Colors.SURFACE),
         ],
         expand=True,
         spacing=0,

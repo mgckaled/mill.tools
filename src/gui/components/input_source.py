@@ -51,7 +51,7 @@ def build_input_source(
     url_field = ft.TextField(
         hint_text=url_hint or "URL (YouTube, SoundCloud…)",
         border_color=ft.Colors.OUTLINE_VARIANT,
-        focused_border_color=ft.Colors.BLUE_400,
+        focused_border_color=ft.Colors.PRIMARY,
         text_size=13,
         expand=True,
         height=42,

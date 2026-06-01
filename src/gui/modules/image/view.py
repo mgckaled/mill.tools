@@ -12,6 +12,7 @@ from src.gui.events import PipelineEvent
 from src.gui.modules.base import Module
 from src.gui.modules.image.form_view import ImageArgs, ImageFormPanel, build_image_form
 from src.gui.modules.image.worker import start_image_pipeline
+from src.gui.theme.tokens import Color
 from src.gui.theme.components import (
     action_button,
     danger_button,
@@ -89,7 +90,7 @@ def build_image_module(
             bottom=ft.BorderSide(1, ft.Colors.OUTLINE_VARIANT),
         ),
         border_radius=6,
-        bgcolor=ft.Colors.SURFACE,
+        bgcolor=Color.dark.surface_variant,
     )
     _preview_stack: ft.Stack = preview_container.content  # type: ignore[assignment]
     _preview_placeholder_ctr: ft.Container = _preview_stack.controls[0]  # type: ignore[index]
@@ -178,7 +179,7 @@ def build_image_module(
                     bottom=ft.BorderSide(1, ft.Colors.OUTLINE_VARIANT),
                 ),
                 border_radius=6,
-                bgcolor=ft.Colors.SURFACE,
+                bgcolor=Color.dark.surface_variant,
             ),
             ft.Row(
                 controls=[open_folder_btn, ft.Container(expand=True), cancel_btn],
@@ -284,7 +285,7 @@ def build_image_module(
     control = ft.Row(
         controls=[
             ft.Container(content=form_panel.control, width=380),
-            ft.VerticalDivider(width=1, color=ft.Colors.OUTLINE_VARIANT),
+            ft.VerticalDivider(width=2, thickness=1.5, color=ft.Colors.OUTLINE_VARIANT),
             ft.Container(
                 content=right_panel,
                 expand=True,

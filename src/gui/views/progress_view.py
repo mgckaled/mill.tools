@@ -428,7 +428,7 @@ def build_progress_view(
                     bottom=ft.BorderSide(1, ft.Colors.OUTLINE_VARIANT),
                 ),
                 border_radius=6,
-                bgcolor=ft.Colors.SURFACE,
+                bgcolor=Color.dark.surface_variant,
             ),
             ft.Row(controls=[cancel_button], alignment=ft.MainAxisAlignment.END),
         ],

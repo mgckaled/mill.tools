@@ -47,7 +47,7 @@ def build_result_view(
     # --- painéis de conteúdo ---
     _md_style = ft.MarkdownStyleSheet(
         blockquote_decoration=ft.BoxDecoration(
-            bgcolor=ft.Colors.with_opacity(0.15, ft.Colors.WHITE),
+            bgcolor=ft.Colors.with_opacity(0.15, ft.Colors.ON_SURFACE),
             border_radius=4,
         ),
     )

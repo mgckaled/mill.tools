@@ -253,6 +253,7 @@ Iniciada com `uv run gui.py`. Flutter desktop no Windows.
 | `control.page` antes do mount | lança `RuntimeError` (não retorna `None`) — proteger com `try/except RuntimeError` |
 | `ColorScheme.surface` vs page.bgcolor | `surface` → `ft.Colors.SURFACE` (painéis/cards) — **não** controla o fundo do Scaffold. Usar `page.bgcolor` explícito via `sync_page_bgcolor(page)` do DS |
 | `surface_variant` / `surface_container_low` / `surface_container` no ColorScheme | kwargs inválidos no Flet 0.85 — geram `TypeError`. Campos suportados: `surface`, `on_surface`, `on_surface_variant`, `outline`, `outline_variant` |
+| `ft.Colors.SURFACE_VARIANT` / `ft.Colors.SURFACE_CONTAINER` | não existem no Flet 0.85 — geram `AttributeError`. Usar `ft.Colors.SURFACE` para fundos de painéis/tooltips elevados |
 
 ### Eventos do pipeline
 

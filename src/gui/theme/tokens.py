@@ -15,21 +15,25 @@ class Color:
     """Paleta do mill.tools — dark / light / log."""
 
     class dark:
-        bg = "#101012"
-        surface = "#1E1E22"
-        surface_variant = "#2A2A30"
-        surface_hover = "#3E3E46"
-        outline = "#5A5A62"
-        outline_variant = "#36363C"
-        text = "#F0F0F2"
-        text_secondary = "#AAAAAE"
-        text_disabled = "#606066"
+        bg = "#1E1E20"
+        surface = "#262629"
+        surface_variant = "#2F2F34"
+        surface_hover = "#3A3A40"
+
+        outline = "#52525B"
+        outline_variant = "#484850"
+
+        text = "#FFFFFF"
+        text_secondary = "#A1A1AA"
+        text_disabled = "#6B6B75"
+
         primary = "#F4A63C"
         primary_hover = "#F7B65C"
         primary_pressed = "#D88E2A"
-        on_primary = "#101012"
-        error = "#D9453C"
-        on_error = "#101012"
+        on_primary = "#1E1E20"
+
+        error = "#E05A51"
+        on_error = "#1E1E20"
 
     class light:
         bg = "#F6F8FB"
@@ -56,7 +60,7 @@ class Color:
         ok = "#5FCF80"   # [✓]  verde    — concluído
         error = "#E5736B"   # [!]  vermelho — erro
         muted = "#6B7C90"   # [»][d] slate  — secundário / debug
-        text = "#EAF0F6"   # (sem prefixo) — conteúdo transcrito
+        text = "#C0C8D0"   # (sem prefixo) — conteúdo transcrito
 
 
 class Type:
@@ -69,20 +73,20 @@ class Type:
     title = _TypeSpec(22.0, 600)
     heading = _TypeSpec(18.0, 600)
     label = _TypeSpec(13.0, 600)
-    body = _TypeSpec(14.0, 400)
-    body_strong = _TypeSpec(14.0, 600)
-    button = _TypeSpec(14.0, 600)
-    caption = _TypeSpec(12.0, 400)
+    body = _TypeSpec(15.0, 400)
+    body_strong = _TypeSpec(15.0, 600)
+    button = _TypeSpec(16.0, 600)
+    caption = _TypeSpec(13.0, 400)
     mono = _TypeSpec(12.5, 400, "Consolas")
 
 
 class Space:
     """Grade de espaçamento em px (múltiplos de 4)."""
 
-    xs = 8
-    sm = 14
-    md = 18
-    lg = 20
+    xs = 6
+    sm = 12
+    md = 16
+    lg = 18
     xl = 24
     xxl = 32
     xxxl = 48

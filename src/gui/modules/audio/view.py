@@ -130,7 +130,7 @@ def build_audio_module(
                 ),
                 width=380,
             ),
-            ft.VerticalDivider(width=1, color=ft.Colors.OUTLINE_VARIANT),
+            ft.VerticalDivider(width=2, thickness=1.5, color=ft.Colors.OUTLINE_VARIANT),
             ft.Container(
                 content=progress_panel.control,
                 expand=True,

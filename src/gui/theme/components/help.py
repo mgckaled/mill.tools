@@ -13,7 +13,7 @@ def _make_tooltip(message: str) -> ft.Tooltip:
         message=message,
         wait_duration=300,
         decoration=ft.BoxDecoration(
-            bgcolor=ft.Colors.SURFACE_CONTAINER,
+            bgcolor=ft.Colors.SURFACE,
             border_radius=Radius.md,
         ),
         padding=ft.Padding(

@@ -39,7 +39,7 @@ def module_scaffold(form: ft.Control, panel: ft.Control) -> ft.Row:
     return ft.Row(
         controls=[
             ft.Container(content=form, width=Layout.form_width),
-            ft.VerticalDivider(width=1, color=ft.Colors.OUTLINE_VARIANT),
+            ft.VerticalDivider(width=2, thickness=1.5, color=ft.Colors.OUTLINE_VARIANT),
             ft.Container(
                 content=panel,
                 expand=True,
@@ -67,7 +67,7 @@ def section(
 
 
 def hairline(vertical: bool = False) -> ft.Control:
-    """Divisor fino de 1px usando outline_variant do tema."""
+    """Divisor de 1.5px usando outline_variant do tema."""
     if vertical:
-        return ft.VerticalDivider(width=1, color=ft.Colors.OUTLINE_VARIANT)
-    return ft.Divider(height=1, color=ft.Colors.OUTLINE_VARIANT)
+        return ft.VerticalDivider(width=2, thickness=1.5, color=ft.Colors.OUTLINE_VARIANT)
+    return ft.Divider(height=3, thickness=1.5, color=ft.Colors.OUTLINE_VARIANT)

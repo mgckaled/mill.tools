@@ -68,7 +68,7 @@ def build_form_view(page: ft.Page, on_start: Callable[[PipelineArgs], None]) -> 
     # ------------------------------------------------------------------
     # URL
     # ------------------------------------------------------------------
-    url_error = ft.Text("", color=ft.Colors.RED_400, size=12, visible=False)
+    url_error = ft.Text("", color=ft.Colors.ERROR, size=12, visible=False)
 
     url_field = ft.TextField(
         label="URL do YouTube",
