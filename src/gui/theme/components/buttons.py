@@ -5,7 +5,7 @@ from typing import Callable
 
 import flet as ft
 
-from src.gui.theme.tokens import Color, Motion, Radius, Space
+from src.gui.theme.tokens import Color, Motion, Radius, Space, Type
 
 
 def primary_button(
@@ -143,7 +143,7 @@ def segmented_selector(
     def _make_chip(opt: str) -> ft.Container:
         active = opt == _selected[0]
         display = labels[opt] if labels else opt
-        t = ft.Text(display, size=14, text_align=ft.TextAlign.CENTER, color=_text_color(active))
+        t = ft.Text(display, size=Type.label.size, text_align=ft.TextAlign.CENTER, color=_text_color(active))
         c = ft.Container(
             content=t,
             border=_border(active),

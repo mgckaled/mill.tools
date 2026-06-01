@@ -53,7 +53,7 @@ def help_icon(
     if long is not None and page is not None:
         def _open(_e) -> None:
             dlg = ft.AlertDialog(
-                title=ft.Text(short[:60], size=15, weight=ft.FontWeight.W_600),
+                title=ft.Text(short[:60], size=Type.body.size, weight=ft.FontWeight.W_600),
                 content=ft.Container(
                     content=ft.Text(long, selectable=True),
                     width=420,

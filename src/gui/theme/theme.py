@@ -34,12 +34,14 @@ def _color_scheme(dark: bool) -> ft.ColorScheme:
 
 def _text_theme() -> ft.TextTheme:
     return ft.TextTheme(
-        display_large=ft.TextStyle(size=34, weight=ft.FontWeight.W_600),
-        title_large=ft.TextStyle(size=22, weight=ft.FontWeight.W_600),
-        headline_small=ft.TextStyle(size=18, weight=ft.FontWeight.W_600),
-        label_large=ft.TextStyle(size=14, weight=ft.FontWeight.W_600),
-        body_medium=ft.TextStyle(size=15),
-        body_small=ft.TextStyle(size=13),
+        display_large=ft.TextStyle(size=Type.display.size, weight=ft.FontWeight.W_600),
+        title_large=ft.TextStyle(size=Type.title.size, weight=ft.FontWeight.W_600),
+        headline_small=ft.TextStyle(size=Type.heading.size, weight=ft.FontWeight.W_600),
+        label_large=ft.TextStyle(size=Type.label.size, weight=ft.FontWeight.W_600),
+        label_small=ft.TextStyle(size=Type.small.size),
+        body_large=ft.TextStyle(size=Type.body.size),
+        body_medium=ft.TextStyle(size=Type.caption.size),
+        body_small=ft.TextStyle(size=Type.mono.size, font_family=Type.FONT_MONO),
     )
 
 

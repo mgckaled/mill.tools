@@ -77,6 +77,8 @@ class Type:
     body_strong = _TypeSpec(16.0, 600)
     button = _TypeSpec(16.0, 600)
     caption = _TypeSpec(14.0, 400)
+    small = _TypeSpec(11.0, 400)   # labels de ícone, caminhos, badges
+    tiny = _TypeSpec(10.0, 400)    # rótulos micro ("Antes"/"Depois")
     mono = _TypeSpec(13, 300, "JetBrains Mono")
 
 
