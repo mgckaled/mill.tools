@@ -8,7 +8,7 @@ import flet as ft
 from flet.controls.core.stack import StackFit
 
 from src.gui import settings
-from src.gui.events import EventBus
+from src.gui.events import EventBus, PipelineEvent
 from src.gui.theme import sync_page_bgcolor
 from src.gui.modules.audio.view import build_audio_module
 from src.gui.modules.base import Module
@@ -127,6 +127,26 @@ def build_app(page: ft.Page) -> None:
         on_change=_on_rail_change,
     )
 
+    rail_gd = ft.GestureDetector(
+        content=rail,
+        mouse_cursor=ft.MouseCursor.BASIC,
+    )
+
+    def _on_pipeline_cursor(event) -> None:
+        if not isinstance(event, PipelineEvent):
+            return
+        if event.type not in ("progress_start", "task_done", "task_error"):
+            return
+        new = ft.MouseCursor.FORBIDDEN if pipeline_running[0] else ft.MouseCursor.BASIC
+        if rail_gd.mouse_cursor != new:
+            rail_gd.mouse_cursor = new
+            try:
+                rail_gd.update()
+            except RuntimeError:
+                pass
+
+    page.pubsub.subscribe(_on_pipeline_cursor)
+
     # ------------------------------------------------------------------
     # Stack — todos os módulos montados; só um visível por vez
     # ------------------------------------------------------------------
@@ -146,7 +166,7 @@ def build_app(page: ft.Page) -> None:
 
     layout = ft.Row(
         controls=[
-            rail,
+            rail_gd,
             ft.VerticalDivider(width=2, thickness=1.5, color=ft.Colors.OUTLINE_VARIANT),
             ft.Container(content=module_stack, expand=True, bgcolor=ft.Colors.SURFACE),
         ],

@@ -202,7 +202,7 @@ def build_image_form(
             alignment=ft.Alignment.CENTER,
         )
         _card_ctr_refs[op_id] = ctr
-        return ctr
+        return ft.GestureDetector(mouse_cursor=ft.MouseCursor.CLICK, content=ctr, expand=True)
 
     # Grade fixa 3 colunas × 4 linhas — spacers invisíveis completam a última linha
     _cards = [_make_card(oid, icon, lbl) for oid, icon, lbl in _OPS]

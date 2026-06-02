@@ -49,6 +49,7 @@ def _make_tooltip(message: str, has_long: bool = False) -> ft.Tooltip:
             size=Type.caption.size,
         ),
         text_align=ft.TextAlign.LEFT,
+        mouse_cursor=ft.MouseCursor.CLICK if has_long else ft.MouseCursor.HELP,
         prefer_below=True,
     )
 

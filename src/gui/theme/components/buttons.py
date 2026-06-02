@@ -163,7 +163,7 @@ def segmented_selector(
         )
         _ctrs[opt] = c
         _texts[opt] = t
-        return c
+        return ft.GestureDetector(mouse_cursor=ft.MouseCursor.CLICK, content=c, expand=True)
 
     chips = [_make_chip(o) for o in options]
     rows = [ft.Row(controls=chips[i:i + columns], spacing=Space.sm) for i in range(0, len(chips), columns)]
