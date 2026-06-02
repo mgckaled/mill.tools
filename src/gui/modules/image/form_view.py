@@ -198,7 +198,6 @@ def build_image_form(
                 color=ft.Colors.with_opacity(0.4, ft.Colors.BLACK),
             ),
             on_click=lambda e, oid=op_id: _select_op(oid),
-            ink=True,
             alignment=ft.Alignment.CENTER,
         )
         _card_ctr_refs[op_id] = ctr

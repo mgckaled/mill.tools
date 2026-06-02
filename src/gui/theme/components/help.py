@@ -68,7 +68,6 @@ def help_icon(
         tooltip=_make_tooltip(short, has_long=has_long),
         border_radius=Radius.pill,
         padding=Space.xs,
-        ink=has_long,
     )
 
     def _hover(e: ft.HoverEvent) -> None:

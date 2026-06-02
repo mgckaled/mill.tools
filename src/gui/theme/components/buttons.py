@@ -23,6 +23,7 @@ def primary_button(
         style=ft.ButtonStyle(
             shape=ft.RoundedRectangleBorder(radius=Radius.md),
             animation_duration=Motion.fast,
+            mouse_cursor=ft.MouseCursor.CLICK,
         ),
     )
 
@@ -39,6 +40,7 @@ def secondary_button(
         on_click=on_click,
         style=ft.ButtonStyle(
             shape=ft.RoundedRectangleBorder(radius=Radius.md),
+            mouse_cursor=ft.MouseCursor.CLICK,
         ),
     )
 
@@ -63,6 +65,7 @@ def action_button(
                 ft.ControlState.PRESSED: c,
             },
             overlay_color=ft.Colors.with_opacity(0.1, c),
+            mouse_cursor=ft.MouseCursor.CLICK,
         ),
     )
 
@@ -85,6 +88,7 @@ def danger_button(
                 ft.ControlState.PRESSED: err,
             },
             overlay_color=ft.Colors.with_opacity(0.1, err),
+            mouse_cursor=ft.MouseCursor.CLICK,
         ),
     )
 
@@ -159,7 +163,6 @@ def segmented_selector(
             ),
             on_click=lambda e, _o=opt: _on_click(e, _o),
             animate=ft.Animation(Motion.fast, ft.AnimationCurve.EASE_IN_OUT),
-            ink=True,
         )
         _ctrs[opt] = c
         _texts[opt] = t
