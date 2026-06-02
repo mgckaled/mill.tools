@@ -132,6 +132,10 @@ def build_audio_form(
         icon=ft.Icons.PLAY_ARROW_ROUNDED,
         disabled=True,
         on_click=lambda _: _on_start_click(),
+        style=ft.ButtonStyle(mouse_cursor={
+            ft.ControlState.DEFAULT: ft.MouseCursor.CLICK,
+            ft.ControlState.DISABLED: ft.MouseCursor.BASIC,
+        }),
     )
 
     def _on_start_click() -> None:

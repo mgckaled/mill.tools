@@ -50,6 +50,7 @@ def build_app(page: ft.Page) -> None:
         icon=ft.Icons.LIGHT_MODE if page.theme_mode == ft.ThemeMode.DARK else ft.Icons.DARK_MODE,
         tooltip="Alternar tema",
         on_click=_toggle_theme,
+        style=ft.ButtonStyle(mouse_cursor=ft.MouseCursor.CLICK),
     )
 
     page.appbar = ft.AppBar(
@@ -129,7 +130,7 @@ def build_app(page: ft.Page) -> None:
 
     rail_gd = ft.GestureDetector(
         content=rail,
-        mouse_cursor=ft.MouseCursor.BASIC,
+        mouse_cursor=ft.MouseCursor.CLICK,
     )
 
     def _on_pipeline_cursor(event) -> None:
@@ -137,7 +138,7 @@ def build_app(page: ft.Page) -> None:
             return
         if event.type not in ("progress_start", "task_done", "task_error"):
             return
-        new = ft.MouseCursor.FORBIDDEN if pipeline_running[0] else ft.MouseCursor.BASIC
+        new = ft.MouseCursor.FORBIDDEN if pipeline_running[0] else ft.MouseCursor.CLICK
         if rail_gd.mouse_cursor != new:
             rail_gd.mouse_cursor = new
             try:

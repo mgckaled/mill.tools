@@ -543,6 +543,7 @@ def build_image_form(
                 on_click=_pick_wm_image,
                 style=ft.ButtonStyle(
                     padding=ft.Padding(left=8, right=8, top=4, bottom=4),
+                    mouse_cursor=ft.MouseCursor.CLICK,
                 ),
             ),
         ], spacing=8, vertical_alignment=ft.CrossAxisAlignment.CENTER),
@@ -964,6 +965,10 @@ def build_image_form(
         icon=ft.Icons.PLAY_ARROW_ROUNDED,
         disabled=True,
         on_click=lambda _: _on_start_click(),
+        style=ft.ButtonStyle(mouse_cursor={
+            ft.ControlState.DEFAULT: ft.MouseCursor.CLICK,
+            ft.ControlState.DISABLED: ft.MouseCursor.BASIC,
+        }),
     )
 
     def _parse_int(tf: ft.TextField, default: int) -> int:

@@ -262,6 +262,10 @@ def build_form_view(page: ft.Page, on_start: Callable[[PipelineArgs], None]) -> 
         "Iniciar",
         icon=ft.Icons.PLAY_ARROW_ROUNDED,
         disabled=True,
+        style=ft.ButtonStyle(mouse_cursor={
+            ft.ControlState.DEFAULT: ft.MouseCursor.CLICK,
+            ft.ControlState.DISABLED: ft.MouseCursor.BASIC,
+        }),
     )
 
     def _on_start_click(e: ft.ControlEvent) -> None:
