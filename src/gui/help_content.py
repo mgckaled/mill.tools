@@ -52,6 +52,18 @@ HELP_SHORT: dict[str, str] = {
         "Embute título, autor e capa no arquivo de saída. "
         "Em ogg/opus a capa pode ser omitida automaticamente."
     ),
+    "audio.denoise": (
+        "Atenua ruído de fundo constante (ventilador, hum, chiado de fita) via spectral gating. "
+        "Requer noisereduce e soundfile instalados."
+    ),
+    "audio.normalize": (
+        "Ajusta o volume para um nível consistente em LUFS via ffmpeg loudnorm. "
+        "Não distorce nem clipa (True Peak ≤ −1 dBFS)."
+    ),
+    "audio.normalize_lufs": (
+        "Alvo de loudness integrado. −14 LUFS: streaming (Spotify/YouTube). "
+        "−23 LUFS: broadcast. −16 a −18 LUFS: podcasts."
+    ),
     # --- Imagens ---
     "image.input": (
         "Cole URLs diretas de imagens ou selecione arquivos locais. "
@@ -165,6 +177,23 @@ HELP_LONG: dict[str, str] = {
         "• llava:7b — mais capaz e detalhado, requer ~4 GB RAM.\n"
         "• minicpm-v — alternativa leve com bom desempenho em PT-BR.\n\n"
         "O modelo deve estar instalado no Ollama antes de usar."
+    ),
+    "audio.denoise": (
+        "Redução de Ruído — Spectral Gating\n\n"
+        "Analisa o espectro do áudio e atenua as frequências que se comportam como ruído "
+        "estacionário. Bom para ventiladores, ar-condicionado, hum de fio e chiado de fita.\n\n"
+        "A saída é sempre WAV para não perder qualidade no passo intermediário.\n\n"
+        "Requer: uv add noisereduce soundfile (ou uv sync após atualizar pyproject.toml)."
+    ),
+    "audio.normalize": (
+        "Normalização de Volume — EBU R128\n\n"
+        "Usa o filtro loudnorm do ffmpeg em dois passos: primeiro mede o loudness integrado "
+        "(LUFS), depois aplica ganho linear para atingir o alvo preservando o True Peak "
+        "(máx. −1 dBFS).\n\n"
+        "• −14 LUFS: Spotify, Apple Music, YouTube.\n"
+        "• −23 LUFS: broadcast (TV/rádio).\n"
+        "• −16 a −18 LUFS: podcasts.\n\n"
+        "O resultado mantém o mesmo contêiner e codec do arquivo de entrada."
     ),
     "transcription.beam_size": (
         "O decodificador do Whisper usa busca em feixe (beam search) para gerar "

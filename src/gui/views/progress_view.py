@@ -171,19 +171,9 @@ def _resolve_messages(event: PipelineEvent) -> list[str]:
         case "log":
             msg = p.get("message", "")
             return [msg] if msg else []
-        case "audio_op_start":
-            op = p.get("operation", "")
-            name = p.get("item_name", "")
-            idx = p.get("item_idx", "?")
-            total = p.get("total", "?")
-            verb = {"download": "Baixando", "convert": "Convertendo", "extract": "Extraindo"}.get(op, op)
-            return [f"[~] {verb} ({idx}/{total}): {name}"]
-        case "audio_op_done":
-            path = p.get("output_path", "")
-            elapsed = p.get("elapsed", "")
-            name = Path(path).name if path else path
-            suffix = f" ({elapsed})" if elapsed else ""
-            return [f"[✓] Salvo: {name}{suffix}"]
+        case "audio_op_start" | "audio_op_done":
+            from src.gui.modules.audio import pipeline_log as _audio_log
+            return _audio_log.resolve_messages(event)
         case "queue_progress" | "progress_start" | "progress_update":
             return []
         case "task_done":
@@ -270,12 +260,9 @@ def _resolve_stage_label(event: PipelineEvent) -> str | None:
             cur = p.get("current_item", "?")
             tot = p.get("total_items", "?")
             return f"Item {cur}/{tot}" + (f" — {name}" if name else "")
-        case "audio_op_start":
-            op = event.payload.get("operation", "")
-            _labels = {"download": "Baixando...", "convert": "Convertendo...", "extract": "Extraindo áudio..."}
-            return _labels.get(op, "Processando...")
-        case "audio_op_done":
-            return "Concluído."
+        case "audio_op_start" | "audio_op_done":
+            from src.gui.modules.audio import pipeline_log as _audio_log
+            return _audio_log.resolve_stage_label(event)
         case "task_done":
             return "Pipeline concluído!"
         case "task_error":

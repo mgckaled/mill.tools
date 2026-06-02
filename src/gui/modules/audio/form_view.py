@@ -9,7 +9,8 @@ import flet as ft
 
 from src.gui import settings
 from src.gui.components.input_source import InputItem, build_input_source
-from src.gui.theme.components import Cursor, hairline, help_icon_for, section, segmented_selector
+from src.gui.theme.components import Cursor, hairline, help_icon_for, section, segmented_selector, switch_row
+from src.gui.theme.tokens import Space, Type
 
 _ALLOWED_EXTS = [
     "mp3", "wav", "flac", "ogg", "opus", "aac", "m4a",
@@ -37,6 +38,9 @@ class AudioArgs:
     fmt: str = "mp3"
     quality: str = "best"
     embed_meta: bool = True
+    denoise: bool = False
+    normalize: bool = False
+    normalize_target_lufs: float = -14.0
 
 
 @dataclass
@@ -125,6 +129,85 @@ def build_audio_form(
         animate_opacity=ft.Animation(150, ft.AnimationCurve.EASE_IN),
     )
 
+    # ── Pós-processamento — denoise + normalize ───────────────────────────────
+
+    denoise_switch = switch_row(
+        "Reduzir ruído (spectral gating)",
+        cfg.get("last_audio_denoise", False),
+    )
+    normalize_switch = switch_row(
+        "Normalizar volume (loudnorm)",
+        cfg.get("last_audio_normalize", False),
+    )
+
+    lufs_values: list[float] = [cfg.get("last_audio_lufs", -14.0)]
+
+    _lufs_value_text = ft.Text(
+        f"{lufs_values[0]:.0f} LUFS",
+        size=Type.label.size,
+        weight=ft.FontWeight.W_600,
+        color=ft.Colors.PRIMARY,
+    )
+
+    _lufs_ctl = ft.Slider(
+        value=lufs_values[0],
+        min=-23.0,
+        max=-6.0,
+        divisions=17,
+        active_color=ft.Colors.PRIMARY,
+        label="{value:.0f} LUFS",
+        expand=True,
+    )
+
+    def _on_lufs_change(e) -> None:
+        lufs_values[0] = e.control.value
+        _lufs_value_text.value = f"{lufs_values[0]:.0f} LUFS"
+        if _lufs_value_text.page:
+            _lufs_value_text.update()
+
+    _lufs_ctl.on_change = _on_lufs_change
+
+    def _set_lufs_disabled(disabled: bool) -> None:
+        _lufs_ctl.disabled = disabled
+
+    _lufs_icon = help_icon_for("audio.normalize_lufs", page)
+    _lufs_col = ft.Column(
+        controls=[
+            ft.Row(
+                [
+                    ft.Text(
+                        "Alvo (LUFS)",
+                        size=Type.label.size,
+                        weight=ft.FontWeight.W_600,
+                        color=ft.Colors.ON_SURFACE_VARIANT,
+                    ),
+                ]
+                + ([_lufs_icon] if _lufs_icon else [])
+                + [ft.Container(expand=True), _lufs_value_text],
+                spacing=Space.xs,
+                vertical_alignment=ft.CrossAxisAlignment.CENTER,
+            ),
+            _lufs_ctl,
+        ],
+        spacing=Space.xs,
+    )
+
+    lufs_block = ft.Container(
+        content=_lufs_col,
+        visible=bool(normalize_switch.value),
+        animate_opacity=ft.Animation(150, ft.AnimationCurve.EASE_IN),
+    )
+
+    def _on_normalize_change(e) -> None:
+        lufs_block.visible = bool(e.control.value)
+        if lufs_block.page:
+            lufs_block.update()
+
+    normalize_switch.on_change = _on_normalize_change
+
+    _denoise_icon   = help_icon_for("audio.denoise",    page)
+    _normalize_icon = help_icon_for("audio.normalize",  page)
+
     # ── Botão Iniciar ─────────────────────────────────────────────────────────
 
     start_btn = ft.FilledButton(
@@ -140,15 +223,21 @@ def build_audio_form(
         if not items:
             return
         settings.save({
-            "last_audio_fmt": _get_fmt(),
-            "last_audio_quality": _get_quality(),
+            "last_audio_fmt":       _get_fmt(),
+            "last_audio_quality":   _get_quality(),
             "last_audio_embed_meta": embed_switch.value,
+            "last_audio_denoise":   denoise_switch.value,
+            "last_audio_normalize": normalize_switch.value,
+            "last_audio_lufs":      lufs_values[0],
         })
         on_start(AudioArgs(
             items=items,
             fmt=_get_fmt(),
             quality=_get_quality(),
             embed_meta=bool(embed_switch.value) and _has_url_items[0],
+            denoise=bool(denoise_switch.value),
+            normalize=bool(normalize_switch.value),
+            normalize_target_lufs=lufs_values[0],
         ))
 
     # ── set_running ───────────────────────────────────────────────────────────
@@ -161,6 +250,9 @@ def build_audio_form(
         _set_fmt_disabled(running)
         _set_quality_disabled(running or _get_fmt() in _NO_BITRATE_FMTS)
         embed_switch.disabled = running
+        denoise_switch.disabled   = running
+        normalize_switch.disabled = running
+        _set_lufs_disabled(running)
         page.update()
 
     # ── fill_from_path (bridge on_mount) ─────────────────────────────────────
@@ -195,6 +287,26 @@ def build_audio_form(
                         # ── Bitrate ───────────────────────────────────────
                         section("Bitrate (kbps)", quality_grid, embed_row,
                                 help_key="audio.bitrate", page=page),
+
+                        hairline(),
+
+                        # ── Pós-processamento ─────────────────────────────
+                        section(
+                            "Pós-processamento",
+                            ft.Row(
+                                [denoise_switch]
+                                + ([_denoise_icon] if _denoise_icon else []),
+                                spacing=4,
+                                vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                            ),
+                            ft.Row(
+                                [normalize_switch]
+                                + ([_normalize_icon] if _normalize_icon else []),
+                                spacing=4,
+                                vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                            ),
+                            lufs_block,
+                        ),
 
                         hairline(),
 

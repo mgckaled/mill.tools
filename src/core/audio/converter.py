@@ -93,6 +93,10 @@ def convert_audio(
     out_dir.mkdir(parents=True, exist_ok=True)
     out_path = out_dir / f"{src.stem}.{fmt}"
 
+    # Evita "same as Input #0" quando src já está em out_dir com mesmo formato
+    if out_path.resolve() == src.resolve():
+        return src
+
     cmd = ["ffmpeg", "-y", "-i", str(src)]
     if bitrate and bitrate != "best":
         cmd += ["-b:a", f"{bitrate}k"]

@@ -8,8 +8,11 @@ from time import time
 from typing import TYPE_CHECKING
 
 from src.core.audio.converter import AUDIO_EXTENSIONS, VIDEO_EXTENSIONS, convert_audio, extract_audio
+from src.core.audio.denoiser import denoise as _denoise_audio, is_available as _denoise_available
 from src.core.audio.downloader import download_audio
+from src.core.audio.normalizer import normalize_lufs as _normalize_lufs
 from src.gui.events import LogEventHandler
+from src.gui.modules.audio import pipeline_log
 from src.gui.modules.audio.form_view import AudioArgs
 from src.utils import AUDIO_PROCESSED_DIR, AUDIO_SOURCE_DIR
 
@@ -152,13 +155,55 @@ def run_audio_pipeline(
                     })
                     return False
 
+            original_src_size = out_path.stat().st_size
+
+            # ── Pós: Denoise ──────────────────────────────────────────────────
+            if args.denoise:
+                if not _denoise_available():
+                    emit("log", payload={"message": "[!] noisereduce não instalado — ignorando denoise."})
+                else:
+                    emit("audio_op_start", payload={
+                        "operation": "denoise",
+                        "item_name": out_path.name,
+                        "item_idx": idx,
+                        "total": total,
+                    })
+                    emit("log", payload={"message": pipeline_log.fmt_denoise_start(out_path.name)})
+                    emit("log", payload={"message": pipeline_log.fmt_denoise_detail(stationary=True)})
+                    out_path = _denoise_audio(out_path, AUDIO_PROCESSED_DIR)
+
+            # ── Pós: Normalize ────────────────────────────────────────────────
+            if args.normalize:
+                emit("audio_op_start", payload={
+                    "operation": "normalize",
+                    "item_name": out_path.name,
+                    "item_idx": idx,
+                    "total": total,
+                })
+                emit("log", payload={"message": pipeline_log.fmt_normalize_start(out_path.name)})
+                emit("log", payload={"message": pipeline_log.fmt_normalize_detail(args.normalize_target_lufs)})
+
+                def _norm_cb(ratio: float) -> None:
+                    emit("progress_update", payload={"current": ratio})
+
+                out_path, stats = _normalize_lufs(
+                    out_path, AUDIO_PROCESSED_DIR, args.normalize_target_lufs, _norm_cb
+                )
+
+                if stats:
+                    emit("log", payload={"message": pipeline_log.fmt_normalize_measured(stats)})
+                else:
+                    emit("log", payload={"message": pipeline_log.fmt_normalize_fallback()})
+
             elapsed = time() - t0
             output_paths.append(str(out_path))
             emit("audio_op_done", payload={
-                "output_path": str(out_path),
-                "elapsed": f"{elapsed:.1f}s",
-                "item_idx": idx,
-                "total": total,
+                "output_path":    str(out_path),
+                "elapsed":        f"{elapsed:.1f}s",
+                "item_idx":       idx,
+                "total":          total,
+                "src_size_bytes": original_src_size,
+                "out_size_bytes": out_path.stat().st_size,
             })
 
             if cancel_event.is_set():
