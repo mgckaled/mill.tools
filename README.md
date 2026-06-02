@@ -15,28 +15,40 @@
 
 ## Visão geral
 
-**mill.tools** é uma multiferramenta extensível, organizada em **módulos** acessíveis por uma barra lateral na GUI desktop (e via CLI). A transcrição roda **100% local** com [faster-whisper](https://github.com/SYSTRAN/faster-whisper) (aceleração GPU, sem PyTorch) e usa [LangChain](https://www.langchain.com/) para formatação, análise e condensação — com escolha de provider: [Ollama](https://ollama.com) local (padrão) ou [Google Gemini](https://ai.google.dev/) na nuvem (free tier).
+**mill.tools** é uma caixa de ferramentas pessoal para quem trabalha com áudio, vídeo e imagens — tudo rodando diretamente no seu computador, sem enviar arquivos para servidores externos, sem assinaturas e sem limites de uso.
 
-### Recursos
+A ferramenta é organizada em **módulos independentes**, cada um especializado em uma categoria de tarefa. Você os acessa por uma interface visual (aplicativo desktop) ou pela linha de comando. Os módulos também se integram: após baixar e converter um áudio, por exemplo, um clique já o envia para transcrição.
 
-- 🎙️ **Transcrição local** com Whisper (faster-whisper / GPU), detecção automática de idioma e marcação de trechos de baixa confiança.
-- 🧠 **Pós-processamento por LLM** — formatação em parágrafos, análise estruturada (10 campos) e digest condensado para uso como contexto.
-- 🔀 **Provider flexível** — Ollama local por padrão; Gemini na nuvem por prefixo de modelo, sem mudar o fluxo.
-- 🎵 **Módulo Áudio** — download (YouTube, SoundCloud, etc. via yt-dlp), conversão e extração de áudio, em fila, com capa/metadados embutidos.
-- 🖼️ **Módulo Imagens** — 12 operações (conversão, redimensionamento, corte, rotação, marca d'água, borda, ajustes, filtros, favicon, colagem, remoção de fundo via rembg e descrição via Ollama vision), visor Before/After integrado.
-- 🖥️ **GUI desktop** (Flet) com acompanhamento em tempo real estilo CLI, barra de progresso determinada e spinner animado.
-- 🔗 **Bridge Áudio → Transcrição** — botão "Transcrever este arquivo" envia o arquivo processado diretamente para o módulo de Transcrição.
-- 🎨 **Design System** — paleta unificada com acento dourado, suporte a temas claro/escuro e contraste WCAG 2.1.
-- ℹ️ **Ajuda contextual** — ícone ⓘ em todos os controles: tooltip no hover, modal com detalhes ao clicar.
+### O que você pode fazer
+
+- 🎙️ **Transcrever áudio e vídeo** — converta fala em texto usando o mesmo modelo de reconhecimento de voz da OpenAI (Whisper), acelerado pela placa de vídeo do seu computador. O idioma é detectado automaticamente, e trechos de baixa confiança ficam marcados para revisão.
+
+- 🧠 **Transformar transcrições em conhecimento** — após transcrever, a inteligência artificial organiza o texto em parágrafos legíveis, extrai um resumo estruturado com pontos-chave, tópicos, citações e conclusões, e ainda gera uma versão compacta pronta para colar como contexto em outros sistemas de IA.
+
+- 🎵 **Baixar e converter áudio** — faça download de áudio do YouTube, SoundCloud e centenas de outras plataformas, ou converta e extraia faixas de arquivos de vídeo locais. Formatos de saída: MP3, WAV, M4A, OGG, OPUS e mais, com capa e metadados embutidos automaticamente.
+
+- 🖼️ **Processar imagens em lote** — 12 operações disponíveis: converter formatos, redimensionar, recortar, girar, aplicar filtros e ajustes de cor, adicionar marca d'água ou borda, gerar favicon `.ico`, montar colagens — e com IA: remover o fundo automaticamente e gerar descrições textuais detalhadas da imagem. Tudo com visor Antes/Depois integrado.
+
+- 🔀 **Escolher onde a IA roda** — por padrão, todos os modelos de linguagem funcionam 100% offline via [Ollama](https://ollama.com) (nenhum dado sai do computador). Para quem prefere, o [Google Gemini](https://ai.google.dev/) gratuito está disponível como alternativa na nuvem — basta escolher o modelo na interface.
 
 ### Módulos
 
-| Módulo | Status | O que faz |
+| Módulo | Status | Descrição |
 |---|---|---|
-| **Transcrição** | ✅ | Whisper local + formatação/análise/digest via LLM |
-| **Áudio** | ✅ | Download, conversão e extração de áudio (fila, capa/metadados) |
-| **Vídeo** | 🚧 | Download/conversão/extração (planejado — PR4) |
-| **Imagens** | ✅ | 12 operações: manipulação + conversão + remoção de fundo (rembg) + descrição IA (Ollama vision) |
+| **Transcrição** | ✅ Disponível | Whisper local com pós-processamento por IA: parágrafos, análise estruturada e resumo |
+| **Áudio** | ✅ Disponível | Download de plataformas, conversão de formatos e extração de faixas, em fila com metadados |
+| **Imagens** | ✅ Disponível | 12 operações: manipulação, conversão, remoção de fundo e descrição por IA vision |
+| **Vídeo** | 🚧 Em breve | Download, conversão e extração de vídeo (próxima versão) |
+
+### Destaques técnicos
+
+| Característica | Detalhe |
+|---|---|
+| Transcrição local | [faster-whisper](https://github.com/SYSTRAN/faster-whisper) + ctranslate2, aceleração GPU, sem PyTorch |
+| Sem dependência de nuvem | Ollama local por padrão; Gemini como opção opt-in por prefixo de modelo |
+| Remoção de fundo | rembg + ONNX Runtime, 100% CPU, sem GPU dedicada |
+| Interface desktop | [Flet 0.85](https://flet.dev) (Flutter/Windows) com log em tempo real e design system próprio |
+| Ajuda contextual | Ícone ⓘ em todos os controles — tooltip no hover, modal detalhado ao clicar |
 
 ---
 
