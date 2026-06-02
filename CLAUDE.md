@@ -150,7 +150,71 @@ Iniciada com `uv run gui.py`. Flutter desktop no Windows.
 - **Sidebar (NavigationRail)** + `ft.Stack` com todos os módulos montados; só um visível por vez (toggle de `visible`).
 - **EventBus** (`events.py`): publica `PipelineEvent(type, stage, payload, module_id)` via `page.pubsub.send_all()` (thread-safe). Worker em thread daemon; UI atualiza na thread principal.
 - **LogEventHandler**: captura `logging.INFO` e encaminha como eventos `log`. `_SUPPRESSED_PREFIXES` filtra duplicados. Recebe `module_id`.
-- **Design System** (`theme/components/`): importar **exclusivamente** via `src.gui.theme.components`. Fábricas: `primary_button`, `secondary_button`, `danger_button`, `action_button`, `segmented_selector`, `output_card`, `spinner()` → `(control, start, stop)`, `log_line`, `summary_card`, `section_title`, `labeled_field`, `slider_row`, `switch_row`, `hairline`, `module_scaffold`, `section`, `section_label`, `help_icon`, `help_icon_for`.
+- **Design System** (`theme/components/`): importar **exclusivamente** via `src.gui.theme.components`. Fábricas e tokens disponíveis:
+
+| Símbolo | Tipo | Descrição |
+|---|---|---|
+| `Cursor` | classe-token | constantes de cursor: `interactive`, `disabled`, `forbidden`, `help`, `btn` (dict por ControlState) |
+| `primary_button` | factory | FilledButton dourado — `mouse_cursor=Cursor.btn` |
+| `secondary_button` | factory | OutlinedButton — `mouse_cursor=Cursor.btn` |
+| `action_button` | factory | TextButton azul — `mouse_cursor=Cursor.btn` |
+| `danger_button` | factory | TextButton vermelho — `mouse_cursor=Cursor.btn` |
+| `segmented_selector` | factory | grade de chips clicáveis com `Cursor.interactive` |
+| `output_card` | factory | card de arquivo de saída com "Abrir pasta" |
+| `spinner()` | factory | retorna `(control, start, stop)` |
+| `log_line` | factory | linha colorida de log |
+| `summary_card` | factory | card de resumo com título |
+| `section_title` | factory | título de seção |
+| `labeled_field` | factory | campo com rótulo |
+| `slider_row` | factory | linha slider + label |
+| `switch_row` | factory | linha switch + label |
+| `hairline` | factory | divisória fina |
+| `module_scaffold` | factory | layout base de módulo |
+| `section` | factory | bloco de seção com padding |
+| `section_label` | factory | rótulo de bloco interno |
+| `help_icon` | factory | ⓘ com tooltip; clique abre modal se `long` e `page` fornecidos |
+| `help_icon_for` | factory | ⓘ lido do registro `help_content.py` pela chave |
+
+### Cursor — convenções de UX
+
+`Cursor` vive em `theme/components/buttons.py` (importa Flet); **`tokens.py` permanece livre de Flet** (só primitivos Python).
+
+| Token | Valor Flutter | Quando usar |
+|---|---|---|
+| `Cursor.interactive` | `MouseCursor.CLICK` | GestureDetector, IconButton, qualquer área clicável |
+| `Cursor.disabled` | `MouseCursor.BASIC` | estado desabilitado (embutido em `Cursor.btn`) |
+| `Cursor.forbidden` | `MouseCursor.FORBIDDEN` | NavigationRail quando pipeline está rodando |
+| `Cursor.help` | `MouseCursor.HELP` | tooltip de ajuda sem modal |
+| `Cursor.btn` | dict `{DEFAULT: CLICK, DISABLED: BASIC}` | `ButtonStyle.mouse_cursor` em qualquer botão que possa ser desabilitado |
+
+**Regra**: todo elemento clicável usa `Cursor.*` — nunca escrever `ft.MouseCursor.*` fora de `buttons.py`.
+
+### Help system
+
+- **Registro central**: `help_content.py` — dicionários `HELP_SHORT` (tooltip) e `HELP_LONG` (modal).
+- **Importar sempre**: `from src.gui.theme.components import help_icon_for`
+- `help_icon_for(key, page)` → retorna `ft.Container | None`; retorna `None` se a chave não existir — o chamador pode omitir sem lógica extra.
+- Tooltip estilizado: `BoxConstraints(max_width=280)`, `BoxDecoration` com borda + sombra, `mouse_cursor=Cursor.interactive` (com modal) ou `Cursor.help` (sem modal).
+- Hint de clique (`↗ Clique para mais detalhes`) é anexado automaticamente ao texto do tooltip quando `HELP_LONG` existe.
+
+### Tipografia — tokens completos
+
+`tokens.py` → classe `Type`:
+
+| Token | Tamanho | Uso |
+|---|---|---|
+| `Type.display` | 34 / 600 | títulos grandes |
+| `Type.title` | 22 / 600 | títulos de seção |
+| `Type.heading` | 18 / 600 | sub-títulos |
+| `Type.label` | 14 / 600 | rótulos de campo |
+| `Type.body` | 16 / 400 | texto corrido |
+| `Type.body_strong` | 16 / 600 | texto em destaque |
+| `Type.caption` | 14 / 400 | texto secundário, tooltips |
+| `Type.mono` | 13 / 300 | caminhos, código (`JetBrains Mono`) |
+| `Type.small` | 11 / 400 | labels de ícone, badges, caminhos compactos |
+| `Type.tiny` | 10 / 400 | rótulos micro ("Antes"/"Depois") |
+
+`theme.py` → `_text_theme()` lê **todos** os tamanhos de `Type.*` — nunca hardcodar px em componentes DS.
 
 ### Flet 0.85 — quirks conhecidos
 
@@ -171,6 +235,12 @@ Iniciada com `uv run gui.py`. Flutter desktop no Windows.
 | `ColorScheme.surface` vs page.bgcolor | `surface` → `ft.Colors.SURFACE` (painéis). `page.bgcolor` explícito via `sync_page_bgcolor(page)` |
 | `surface_variant` / `surface_container_*` no ColorScheme | kwargs inválidos — geram `TypeError`. Suportados: `surface`, `on_surface`, `on_surface_variant`, `outline`, `outline_variant` |
 | `ft.Colors.SURFACE_VARIANT` / `SURFACE_CONTAINER` | não existem no 0.85 — geram `AttributeError`. Usar `ft.Colors.SURFACE` |
+| `BoxDecoration(shadow=...)` | deve ser `shadows=[ft.BoxShadow(...)]` — plural, lista |
+| `Container(box_shadow=...)` | deve ser `Container(shadow=ft.BoxShadow(...))` — sem prefixo `box_` |
+| `ink=True` em Container | cria Flutter InkWell que **absorve** eventos de ponteiro e anula o cursor do GestureDetector externo — cursor só aparece nas margens. Nunca usar `ink=True` em containers clicáveis; usar `GestureDetector` externo + `Cursor.*` |
+| `ft.Tooltip` sem `size_constraints` | texto renderiza em linha única sem quebra. Usar `size_constraints=ft.BoxConstraints(max_width=280)` |
+| `ft.NavigationRailDestination` cursor | não tem propriedade `mouse_cursor`. Solução: envolver o `NavigationRail` num `ft.GestureDetector(mouse_cursor=Cursor.interactive)` e alternar para `Cursor.forbidden` via `page.pubsub` quando pipeline estiver rodando |
+| `ButtonStyle.mouse_cursor` | aceita valor flat (`Cursor.interactive`) **ou** dict por estado (`Cursor.btn`). `ControlState.DISABLED` existe e funciona — usar `Cursor.btn` em botões que podem ser desabilitados |
 
 ### Eventos do pipeline
 
