@@ -59,7 +59,7 @@ src/
     │   ├── base.py              — dataclass Module (id, label, icon, control, on_mount/on_unmount)
     │   ├── transcription/view.py
     │   ├── audio/               — form_view.py, worker.py, view.py
-    │   ├── image/               — form_view.py, worker.py, view.py (PR-IMG-2B)
+    │   ├── image/               — form_view.py, worker.py, view.py, pipeline_log.py (PR-IMG-2B)
     │   └── video/view.py        — placeholder (PR4)
     └── views/
         ├── form_view.py         — formulário de Transcrição → FormPanel
@@ -99,6 +99,7 @@ Conversão, manipulação e operações de IA com visor Before/After integrado.
 - **GUI** (`form_view.py`): `ImageArgs` com 33 campos. Card `remove_bg` desabilitado com tooltip quando extra não instalado (`_UNAVAILABLE`). Blocos `rembg_block` e `describe_block` com Dropdown de modelo. Formato oculto para `favicon` e `describe`.
 - **Visor Before/After**: `_single_pane` (placeholder ou input thumb) e `_before_after_row` (Antes/Depois em `ft.Row`) num `ft.Row` pai, toggle por `visible=`. `_last_input_thumb` preserva o thumb do input para o split após `image_op_done`.
 - **Formatos**: JPG, PNG, WebP, AVIF, TIFF, BMP, GIF, ICO. `LOSSY_FMTS = {"jpg", "jpeg", "webp"}`.
+- **`pipeline_log.py`**: fonte única de mensagens do módulo — constantes `OP_VERBS`/`OP_LABELS`, builders `fmt_*` por operação (metadados PIL, detalhes de cada op, rembg, describe), `resolve_messages()` e `resolve_stage_label()` usados por `view.py`. `worker.py` emite metadados lazy (`_try_read_meta` lê cabeçalho sem decodificar pixels) e detalhe específico antes de cada chamada ao core. **Padrão a replicar nos módulos Áudio e Vídeo (PR4).**
 - **Saída**: downloads → `output/image/source/`; processadas → `output/image/processed/`.
 
 ## Splash + spinner (branding)
@@ -154,6 +155,7 @@ Iniciada com `uv run gui.py`. Flutter desktop no Windows.
 - **Sidebar (NavigationRail)** + `ft.Stack` com todos os módulos montados; só um visível por vez (toggle de `visible`).
 - **EventBus** (`events.py`): publica `PipelineEvent(type, stage, payload, module_id)` via `page.pubsub.send_all()` (thread-safe). Worker em thread daemon; UI atualiza na thread principal.
 - **LogEventHandler**: captura `logging.INFO` e encaminha como eventos `log`. `_SUPPRESSED_PREFIXES` filtra duplicados. Recebe `module_id`.
+- **`pipeline_log.py` (por módulo)**: vocabulário centralizado de mensagens — `worker.py` importa `fmt_*` para `emit("log", ...)`, `view.py` importa `resolve_messages()`/`resolve_stage_label()`. Separa "o que emitir" de "como exibir" e elimina strings inline espalhadas. Implementado em `modules/image/`; padrão para módulos futuros.
 - **Design System** (`theme/components/`): factories, tokens de tipografia, cursores e help system → skill `design-system` (`.claude/skills/design-system/SKILL.md`).
 
 ### Flet 0.85 — quirks conhecidos
