@@ -192,6 +192,11 @@ def build_image_form(
             expand=True,
             bgcolor=ft.Colors.SURFACE,
             border=ft.Border(left=side, right=side, top=side, bottom=side),
+            shadow=ft.BoxShadow(
+                blur_radius=8, spread_radius=0,
+                offset=ft.Offset(0, 3),
+                color=ft.Colors.with_opacity(0.4, ft.Colors.BLACK),
+            ),
             on_click=lambda e, oid=op_id: _select_op(oid),
             ink=True,
             alignment=ft.Alignment.CENTER,

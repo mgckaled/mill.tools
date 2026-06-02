@@ -152,6 +152,11 @@ def segmented_selector(
             padding=ft.Padding(left=2, right=2, top=7, bottom=7),
             expand=True,
             alignment=ft.Alignment.CENTER,
+            shadow=ft.BoxShadow(
+                blur_radius=4, spread_radius=0,
+                offset=ft.Offset(0, 2),
+                color=ft.Colors.with_opacity(0.25, ft.Colors.BLACK),
+            ),
             on_click=lambda e, _o=opt: _on_click(e, _o),
             animate=ft.Animation(Motion.fast, ft.AnimationCurve.EASE_IN_OUT),
             ink=True,
