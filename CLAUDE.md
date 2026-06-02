@@ -9,7 +9,8 @@ Multiferramenta pessoal extensível para processamento de áudio, vídeo e trans
 - **yt-dlp** — download de áudio/vídeo e metadados
 - **ffmpeg** — conversão/extração de áudio
 - **Pillow 12.2+** — processamento de imagens (AVIF nativo, EXIF transpose, conversão multi-formato)
-- **LangChain** + **Ollama** (local) / **Google Gemini** (nuvem) — formatação, análise e condensação
+- **rembg[cpu]** + **onnxruntime** (extra `[ai-image]`) — remoção de fundo CPU/ONNX
+- **LangChain** + **Ollama** (local) / **Google Gemini** (nuvem) — formatação, análise, condensação e descrição de imagens (vision)
 - **Flet 0.85** — GUI desktop (Flutter no Windows)
 - **tqdm** — barra de progresso (CLI)
 
@@ -41,6 +42,8 @@ src/
 │       ├── downloader.py        — urllib: URL → output/image/source/
 │       ├── converter.py         — convert_image(): EXIF transpose, RGBA→RGB, quality lossy
 │       ├── transform.py         — 9 funções de manipulação (resize/crop/rotate/watermark/border/adjust/filter/favicon/contact_sheet)
+│       ├── background.py        — remove_background() via rembg/ONNX (imports lazy; extra [ai-image])
+│       ├── describe.py          — describe_image() + save_description() via LangChain + Ollama vision
 │       └── info.py              — image_info() + thumbnail_bytes()
 └── gui/
     ├── app.py                   — build_app(): NavigationRail + registry de módulos + navigate_to
@@ -56,7 +59,7 @@ src/
     │   ├── base.py              — dataclass Module (id, label, icon, control, on_mount/on_unmount)
     │   ├── transcription/view.py
     │   ├── audio/               — form_view.py, worker.py, view.py
-    │   ├── image/               — form_view.py, worker.py, view.py (PR-IMG-2A)
+    │   ├── image/               — form_view.py, worker.py, view.py (PR-IMG-2B)
     │   └── video/view.py        — placeholder (PR4)
     └── views/
         ├── form_view.py         — formulário de Transcrição → FormPanel
@@ -67,7 +70,7 @@ src/
 ## Sistema de módulos (GUI)
 
 A GUI é dividida em módulos selecionáveis numa **NavigationRail** à esquerda. Estado:
-**Áudio** (PR3, completo), **Vídeo** (placeholder, PR4), **Imagens** (PR-IMG-2A, completo), **Transcrição** (completo).
+**Áudio** (PR3, completo), **Vídeo** (placeholder, PR4), **Imagens** (PR-IMG-2B, completo), **Transcrição** (completo).
 Ordem na rail: Áudio → Vídeo → Imagens → Transcrição.
 
 - **Registry** (`app.py`): `MODULES: list[Module]` é a fonte única. Adicionar um módulo = uma entrada na lista.
@@ -87,13 +90,13 @@ Ordem na rail: Áudio → Vídeo → Imagens → Transcrição.
 
 > IA de áudio planejada para **PR3.1** (DeepFilterNet/Demucs), isolada em extra opcional torch.
 
-## Módulo Imagens (PR-IMG-2A)
+## Módulo Imagens (PR-IMG-2B)
 
-Conversão e manipulação de imagens com visor Before/After integrado.
+Conversão, manipulação e operações de IA com visor Before/After integrado.
 
-- **Operações** (10, selecionadas via card grid 3 colunas): `convert`, `resize` (caber/exato/escala%), `crop` (manual/proporção/auto-trim), `rotate` (ângulo/flip/EXIF), `watermark` (texto ou imagem), `border`, `adjust` (brilho/contraste/saturação/nitidez), `filter` (blur/sharpen/autocontrast/equalizar/cinza), `favicon` (.ico multires), `contact_sheet` (N→1).
-- **Core** (`core/image/transform.py`): 9 funções puras. Helpers: `_out_path` (colisão _1/_2…), `_save` (replica lógica de converter.py), `_hex_rgb`, `_ensure_rgb`. `contact_sheet` é N→1 — tratado antes do loop em `_run_contact_sheet(args, cancel_event, emit)`.
-- **GUI** (`form_view.py`): `ImageArgs` com 30+ campos. Card grid `expand=True` em rows de 3. Blocos de parâmetros condicionais com sub-visibilidade (resize/crop/watermark). Formato: segmented selector para `convert`; Dropdown com "Preservar original" para demais; oculto para `favicon`.
+- **Operações** (12, selecionadas via card grid 3 colunas): `convert`, `resize` (caber/exato/escala%), `crop` (manual/proporção/auto-trim), `rotate` (ângulo/flip/EXIF), `watermark` (texto ou imagem), `border`, `adjust` (brilho/contraste/saturação/nitidez), `filter` (blur/sharpen/autocontrast/equalizar/cinza), `favicon` (.ico multires), `contact_sheet` (N→1), `remove_bg` (rembg/ONNX, CPU), `describe` (Ollama vision → .txt).
+- **Core** (`core/image/`): `transform.py` com 9 funções puras; `background.py` — `remove_background()` via rembg (imports lazy, extra `[ai-image]`); `describe.py` — `describe_image()` + `save_description()` via LangChain + Ollama.
+- **GUI** (`form_view.py`): `ImageArgs` com 33 campos. Card `remove_bg` desabilitado com tooltip quando extra não instalado (`_UNAVAILABLE`). Blocos `rembg_block` e `describe_block` com Dropdown de modelo. Formato oculto para `favicon` e `describe`.
 - **Visor Before/After**: `_single_pane` (placeholder ou input thumb) e `_before_after_row` (Antes/Depois em `ft.Row`) num `ft.Row` pai, toggle por `visible=`. `_last_input_thumb` preserva o thumb do input para o split após `image_op_done`.
 - **Formatos**: JPG, PNG, WebP, AVIF, TIFF, BMP, GIF, ICO. `LOSSY_FMTS = {"jpg", "jpeg", "webp"}`.
 - **Saída**: downloads → `output/image/source/`; processadas → `output/image/processed/`.
@@ -139,6 +142,7 @@ uv run -m src output/transcriptions/text/<file>.txt  # análise standalone
 
 - **qwen7b-custom**: Qwen 2.5 7B — `--analyze` (`ollama/Modelfile`)
 - **phi4mini-custom**: Phi-4 Mini 3.8B — `--format` (`ollama/Modelfile.phi4mini`)
+- **moondream-custom**: moondream vision — descrição de imagens (`ollama/Modelfile.vision`; `num_thread 2`, `num_gpu 0`)
 - `num_gpu` controla camadas na GPU; `num_thread` controla threads CPU
 
 ## GUI Desktop (Flet 0.85)
@@ -229,6 +233,5 @@ Flet (DirectX) e Whisper (CUDA) disputam a MX150. Uso simultâneo pode causar BS
 
 - **PR3.1** — IA de áudio opcional (extra `[ai-audio]`): DeepFilterNet (denoise, CPU); Demucs (stems) a decidir.
 - **PR4** — Módulo Vídeo (análogo ao Áudio: mesmo InputSource, fila e eventos).
-- **PR-IMG-2B** — `remove_bg` (rembg), delta mínimo sobre o PR-IMG-2A.
 - **Futuro** — melhorias no Módulo Imagens (batch rename, redimensionamento guiado); IA de imagens (upscale).
 - **Fora de escopo (definitivo)** — arrastar arquivos do SO (não nativo no Flet).
