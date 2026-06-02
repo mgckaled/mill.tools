@@ -7,11 +7,14 @@ from typing import Callable
 
 import flet as ft
 
+from src.core.image.background import MODELS as _REMBG_MODELS
+from src.core.image.background import is_available as _rembg_ok
 from src.gui.components.input_source import InputItem, build_input_source
 from src.gui.theme.components import (
     Cursor,
     hairline,
     help_icon_for,
+    labeled_field,
     section,
     section_label,
     segmented_selector,
@@ -41,7 +44,13 @@ _OPS: list[tuple[str, str, str]] = [
     ("filter",        ft.Icons.FILTER,               "Filtros"),
     ("favicon",       ft.Icons.GRID_VIEW,            "Favicon"),
     ("contact_sheet", ft.Icons.DASHBOARD_OUTLINED,   "Colagem"),
+    ("remove_bg",     ft.Icons.AUTO_FIX_HIGH,         "Remover\nfundo"),
+    ("describe",      ft.Icons.DESCRIPTION_OUTLINED,  "Descrever"),
 ]
+
+_UNAVAILABLE: dict[str, str] = {}
+if not _rembg_ok():
+    _UNAVAILABLE["remove_bg"] = "Instale com: uv sync --extra ai-image"
 
 
 @dataclass
@@ -111,6 +120,13 @@ class ImageArgs:
     cs_thumb_size: int = 200
     cs_gap: int = 10
     cs_bg_color: str = "#ffffff"
+
+    # ── remove_bg ────────────────────────────────────────────
+    rembg_model: str = "u2net"
+
+    # ── describe ─────────────────────────────────────────────
+    describe_model: str = "moondream-custom"
+    describe_prompt: str = ""
 
 
 @dataclass
@@ -202,6 +218,12 @@ def build_image_form(
             alignment=ft.Alignment.CENTER,
         )
         _card_ctr_refs[op_id] = ctr
+        if op_id in _UNAVAILABLE:
+            ctr.tooltip = _UNAVAILABLE[op_id]
+            ctr.disabled = True
+            ic.color = ft.Colors.ON_SURFACE_VARIANT
+            tx.color = ft.Colors.ON_SURFACE_VARIANT
+            ctr.on_click = None
         return ft.GestureDetector(mouse_cursor=Cursor.interactive, content=ctr, expand=True)
 
     # Grade fixa 3 colunas × 4 linhas — spacers invisíveis completam a última linha
@@ -773,6 +795,102 @@ def build_image_form(
     )
     _param_blocks["contact_sheet"] = contact_sheet_block
 
+    # -- remove_bg ------------------------------------------------------------
+    _rembg_available = _rembg_ok()
+
+    _rembg_warning = ft.Text(
+        "⚠ Extra não instalado.\nExecute: uv sync --extra ai-image",
+        color=ft.Colors.ERROR,
+        size=Type.small.size,
+        visible=not _rembg_available,
+    )
+
+    _rembg_dd = ft.Dropdown(
+        options=[
+            ft.dropdown.Option("u2net",             "u2net — geral (padrão)"),
+            ft.dropdown.Option("u2netp",            "u2netp — rápido e leve"),
+            ft.dropdown.Option("silueta",           "silueta — compacto"),
+            ft.dropdown.Option("isnet-general-use", "isnet — recortes precisos"),
+            ft.dropdown.Option("u2net_human_seg",   "humano — otimizado para pessoas"),
+        ],
+        value="u2net",
+        disabled=not _rembg_available,
+        border_color=ft.Colors.OUTLINE_VARIANT,
+        focused_border_color=ft.Colors.PRIMARY,
+        text_size=13,
+        height=42,
+        content_padding=ft.Padding(left=10, right=4, top=0, bottom=0),
+    )
+
+    def _get_rembg_model() -> str:
+        return _rembg_dd.value or "u2net"
+
+    def _set_rembg_disabled(disabled: bool) -> None:
+        _rembg_dd.disabled = disabled
+
+    rembg_block = ft.Column(
+        visible=False,
+        spacing=Space.sm,
+        controls=[
+            _rembg_warning,
+            labeled_field("Modelo", _rembg_dd, help_key="image.rembg_model", page=page),
+            ft.Text(
+                "Saída: sempre PNG com transparência",
+                size=Type.small.size,
+                color=ft.Colors.ON_SURFACE_VARIANT,
+                italic=True,
+            ),
+        ],
+    )
+    _param_blocks["remove_bg"] = rembg_block
+
+    # -- describe -------------------------------------------------------------
+    _desc_dd = ft.Dropdown(
+        options=[
+            ft.dropdown.Option("moondream-custom", "moondream-custom"),
+            ft.dropdown.Option("llava:7b",         "llava:7b"),
+            ft.dropdown.Option("minicpm-v",        "minicpm-v"),
+        ],
+        value="moondream-custom",
+        border_color=ft.Colors.OUTLINE_VARIANT,
+        focused_border_color=ft.Colors.PRIMARY,
+        text_size=13,
+        height=42,
+        content_padding=ft.Padding(left=10, right=4, top=0, bottom=0),
+    )
+
+    def _get_desc_model() -> str:
+        return _desc_dd.value or "moondream-custom"
+
+    def _set_desc_disabled(disabled: bool) -> None:
+        _desc_dd.disabled = disabled
+
+    _desc_prompt_tf = ft.TextField(
+        hint_text="Prompt customizado (vazio = padrão PT-BR)",
+        text_size=Type.caption.size,
+        height=38,
+        content_padding=ft.Padding(left=10, right=4, top=0, bottom=0),
+        border_color=ft.Colors.OUTLINE_VARIANT,
+        focused_border_color=ft.Colors.PRIMARY,
+        expand=True,
+    )
+
+    describe_block = ft.Column(
+        visible=False,
+        spacing=Space.sm,
+        controls=[
+            labeled_field("Modelo vision", _desc_dd, help_key="image.describe_model", page=page),
+            labeled_field("Prompt", _desc_prompt_tf, help_key="image.describe_prompt", page=page),
+            ft.Text(
+                "Saída: .txt salvo em output/image/processed/",
+                size=Type.small.size,
+                color=ft.Colors.ON_SURFACE_VARIANT,
+                italic=True,
+            ),
+        ],
+    )
+    _param_blocks["describe"] = describe_block
+
     # -- convert / vazio -------------------------------------------------------
     _param_blocks["convert"] = ft.Column(visible=False, spacing=0)
 
@@ -950,8 +1068,8 @@ def build_image_form(
     def _refresh_format_block() -> None:
         op = _current_op[0]
         _fmt_convert_col.visible = op == "convert"
-        _fmt_manip_col.visible = op not in ("convert", "favicon")
-        _fmt_section.visible = op != "favicon"
+        _fmt_manip_col.visible = op not in ("convert", "favicon", "describe")
+        _fmt_section.visible = op not in ("favicon", "describe")
 
     # ── Refresh dos blocos de parâmetros ──────────────────────────────────────
 
@@ -1042,6 +1160,11 @@ def build_image_form(
             cs_thumb_size=max(10, int(_cs_thumb_slider.value or 200)),
             cs_gap=max(0, int(_cs_gap_slider.value or 10)),
             cs_bg_color=(_cs_bg_color_tf.value or "#ffffff").strip(),
+            # remove_bg
+            rembg_model=_get_rembg_model() if op == "remove_bg" else "u2net",
+            # describe
+            describe_model=_get_desc_model() if op == "describe" else "moondream-custom",
+            describe_prompt=(_desc_prompt_tf.value or "").strip() if op == "describe" else "",
         )
         on_start(args)
 
@@ -1054,9 +1177,11 @@ def build_image_form(
             ft.Icons.HOURGLASS_EMPTY if running else ft.Icons.PLAY_ARROW_ROUNDED
         )
         input_source.set_enabled(not running)
-        for ctr in _card_ctr_refs.values():
-            ctr.disabled = running
+        for oid, ctr in _card_ctr_refs.items():
+            ctr.disabled = running or (oid in _UNAVAILABLE)
         _set_fmt_disabled(running)
+        _set_rembg_disabled(running or not _rembg_available)
+        _set_desc_disabled(running)
         if running:
             quality_container.opacity = 0.4
             quality_slider.disabled = True

@@ -108,6 +108,21 @@ HELP_SHORT: dict[str, str] = {
         "Monta uma grade com todas as imagens da fila. "
         "O resultado é uma única imagem de saída."
     ),
+    "image.rembg_model": (
+        "u2net: geral (padrão, ~170MB). u2netp: rápido e leve (~4MB). "
+        "silueta: compacto (~43MB). isnet: recortes precisos. "
+        "humano: otimizado para pessoas. Todos rodam na CPU; "
+        "1ª execução baixa o modelo."
+    ),
+    "image.describe_model": (
+        "Modelo Ollama com suporte a visão. moondream-custom: leve e rápido (recomendado). "
+        "llava:7b: mais capaz, mais lento. "
+        "Configure num_thread em ollama/Modelfile.vision."
+    ),
+    "image.describe_prompt": (
+        "Instrução enviada ao modelo. "
+        "Vazio = descrição geral em português (objetos, contexto, cores, texto visível)."
+    ),
 }
 
 #: Texto longo (opcional) — quando presente, a ⓘ vira clicável e abre um modal.
@@ -132,6 +147,24 @@ HELP_LONG: dict[str, str] = {
         "de 128 kbps para 320 kbps não melhora nada, só aumenta o arquivo.\n"
         "• 128–192 kbps costuma ser transparente para fala; música pede mais.\n"
         "• É ignorado quando o formato é 'best' (sem reencode) ou 'wav' (sem perda)."
+    ),
+    "image.rembg_model": (
+        "Modelos disponíveis:\n\n"
+        "• u2net — geral, padrão (~170 MB). Boa cobertura para a maioria das imagens.\n"
+        "• u2netp — versão comprimida do u2net (~4 MB). Mais rápido, menor precisão.\n"
+        "• silueta — compacto (~43 MB), focado em silhuetas nítidas.\n"
+        "• isnet — recortes de alta precisão com detalhes finos de borda.\n"
+        "• humano — especializado em segmentação de pessoas.\n\n"
+        "Todos rodam 100% na CPU via ONNX Runtime. O modelo é baixado para "
+        "~/.u2net/ automaticamente na primeira execução de cada variante."
+    ),
+    "image.describe_model": (
+        "Modelos Ollama com suporte a visão:\n\n"
+        "• moondream-custom — leve (~800 MB RAM), rápido. Recomendado.\n"
+        "  Setup: ollama pull moondream && ollama create moondream-custom -f ollama/Modelfile.vision\n"
+        "• llava:7b — mais capaz e detalhado, requer ~4 GB RAM.\n"
+        "• minicpm-v — alternativa leve com bom desempenho em PT-BR.\n\n"
+        "O modelo deve estar instalado no Ollama antes de usar."
     ),
     "transcription.beam_size": (
         "O decodificador do Whisper usa busca em feixe (beam search) para gerar "

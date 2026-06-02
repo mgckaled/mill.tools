@@ -7,7 +7,9 @@ from pathlib import Path
 from time import time
 from typing import TYPE_CHECKING, Callable
 
+from src.core.image.background import create_session, is_available, remove_background
 from src.core.image.converter import convert_image
+from src.core.image.describe import describe_image, save_description
 from src.core.image.downloader import download_image
 from src.core.image.info import thumbnail_bytes
 from src.core.image.transform import (
@@ -68,6 +70,11 @@ def run_image_pipeline(
         # contact_sheet é N→1: tratamento especial fora do loop
         if args.operation == "contact_sheet":
             return _run_contact_sheet(args, cancel_event, emit)
+
+        if args.operation == "remove_bg":
+            return _run_batch_rembg(args, cancel_event, emit)
+        if args.operation == "describe":
+            return _run_batch_describe(args, cancel_event, emit)
 
         output_paths: list[str] = []
         failed_count = 0
@@ -310,6 +317,137 @@ def _run_contact_sheet(
     except Exception as exc:
         emit("task_error", payload={"message": str(exc)})
         return False
+
+
+def _run_batch_rembg(
+    args: ImageArgs,
+    cancel_event: threading.Event,
+    emit: Callable,
+) -> bool:
+    """Remove fundo de cada item usando rembg (CPU/ONNX)."""
+    if not is_available():
+        emit("task_error", payload={"message": "Extra [ai-image] não instalado. Execute: uv sync --extra ai-image"})
+        return False
+
+    emit("log", payload={"message": f"[i] Carregando modelo '{args.rembg_model}' (1ª vez: baixa para ~/.u2net/)…"})
+    try:
+        session = create_session(args.rembg_model)
+    except Exception as exc:
+        emit("task_error", payload={"message": f"Falha ao carregar modelo rembg: {exc}"})
+        return False
+
+    emit("progress_start")
+    output_paths: list[str] = []
+    failed_count = 0
+    total = len(args.items)
+
+    for idx, item in enumerate(args.items, 1):
+        if cancel_event.is_set():
+            emit("task_error", payload={"message": "Cancelado."})
+            return False
+
+        item_name = _item_label(item)
+        emit("queue_progress", payload={"current_item": idx, "total_items": total, "item_name": item_name})
+        t0 = time()
+
+        try:
+            if item.kind == "url":
+                emit("image_op_start", payload={
+                    "operation": "download", "item_name": item_name,
+                    "item_idx": idx, "total_items": total,
+                })
+                src = download_image(item.value, IMAGE_SOURCE_DIR)
+            else:
+                src = Path(item.value)
+
+            input_thumb = _make_thumb(src)
+            emit("image_op_start", payload={
+                "operation": "remove_bg", "item_name": src.name,
+                "thumb": input_thumb, "item_idx": idx, "total_items": total,
+            })
+
+            out_path = remove_background(src, IMAGE_PROCESSED_DIR, session)
+            output_paths.append(str(out_path))
+            emit("image_op_done", payload={
+                "output_path": str(out_path),
+                "thumb": _make_thumb(out_path),
+                "elapsed": f"{time() - t0:.1f}s",
+                "item_idx": idx, "total_items": total,
+                "src_size_bytes": src.stat().st_size,
+                "out_size_bytes": out_path.stat().st_size,
+            })
+
+        except Exception as exc:
+            failed_count += 1
+            logger.warning("[!] Erro em '%s': %s", item_name, exc)
+            emit("image_op_error", payload={"item_name": item_name, "message": str(exc)})
+
+        if cancel_event.is_set():
+            emit("task_error", payload={"message": "Cancelado."})
+            return False
+
+    emit("task_done", payload={"output_paths": output_paths, "failed_count": failed_count})
+    return len(output_paths) > 0
+
+
+def _run_batch_describe(
+    args: ImageArgs,
+    cancel_event: threading.Event,
+    emit: Callable,
+) -> bool:
+    """Descreve cada imagem via Ollama vision e salva .txt."""
+    emit("progress_start")
+    output_paths: list[str] = []
+    failed_count = 0
+    total = len(args.items)
+
+    for idx, item in enumerate(args.items, 1):
+        if cancel_event.is_set():
+            emit("task_error", payload={"message": "Cancelado."})
+            return False
+
+        item_name = _item_label(item)
+        emit("queue_progress", payload={"current_item": idx, "total_items": total, "item_name": item_name})
+        t0 = time()
+
+        try:
+            src = Path(item.value) if item.kind == "local" else download_image(item.value, IMAGE_SOURCE_DIR)
+            input_thumb = _make_thumb(src)
+
+            emit("image_op_start", payload={
+                "operation": "describe", "item_name": src.name,
+                "thumb": input_thumb, "item_idx": idx, "total_items": total,
+            })
+            emit("log", payload={"message": f"[i] Analisando com {args.describe_model}…"})
+
+            text = describe_image(src, model=args.describe_model, prompt=args.describe_prompt)
+            out_path = save_description(src, IMAGE_PROCESSED_DIR, text)
+            output_paths.append(str(out_path))
+
+            for line in text.splitlines():
+                if line.strip():
+                    emit("log", payload={"message": line})
+
+            emit("image_op_done", payload={
+                "output_path": str(out_path),
+                "thumb": None,
+                "elapsed": f"{time() - t0:.1f}s",
+                "item_idx": idx, "total_items": total,
+                "src_size_bytes": src.stat().st_size,
+                "out_size_bytes": out_path.stat().st_size,
+            })
+
+        except Exception as exc:
+            failed_count += 1
+            logger.warning("[!] Erro em '%s': %s", item_name, exc)
+            emit("image_op_error", payload={"item_name": item_name, "message": str(exc)})
+
+        if cancel_event.is_set():
+            emit("task_error", payload={"message": "Cancelado."})
+            return False
+
+    emit("task_done", payload={"output_paths": output_paths, "failed_count": failed_count})
+    return len(output_paths) > 0
 
 
 def start_image_pipeline(

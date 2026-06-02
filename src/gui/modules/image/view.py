@@ -357,6 +357,7 @@ _OP_VERBS: dict[str, str] = {
     "favicon":       "Gerando favicon",
     "contact_sheet": "Montando colagem",
     "remove_bg":     "Removendo fundo",
+    "describe":      "Analisando",
 }
 
 _OP_LABELS: dict[str, str] = {
@@ -372,6 +373,7 @@ _OP_LABELS: dict[str, str] = {
     "favicon":       "Gerando favicon...",
     "contact_sheet": "Montando colagem...",
     "remove_bg":     "Removendo fundo...",
+    "describe":      "Analisando imagem…",
 }
 
 

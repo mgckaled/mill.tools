@@ -17,6 +17,9 @@ dependencies = [
     "yt-dlp>=2026.3.17",
 ]
 
+[project.optional-dependencies]
+ai-image = ["rembg[cpu]>=2.0.50"]
+
 [dependency-groups]
 dev = [
     "pytest>=9.0.3",
