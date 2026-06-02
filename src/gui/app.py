@@ -10,6 +10,7 @@ from flet.controls.core.stack import StackFit
 from src.gui import settings
 from src.gui.events import EventBus, PipelineEvent
 from src.gui.theme import sync_page_bgcolor
+from src.gui.theme.components import Cursor
 from src.gui.modules.audio.view import build_audio_module
 from src.gui.modules.base import Module
 from src.gui.modules.image.view import build_image_module
@@ -50,7 +51,7 @@ def build_app(page: ft.Page) -> None:
         icon=ft.Icons.LIGHT_MODE if page.theme_mode == ft.ThemeMode.DARK else ft.Icons.DARK_MODE,
         tooltip="Alternar tema",
         on_click=_toggle_theme,
-        style=ft.ButtonStyle(mouse_cursor=ft.MouseCursor.CLICK),
+        style=ft.ButtonStyle(mouse_cursor=Cursor.interactive),
     )
 
     page.appbar = ft.AppBar(
@@ -130,7 +131,7 @@ def build_app(page: ft.Page) -> None:
 
     rail_gd = ft.GestureDetector(
         content=rail,
-        mouse_cursor=ft.MouseCursor.CLICK,
+        mouse_cursor=Cursor.interactive,
     )
 
     def _on_pipeline_cursor(event) -> None:
@@ -138,7 +139,7 @@ def build_app(page: ft.Page) -> None:
             return
         if event.type not in ("progress_start", "task_done", "task_error"):
             return
-        new = ft.MouseCursor.FORBIDDEN if pipeline_running[0] else ft.MouseCursor.CLICK
+        new = Cursor.forbidden if pipeline_running[0] else Cursor.interactive
         if rail_gd.mouse_cursor != new:
             rail_gd.mouse_cursor = new
             try:

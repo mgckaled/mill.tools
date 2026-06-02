@@ -8,6 +8,20 @@ import flet as ft
 from src.gui.theme.tokens import Color, Motion, Radius, Space, Type
 
 
+class Cursor:
+    """Constantes de cursor — ponto único para GestureDetector e ButtonStyle."""
+
+    interactive = ft.MouseCursor.CLICK
+    disabled    = ft.MouseCursor.BASIC
+    forbidden   = ft.MouseCursor.FORBIDDEN
+    help        = ft.MouseCursor.HELP
+    # dict pronto para ButtonStyle.mouse_cursor em botões que podem ser desabilitados
+    btn: dict = {
+        ft.ControlState.DEFAULT:  ft.MouseCursor.CLICK,
+        ft.ControlState.DISABLED: ft.MouseCursor.BASIC,
+    }
+
+
 def primary_button(
     text: str,
     icon: str | None = None,
@@ -23,7 +37,7 @@ def primary_button(
         style=ft.ButtonStyle(
             shape=ft.RoundedRectangleBorder(radius=Radius.md),
             animation_duration=Motion.fast,
-            mouse_cursor=ft.MouseCursor.CLICK,
+            mouse_cursor=Cursor.btn,
         ),
     )
 
@@ -40,7 +54,7 @@ def secondary_button(
         on_click=on_click,
         style=ft.ButtonStyle(
             shape=ft.RoundedRectangleBorder(radius=Radius.md),
-            mouse_cursor=ft.MouseCursor.CLICK,
+            mouse_cursor=Cursor.btn,
         ),
     )
 
@@ -65,7 +79,7 @@ def action_button(
                 ft.ControlState.PRESSED: c,
             },
             overlay_color=ft.Colors.with_opacity(0.1, c),
-            mouse_cursor=ft.MouseCursor.CLICK,
+            mouse_cursor=Cursor.btn,
         ),
     )
 
@@ -88,7 +102,7 @@ def danger_button(
                 ft.ControlState.PRESSED: err,
             },
             overlay_color=ft.Colors.with_opacity(0.1, err),
-            mouse_cursor=ft.MouseCursor.CLICK,
+            mouse_cursor=Cursor.btn,
         ),
     )
 
@@ -166,7 +180,7 @@ def segmented_selector(
         )
         _ctrs[opt] = c
         _texts[opt] = t
-        return ft.GestureDetector(mouse_cursor=ft.MouseCursor.CLICK, content=c, expand=True)
+        return ft.GestureDetector(mouse_cursor=Cursor.interactive, content=c, expand=True)
 
     chips = [_make_chip(o) for o in options]
     rows = [ft.Row(controls=chips[i:i + columns], spacing=Space.sm) for i in range(0, len(chips), columns)]

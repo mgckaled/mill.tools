@@ -11,6 +11,7 @@ from __future__ import annotations
 import flet as ft
 
 from src.gui.help_content import help_for, help_long_for
+from src.gui.theme.components.buttons import Cursor
 from src.gui.theme.tokens import Color, Radius, Space, Type
 
 _TOOLTIP_MAX_WIDTH = 280
@@ -49,7 +50,7 @@ def _make_tooltip(message: str, has_long: bool = False) -> ft.Tooltip:
             size=Type.caption.size,
         ),
         text_align=ft.TextAlign.LEFT,
-        mouse_cursor=ft.MouseCursor.CLICK if has_long else ft.MouseCursor.HELP,
+        mouse_cursor=Cursor.interactive if has_long else Cursor.help,
         prefer_below=True,
     )
 
