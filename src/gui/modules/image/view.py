@@ -3,7 +3,6 @@ from __future__ import annotations
 
 import subprocess
 import threading
-from pathlib import Path
 from typing import TYPE_CHECKING
 
 import flet as ft
@@ -11,6 +10,7 @@ import flet as ft
 from src.gui.events import PipelineEvent
 from src.gui.modules.base import Module
 from src.gui.modules.image.form_view import ImageArgs, ImageFormPanel, build_image_form
+from src.gui.modules.image import pipeline_log
 from src.gui.modules.image.worker import start_image_pipeline
 from src.gui.theme.tokens import Color
 from src.gui.theme.components import (
@@ -229,7 +229,7 @@ def build_image_module(
         t = event.type
         p = event.payload
 
-        _label = _resolve_stage_label(event)
+        _label = pipeline_log.resolve_stage_label(event)
         if _label is not None:
             stage_label.value = _label
             stage_label.color = ft.Colors.ON_SURFACE
@@ -261,7 +261,7 @@ def build_image_module(
             tot_items = p.get("total_items", 1)
             progress_bar.value = cur_item / max(tot_items, 1)
 
-        for msg in _resolve_messages(event):
+        for msg in pipeline_log.resolve_messages(event):
             _append_log(msg)
 
         if t == "task_done":
@@ -332,108 +332,3 @@ def build_image_module(
     )
 
 
-# ------------------------------------------------------------------
-# Helpers de mensagens e stage label
-# ------------------------------------------------------------------
-
-def _fmt_size(b: int) -> str:
-    if b < 1024:
-        return f"{b} B"
-    if b < 1024 * 1024:
-        return f"{b / 1024:.0f} KB"
-    return f"{b / (1024 * 1024):.1f} MB"
-
-
-_OP_VERBS: dict[str, str] = {
-    "download":      "Baixando",
-    "convert":       "Convertendo",
-    "resize":        "Redimensionando",
-    "crop":          "Cortando",
-    "rotate":        "Rotacionando",
-    "watermark":     "Aplicando marca d'água",
-    "border":        "Adicionando borda",
-    "adjust":        "Ajustando",
-    "filter":        "Aplicando filtro",
-    "favicon":       "Gerando favicon",
-    "contact_sheet": "Montando colagem",
-    "remove_bg":     "Removendo fundo",
-    "describe":      "Analisando",
-}
-
-_OP_LABELS: dict[str, str] = {
-    "download":      "Baixando...",
-    "convert":       "Convertendo...",
-    "resize":        "Redimensionando...",
-    "crop":          "Cortando...",
-    "rotate":        "Rotacionando...",
-    "watermark":     "Marca d'água...",
-    "border":        "Adicionando borda...",
-    "adjust":        "Ajustando...",
-    "filter":        "Aplicando filtro...",
-    "favicon":       "Gerando favicon...",
-    "contact_sheet": "Montando colagem...",
-    "remove_bg":     "Removendo fundo...",
-    "describe":      "Analisando imagem…",
-}
-
-
-def _resolve_messages(event: PipelineEvent) -> list[str]:
-    p = event.payload
-    t = event.type
-    match t:
-        case "image_op_start":
-            op = p.get("operation", "")
-            name = p.get("item_name", "")
-            verb = _OP_VERBS.get(op, "Processando")
-            return [f"[~] {verb}: {name}"]
-        case "image_op_done":
-            path = p.get("output_path", "")
-            elapsed = p.get("elapsed", "")
-            name = Path(path).name if path else path
-            src_sz = p.get("src_size_bytes")
-            out_sz = p.get("out_size_bytes")
-            sz = f" | {_fmt_size(src_sz)} → {_fmt_size(out_sz)}" if src_sz and out_sz else ""
-            return [f"[✓] Salvo: {name} ({elapsed}){sz}"]
-        case "image_op_error":
-            name = p.get("item_name", "")
-            msg = p.get("message", "")
-            return [f"[!] Erro em '{name}': {msg}"]
-        case "task_done":
-            paths = p.get("output_paths", [])
-            failed = p.get("failed_count", 0)
-            lines = [f"[✓] Concluído — {len(paths)} arquivo(s) gerado(s)."]
-            if failed:
-                lines.append(f"[!] {failed} item(ns) com erro.")
-            return lines
-        case "task_error":
-            return [f"[!] {p.get('message', 'erro desconhecido')}"]
-        case "log":
-            msg = p.get("message", "")
-            return [msg] if msg else []
-        case _:
-            return []
-
-
-def _resolve_stage_label(event: PipelineEvent) -> str | None:
-    p = event.payload
-    match event.type:
-        case "progress_start":
-            return "Iniciando..."
-        case "queue_progress":
-            cur = p.get("current_item", "?")
-            tot = p.get("total_items", "?")
-            name = p.get("item_name", "")
-            return f"Item {cur}/{tot}" + (f" — {name}" if name else "")
-        case "image_op_start":
-            op = p.get("operation", "")
-            return _OP_LABELS.get(op, "Processando...")
-        case "image_op_done":
-            return "Concluído."
-        case "image_op_error":
-            return "Erro — continuando fila..."
-        case "task_done":
-            return "Pipeline concluído!"
-        case "task_error":
-            return "Erro no pipeline."
-        case _:
-            return None

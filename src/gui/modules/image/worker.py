@@ -24,6 +24,7 @@ from src.core.image.transform import (
     watermark_image,
 )
 from src.gui.events import LogEventHandler
+from src.gui.modules.image import pipeline_log
 from src.gui.modules.image.form_view import ImageArgs
 from src.utils import IMAGE_PROCESSED_DIR, IMAGE_SOURCE_DIR
 
@@ -121,12 +122,30 @@ def run_image_pipeline(
                     "total_items": total,
                 })
 
+                # ── Metadados (leitura lazy do cabeçalho, sem decodificar pixels) ─
+                meta = _try_read_meta(src)
+                _w = _h = 0
+                _mode = "?"
+                _src_fmt: str | None = None
+                if meta:
+                    _w, _h, _mode, _src_fmt = meta
+                    emit("log", payload={"message": pipeline_log.fmt_image_info(
+                        src.name, _w, _h, _mode, src.stat().st_size,
+                    )})
+
                 match op:
                     case "convert":
+                        emit("log", payload={"message": pipeline_log.fmt_convert_detail(
+                            _src_fmt, args.fmt,
+                        )})
                         out_path = convert_image(
                             src, IMAGE_PROCESSED_DIR, args.fmt, args.quality
                         )
                     case "resize":
+                        emit("log", payload={"message": pipeline_log.fmt_resize_detail(
+                            args.resize_mode, _w, _h,
+                            args.resize_width, args.resize_height, args.resize_scale_pct,
+                        )})
                         out_path = resize_image(
                             src, IMAGE_PROCESSED_DIR,
                             resize_mode=args.resize_mode,
@@ -137,6 +156,12 @@ def run_image_pipeline(
                             quality=args.out_quality,
                         )
                     case "crop":
+                        emit("log", payload={"message": pipeline_log.fmt_crop_detail(
+                            args.crop_mode,
+                            args.crop_left, args.crop_top,
+                            args.crop_width, args.crop_height,
+                            args.crop_ratio, args.crop_trim_color,
+                        )})
                         out_path = crop_image(
                             src, IMAGE_PROCESSED_DIR,
                             crop_mode=args.crop_mode,
@@ -150,6 +175,10 @@ def run_image_pipeline(
                             quality=args.out_quality,
                         )
                     case "rotate":
+                        emit("log", payload={"message": pipeline_log.fmt_rotate_detail(
+                            args.rotate_angle, args.rotate_flip_h,
+                            args.rotate_flip_v, args.rotate_exif_auto,
+                        )})
                         out_path = rotate_image(
                             src, IMAGE_PROCESSED_DIR,
                             angle=args.rotate_angle,
@@ -160,6 +189,9 @@ def run_image_pipeline(
                             quality=args.out_quality,
                         )
                     case "watermark":
+                        emit("log", payload={"message": pipeline_log.fmt_watermark_detail(
+                            args.wm_mode, args.wm_position, args.wm_opacity,
+                        )})
                         out_path = watermark_image(
                             src, IMAGE_PROCESSED_DIR,
                             wm_mode=args.wm_mode,
@@ -173,6 +205,9 @@ def run_image_pipeline(
                             quality=args.out_quality,
                         )
                     case "border":
+                        emit("log", payload={"message": pipeline_log.fmt_border_detail(
+                            args.border_padding, args.border_color, args.border_fill_alpha,
+                        )})
                         out_path = add_border(
                             src, IMAGE_PROCESSED_DIR,
                             padding=args.border_padding,
@@ -182,6 +217,10 @@ def run_image_pipeline(
                             quality=args.out_quality,
                         )
                     case "adjust":
+                        emit("log", payload={"message": pipeline_log.fmt_adjust_detail(
+                            args.adj_brightness, args.adj_contrast,
+                            args.adj_color, args.adj_sharpness,
+                        )})
                         out_path = adjust_image(
                             src, IMAGE_PROCESSED_DIR,
                             brightness=args.adj_brightness,
@@ -192,6 +231,9 @@ def run_image_pipeline(
                             quality=args.out_quality,
                         )
                     case "filter":
+                        emit("log", payload={"message": pipeline_log.fmt_filter_detail(
+                            args.filter_type,
+                        )})
                         out_path = apply_filter(
                             src, IMAGE_PROCESSED_DIR,
                             filter_type=args.filter_type,
@@ -199,6 +241,9 @@ def run_image_pipeline(
                             quality=args.out_quality,
                         )
                     case "favicon":
+                        emit("log", payload={"message": pipeline_log.fmt_favicon_detail(
+                            args.favicon_sizes,
+                        )})
                         out_path = make_favicon(
                             src, IMAGE_PROCESSED_DIR,
                             sizes=args.favicon_sizes,
@@ -286,11 +331,14 @@ def _run_contact_sheet(
 
     emit("image_op_start", payload={
         "operation": "contact_sheet",
-        "item_name": "colagem",
+        "item_name": f"{len(sources)} imagens",
         "thumb": None,
         "item_idx": 1,
         "total_items": 1,
     })
+    emit("log", payload={"message": pipeline_log.fmt_cs_detail(
+        len(sources), args.cs_cols, args.cs_thumb_size, args.cs_gap, args.cs_bg_color,
+    )})
     try:
         t0 = time()
         out_path = make_contact_sheet(
@@ -329,12 +377,13 @@ def _run_batch_rembg(
         emit("task_error", payload={"message": "Extra [ai-image] não instalado. Execute: uv sync --extra ai-image"})
         return False
 
-    emit("log", payload={"message": f"[i] Carregando modelo '{args.rembg_model}' (1ª vez: baixa para ~/.u2net/)…"})
+    emit("log", payload={"message": pipeline_log.fmt_rembg_loading(args.rembg_model)})
     try:
         session = create_session(args.rembg_model)
     except Exception as exc:
         emit("task_error", payload={"message": f"Falha ao carregar modelo rembg: {exc}"})
         return False
+    emit("log", payload={"message": pipeline_log.fmt_rembg_loaded(args.rembg_model)})
 
     emit("progress_start")
     output_paths: list[str] = []
@@ -365,6 +414,13 @@ def _run_batch_rembg(
                 "operation": "remove_bg", "item_name": src.name,
                 "thumb": input_thumb, "item_idx": idx, "total_items": total,
             })
+
+            meta = _try_read_meta(src)
+            if meta:
+                emit("log", payload={"message": pipeline_log.fmt_image_info(
+                    src.name, meta[0], meta[1], meta[2], src.stat().st_size,
+                )})
+            emit("log", payload={"message": pipeline_log.fmt_rembg_inferring(src.name)})
 
             out_path = remove_background(src, IMAGE_PROCESSED_DIR, session)
             output_paths.append(str(out_path))
@@ -418,7 +474,16 @@ def _run_batch_describe(
                 "operation": "describe", "item_name": src.name,
                 "thumb": input_thumb, "item_idx": idx, "total_items": total,
             })
-            emit("log", payload={"message": f"[i] Analisando com {args.describe_model}…"})
+
+            meta = _try_read_meta(src)
+            if meta:
+                emit("log", payload={"message": pipeline_log.fmt_image_info(
+                    src.name, meta[0], meta[1], meta[2], src.stat().st_size,
+                )})
+            emit("log", payload={"message": pipeline_log.fmt_describe_header(
+                args.describe_model, args.describe_prompt,
+            )})
+            emit("log", payload={"message": pipeline_log.fmt_describe_sep_open()})
 
             text = describe_image(src, model=args.describe_model, prompt=args.describe_prompt)
             out_path = save_description(src, IMAGE_PROCESSED_DIR, text)
@@ -427,6 +492,8 @@ def _run_batch_describe(
             for line in text.splitlines():
                 if line.strip():
                     emit("log", payload={"message": line})
+
+            emit("log", payload={"message": pipeline_log.fmt_describe_sep_close()})
 
             emit("image_op_done", payload={
                 "output_path": str(out_path),
@@ -494,5 +561,15 @@ def _make_thumb(path: Path) -> bytes | None:
     """Gera miniatura para o visor; retorna None em caso de falha."""
     try:
         return thumbnail_bytes(path, max_px=600)
+    except Exception:
+        return None
+
+
+def _try_read_meta(path: Path) -> tuple[int, int, str, str | None] | None:
+    """Lê largura, altura, modo e formato do cabeçalho sem decodificar pixels."""
+    try:
+        from PIL import Image
+        with Image.open(path) as im:
+            return im.size[0], im.size[1], im.mode, im.format
     except Exception:
         return None
