@@ -8,6 +8,8 @@ from typing import Callable
 
 import flet as ft
 
+from src.gui.theme.components.buttons import Cursor
+
 
 @dataclass
 class InputItem:
@@ -116,6 +118,7 @@ def build_input_source(
                     icon_color=ft.Colors.ON_SURFACE_VARIANT,
                     style=ft.ButtonStyle(
                         padding=ft.Padding(left=2, right=2, top=2, bottom=2),
+                        mouse_cursor=Cursor.interactive,
                     ),
                     on_click=_remove,
                 ),
@@ -149,6 +152,7 @@ def build_input_source(
         icon=ft.Icons.ADD_CIRCLE_OUTLINE,
         tooltip="Adicionar URL",
         on_click=lambda _: _add_url(),
+        style=ft.ButtonStyle(mouse_cursor=Cursor.interactive),
     )
 
     async def _on_pick_click(_e) -> None:
@@ -166,6 +170,7 @@ def build_input_source(
         "Selecionar arquivos",
         icon=ft.Icons.FOLDER_OPEN_OUTLINED,
         on_click=_on_pick_click,
+        style=ft.ButtonStyle(mouse_cursor=Cursor.interactive),
     )
 
     # ── layout raiz ──────────────────────────────────────────────────────────

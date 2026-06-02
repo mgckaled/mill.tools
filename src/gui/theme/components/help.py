@@ -1,29 +1,56 @@
-"""Ícone de ajuda (ⓘ): tooltip no hover, modal opcional no clique."""
+"""Ícone de ajuda (ⓘ): tooltip no hover, modal opcional no clique.
+
+Ponto único de replicação para todos os módulos da GUI:
+  - help_icon(short, long, page)  → constrói o ⓘ diretamente
+  - help_icon_for(key, page)      → lê de help_content.py pelo registro
+
+Importar sempre via: from src.gui.theme.components import help_icon_for
+"""
 from __future__ import annotations
 
 import flet as ft
 
 from src.gui.help_content import help_for, help_long_for
-from src.gui.theme.tokens import Radius, Space, Type
+from src.gui.theme.components.buttons import Cursor
+from src.gui.theme.tokens import Color, Radius, Space, Type
+
+_TOOLTIP_MAX_WIDTH = 280
+_HINT_CLICK = "\n\n↗ Clique para mais detalhes"
 
 
-def _make_tooltip(message: str) -> ft.Tooltip:
-    """Tooltip estilizado com fundo surface_container e bordas arredondadas."""
+def _make_tooltip(message: str, has_long: bool = False) -> ft.Tooltip:
+    """Tooltip estilizado. Se has_long, anexa hint de clique na mensagem."""
+    text = message + _HINT_CLICK if has_long else message
     return ft.Tooltip(
-        message=message,
+        message=text,
         wait_duration=300,
         decoration=ft.BoxDecoration(
-            bgcolor=ft.Colors.SURFACE,
+            bgcolor=Color.dark.surface_variant,
             border_radius=Radius.md,
+            border=ft.Border(
+                left=ft.BorderSide(1, Color.dark.outline_variant),
+                right=ft.BorderSide(1, Color.dark.outline_variant),
+                top=ft.BorderSide(1, Color.dark.outline_variant),
+                bottom=ft.BorderSide(1, Color.dark.outline_variant),
+            ),
+            shadows=[ft.BoxShadow(
+                blur_radius=10,
+                spread_radius=0,
+                offset=ft.Offset(0, 4),
+                color=ft.Colors.with_opacity(0.35, ft.Colors.BLACK),
+            )],
         ),
+        size_constraints=ft.BoxConstraints(max_width=_TOOLTIP_MAX_WIDTH),
         padding=ft.Padding(
             left=Space.lg, right=Space.lg,
             top=Space.sm, bottom=Space.sm,
         ),
         text_style=ft.TextStyle(
             color=ft.Colors.ON_SURFACE,
-            size=Type.body.size,
+            size=Type.caption.size,
         ),
+        text_align=ft.TextAlign.LEFT,
+        mouse_cursor=Cursor.interactive if has_long else Cursor.help,
         prefer_below=True,
     )
 
@@ -34,14 +61,14 @@ def help_icon(
     page: ft.Page | None = None,
     size: int = 16,
 ) -> ft.Container:
-    """ⓘ com tooltip estilizado (short). Se `long` e `page`, clique abre modal."""
+    """ⓘ com tooltip (short) no hover. Se `long` e `page`, clique abre modal detalhado."""
+    has_long = long is not None and page is not None
     icon = ft.Icon(ft.Icons.INFO_OUTLINED, size=size, color=ft.Colors.ON_SURFACE_VARIANT)
     box = ft.Container(
         content=icon,
-        tooltip=_make_tooltip(short),
+        tooltip=_make_tooltip(short, has_long=has_long),
         border_radius=Radius.pill,
         padding=Space.xs,
-        ink=long is not None,
     )
 
     def _hover(e: ft.HoverEvent) -> None:
@@ -50,10 +77,10 @@ def help_icon(
 
     box.on_hover = _hover
 
-    if long is not None and page is not None:
+    if has_long:
         def _open(_e) -> None:
             dlg = ft.AlertDialog(
-                title=ft.Text(short[:60], size=15, weight=ft.FontWeight.W_600),
+                title=ft.Text(short[:60], size=Type.body.size, weight=ft.FontWeight.W_600),
                 content=ft.Container(
                     content=ft.Text(long, selectable=True),
                     width=420,
@@ -70,7 +97,11 @@ def help_icon(
 
 
 def help_icon_for(key: str, page: ft.Page | None = None) -> ft.Container | None:
-    """Monta a ⓘ a partir do registro. None se a chave não tiver texto curto."""
+    """Monta o ⓘ a partir do registro central (help_content.py).
+
+    Retorna None se a chave não tiver texto curto — o chamador pode ignorar
+    ou omitir o ícone sem precisar de lógica extra.
+    """
     short = help_for(key)
     if not short:
         return None

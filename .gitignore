@@ -20,7 +20,8 @@ output/**
 /transcriptions/
 
 # Claude-related files
-.claude/
+.claude/*
+!.claude/skills/
 
 # Secrets
 .env

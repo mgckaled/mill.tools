@@ -5,7 +5,21 @@ from typing import Callable
 
 import flet as ft
 
-from src.gui.theme.tokens import Color, Motion, Radius, Space
+from src.gui.theme.tokens import Color, Motion, Radius, Space, Type
+
+
+class Cursor:
+    """Constantes de cursor — ponto único para GestureDetector e ButtonStyle."""
+
+    interactive = ft.MouseCursor.CLICK
+    disabled    = ft.MouseCursor.BASIC
+    forbidden   = ft.MouseCursor.FORBIDDEN
+    help        = ft.MouseCursor.HELP
+    # dict pronto para ButtonStyle.mouse_cursor em botões que podem ser desabilitados
+    btn: dict = {
+        ft.ControlState.DEFAULT:  ft.MouseCursor.CLICK,
+        ft.ControlState.DISABLED: ft.MouseCursor.BASIC,
+    }
 
 
 def primary_button(
@@ -23,6 +37,7 @@ def primary_button(
         style=ft.ButtonStyle(
             shape=ft.RoundedRectangleBorder(radius=Radius.md),
             animation_duration=Motion.fast,
+            mouse_cursor=Cursor.btn,
         ),
     )
 
@@ -39,6 +54,7 @@ def secondary_button(
         on_click=on_click,
         style=ft.ButtonStyle(
             shape=ft.RoundedRectangleBorder(radius=Radius.md),
+            mouse_cursor=Cursor.btn,
         ),
     )
 
@@ -63,6 +79,7 @@ def action_button(
                 ft.ControlState.PRESSED: c,
             },
             overlay_color=ft.Colors.with_opacity(0.1, c),
+            mouse_cursor=Cursor.btn,
         ),
     )
 
@@ -85,6 +102,7 @@ def danger_button(
                 ft.ControlState.PRESSED: err,
             },
             overlay_color=ft.Colors.with_opacity(0.1, err),
+            mouse_cursor=Cursor.btn,
         ),
     )
 
@@ -143,7 +161,7 @@ def segmented_selector(
     def _make_chip(opt: str) -> ft.Container:
         active = opt == _selected[0]
         display = labels[opt] if labels else opt
-        t = ft.Text(display, size=14, text_align=ft.TextAlign.CENTER, color=_text_color(active))
+        t = ft.Text(display, size=Type.label.size, text_align=ft.TextAlign.CENTER, color=_text_color(active))
         c = ft.Container(
             content=t,
             border=_border(active),
@@ -152,13 +170,17 @@ def segmented_selector(
             padding=ft.Padding(left=2, right=2, top=7, bottom=7),
             expand=True,
             alignment=ft.Alignment.CENTER,
+            shadow=ft.BoxShadow(
+                blur_radius=4, spread_radius=0,
+                offset=ft.Offset(0, 2),
+                color=ft.Colors.with_opacity(0.25, ft.Colors.BLACK),
+            ),
             on_click=lambda e, _o=opt: _on_click(e, _o),
             animate=ft.Animation(Motion.fast, ft.AnimationCurve.EASE_IN_OUT),
-            ink=True,
         )
         _ctrs[opt] = c
         _texts[opt] = t
-        return c
+        return ft.GestureDetector(mouse_cursor=Cursor.interactive, content=c, expand=True)
 
     chips = [_make_chip(o) for o in options]
     rows = [ft.Row(controls=chips[i:i + columns], spacing=Space.sm) for i in range(0, len(chips), columns)]

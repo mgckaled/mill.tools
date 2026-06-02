@@ -12,7 +12,7 @@ from typing import Callable
 import flet as ft
 
 from src.gui import settings
-from src.gui.theme.components import hairline, section, section_label
+from src.gui.theme.components import Cursor, hairline, section, section_label
 from src.gui.workers import PipelineArgs
 
 
@@ -262,6 +262,7 @@ def build_form_view(page: ft.Page, on_start: Callable[[PipelineArgs], None]) -> 
         "Iniciar",
         icon=ft.Icons.PLAY_ARROW_ROUNDED,
         disabled=True,
+        style=ft.ButtonStyle(mouse_cursor=Cursor.btn),
     )
 
     def _on_start_click(e: ft.ControlEvent) -> None:

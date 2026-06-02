@@ -9,7 +9,7 @@ import flet as ft
 
 from src.gui import settings
 from src.gui.components.input_source import InputItem, build_input_source
-from src.gui.theme.components import hairline, help_icon_for, section, segmented_selector
+from src.gui.theme.components import Cursor, hairline, help_icon_for, section, segmented_selector
 
 _ALLOWED_EXTS = [
     "mp3", "wav", "flac", "ogg", "opus", "aac", "m4a",
@@ -132,6 +132,7 @@ def build_audio_form(
         icon=ft.Icons.PLAY_ARROW_ROUNDED,
         disabled=True,
         on_click=lambda _: _on_start_click(),
+        style=ft.ButtonStyle(mouse_cursor=Cursor.btn),
     )
 
     def _on_start_click() -> None:

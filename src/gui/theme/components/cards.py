@@ -55,7 +55,7 @@ def output_card(
                         ft.Icon(icon, size=16, color=c),
                         ft.Text(
                             path.name,
-                            size=12,
+                            size=Type.mono.size,
                             color=ft.Colors.ON_SURFACE,
                             font_family=Type.FONT_MONO,
                             expand=True,
@@ -69,7 +69,7 @@ def output_card(
                 ),
                 ft.Text(
                     str(path.parent),
-                    size=11,
+                    size=Type.small.size,
                     color=ft.Colors.ON_SURFACE_VARIANT,
                     font_family=Type.FONT_MONO,
                     selectable=True,

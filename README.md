@@ -15,28 +15,40 @@
 
 ## Visão geral
 
-**mill.tools** é uma multiferramenta extensível, organizada em **módulos** acessíveis por uma barra lateral na GUI desktop (e via CLI). A transcrição roda **100% local** com [faster-whisper](https://github.com/SYSTRAN/faster-whisper) (aceleração GPU, sem PyTorch) e usa [LangChain](https://www.langchain.com/) para formatação, análise e condensação — com escolha de provider: [Ollama](https://ollama.com) local (padrão) ou [Google Gemini](https://ai.google.dev/) na nuvem (free tier).
+**mill.tools** é uma caixa de ferramentas pessoal para quem trabalha com áudio, vídeo e imagens — tudo rodando diretamente no seu computador, sem enviar arquivos para servidores externos, sem assinaturas e sem limites de uso.
 
-### Recursos
+A ferramenta é organizada em **módulos independentes**, cada um especializado em uma categoria de tarefa. Você os acessa por uma interface visual (aplicativo desktop) ou pela linha de comando. Os módulos também se integram: após baixar e converter um áudio, por exemplo, um clique já o envia para transcrição.
 
-- 🎙️ **Transcrição local** com Whisper (faster-whisper / GPU), detecção automática de idioma e marcação de trechos de baixa confiança.
-- 🧠 **Pós-processamento por LLM** — formatação em parágrafos, análise estruturada (10 campos) e digest condensado para uso como contexto.
-- 🔀 **Provider flexível** — Ollama local por padrão; Gemini na nuvem por prefixo de modelo, sem mudar o fluxo.
-- 🎵 **Módulo Áudio** — download (YouTube, SoundCloud, etc. via yt-dlp), conversão e extração de áudio, em fila, com capa/metadados embutidos.
-- 🖼️ **Módulo Imagens** — conversão entre 8 formatos (JPG, PNG, WebP, AVIF, TIFF, BMP, GIF, ICO), controle de qualidade e visor de pré-visualização integrado.
-- 🖥️ **GUI desktop** (Flet) com acompanhamento em tempo real estilo CLI, barra de progresso determinada e spinner animado.
-- 🔗 **Bridge Áudio → Transcrição** — botão "Transcrever este arquivo" envia o arquivo processado diretamente para o módulo de Transcrição.
-- 🎨 **Design System** — paleta unificada com acento dourado, suporte a temas claro/escuro e contraste WCAG 2.1.
-- ℹ️ **Ajuda contextual** — ícone ⓘ em todos os controles: tooltip no hover, modal com detalhes ao clicar.
+### O que você pode fazer
+
+- 🎙️ **Transcrever áudio e vídeo** — converta fala em texto usando o mesmo modelo de reconhecimento de voz da OpenAI (Whisper), acelerado pela placa de vídeo do seu computador. O idioma é detectado automaticamente, e trechos de baixa confiança ficam marcados para revisão.
+
+- 🧠 **Transformar transcrições em conhecimento** — após transcrever, a inteligência artificial organiza o texto em parágrafos legíveis, extrai um resumo estruturado com pontos-chave, tópicos, citações e conclusões, e ainda gera uma versão compacta pronta para colar como contexto em outros sistemas de IA.
+
+- 🎵 **Baixar e converter áudio** — faça download de áudio do YouTube, SoundCloud e centenas de outras plataformas, ou converta e extraia faixas de arquivos de vídeo locais. Formatos de saída: MP3, WAV, M4A, OGG, OPUS e mais, com capa e metadados embutidos automaticamente.
+
+- 🖼️ **Processar imagens em lote** — 12 operações disponíveis: converter formatos, redimensionar, recortar, girar, aplicar filtros e ajustes de cor, adicionar marca d'água ou borda, gerar favicon `.ico`, montar colagens — e com IA: remover o fundo automaticamente e gerar descrições textuais detalhadas da imagem. Tudo com visor Antes/Depois integrado.
+
+- 🔀 **Escolher onde a IA roda** — por padrão, todos os modelos de linguagem funcionam 100% offline via [Ollama](https://ollama.com) (nenhum dado sai do computador). Para quem prefere, o [Google Gemini](https://ai.google.dev/) gratuito está disponível como alternativa na nuvem — basta escolher o modelo na interface.
 
 ### Módulos
 
-| Módulo | Status | O que faz |
+| Módulo | Status | Descrição |
 |---|---|---|
-| **Transcrição** | ✅ | Whisper local + formatação/análise/digest via LLM |
-| **Áudio** | ✅ | Download, conversão e extração de áudio (fila, capa/metadados) |
-| **Vídeo** | 🚧 | Download/conversão/extração (planejado — PR4) |
-| **Imagens** | ✅ | Conversão de formato/qualidade, download de URL, visor de pré-visualização (PR-IMG-1) |
+| **Transcrição** | ✅ Disponível | Whisper local com pós-processamento por IA: parágrafos, análise estruturada e resumo |
+| **Áudio** | ✅ Disponível | Download de plataformas, conversão de formatos e extração de faixas, em fila com metadados |
+| **Imagens** | ✅ Disponível | 12 operações: manipulação, conversão, remoção de fundo e descrição por IA vision |
+| **Vídeo** | 🚧 Em breve | Download, conversão e extração de vídeo (próxima versão) |
+
+### Destaques técnicos
+
+| Característica | Detalhe |
+|---|---|
+| Transcrição local | [faster-whisper](https://github.com/SYSTRAN/faster-whisper) + ctranslate2, aceleração GPU, sem PyTorch |
+| Sem dependência de nuvem | Ollama local por padrão; Gemini como opção opt-in por prefixo de modelo |
+| Remoção de fundo | rembg + ONNX Runtime, 100% CPU, sem GPU dedicada |
+| Interface desktop | [Flet 0.85](https://flet.dev) (Flutter/Windows) com log em tempo real e design system próprio |
+| Ajuda contextual | Ícone ⓘ em todos os controles — tooltip no hover, modal detalhado ao clicar |
 
 ---
 
@@ -69,7 +81,20 @@ ollama create qwen7b-custom -f ollama/Modelfile
 # formatação de parágrafos
 ollama pull phi4-mini
 ollama create phi4mini-custom -f ollama/Modelfile.phi4mini
+
+# descrição de imagens (módulo Imagens → Descrever)
+ollama pull moondream
+ollama create moondream-custom -f ollama/Modelfile.vision
 ```
+
+### Extras opcionais
+
+```bash
+# remoção de fundo (módulo Imagens → Remover fundo)
+uv sync --extra ai-image
+```
+
+> O app base funciona sem os extras. A operação "Remover fundo" fica com card desabilitado enquanto `[ai-image]` não estiver instalado.
 
 ### Opção B — Google Gemini (free tier)
 
@@ -197,7 +222,28 @@ Downloads em `source/`; conversões/extrações em `processed/`.
 
 ### Imagens — `output/image/`
 
-Downloads de URL em `source/`; imagens convertidas em `processed/`.
+Downloads de URL em `source/`; imagens processadas em `processed/`.
+
+---
+
+## Módulo Imagens — operações disponíveis
+
+| Operação | O que faz |
+|---|---|
+| **Converter** | Converte entre 8 formatos: JPG, PNG, WebP, AVIF, TIFF, BMP, GIF, ICO |
+| **Redimensionar** | Caber (proporcional), Exato (força dimensões) ou Escala % |
+| **Cortar** | Manual (px), Proporção (16:9, 4:3…) ou Auto-trim (remove borda por cor) |
+| **Girar** | Ângulo 90°/180°/270°, espelhamento H/V, correção automática EXIF |
+| **Marca d'água** | Texto ou imagem sobreposta, com posição e opacidade configuráveis |
+| **Borda** | Borda sólida configurável, com opção de preencher alpha pela cor |
+| **Ajustes** | Brilho, contraste, saturação e nitidez (sliders 0.1–2.0) |
+| **Filtros** | Blur, Nitidez, Autocontraste, Equalizar, Escala de cinza |
+| **Favicon** | Gera `.ico` com múltiplas resoluções embutidas (16–256 px) |
+| **Colagem** | Monta grade de miniaturas de N imagens em uma única saída |
+| **Remover fundo** | Remove o fundo via rembg/ONNX (CPU). Saída sempre PNG com alpha. 5 modelos: u2net, u2netp, silueta, isnet, humano. Requer `uv sync --extra ai-image`. |
+| **Descrever** | Envia a imagem a um modelo Ollama vision e salva a descrição como `.txt`. Modelos: moondream-custom (padrão), llava:7b, minicpm-v. |
+
+O visor **Before/After** mostra a imagem original e o resultado lado a lado. Para "Descrever" (saída texto), o visor permanece em single-pane com a imagem de entrada.
 
 ---
 
@@ -285,7 +331,7 @@ Fonte de UI: **Verdana**. Fonte mono (log): **JetBrains Mono** / **Consolas** (e
 O arquivo `src/gui/help_content.py` centraliza todo o conteúdo de ajuda, separado da UI. Cada controle recebe uma **chave** (`"módulo.campo"`) — nenhuma string de ajuda fica espalhada nos formulários.
 
 **Comportamento:**
-- **Hover** → tooltip estilizado (fundo `surface_container`, bordas arredondadas, 300 ms de delay)
+- **Hover** → tooltip estilizado (300 ms de delay)
 - **Clique** (apenas quando há texto longo) → `AlertDialog` com título e corpo detalhado
 
 **Chaves disponíveis:**
@@ -306,6 +352,18 @@ O arquivo `src/gui/help_content.py` centraliza todo o conteúdo de ajuda, separa
 | `image.input` | URL direta vs arquivo local | — |
 | `image.format` | Lossy vs lossless, AVIF | — |
 | `image.quality` | Quando e quanto comprimir | — |
+| `image.resize` | Modos de redimensionamento | — |
+| `image.crop` | Modos de corte | — |
+| `image.rotate` | Ângulo, flip e EXIF | — |
+| `image.watermark` | Texto vs imagem, opacidade | — |
+| `image.border` | Padding, cor e alpha | — |
+| `image.adjust` | Sliders de ajuste | — |
+| `image.filter` | Tipos de filtro | — |
+| `image.favicon` | Tamanhos e formato .ico | — |
+| `image.contact_sheet` | Grade N→1 | — |
+| `image.rembg_model` | Resumo dos 5 modelos | ✅ Tamanho, uso ideal e onde são baixados |
+| `image.describe_model` | Resumo dos modelos vision | ✅ RAM, velocidade e setup de cada um |
+| `image.describe_prompt` | Como usar o prompt customizado | — |
 
 Para adicionar ajuda a um novo controle: inserir a chave em `HELP_SHORT` (e opcionalmente `HELP_LONG`) e passar `help_key=` para a fábrica correspondente.
 
@@ -321,7 +379,7 @@ mill-tools/
 │   ├── transcriber.py · formatter.py · analyzer.py · prompter.py · llm_factory.py · utils.py
 │   ├── core/
 │   │   ├── audio/       — downloader, converter, info (lógica pura, sem Flet)
-│   │   └── image/       — downloader, converter, info (Pillow; lógica pura, sem Flet)
+│   │   └── image/       — downloader, converter, transform, info (Pillow; lógica pura, sem Flet)
 │   └── gui/
 │       ├── app.py       — NavigationRail + registry de módulos + navigate_to
 │       ├── splash.py    — animação de entrada (moinho + fade)
@@ -344,7 +402,7 @@ mill-tools/
 ├── docs/                — planos de implementação
 └── output/
     ├── audio/           — source/ (downloads) · processed/ (conversões)
-    ├── image/           — source/ (downloads de URL) · processed/ (convertidas)
+    ├── image/           — source/ (downloads de URL) · processed/ (processadas)
     ├── video/
     └── transcriptions/  — text/ · analysis/ · digest/
 ```
@@ -364,4 +422,4 @@ mill-tools/
 
 - **PR3.1** — IA de áudio opcional (denoise via DeepFilterNet; stems via Demucs a avaliar), isolada em extra que não afeta o app base.
 - **PR4** — Módulo Vídeo (download/conversão/extração, análogo ao Áudio).
-- **Futuro** — melhorias no Módulo Imagens (batch rename, redimensionamento, crop); Módulo de Imagens com IA (upscale/remoção de fundo).
+- **Futuro** — melhorias no Módulo Imagens (batch rename, redimensionamento guiado); IA de imagens (upscale).

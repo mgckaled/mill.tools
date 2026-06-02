@@ -4,6 +4,7 @@ from src.gui.theme.components.help import (
     help_icon_for,
 )
 from src.gui.theme.components.buttons import (
+    Cursor,
     action_button,
     danger_button,
     primary_button,
@@ -33,6 +34,7 @@ from src.gui.theme.components.layout import (
 )
 
 __all__ = [
+    "Cursor",
     "help_icon",
     "help_icon_for",
     "action_button",
