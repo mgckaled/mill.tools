@@ -15,7 +15,7 @@ from src.gui.modules.audio.view import build_audio_module
 from src.gui.modules.base import Module
 from src.gui.modules.image.view import build_image_module
 from src.gui.modules.transcription.view import build_transcription_module, get_form_start_button
-from src.gui.modules.video.view import build_video_placeholder
+from src.gui.modules.video.view import build_video_module
 
 
 def build_app(page: ft.Page) -> None:
@@ -70,7 +70,7 @@ def build_app(page: ft.Page) -> None:
 
     _transcription = build_transcription_module(page, bus, cancel_event, pipeline_running)
     _audio = build_audio_module(page, bus, cancel_event, pipeline_running, nav)
-    _video = build_video_placeholder()
+    _video = build_video_module(page, bus, cancel_event, pipeline_running, nav)
     _image = build_image_module(page, bus, cancel_event, pipeline_running)
 
     MODULES: list[Module] = [_audio, _video, _image, _transcription]

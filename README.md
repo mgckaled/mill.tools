@@ -25,7 +25,7 @@ A ferramenta é organizada em **módulos independentes**, cada um especializado 
 
 - 🧠 **Transformar transcrições em conhecimento** — após transcrever, a inteligência artificial organiza o texto em parágrafos legíveis, extrai um resumo estruturado com pontos-chave, tópicos, citações e conclusões, e ainda gera uma versão compacta pronta para colar como contexto em outros sistemas de IA.
 
-- 🎵 **Baixar e converter áudio** — faça download de áudio do YouTube, SoundCloud e centenas de outras plataformas, ou converta e extraia faixas de arquivos de vídeo locais. Formatos de saída: MP3, WAV, M4A, OGG, OPUS e mais, com capa e metadados embutidos automaticamente.
+- 🎵 **Baixar, converter e pós-processar áudio** — faça download de áudio do YouTube, SoundCloud e centenas de outras plataformas, ou converta e extraia faixas de arquivos de vídeo locais. Formatos de saída: MP3, WAV, M4A, OGG, OPUS e mais, com capa e metadados embutidos automaticamente. Pós-processamento opcional em fila: **redução de ruído** (spectral gating, CPU) e **normalização de loudness** (EBU R128 — −14 LUFS streaming, −23 broadcast, configurável).
 
 - 🖼️ **Processar imagens em lote** — 12 operações disponíveis: converter formatos, redimensionar, recortar, girar, aplicar filtros e ajustes de cor, adicionar marca d'água ou borda, gerar favicon `.ico`, montar colagens — e com IA: remover o fundo automaticamente e gerar descrições textuais detalhadas da imagem. Tudo com visor Antes/Depois integrado.
 
@@ -36,16 +36,18 @@ A ferramenta é organizada em **módulos independentes**, cada um especializado 
 | Módulo | Status | Descrição |
 |---|---|---|
 | **Transcrição** | ✅ Disponível | Whisper local com pós-processamento por IA: parágrafos, análise estruturada e resumo |
-| **Áudio** | ✅ Disponível | Download de plataformas, conversão de formatos e extração de faixas, em fila com metadados |
+| **Áudio** | ✅ Disponível | Download, conversão e extração de faixas em fila; pós-processamento: denoise spectral + normalize loudnorm (EBU R128) |
 | **Imagens** | ✅ Disponível | 12 operações: manipulação, conversão, remoção de fundo e descrição por IA vision |
-| **Vídeo** | 🚧 Em breve | Download, conversão e extração de vídeo (próxima versão) |
+| **Vídeo** | ✅ Disponível | 7 operações: download, conversão, corte, compressão, redimensionamento, extração de áudio e thumbnail |
 
 ### Destaques técnicos
 
 | Característica | Detalhe |
 |---|---|
+| Processamento de vídeo | yt-dlp (download) + ffmpeg CPU-only: libx264, libx265, libvpx-vp9 — sem NVENC |
 | Transcrição local | [faster-whisper](https://github.com/SYSTRAN/faster-whisper) + ctranslate2, aceleração GPU, sem PyTorch |
 | Sem dependência de nuvem | Ollama local por padrão; Gemini como opção opt-in por prefixo de modelo |
+| Pós-processamento de áudio | noisereduce (spectral gating, CPU) + ffmpeg loudnorm (EBU R128, 2 passes); torch-free, base deps |
 | Remoção de fundo | rembg + ONNX Runtime, 100% CPU, sem GPU dedicada |
 | Interface desktop | [Flet 0.85](https://flet.dev) (Flutter/Windows) com log em tempo real e design system próprio |
 | Ajuda contextual | Ícone ⓘ em todos os controles — tooltip no hover, modal detalhado ao clicar |
@@ -224,6 +226,26 @@ Downloads em `source/`; conversões/extrações em `processed/`.
 
 Downloads de URL em `source/`; imagens processadas em `processed/`.
 
+### Vídeo — `output/video/`
+
+Downloads de URL em `source/`; vídeos processados (convert, trim, compress, resize, thumbnail) e áudios extraídos em `processed/`.
+
+---
+
+## Módulo Vídeo — operações disponíveis
+
+| Operação | Entrada | O que faz |
+|---|---|---|
+| **Baixar** | URL | Download via yt-dlp, resolução máx. configurável (360p–4K), containers MP4/MKV/WebM |
+| **Converter** | arquivo local | Muda container e/ou codec. `copy` = sem reencoding (rápido). H.264 / H.265 / VP9 disponíveis |
+| **Recortar** | arquivo local | Corta trecho por tempo (`HH:MM:SS`). Modo rápido (copy, no keyframe) ou frame-preciso (reencoda) |
+| **Comprimir** | arquivo local | Reencoda com H.264/CRF (18–28). CRF 18 = alta qualidade; CRF 28 = menor tamanho |
+| **Redimensionar** | arquivo local | Ajusta resolução preservando aspect ratio. Deixe um eixo em branco para calcular automaticamente |
+| **Extrair áudio** | arquivo local | Extrai faixa de áudio em MP3/M4A/WAV. Resultado aparece com botões "Transcrever" e "Processar no Áudio" |
+| **Thumbnail** | arquivo local | Captura um frame específico (`HH:MM:SS`) como JPG ou PNG |
+
+Encoding 100% CPU — sem NVENC (decisão definitiva). Preset e CRF configuráveis no formulário.
+
 ---
 
 ## Módulo Imagens — operações disponíveis
@@ -345,10 +367,22 @@ O arquivo `src/gui/help_content.py` centraliza todo o conteúdo de ajuda, separa
 | `transcription.analyze` | O que gera a análise | — |
 | `transcription.prompt` | O que é o digest | — |
 | `transcription.model_stage` | Local vs nuvem | — |
+| `video.input` | URL vs arquivo local | — |
+| `video.operation` | Quando usar copy vs reencoding | — |
+| `video.resolution` | Impacto no tamanho do download | — |
+| `video.embed_meta` | O que é embutido | — |
+| `video.codec` | Resumo dos codecs disponíveis | ✅ copy / H.264 / H.265 / VP9 — trade-offs |
+| `video.trim` | Rápido vs frame-preciso | — |
+| `video.crf` | Guia rápido de valores CRF | ✅ 18–28 — qualidade vs tamanho |
+| `video.preset` | Velocidade vs compressão | — |
+| `video.resize` | Aspect ratio e eixo automático | — |
 | `audio.input` | URL vs arquivo local | — |
 | `audio.format` | 'best' vs conversão | — |
 | `audio.bitrate` | Resumo do bitrate | ✅ Quando usar cada valor |
 | `audio.embed_meta` | O que é embutido | — |
+| `audio.denoise` | Spectral gating: quando usar | ✅ Como funciona o algoritmo |
+| `audio.normalize` | EBU R128: alvos por plataforma | ✅ Streaming / broadcast / podcast |
+| `audio.normalize_lufs` | Guia rápido de alvos LUFS | — |
 | `image.input` | URL direta vs arquivo local | — |
 | `image.format` | Lossy vs lossless, AVIF | — |
 | `image.quality` | Quando e quanto comprimir | — |
@@ -378,7 +412,8 @@ mill-tools/
 ├── src/
 │   ├── transcriber.py · formatter.py · analyzer.py · prompter.py · llm_factory.py · utils.py
 │   ├── core/
-│   │   ├── audio/       — downloader, converter, info (lógica pura, sem Flet)
+│   │   ├── audio/       — downloader, converter, denoiser, normalizer, info (lógica pura, sem Flet)
+│   │   ├── video/       — downloader (yt-dlp), converter (ffmpeg), info (ffprobe)
 │   │   └── image/       — downloader, converter, transform, info (Pillow; lógica pura, sem Flet)
 │   └── gui/
 │       ├── app.py       — NavigationRail + registry de módulos + navigate_to
@@ -390,6 +425,7 @@ mill-tools/
 │       ├── help_content.py — registro central de tooltips e modais (HELP_SHORT/LONG)
 │       ├── components/  — input_source.py (URL + FilePicker, allow_multiple, url_hint)
 │       ├── modules/     — base.py + transcription/ · audio/ · video/ · image/
+│       │                  (cada módulo: form_view, worker, view, pipeline_log)
 │       ├── theme/       — Design System
 │       │   ├── tokens.py    — Color, Type, Space, Radius, Motion, Layout
 │       │   ├── theme.py     — build_theme() + apply_theme()
@@ -420,6 +456,7 @@ mill-tools/
 
 ## Roadmap
 
-- **PR3.1** — IA de áudio opcional (denoise via DeepFilterNet; stems via Demucs a avaliar), isolada em extra que não afeta o app base.
-- **PR4** — Módulo Vídeo (download/conversão/extração, análogo ao Áudio).
+- **PR3.1-A** ✅ — Pós-processamento de áudio: redução de ruído (spectral gating, CPU) e normalização de loudness (EBU R128). Sem torch, sem extra — já incluído na instalação padrão.
+- **PR3.1-B** — IA de áudio com torch (extra `[ai-audio]`): DeepFilterNet (denoise neural); Demucs (separação de stems) a avaliar.
+- **PR4** ✅ — Módulo Vídeo: 7 operações (download, convert, trim, compress, resize, extract_audio, thumbnail). CPU-only, fila sequencial, bridge extract_audio → Transcrição/Áudio.
 - **Futuro** — melhorias no Módulo Imagens (batch rename, redimensionamento guiado); IA de imagens (upscale).

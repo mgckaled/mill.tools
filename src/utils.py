@@ -20,6 +20,7 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 OUTPUT_DIR               = PROJECT_ROOT / "output"
 AUDIO_SOURCE_DIR         = OUTPUT_DIR / "audio" / "source"
 AUDIO_PROCESSED_DIR      = OUTPUT_DIR / "audio" / "processed"
+VIDEO_SOURCE_DIR         = OUTPUT_DIR / "video" / "source"
 VIDEO_PROCESSED_DIR      = OUTPUT_DIR / "video" / "processed"
 IMAGE_SOURCE_DIR         = OUTPUT_DIR / "image" / "source"
 IMAGE_PROCESSED_DIR      = OUTPUT_DIR / "image" / "processed"

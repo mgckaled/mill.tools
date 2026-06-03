@@ -174,6 +174,9 @@ def _resolve_messages(event: PipelineEvent) -> list[str]:
         case "audio_op_start" | "audio_op_done":
             from src.gui.modules.audio import pipeline_log as _audio_log
             return _audio_log.resolve_messages(event)
+        case "video_op_start" | "video_op_done" | "video_op_error":
+            from src.gui.modules.video import pipeline_log as _video_log
+            return _video_log.resolve_messages(event)
         case "queue_progress" | "progress_start" | "progress_update":
             return []
         case "task_done":
@@ -263,6 +266,9 @@ def _resolve_stage_label(event: PipelineEvent) -> str | None:
         case "audio_op_start" | "audio_op_done":
             from src.gui.modules.audio import pipeline_log as _audio_log
             return _audio_log.resolve_stage_label(event)
+        case "video_op_start" | "video_op_done" | "video_op_error":
+            from src.gui.modules.video import pipeline_log as _video_log
+            return _video_log.resolve_stage_label(event)
         case "task_done":
             return "Pipeline concluído!"
         case "task_error":

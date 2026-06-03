@@ -7,14 +7,15 @@ Multiferramenta pessoal extensível para processamento de áudio, vídeo e trans
 - **Python 3.13** gerenciado com `uv`
 - **faster-whisper** + **ctranslate2** — transcrição via Whisper (sem PyTorch, por escolha)
 - **yt-dlp** — download de áudio/vídeo e metadados
-- **ffmpeg** — conversão/extração de áudio
+- **ffmpeg** — conversão/extração de áudio e normalização loudnorm (EBU R128)
+- **noisereduce>=3.0** + **soundfile>=0.12** — spectral gating e I/O PCM (pós-processamento de áudio, CPU-only, sem torch)
 - **Pillow 12.2+** — processamento de imagens (AVIF nativo, EXIF transpose, conversão multi-formato)
 - **rembg[cpu]** + **onnxruntime** (extra `[ai-image]`) — remoção de fundo CPU/ONNX
 - **LangChain** + **Ollama** (local) / **Google Gemini** (nuvem) — formatação, análise, condensação e descrição de imagens (vision)
 - **Flet 0.85** — GUI desktop (Flutter no Windows)
 - **tqdm** — barra de progresso (CLI)
 
-> Decisão consciente: o projeto evita **PyTorch**. Qualquer IA que dependa de torch (ex.: Demucs, DeepFilterNet) fica isolada num extra opcional `[ai-audio]` (planejado para o PR3.1) — o app base permanece torch-free.
+> Decisão consciente: o projeto evita **PyTorch**. O pós-processamento de áudio (PR3.1-A: denoise + normalize) é CPU-only e torch-free. Qualquer IA que dependa de torch (ex.: Demucs, DeepFilterNet neural) ficará isolada num extra opcional `[ai-audio]` (PR3.1-B) — o app base permanece torch-free.
 
 ## Hardware de desenvolvimento
 
@@ -37,7 +38,14 @@ src/
 │   ├── audio/
 │   │   ├── downloader.py        — yt-dlp: URL → output/audio/source/
 │   │   ├── converter.py         — ffmpeg (-progress pipe:1): convert_audio(), extract_audio()
+│   │   ├── denoiser.py          — denoise() via noisereduce + soundfile (spectral gating, CPU)
+│   │   ├── normalizer.py        — normalize_lufs() via ffmpeg loudnorm, dois passes (EBU R128)
 │   │   └── info.py              — get_duration_ffprobe()
+│   ├── video/
+│   │   ├── __init__.py
+│   │   ├── downloader.py        — yt-dlp: URL → output/video/source/
+│   │   ├── converter.py         — ffmpeg (-progress pipe:1): convert, trim, compress, resize, extract_audio, thumbnail
+│   │   └── info.py              — get_video_info() via ffprobe (VideoInfo dataclass)
 │   └── image/
 │       ├── downloader.py        — urllib: URL → output/image/source/
 │       ├── converter.py         — convert_image(): EXIF transpose, RGBA→RGB, quality lossy
@@ -58,9 +66,9 @@ src/
     ├── modules/
     │   ├── base.py              — dataclass Module (id, label, icon, control, on_mount/on_unmount)
     │   ├── transcription/view.py
-    │   ├── audio/               — form_view.py, worker.py, view.py
+    │   ├── audio/               — form_view.py, worker.py, view.py, pipeline_log.py (PR3.1-A)
     │   ├── image/               — form_view.py, worker.py, view.py, pipeline_log.py (PR-IMG-2B)
-    │   └── video/view.py        — placeholder (PR4)
+    │   └── video/               — form_view.py, worker.py, view.py, pipeline_log.py (PR4)
     └── views/
         ├── form_view.py         — formulário de Transcrição → FormPanel
         ├── progress_view.py     — ProgressPanel (logs/barra/spinner), filtro por owner_id
@@ -70,25 +78,47 @@ src/
 ## Sistema de módulos (GUI)
 
 A GUI é dividida em módulos selecionáveis numa **NavigationRail** à esquerda. Estado:
-**Áudio** (PR3, completo), **Vídeo** (placeholder, PR4), **Imagens** (PR-IMG-2B, completo), **Transcrição** (completo).
+**Áudio** (PR3, completo), **Vídeo** (PR4, completo), **Imagens** (PR-IMG-2B, completo), **Transcrição** (completo).
 Ordem na rail: Áudio → Vídeo → Imagens → Transcrição.
 
 - **Registry** (`app.py`): `MODULES: list[Module]` é a fonte única. Adicionar um módulo = uma entrada na lista.
 - **Module** (`modules/base.py`): dataclass com `id`, `label`, `icon`, `selected_icon`, `control`, `on_mount(payload)`, `on_unmount()`. O `control` é construído uma vez; trocar de aba **não** destrói o estado.
 - **navigate_to(module_id, payload)**: alterna **visibilidade** dos controles num `ft.Stack` (não reatribui `content` — evita o `object_patch` IndexError do Flet 0.85). **Bloqueia a troca** enquanto `pipeline_running[0]` for `True`.
 - **Bridge Áudio → Transcrição**: `navigate_to("transcription", {"file": path})` — o `on_mount` preenche o campo URL percorrendo a árvore de controles.
+- **Bridge Vídeo → Transcrição/Áudio**: resultado de `extract_audio` exibe botões "Transcrever" e "Processar no Áudio" no painel de resultados de vídeo.
 - **Escopo de eventos por módulo**: cada `ProgressPanel` recebe um `owner_id` e ignora eventos cujo `module_id` não casa.
 
-## Módulo Áudio (PR3)
+## Módulo Áudio (PR3 + PR3.1-A)
 
-- **Operações** (auto-detectadas): URL → download; vídeo local → extração; áudio local → conversão.
+- **Operações principais** (auto-detectadas): URL → download; vídeo local → extração; áudio local → conversão.
 - **Entrada**: URL + FilePicker via `page.services`, `allow_multiple=True`. Arrastar do SO fora de escopo.
 - **Formato/qualidade**: `best`/mp3/m4a/wav/ogg/opus + bitrate (320…64 kb/s). `best` sem reencode.
 - **Capa + metadados**: embutidos por padrão; switch desligável. Fallback gracioso em ogg/opus.
 - **Fila sequencial**: um item por vez. Progresso via `queue_progress` + `progress_update`.
-- **Saída**: downloads → `output/audio/source/`; convertidos → `output/audio/processed/`.
+- **Saída**: downloads → `output/audio/source/`; convertidos/pós-processados → `output/audio/processed/`.
 
-> IA de áudio planejada para **PR3.1** (DeepFilterNet/Demucs), isolada em extra opcional torch.
+### Pós-processamento (PR3.1-A)
+
+Ativado por switches no formulário; as duas operações são encadeáveis após a operação principal.
+
+| Operação | Módulo core | Detalhe técnico |
+|---|---|---|
+| **Reduzir ruído** | `denoiser.py` | Spectral gating via noisereduce (CPU-only). Decodifica via ffmpeg, processa canal por canal, salva WAV preservando subtype PCM original (`sf.info` + `subtype=meta.subtype`). |
+| **Normalizar volume** | `normalizer.py` | EBU R128 via ffmpeg loudnorm em 2 passes: passe 1 mede IL/LRA/TP; passe 2 aplica ganho linear (`linear=true`). Alvo configurável −23..−6 LUFS. True Peak máx. −1 dBFS. Retorna `(path, stats_dict)`. |
+
+- **`pipeline_log.py`**: vocabulário centralizado — `OP_VERBS`/`OP_LABELS` para 5 operações (download, convert, extract, denoise, normalize), builders `fmt_denoise_*` / `fmt_normalize_*`, `resolve_messages()` e `resolve_stage_label()` delegados pelo `progress_view.py`. Padrão idêntico ao `modules/image/pipeline_log.py`.
+- **`AudioArgs`**: expandido com `denoise: bool`, `normalize: bool`, `normalize_target_lufs: float = -14.0`. Estado persistido em `~/.mill-tools/config.json`.
+
+## Módulo Vídeo (PR4)
+
+Download, conversão e processamento via yt-dlp e ffmpeg. Encoding 100% CPU — sem NVENC (decisão definitiva).
+
+- **Operações** (7, selecionadas via segmented_selector 3 colunas): `download` (yt-dlp), `convert` (codec/container), `trim` (corte por tempo, copy ou reenc), `compress` (H.264/CRF 18–28), `resize` (scale ffmpeg, aspect ratio preservado), `extract_audio` (bridge para `core/audio/converter.py`), `thumbnail` (frame → jpg/png).
+- **Core** (`core/video/`): `info.py` — `VideoInfo` + `get_video_info()` via ffprobe; `downloader.py` — `download_video()` via yt-dlp com hook de progresso; `converter.py` — 6 funções ffmpeg com `_run_ffmpeg()` e `-progress pipe:1`.
+- **GUI** (`form_view.py`): `VideoArgs` com 17 campos. Detecção automática URL → operação forçada para `download` (seletor desabilitado). 7 blocos condicionais com `visible=`/`animate_opacity`.
+- **`pipeline_log.py`**: 7 `OP_VERBS`/`OP_LABELS`, builders `fmt_*` por operação (metadados ffprobe + detalhe específico), `resolve_messages()` e `resolve_stage_label()` delegados por `progress_view.py`.
+- **Saída**: downloads → `output/video/source/`; processados → `output/video/processed/`.
+- **Bridge extract_audio**: resultado de áudio exibe botões "Transcrever" e "Processar no Áudio" no painel de resultados.
 
 ## Módulo Imagens (PR-IMG-2B)
 
@@ -155,7 +185,7 @@ Iniciada com `uv run gui.py`. Flutter desktop no Windows.
 - **Sidebar (NavigationRail)** + `ft.Stack` com todos os módulos montados; só um visível por vez (toggle de `visible`).
 - **EventBus** (`events.py`): publica `PipelineEvent(type, stage, payload, module_id)` via `page.pubsub.send_all()` (thread-safe). Worker em thread daemon; UI atualiza na thread principal.
 - **LogEventHandler**: captura `logging.INFO` e encaminha como eventos `log`. `_SUPPRESSED_PREFIXES` filtra duplicados. Recebe `module_id`.
-- **`pipeline_log.py` (por módulo)**: vocabulário centralizado de mensagens — `worker.py` importa `fmt_*` para `emit("log", ...)`, `view.py` importa `resolve_messages()`/`resolve_stage_label()`. Separa "o que emitir" de "como exibir" e elimina strings inline espalhadas. Implementado em `modules/image/`; padrão para módulos futuros.
+- **`pipeline_log.py` (por módulo)**: vocabulário centralizado de mensagens — `worker.py` importa `fmt_*` para `emit("log", ...)`, `view.py`/`progress_view.py` importa `resolve_messages()`/`resolve_stage_label()`. Separa "o que emitir" de "como exibir" e elimina strings inline espalhadas. Implementado em `modules/image/` (PR-IMG-2B), `modules/audio/` (PR3.1-A) e `modules/video/` (PR4).
 - **Design System** (`theme/components/`): factories, tokens de tipografia, cursores e help system → skill `design-system` (`.claude/skills/design-system/SKILL.md`).
 
 ### Flet 0.85 — quirks conhecidos
@@ -199,7 +229,9 @@ Iniciada com `uv run gui.py`. Flutter desktop no Windows.
 | `task_error` | `message` | log de erro, para spinner |
 | `log` | `message`, `level` | passthrough colorido |
 
-**Áudio (stage="audio"):** `audio_op_start` (`operation`, `item_name`, `item_idx`, `total`), `audio_op_done` (`output_path`, `elapsed`).
+**Áudio (stage="audio"):** `audio_op_start` (`operation`, `item_name`, `item_idx`, `total`), `audio_op_done` (`output_path`, `elapsed`, `item_idx`, `total`, `src_size_bytes`, `out_size_bytes`). `operation` ∈ {`download`, `convert`, `extract`, `denoise`, `normalize`}.
+
+**Vídeo (stage="video"):** `video_op_start` (`operation`, `item_name`, `item_idx`, `total`), `video_op_done` (`output_path`, `elapsed`, `item_idx`, `total`, `src_size_bytes`, `out_size_bytes`), `video_op_error` (`item_name`, `message`). `operation` ∈ {`download`, `convert`, `trim`, `compress`, `resize`, `extract_audio`, `thumbnail`}. `module_id = "video"`.
 
 **Imagens (stage="image"):** `image_op_start` (`operation`, `item_name`, `item_idx`, `total_items`, `thumb: bytes|None`), `image_op_done` (`output_path`, `elapsed`, `src_size_bytes`, `out_size_bytes`, `thumb`, `item_idx`, `total_items`), `image_op_error` (`item_name`, `message`).
 
@@ -233,7 +265,8 @@ Flet (DirectX) e Whisper (CUDA) disputam a MX150. Uso simultâneo pode causar BS
 
 ## Roadmap
 
-- **PR3.1** — IA de áudio opcional (extra `[ai-audio]`): DeepFilterNet (denoise, CPU); Demucs (stems) a decidir.
-- **PR4** — Módulo Vídeo (análogo ao Áudio: mesmo InputSource, fila e eventos).
+- **PR3.1-A** ✅ — Pós-processamento de áudio (CPU, torch-free): denoise spectral (noisereduce) + normalização loudnorm (EBU R128, 2 passes). Switches no formulário, encadeável, estado persistido.
+- **PR3.1-B** — IA de áudio com torch (extra `[ai-audio]`): DeepFilterNet (denoise neural, CPU); Demucs (separação de stems) a avaliar.
+- **PR4** ✅ — Módulo Vídeo: 7 operações (download, convert, trim, compress, resize, extract_audio, thumbnail). CPU-only, fila sequencial, pipeline_log, bridge extract_audio → Transcrição/Áudio.
 - **Futuro** — melhorias no Módulo Imagens (batch rename, redimensionamento guiado); IA de imagens (upscale).
 - **Fora de escopo (definitivo)** — arrastar arquivos do SO (não nativo no Flet).
