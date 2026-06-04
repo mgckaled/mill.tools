@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import logging
+import re
 import threading
 from pathlib import Path
 from time import time
@@ -115,6 +116,9 @@ def run_video_pipeline(
                         total_b = d.get("total_bytes") or d.get("total_bytes_estimate") or 0
                         if total_b > 0:
                             emit("progress_update", payload={"current": min(downloaded / total_b, 1.0)})
+                        line = _fmt_ydl_progress(d)
+                        if line:
+                            emit("log", payload={"message": line, "mutable": True})
 
                 out_path = download_video(
                     url=item.value,
@@ -256,6 +260,31 @@ def start_video_pipeline(
     thread = threading.Thread(target=_run, daemon=True)
     thread.start()
     return thread
+
+
+_ANSI_ESC = re.compile(r'\x1b\[[0-9;]*m')
+
+
+def _strip_ansi(s: str) -> str:
+    return _ANSI_ESC.sub('', s).strip()
+
+
+def _fmt_ydl_progress(d: dict) -> str:
+    """Formata a linha de progresso do yt-dlp para exibição no log."""
+    pct   = _strip_ansi(d.get("_percent_str") or "")
+    total = _strip_ansi(d.get("_total_bytes_str") or d.get("_total_bytes_estimate_str") or "")
+    speed = _strip_ansi(d.get("_speed_str") or "")
+    eta   = _strip_ansi(d.get("_eta_str") or "")
+    parts: list[str] = []
+    if pct:
+        parts.append(pct)
+    if total:
+        parts.append(f"de {total}")
+    if speed and speed not in ("Unknown B/s", "N/A"):
+        parts.append(speed)
+    if eta and eta not in ("Unknown", "N/A"):
+        parts.append(f"ETA {eta}")
+    return f"[d] {' | '.join(parts)}" if parts else ""
 
 
 def _item_label(item) -> str:

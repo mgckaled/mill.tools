@@ -132,9 +132,9 @@ def build_input_source(
             return
         items.append(item)
         items_col.controls.append(_make_item_row(item))
-        if items_col.page:
-            items_col.update()
         _notify()
+        if items_border.page:
+            items_border.update()
 
     def _add_url() -> None:
         raw = (url_field.value or "").strip()

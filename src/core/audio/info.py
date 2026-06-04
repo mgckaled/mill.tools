@@ -17,9 +17,8 @@ def get_duration_ffprobe(src: Path) -> float | None:
                 str(src),
             ],
             capture_output=True,
-            text=True,
             timeout=10,
         )
-        return float(result.stdout.strip())
+        return float(result.stdout.decode('utf-8', errors='replace').strip())
     except (ValueError, subprocess.TimeoutExpired, FileNotFoundError):
         return None

@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import logging
+import tempfile
 from pathlib import Path
 from typing import Callable
 
@@ -48,11 +49,16 @@ def download_video(
                 f"/bestvideo[height<={max_h}]+bestaudio/best[height<={max_h}]"
             )
     else:
-        fmt = "bestvideo[ext=mp4]+bestaudio[ext=m4a]/bestvideo+bestaudio/best"
+        if container == "webm":
+            fmt = "bestvideo[vcodec^=vp]+bestaudio[acodec^=opus]/bestvideo+bestaudio/best"
+        else:
+            fmt = "bestvideo[ext=mp4]+bestaudio[ext=m4a]/bestvideo+bestaudio/best"
 
     postprocessors: list[dict] = []
     if container == "mp4":
         postprocessors.append({"key": "FFmpegVideoConvertor", "preferedformat": "mp4"})
+    # WebM: merge_output_format já cuida do container com streams VP9+Opus nativos;
+    # FFmpegVideoConvertor criaria .temp.webm → WinError 32 (rename bloqueado pelo SO)
     if embed_meta:
         postprocessors.append({"key": "FFmpegMetadata"})
 
@@ -71,6 +77,10 @@ def download_video(
         "postprocessor_hooks": [_pp_hook],
         "progress_hooks": [progress_hook] if progress_hook else [],
         "merge_output_format": container,
+        "nopart": True,
+        "overwrites": True,
+        # Redireciona .temp/.part para %TEMP% do sistema — geralmente excluído do antivírus
+        "paths": {"temp": tempfile.gettempdir()},
         "quiet": True,
         "no_warnings": True,
     }

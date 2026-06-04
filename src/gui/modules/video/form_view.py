@@ -20,16 +20,15 @@ from src.gui.theme.tokens import Space, Type
 
 _ALLOWED_EXTS = ["mp4", "mkv", "webm", "avi", "mov"]
 
-_OP_OPTIONS = ["download", "convert", "trim", "compress", "resize", "extract_audio", "thumbnail"]
-_OP_LABELS = {
-    "download":      "Baixar",
-    "convert":       "Converter",
-    "trim":          "Recortar",
-    "compress":      "Comprimir",
-    "resize":        "Redimensionar",
-    "extract_audio": "Extrair áudio",
-    "thumbnail":     "Thumbnail",
-}
+_OP_ICONS: list[tuple[str, str, str]] = [
+    ("download",      ft.Icons.DOWNLOAD_OUTLINED,      "Baixar"),
+    ("convert",       ft.Icons.COMPARE_ARROWS,          "Converter"),
+    ("trim",          ft.Icons.CONTENT_CUT,              "Recortar"),
+    ("compress",      ft.Icons.COMPRESS,                 "Comprimir"),
+    ("resize",        ft.Icons.OPEN_IN_FULL,             "Redimensionar"),
+    ("extract_audio", ft.Icons.AUDIO_FILE_OUTLINED,     "Extrair áudio"),
+    ("thumbnail",     ft.Icons.IMAGE_OUTLINED,           "Thumbnail"),
+]
 
 _RES_OPTIONS = ["best", "2160", "1080", "720", "480", "360"]
 _RES_LABELS  = {"best": "Melhor", "2160": "4K", "1080": "1080p", "720": "720p", "480": "480p", "360": "360p"}
@@ -126,6 +125,9 @@ def build_video_form(
         _has_url_items[0] = has_url
         start_btn.disabled = len(items) == 0
         # URL → força download e bloqueia seletor de operação
+        if has_url and _current_op[0] != "download":
+            _current_op[0] = "download"
+            _refresh_op_cards()
         _set_op_disabled(has_url)
         _show_op_block("download" if has_url else _get_op())
         if start_btn.page:
@@ -137,24 +139,87 @@ def build_video_form(
         on_change=_on_items_change,
     )
 
-    # ── Seletor de operação ────────────────────────────────────────────────────
+    # ── Seletor de operação (card grid) ───────────────────────────────────────
 
     initial_op = cfg.get("last_video_operation", "download")
+    _current_op: list[str] = [initial_op]
+    _op_card_ctr_refs: dict[str, ft.Container] = {}
+    _op_card_icon_refs: dict[str, ft.Icon] = {}
+    _op_card_text_refs: dict[str, ft.Text] = {}
+    _op_grid_disabled: list[bool] = [False]
 
-    def _on_op_change(op: str) -> None:
-        _show_op_block(op)
-        for block in _op_blocks.values():
-            if block.page:
-                block.update()
+    def _refresh_op_cards() -> None:
+        sel = _current_op[0]
+        for oid, ctr in _op_card_ctr_refs.items():
+            active = oid == sel
+            color = ft.Colors.PRIMARY if active else ft.Colors.ON_SURFACE_VARIANT
+            bw = 2 if active else 1
+            bc = ft.Colors.PRIMARY if active else ft.Colors.OUTLINE_VARIANT
+            side = ft.BorderSide(bw, bc)
+            _op_card_icon_refs[oid].color = color
+            _op_card_text_refs[oid].color = color
+            ctr.border = ft.Border(left=side, right=side, top=side, bottom=side)
 
-    op_grid, _get_op, _set_op_disabled = segmented_selector(
-        _OP_OPTIONS,
-        initial_op,
-        page,
-        on_change=_on_op_change,
-        columns=3,
-        labels=_OP_LABELS,
+    def _on_op_card_click(op_id: str) -> None:
+        if _op_grid_disabled[0]:
+            return
+        _current_op[0] = op_id
+        _refresh_op_cards()
+        _show_op_block(op_id)
+        for blk in _op_blocks.values():
+            if blk.page:
+                blk.update()
+        page.update()
+
+    def _make_op_card(op_id: str, icon_name: str, label: str) -> ft.GestureDetector:
+        active = op_id == initial_op
+        color = ft.Colors.PRIMARY if active else ft.Colors.ON_SURFACE_VARIANT
+        bw = 2 if active else 1
+        bc = ft.Colors.PRIMARY if active else ft.Colors.OUTLINE_VARIANT
+        side = ft.BorderSide(bw, bc)
+        ic = ft.Icon(icon_name, size=24, color=color)
+        tx = ft.Text(label, size=11, text_align=ft.TextAlign.CENTER, color=color, max_lines=2)
+        _op_card_icon_refs[op_id] = ic
+        _op_card_text_refs[op_id] = tx
+        ctr = ft.Container(
+            content=ft.Column([ic, tx], horizontal_alignment=ft.CrossAxisAlignment.CENTER, spacing=6, tight=True),
+            height=70, padding=8, border_radius=8,
+            expand=True,
+            bgcolor=ft.Colors.SURFACE,
+            border=ft.Border(left=side, right=side, top=side, bottom=side),
+            shadow=ft.BoxShadow(
+                blur_radius=8, spread_radius=0,
+                offset=ft.Offset(0, 3),
+                color=ft.Colors.with_opacity(0.4, ft.Colors.BLACK),
+            ),
+            on_click=lambda e, oid=op_id: _on_op_card_click(oid),
+            alignment=ft.Alignment.CENTER,
+        )
+        _op_card_ctr_refs[op_id] = ctr
+        return ft.GestureDetector(mouse_cursor=Cursor.interactive, content=ctr, expand=True)
+
+    _OP_COLS = 3
+    _op_card_list = [_make_op_card(oid, icon, lbl) for oid, icon, lbl in _OP_ICONS]
+    while len(_op_card_list) % _OP_COLS != 0:
+        _op_card_list.append(ft.Container(expand=True))
+    op_grid = ft.Column(
+        spacing=6,
+        controls=[
+            ft.Row(controls=_op_card_list[i:i + _OP_COLS], spacing=6)
+            for i in range(0, len(_op_card_list), _OP_COLS)
+        ],
     )
+
+    def _get_op() -> str:
+        return _current_op[0]
+
+    def _set_op_disabled(disabled: bool) -> None:
+        _op_grid_disabled[0] = disabled
+        for ctr in _op_card_ctr_refs.values():
+            ctr.disabled = disabled
+            if ctr.page:
+                ctr.update()
+
     _sel_disable_fns.append(_set_op_disabled)
 
     # ── Bloco: Download ────────────────────────────────────────────────────────

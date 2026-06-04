@@ -28,22 +28,23 @@ def _run_ffmpeg(
     info = get_video_info(src)
     total_secs = info.duration if progress_cb else None
 
-    proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 
     stderr_lines: list[str] = []
 
     def _drain() -> None:
-        for line in proc.stderr:
-            stderr_lines.append(line.rstrip())
+        for raw in proc.stderr:
+            stderr_lines.append(raw.decode('utf-8', errors='replace').rstrip())
             if len(stderr_lines) > 100:
                 del stderr_lines[:-100]
 
     threading.Thread(target=_drain, daemon=True).start()
 
-    for line in proc.stdout:
-        if line.strip().startswith("out_time_us=") and progress_cb and total_secs:
+    for raw in proc.stdout:
+        line = raw.decode('utf-8', errors='replace').strip()
+        if line.startswith("out_time_us=") and progress_cb and total_secs:
             try:
-                ratio = min(int(line.strip().split("=", 1)[1]) / 1_000_000 / total_secs, 1.0)
+                ratio = min(int(line.split("=", 1)[1]) / 1_000_000 / total_secs, 1.0)
                 progress_cb(ratio)
             except (ValueError, IndexError):
                 pass

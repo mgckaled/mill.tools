@@ -28,9 +28,9 @@ def get_video_info(src: Path) -> VideoInfo:
                 "-show_streams", "-show_format",
                 str(src),
             ],
-            capture_output=True, text=True, timeout=15,
+            capture_output=True, timeout=15,
         )
-        data = json.loads(r.stdout)
+        data = json.loads(r.stdout.decode('utf-8', errors='replace'))
         fmt = data.get("format", {})
         streams = data.get("streams", [])
         v = next((s for s in streams if s.get("codec_type") == "video"), {})

@@ -113,12 +113,14 @@ Ativado por switches no formulário; as duas operações são encadeáveis após
 
 Download, conversão e processamento via yt-dlp e ffmpeg. Encoding 100% CPU — sem NVENC (decisão definitiva).
 
-- **Operações** (7, selecionadas via segmented_selector 3 colunas): `download` (yt-dlp), `convert` (codec/container), `trim` (corte por tempo, copy ou reenc), `compress` (H.264/CRF 18–28), `resize` (scale ffmpeg, aspect ratio preservado), `extract_audio` (bridge para `core/audio/converter.py`), `thumbnail` (frame → jpg/png).
+- **Operações** (7, selecionadas via card grid 3 colunas): `download` (yt-dlp), `convert` (codec/container), `trim` (corte por tempo, copy ou reenc), `compress` (H.264/CRF 18–28), `resize` (scale ffmpeg, aspect ratio preservado), `extract_audio` (bridge para `core/audio/converter.py`), `thumbnail` (frame → jpg/png).
 - **Core** (`core/video/`): `info.py` — `VideoInfo` + `get_video_info()` via ffprobe; `downloader.py` — `download_video()` via yt-dlp com hook de progresso; `converter.py` — 6 funções ffmpeg com `_run_ffmpeg()` e `-progress pipe:1`.
 - **GUI** (`form_view.py`): `VideoArgs` com 17 campos. Detecção automática URL → operação forçada para `download` (seletor desabilitado). 7 blocos condicionais com `visible=`/`animate_opacity`.
 - **`pipeline_log.py`**: 7 `OP_VERBS`/`OP_LABELS`, builders `fmt_*` por operação (metadados ffprobe + detalhe específico), `resolve_messages()` e `resolve_stage_label()` delegados por `progress_view.py`.
 - **Saída**: downloads → `output/video/source/`; processados → `output/video/processed/`.
 - **Bridge extract_audio**: resultado de áudio exibe botões "Transcrever" e "Processar no Áudio" no painel de resultados.
+- **Downloader — quirks Windows**: WebM requer formato `bestvideo[vcodec^=vp]+bestaudio[acodec^=opus]` — **não** adicionar `FFmpegVideoConvertor` para WebM (gera `.temp.webm` bloqueado pelo antivírus com `[WinError 32]`). Opções obrigatórias: `nopart=True`, `overwrites=True`, `paths={"temp": tempfile.gettempdir()}` (redireciona merge temporário para `%TEMP%`, excluído do Defender por padrão). Solução definitiva: adicionar a pasta `output/` às exclusões do Windows Defender.
+- **Progresso yt-dlp**: campos `_percent_str`, `_speed_str`, `_eta_str` contêm códigos ANSI — strip obrigatório antes de exibir: `re.sub(r'\x1b\[[0-9;]*m', '', s).strip()`.
 
 ## Módulo Imagens (PR-IMG-2B)
 
@@ -154,6 +156,7 @@ uv run -m src output/transcriptions/text/<file>.txt  # análise standalone
 - Logging via handler dedicado — nunca usar `print()` para logs
 - Core (`src/core/`) é puro: sem dependência de Flet, reutilizável por CLI e GUI
 - Linter: ruff · Testes: pytest (dev dependency)
+- `subprocess` — sempre **modo binário** (`Popen`/`run` sem `text=True`); decodificar manualmente com `.decode('utf-8', errors='replace')`. Em Windows, `text=True` herda cp1252 do sistema e causa `UnicodeDecodeError` em saídas UTF-8 de ffmpeg/ffprobe. Aplica-se a todos os módulos em `src/core/`.
 
 ## Dependências externas (PATH)
 
@@ -227,7 +230,7 @@ Iniciada com `uv run gui.py`. Flutter desktop no Windows.
 | `queue_progress` | `current_item`, `total_items`, `item_name` | label "Item 2/5 — arquivo.mp3" |
 | `task_done` | `output_path(s)` | barra 1.0, para spinner, habilita Resultados |
 | `task_error` | `message` | log de erro, para spinner |
-| `log` | `message`, `level` | passthrough colorido |
+| `log` | `message`, `level`, `mutable: bool` | passthrough colorido; `mutable=True` atualiza a última linha em vez de criar nova (para progresso contínuo, ex.: download yt-dlp) |
 
 **Áudio (stage="audio"):** `audio_op_start` (`operation`, `item_name`, `item_idx`, `total`), `audio_op_done` (`output_path`, `elapsed`, `item_idx`, `total`, `src_size_bytes`, `out_size_bytes`). `operation` ∈ {`download`, `convert`, `extract`, `denoise`, `normalize`}.
 
