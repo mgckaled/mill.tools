@@ -338,7 +338,7 @@ def build_progress_view(
     on_done: Callable[[dict], None],
     owner_id: str = "",
     on_show_results: Callable[[object, ft.Column], None] | None = None,
-    extra_header: ft.Control | None = None,
+    log_height: int | None = None,
 ) -> ProgressPanel:
     """Retorna um ProgressPanel com controle raiz e métodos reset/show_results.
 
@@ -350,8 +350,9 @@ def build_progress_view(
             Eventos com module_id diferente são ignorados — evita cross-talk entre painéis.
         on_show_results: Renderização customizada dos resultados. Recebe (result, results_inner).
             Se None, usa a renderização padrão de Transcrição (PipelineResult).
-        extra_header: Widget opcional inserido acima do log (ex: reprodutor de áudio).
-            Deve ser um controle Flet com visible=False por padrão.
+        log_height: Altura fixa do log em pixels. Quando definido, o painel pipeline
+            não usa expand=True — útil para embutir o painel abaixo de outro widget.
+            Se None (padrão), o log usa expand=True e o painel ocupa todo o espaço disponível.
     """
     audio_duration: list[float] = [0.0]
     _done_called: list[bool] = [False]  # guard contra duplo on_done
@@ -415,12 +416,10 @@ def build_progress_view(
             spacing=4,
         ),
     ]
-    if extra_header is not None:
-        _pipeline_controls.append(extra_header)
+    _log_ctr_kwargs = {"height": log_height} if log_height else {"expand": True}
     _pipeline_controls.extend([
         ft.Container(
             content=log_list,
-            expand=True,
             border=ft.Border(
                 left=ft.BorderSide(1, ft.Colors.OUTLINE_VARIANT),
                 right=ft.BorderSide(1, ft.Colors.OUTLINE_VARIANT),
@@ -429,13 +428,14 @@ def build_progress_view(
             ),
             border_radius=6,
             bgcolor=Color.dark.surface_variant,
+            **_log_ctr_kwargs,
         ),
         ft.Row(controls=[cancel_button], alignment=ft.MainAxisAlignment.END),
     ])
 
     pipeline_panel = ft.Column(
         controls=_pipeline_controls,
-        expand=True,
+        expand=log_height is None,
         spacing=8,
         visible=True,
     )

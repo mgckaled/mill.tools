@@ -1,7 +1,8 @@
-"""Reprodutor de áudio simples — play/pause/seek via sounddevice + ffmpeg."""
+"""Reprodutor de áudio — play/pause/seek/skip/loop/volume via sounddevice + ffmpeg."""
 
 from __future__ import annotations
 
+import io
 import subprocess
 import threading
 import time
@@ -15,13 +16,27 @@ import numpy as np
 from src.gui.theme.tokens import Color, Type
 
 # ---------------------------------------------------------------------------
-# Constantes de decodificação
+# Constantes
 # ---------------------------------------------------------------------------
 
 _SAMPLERATE = 44100
-_CHANNELS = 2
-_DTYPE = "float32"
-_UI_INTERVAL = 0.2  # segundos entre atualizações de posição na UI
+_CHANNELS   = 2
+_DTYPE      = "float32"
+_UI_INTERVAL = 0.2     # segundos entre atualizações de UI durante reprodução
+_WF_W = 600            # largura do waveform em pixels (resolução interna da imagem PNG)
+_WF_H = 120            # altura do waveform em pixels
+
+# Color.dark.primary = #F4A63C convertido para RGBA
+_WF_PLAYED   = (244, 166,  60, 210)
+_WF_UNPLAYED = ( 80,  80,  95, 150)
+_WF_CURSOR   = (255, 255, 255, 200)
+
+# 1×1 px PNG transparente (src obrigatório no Flet 0.85)
+_BLANK_PNG = (
+    b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01"
+    b"\x08\x06\x00\x00\x00\x1f\x15\xc4\x89\x00\x00\x00\nIDATx\x9cc\x00\x01"
+    b"\x00\x00\x05\x00\x01\r\n-\xb4\x00\x00\x00\x00IEND\xaeB`\x82"
+)
 
 
 # ---------------------------------------------------------------------------
@@ -38,11 +53,9 @@ def _decode_via_ffmpeg(path: str) -> np.ndarray:
     """Decodifica qualquer formato de áudio para float32 PCM via ffmpeg.
 
     Retorna array (n_samples, 2) a 44100 Hz estéreo.
-    Usa ffmpeg que já é dependência do projeto.
     """
     cmd = [
-        "ffmpeg",
-        "-i", path,
+        "ffmpeg", "-i", path,
         "-f", "f32le",
         "-ar", str(_SAMPLERATE),
         "-ac", str(_CHANNELS),
@@ -53,8 +66,51 @@ def _decode_via_ffmpeg(path: str) -> np.ndarray:
     raw = result.stdout
     if not raw:
         raise RuntimeError(f"ffmpeg não produziu saída para: {path}")
-    data = np.frombuffer(raw, dtype=np.float32).reshape(-1, _CHANNELS)
-    return data
+    return np.frombuffer(raw, dtype=np.float32).reshape(-1, _CHANNELS)
+
+
+def _compute_waveform(data: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    """Pré-computa os arrays RGBA played/unplayed para o waveform.
+
+    Retorna (played_arr, unplayed_arr) com shape (_WF_H, _WF_W, 4).
+    Ambos são calculados uma vez no carregamento e reutilizados em cada tick.
+    """
+    W, H = _WF_W, _WF_H
+    played   = np.zeros((H, W, 4), dtype=np.uint8)
+    unplayed = np.zeros((H, W, 4), dtype=np.uint8)
+
+    n = len(data)
+    if n == 0:
+        return played, unplayed
+
+    mono = np.abs(data.mean(axis=1))
+    chunk = max(1, n // W)
+    n_chunks = min(W, n // chunk)
+    if n_chunks == 0:
+        return played, unplayed
+
+    sliced = mono[: n_chunks * chunk].reshape(n_chunks, chunk)
+    amps = sliced.max(axis=1)
+    peak = amps.max()
+    if peak > 0:
+        amps = amps / peak
+
+    cy = H // 2
+    for x in range(n_chunks):
+        h = max(2, int(amps[x] * (cy - 2)))
+        y0, y1 = cy - h, cy + h
+        played[y0:y1, x]   = _WF_PLAYED
+        unplayed[y0:y1, x] = _WF_UNPLAYED
+
+    return played, unplayed
+
+
+def _encode_png(arr: np.ndarray) -> bytes:
+    """Codifica array RGBA como PNG sem compressão (rápido — ~1ms para _WF_W×_WF_H)."""
+    from PIL import Image
+    buf = io.BytesIO()
+    Image.fromarray(arr, "RGBA").save(buf, "PNG", compress_level=0)
+    return buf.getvalue()
 
 
 # ---------------------------------------------------------------------------
@@ -64,16 +120,19 @@ def _decode_via_ffmpeg(path: str) -> np.ndarray:
 class _AudioEngine:
     """Motor de playback baseado em sounddevice.
 
-    Thread-safe para as operações essenciais (play/pause/seek).
-    A posição (_frame) é lida/escrita atomicamente via GIL do CPython.
+    Volume e mute são aplicados no callback do PortAudio (escala o buffer PCM).
+    Thread-safe para as operações essenciais via GIL do CPython.
     """
 
     def __init__(self) -> None:
-        self._data: np.ndarray | None = None
-        self._sr: int = _SAMPLERATE
-        self._frame: int = 0
-        self._stream = None          # sd.OutputStream
-        self.state: str = "stopped"  # stopped | loading | playing | paused
+        self._data:   np.ndarray | None = None
+        self._sr:     int  = _SAMPLERATE
+        self._frame:  int  = 0
+        self._stream        = None
+        self._volume: float = 1.0
+        self._muted:  bool  = False
+        self.loop:    bool  = False
+        self.state:   str   = "stopped"   # stopped | loading | playing | paused
         self.on_complete: Callable | None = None
 
     # ------------------------------------------------------------------
@@ -82,35 +141,37 @@ class _AudioEngine:
 
     @property
     def duration_s(self) -> float:
-        if self._data is None:
-            return 0.0
-        return len(self._data) / self._sr
+        """Duração total em segundos."""
+        return len(self._data) / self._sr if self._data is not None else 0.0
 
     @property
     def position_s(self) -> float:
-        if self._data is None:
-            return 0.0
-        return self._frame / self._sr
+        """Posição atual em segundos."""
+        return self._frame / self._sr if self._data is not None else 0.0
+
+    @property
+    def effective_volume(self) -> float:
+        """Volume efetivo considerando mute."""
+        return 0.0 if self._muted else self._volume
 
     # ------------------------------------------------------------------
     # API pública
     # ------------------------------------------------------------------
 
     def load(self, path: str, on_loaded: Callable | None = None) -> None:
-        """Carrega arquivo em thread de background. Chama on_loaded() ao terminar."""
+        """Carrega arquivo em thread de background; chama on_loaded() ao terminar."""
         self.stop()
         self.state = "loading"
 
         def _worker() -> None:
             try:
                 data = _decode_via_ffmpeg(path)
-                self._data = data
-                self._sr = _SAMPLERATE
+                self._data  = data
+                self._sr    = _SAMPLERATE
                 self._frame = 0
+                self.state  = "stopped"
+            except Exception:
                 self.state = "stopped"
-            except Exception as exc:
-                self.state = "stopped"
-                raise exc
             finally:
                 if on_loaded:
                     on_loaded()
@@ -118,6 +179,7 @@ class _AudioEngine:
         threading.Thread(target=_worker, daemon=True).start()
 
     def toggle(self) -> None:
+        """Alterna play/pause."""
         if self.state == "playing":
             self.pause()
         elif self.state == "paused":
@@ -134,11 +196,13 @@ class _AudioEngine:
         self.state = "playing"
 
     def pause(self) -> None:
+        """Pausa a reprodução."""
         if self._stream:
             self._stream.stop()
         self.state = "paused"
 
     def resume(self) -> None:
+        """Retoma a reprodução de onde parou."""
         if self._data is None:
             return
         self._open_stream()
@@ -151,13 +215,16 @@ class _AudioEngine:
         was_playing = self.state == "playing"
         if self._stream:
             self._stream.stop()
-        self._frame = int(
-            max(0, min(seconds * self._sr, len(self._data) - 1))
-        )
+        self._frame = int(max(0, min(seconds * self._sr, len(self._data) - 1)))
         if was_playing:
             self._open_stream()
 
+    def skip(self, delta_s: float) -> None:
+        """Avança/retrocede delta_s segundos a partir da posição atual."""
+        self.seek(self.position_s + delta_s)
+
     def stop(self) -> None:
+        """Para e reseta a reprodução."""
         if self._stream:
             self._stream.stop()
             self._stream.close()
@@ -165,12 +232,20 @@ class _AudioEngine:
         self._frame = 0
         self.state = "stopped"
 
+    def set_volume(self, vol: float) -> None:
+        """Define volume 0.0–1.0."""
+        self._volume = max(0.0, min(1.0, vol))
+
+    def toggle_mute(self) -> None:
+        """Alterna mudo."""
+        self._muted = not self._muted
+
     # ------------------------------------------------------------------
     # Internals
     # ------------------------------------------------------------------
 
     def _open_stream(self) -> None:
-        import sounddevice as sd  # importação lazy — dep opcional
+        import sounddevice as sd  # importação lazy — dep declarada mas não carregada no import
 
         if self._stream:
             self._stream.stop()
@@ -178,14 +253,9 @@ class _AudioEngine:
 
         engine = self
 
-        def _callback(
-            outdata: np.ndarray,
-            frames: int,
-            _time_info,
-            _status,
-        ) -> None:
-            start = engine._frame
-            end = min(start + frames, len(engine._data))
+        def _callback(outdata: np.ndarray, frames: int, _t, _s) -> None:
+            start  = engine._frame
+            end    = min(start + frames, len(engine._data))
             actual = end - start
 
             if actual <= 0:
@@ -195,7 +265,9 @@ class _AudioEngine:
                     engine.on_complete()
                 raise sd.CallbackStop()
 
-            outdata[:actual] = engine._data[start:end]
+            chunk = engine._data[start:end]
+            vol   = engine.effective_volume
+            outdata[:actual] = chunk * vol if vol != 1.0 else chunk
             engine._frame = end
 
             if actual < frames:
@@ -220,11 +292,12 @@ class _AudioEngine:
 
 @dataclass
 class AudioPlayer:
-    """Reprodutor de áudio com controle visual (play/pause/seek).
+    """Reprodutor de áudio com controle visual play/pause/seek/skip/loop/volume.
 
     Atributos:
-        control: Widget Flet a inserir no layout (inicialmente invisible).
-        load: Função que recebe um caminho de arquivo e carrega o áudio.
+        control: Widget Flet a inserir no layout. Sempre visível — exibe
+                 placeholder até o primeiro load().
+        load: Função que recebe caminho de arquivo e inicia o carregamento.
     """
     control: ft.Control
     load: Callable[[str], None]
@@ -233,23 +306,27 @@ class AudioPlayer:
 def build_audio_player(page: ft.Page) -> AudioPlayer:
     """Constrói o reprodutor de áudio.
 
-    O controle começa com visible=False e torna-se visível após o primeiro load().
-    A decodificação ocorre em thread de background via ffmpeg; um indicador de
-    carregamento é exibido enquanto decoding está em andamento.
+    Features:
+        - Waveform estático com cursor de posição (PIL + numpy, 1 redesenho/tick)
+        - Play/pause, skip ±10s, loop, volume + mute
+        - Seek por clique no waveform (GestureDetector.on_tap_down → local_x)
+        - Decodificação e cálculo do waveform em threads de background
 
     Args:
-        page: Página Flet (usada para page.update() nas atualizações de posição).
+        page: Página Flet (usada em page.update() nos callbacks de UI).
     """
     engine = _AudioEngine()
-    _timer_running: list[bool] = [False]
+    _timer_running: list[bool]              = [False]
+    _wf_played:     list[np.ndarray | None] = [None]
+    _wf_unplayed:   list[np.ndarray | None] = [None]
 
     # ------------------------------------------------------------------
-    # Widgets
+    # Widgets de informação
     # ------------------------------------------------------------------
 
     file_label = ft.Text(
         "",
-        size=12,
+        size=14,
         weight=ft.FontWeight.W_500,
         color=ft.Colors.ON_SURFACE,
         no_wrap=True,
@@ -257,46 +334,191 @@ def build_audio_player(page: ft.Page) -> AudioPlayer:
         expand=True,
     )
 
+    info_label = ft.Text(
+        "",
+        size=12,
+        color=ft.Colors.ON_SURFACE_VARIANT,
+        font_family=Type.FONT_MONO,
+        no_wrap=True,
+    )
+
     time_label = ft.Text(
         "0:00 / 0:00",
-        size=11,
+        size=13,
         color=ft.Colors.ON_SURFACE_VARIANT,
         font_family=Type.FONT_MONO,
     )
 
-    play_btn = ft.IconButton(
-        icon=ft.Icons.PLAY_CIRCLE_OUTLINE,
-        icon_size=26,
-        icon_color=ft.Colors.PRIMARY,
-        tooltip="Reproduzir",
-        padding=ft.Padding(left=0, right=2, top=0, bottom=0),
+    loading_ring = ft.ProgressRing(
+        width=14, height=14, stroke_width=2,
+        color=ft.Colors.PRIMARY, visible=False,
     )
 
-    seek_slider = ft.Slider(
-        min=0.0,
-        max=1.0,
-        value=0.0,
+    # ------------------------------------------------------------------
+    # Waveform
+    # ------------------------------------------------------------------
+
+    waveform_img = ft.Image(src=_BLANK_PNG, fit=ft.BoxFit.FILL, expand=True)
+
+    waveform_gd = ft.GestureDetector(
+        content=waveform_img,
+        on_tap_down=None,   # atribuído abaixo após definir o handler
         expand=True,
-        height=20,
+    )
+
+    waveform_ctr = ft.Container(
+        content=waveform_gd,
+        height=_WF_H,
+        border_radius=4,
+        clip_behavior=ft.ClipBehavior.HARD_EDGE,
+    )
+
+    # ------------------------------------------------------------------
+    # Botões de transporte
+    # ------------------------------------------------------------------
+
+    play_btn = ft.IconButton(
+        icon=ft.Icons.PLAY_CIRCLE_OUTLINE,
+        selected_icon=ft.Icons.PAUSE_CIRCLE_OUTLINE,
+        selected=False,
+        icon_size=38,
+        icon_color=ft.Colors.PRIMARY,
+        tooltip="Reproduzir",
+        padding=ft.Padding(left=0, right=6, top=0, bottom=0),
+        disabled=True,
+    )
+
+    skip_back_btn = ft.IconButton(
+        icon=ft.Icons.REPLAY_10,
+        icon_size=26,
+        icon_color=ft.Colors.ON_SURFACE_VARIANT,
+        tooltip="Voltar 10s",
+        disabled=True,
+    )
+
+    skip_fwd_btn = ft.IconButton(
+        icon=ft.Icons.FORWARD_10,
+        icon_size=26,
+        icon_color=ft.Colors.ON_SURFACE_VARIANT,
+        tooltip="Avançar 10s",
+        disabled=True,
+    )
+
+    loop_btn = ft.IconButton(
+        icon=ft.Icons.REPEAT,
+        selected_icon=ft.Icons.REPEAT,
+        selected=False,
+        icon_size=22,
+        style=ft.ButtonStyle(
+            color={"selected": ft.Colors.PRIMARY, "": ft.Colors.ON_SURFACE_VARIANT},
+        ),
+        tooltip="Repetir",
+    )
+
+    # ------------------------------------------------------------------
+    # Controle de volume
+    # ------------------------------------------------------------------
+
+    mute_btn = ft.IconButton(
+        icon=ft.Icons.VOLUME_UP,
+        selected_icon=ft.Icons.VOLUME_OFF,
+        selected=False,
+        icon_size=22,
+        style=ft.ButtonStyle(
+            color={"selected": ft.Colors.ON_SURFACE_VARIANT, "": ft.Colors.ON_SURFACE_VARIANT},
+        ),
+        tooltip="Mudo",
+    )
+
+    vol_slider = ft.Slider(
+        min=0.0, max=1.0, value=1.0,
+        width=110, height=24,
         active_color=ft.Colors.PRIMARY,
         inactive_color=ft.Colors.OUTLINE_VARIANT,
         thumb_color=ft.Colors.PRIMARY,
     )
 
-    loading_ring = ft.ProgressRing(
-        width=16,
-        height=16,
-        stroke_width=2,
-        color=ft.Colors.PRIMARY,
+    # ------------------------------------------------------------------
+    # Placeholder (visível antes do primeiro load)
+    # ------------------------------------------------------------------
+
+    # Altura espelhando o conteúdo do player: header(30) + wf(120) + time(22) + controls(52) + spacing(18) + padding(24) ≈ 266
+    _PLAYER_H = 270
+
+    placeholder_ctr = ft.Container(
+        content=ft.Column(
+            controls=[
+                ft.Icon(ft.Icons.AUDIO_FILE_OUTLINED, size=36, color=ft.Colors.OUTLINE_VARIANT),
+                ft.Text(
+                    "Aguardando arquivo de áudio...",
+                    size=13,
+                    color=ft.Colors.ON_SURFACE_VARIANT,
+                    italic=True,
+                ),
+            ],
+            horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+            alignment=ft.MainAxisAlignment.CENTER,
+            spacing=10,
+        ),
+        height=_PLAYER_H,
+        alignment=ft.Alignment.CENTER,
+        visible=True,
+    )
+
+    # ------------------------------------------------------------------
+    # Painel do player (oculto até load)
+    # ------------------------------------------------------------------
+
+    player_inner = ft.Container(
+        content=ft.Column(
+            controls=[
+                # Linha 1: ícone + nome do arquivo + loading ring + info
+                ft.Row(
+                    controls=[
+                        ft.Icon(ft.Icons.AUDIO_FILE_OUTLINED, size=14, color=ft.Colors.PRIMARY),
+                        file_label,
+                        loading_ring,
+                        info_label,
+                    ],
+                    spacing=6,
+                    vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                ),
+                # Waveform clicável
+                waveform_ctr,
+                # Posição
+                ft.Row(
+                    controls=[time_label],
+                    alignment=ft.MainAxisAlignment.END,
+                ),
+                # Controles: transport à esquerda, volume à direita
+                ft.Row(
+                    controls=[
+                        skip_back_btn,
+                        play_btn,
+                        skip_fwd_btn,
+                        loop_btn,
+                        ft.Container(expand=True),
+                        mute_btn,
+                        vol_slider,
+                    ],
+                    spacing=2,
+                    vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                ),
+            ],
+            spacing=6,
+        ),
         visible=False,
     )
 
     # ------------------------------------------------------------------
-    # Container raiz (invisível até o primeiro load)
+    # Container raiz — sempre visível
     # ------------------------------------------------------------------
 
-    container = ft.Container(
-        visible=False,
+    root = ft.Container(
+        content=ft.Column(
+            controls=[placeholder_ctr, player_inner],
+            spacing=0,
+        ),
         border=ft.Border(
             left=ft.BorderSide(1, ft.Colors.OUTLINE_VARIANT),
             right=ft.BorderSide(1, ft.Colors.OUTLINE_VARIANT),
@@ -305,66 +527,45 @@ def build_audio_player(page: ft.Page) -> AudioPlayer:
         ),
         border_radius=6,
         bgcolor=Color.dark.surface_variant,
-        padding=ft.Padding(left=8, right=12, top=6, bottom=4),
-        margin=ft.Margin(top=0, bottom=0, left=0, right=0),
-        content=ft.Column(
-            spacing=0,
-            controls=[
-                # Linha 1: ícone + nome do arquivo + loading ring + tempo
-                ft.Row(
-                    controls=[
-                        ft.Icon(
-                            ft.Icons.AUDIO_FILE_OUTLINED,
-                            size=13,
-                            color=ft.Colors.PRIMARY,
-                        ),
-                        file_label,
-                        loading_ring,
-                        time_label,
-                    ],
-                    spacing=6,
-                    vertical_alignment=ft.CrossAxisAlignment.CENTER,
-                ),
-                # Linha 2: botão play/pause + seek slider
-                ft.Row(
-                    controls=[
-                        play_btn,
-                        seek_slider,
-                    ],
-                    spacing=0,
-                    vertical_alignment=ft.CrossAxisAlignment.CENTER,
-                ),
-            ],
-        ),
+        padding=ft.Padding(left=10, right=14, top=8, bottom=8),
     )
 
     # ------------------------------------------------------------------
-    # Atualização periódica de posição (thread de polling)
+    # Waveform render (chamado no polling thread — ~1ms por frame)
+    # ------------------------------------------------------------------
+
+    def _render_wf(pos_s: float) -> bytes:
+        """Gera PNG do waveform com cursor na posição pos_s."""
+        if _wf_played[0] is None:
+            return _BLANK_PNG
+        W   = _WF_W
+        dur = engine.duration_s
+        cx  = min(int(pos_s / dur * W), W - 1) if dur > 0 else 0
+
+        img = _wf_unplayed[0].copy()
+        if cx > 0:
+            img[:, :cx] = _wf_played[0][:, :cx]
+        if 0 <= cx < W:
+            img[:, cx] = _WF_CURSOR
+
+        return _encode_png(img)
+
+    # ------------------------------------------------------------------
+    # Atualização periódica de posição
     # ------------------------------------------------------------------
 
     def _update_display() -> None:
-        """Atualiza slider e tempo enquanto reproduzindo."""
-        dur = engine.duration_s
-        pos = engine.position_s
+        """Atualiza ícone play/pause, label de tempo e waveform."""
+        pos   = engine.position_s
+        dur   = engine.duration_s
         state = engine.state
 
-        # Atualiza ícone do botão
-        if state == "playing":
-            play_btn.icon = ft.Icons.PAUSE_CIRCLE_OUTLINE
-            play_btn.tooltip = "Pausar"
-        elif state == "loading":
-            play_btn.icon = ft.Icons.PLAY_CIRCLE_OUTLINE
-            play_btn.tooltip = "Reproduzir"
-        else:
-            play_btn.icon = ft.Icons.PLAY_CIRCLE_OUTLINE
-            play_btn.tooltip = "Reproduzir"
+        play_btn.selected = state == "playing"
+        play_btn.tooltip  = "Pausar" if state == "playing" else "Reproduzir"
+        time_label.value  = f"{_fmt_s(pos)} / {_fmt_s(dur)}"
 
-        # Atualiza slider (somente se não estiver no evento on_change)
-        if dur > 0:
-            seek_slider.value = min(pos / dur, 1.0)
-
-        # Atualiza label de tempo
-        time_label.value = f"{_fmt_s(pos)} / {_fmt_s(dur)}"
+        if _wf_played[0] is not None:
+            waveform_img.src = _render_wf(pos)
 
         try:
             page.update()
@@ -395,56 +596,108 @@ def build_audio_player(page: ft.Page) -> AudioPlayer:
     # ------------------------------------------------------------------
 
     def _on_play_click(_e) -> None:
-        state = engine.state
-        if state == "loading":
+        if engine.state == "loading":
             return
         engine.toggle()
         if engine.state == "playing":
             _start_polling()
         _update_display()
 
-    def _on_seek_change_end(e) -> None:
-        """Seek ao soltar o slider."""
-        dur = engine.duration_s
-        if dur > 0:
-            engine.seek(seek_slider.value * dur)
+    def _on_skip_back(_e) -> None:
+        engine.skip(-10.0)
         if engine.state == "playing":
             _start_polling()
+        _update_display()
+
+    def _on_skip_fwd(_e) -> None:
+        engine.skip(10.0)
+        if engine.state == "playing":
+            _start_polling()
+        _update_display()
+
+    def _on_loop_click(_e) -> None:
+        engine.loop = not engine.loop
+        loop_btn.selected = engine.loop
+        page.update()
+
+    def _on_mute_click(_e) -> None:
+        engine.toggle_mute()
+        mute_btn.selected = engine._muted
+        page.update()
+
+    def _on_vol_change(_e) -> None:
+        engine.set_volume(vol_slider.value)
+        if engine._muted:
+            engine._muted = False
+            mute_btn.selected = False
+            page.update()
+
+    def _on_waveform_tap(e) -> None:
+        """Seek por clique no waveform; local_x fornecido pelo GestureDetector."""
+        if engine.state == "loading" or engine._data is None:
+            return
+        w = waveform_gd.width
+        if not (w and w > 0 and engine.duration_s > 0):
+            return
+        frac = max(0.0, min(1.0, e.local_x / w))
+        engine.seek(frac * engine.duration_s)
+        if engine.state == "playing":
+            _start_polling()
+        _update_display()
 
     def _on_complete() -> None:
-        """Chamado pelo engine quando a reprodução termina."""
-        _stop_polling()
-        seek_slider.value = 0.0
-        time_label.value = f"0:00 / {_fmt_s(engine.duration_s)}"
-        play_btn.icon = ft.Icons.PLAY_CIRCLE_OUTLINE
-        play_btn.tooltip = "Reproduzir"
-        try:
-            page.update()
-        except Exception:
-            pass
+        """Chamado pelo engine ao fim da reprodução — trata loop e reset de UI."""
+        if engine.loop and engine._data is not None:
+            # Reinicia em nova thread para não bloquear o callback do PortAudio
+            def _restart() -> None:
+                engine.play()
+                _start_polling()
+            threading.Thread(target=_restart, daemon=True).start()
+        else:
+            _stop_polling()
+            waveform_img.src = _render_wf(0.0)
+            time_label.value = f"0:00 / {_fmt_s(engine.duration_s)}"
+            play_btn.selected = False
+            play_btn.tooltip  = "Reproduzir"
+            try:
+                page.update()
+            except Exception:
+                pass
 
-    play_btn.on_click = _on_play_click
-    seek_slider.on_change_end = _on_seek_change_end
-    engine.on_complete = _on_complete
+    play_btn.on_click      = _on_play_click
+    skip_back_btn.on_click = _on_skip_back
+    skip_fwd_btn.on_click  = _on_skip_fwd
+    loop_btn.on_click      = _on_loop_click
+    mute_btn.on_click      = _on_mute_click
+    vol_slider.on_change   = _on_vol_change
+    waveform_gd.on_tap_down = _on_waveform_tap
+    engine.on_complete     = _on_complete
 
     # ------------------------------------------------------------------
     # Função pública de carga
     # ------------------------------------------------------------------
 
     def _load(path: str) -> None:
-        """Carrega um arquivo de áudio e exibe o player."""
+        """Carrega arquivo de áudio, calcula waveform e exibe o player."""
         _stop_polling()
         p = Path(path)
 
-        # Resetar UI para estado de carregamento
-        file_label.value = p.name
-        time_label.value = "0:00 / 0:00"
-        seek_slider.value = 0.0
-        play_btn.icon = ft.Icons.PLAY_CIRCLE_OUTLINE
-        play_btn.tooltip = "Reproduzir"
-        play_btn.disabled = True
-        loading_ring.visible = True
-        container.visible = True
+        # Reset de UI para estado loading
+        file_label.value   = p.name
+        info_label.value   = ""
+        time_label.value   = "0:00 / 0:00"
+        play_btn.selected  = False
+        play_btn.disabled  = True
+        skip_back_btn.disabled = True
+        skip_fwd_btn.disabled  = True
+        loading_ring.visible   = True
+        waveform_img.src   = _BLANK_PNG
+        _wf_played[0]   = None
+        _wf_unplayed[0] = None
+
+        # Transição placeholder → player
+        placeholder_ctr.visible = False
+        player_inner.visible    = True
 
         try:
             page.update()
@@ -452,10 +705,26 @@ def build_audio_player(page: ft.Page) -> AudioPlayer:
             pass
 
         def _on_loaded() -> None:
-            play_btn.disabled = False
-            loading_ring.visible = False
-            dur = engine.duration_s
-            time_label.value = f"0:00 / {_fmt_s(dur)}"
+            # Calcula waveform com os dados já disponíveis em engine._data
+            if engine._data is not None:
+                try:
+                    played, unplayed = _compute_waveform(engine._data)
+                    _wf_played[0]   = played
+                    _wf_unplayed[0] = unplayed
+                except Exception:
+                    pass
+
+            dur    = engine.duration_s
+            sr_str = f"{_SAMPLERATE // 1000}.{(_SAMPLERATE % 1000) // 100}kHz"
+            info_label.value   = f"{_fmt_s(dur)} · {sr_str} · Stereo"
+            play_btn.disabled  = False
+            skip_back_btn.disabled = False
+            skip_fwd_btn.disabled  = False
+            loading_ring.visible   = False
+
+            if _wf_played[0] is not None:
+                waveform_img.src = _render_wf(0.0)
+
             try:
                 page.update()
             except Exception:
@@ -463,4 +732,4 @@ def build_audio_player(page: ft.Page) -> AudioPlayer:
 
         engine.load(path, on_loaded=_on_loaded)
 
-    return AudioPlayer(control=container, load=_load)
+    return AudioPlayer(control=root, load=_load)
