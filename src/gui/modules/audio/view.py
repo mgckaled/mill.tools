@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING
 
 import flet as ft
 
+from src.gui.components.audio_player import build_audio_player
 from src.gui.modules.audio.form_view import AudioArgs, AudioFormPanel, build_audio_form
 from src.gui.modules.audio.worker import start_audio_pipeline
 from src.gui.modules.base import Module
@@ -52,11 +53,18 @@ def build_audio_module(
     def _on_cancel() -> None:
         cancel_event.set()
 
+    _AUDIO_EXTS = {".mp3", ".wav", ".flac", ".ogg", ".opus", ".aac", ".m4a"}
+
     def _on_done(payload: dict) -> None:
         pipeline_running[0] = False
         form_panel.set_running(False)
         if not payload.get("error"):
             progress_panel.show_results(payload)
+            # Carrega o primeiro arquivo de áudio da saída no reprodutor
+            for path_str in payload.get("output_paths", []):
+                if Path(path_str).suffix.lower() in _AUDIO_EXTS:
+                    player.load(path_str)
+                    break
 
     # ------------------------------------------------------------------
     # Renderização dos resultados de áudio
@@ -108,6 +116,8 @@ def build_audio_module(
     # Painéis
     # ------------------------------------------------------------------
 
+    player = build_audio_player(page)
+
     form_panel: AudioFormPanel = build_audio_form(page, on_start=_on_start)
     progress_panel: ProgressPanel = build_progress_view(
         page,
@@ -115,6 +125,7 @@ def build_audio_module(
         on_done=_on_done,
         owner_id="audio",
         on_show_results=_render_audio_results,
+        extra_header=player.control,
     )
 
     # ------------------------------------------------------------------

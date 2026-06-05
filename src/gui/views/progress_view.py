@@ -338,6 +338,7 @@ def build_progress_view(
     on_done: Callable[[dict], None],
     owner_id: str = "",
     on_show_results: Callable[[object, ft.Column], None] | None = None,
+    extra_header: ft.Control | None = None,
 ) -> ProgressPanel:
     """Retorna um ProgressPanel com controle raiz e métodos reset/show_results.
 
@@ -349,6 +350,8 @@ def build_progress_view(
             Eventos com module_id diferente são ignorados — evita cross-talk entre painéis.
         on_show_results: Renderização customizada dos resultados. Recebe (result, results_inner).
             Se None, usa a renderização padrão de Transcrição (PipelineResult).
+        extra_header: Widget opcional inserido acima do log (ex: reprodutor de áudio).
+            Deve ser um controle Flet com visible=False por padrão.
     """
     audio_duration: list[float] = [0.0]
     _done_called: list[bool] = [False]  # guard contra duplo on_done
@@ -393,39 +396,45 @@ def build_progress_view(
     # --- moinho giratório no header do pipeline ---
     status_icon, _start_spin, _stop_spin = spinner()
 
-    pipeline_panel = ft.Column(
-        controls=[
-            ft.Column(
-                controls=[
-                    ft.Row(
-                        controls=[
-                            status_icon,
-                            stage_label,
-                        ],
-                        spacing=8,
-                        vertical_alignment=ft.CrossAxisAlignment.CENTER,
-                    ),
-                    ft.Container(
-                        content=progress_bar,
-                        padding=ft.Padding(left=0, right=0, top=4, bottom=8),
-                    ),
-                ],
-                spacing=4,
-            ),
-            ft.Container(
-                content=log_list,
-                expand=True,
-                border=ft.Border(
-                    left=ft.BorderSide(1, ft.Colors.OUTLINE_VARIANT),
-                    right=ft.BorderSide(1, ft.Colors.OUTLINE_VARIANT),
-                    top=ft.BorderSide(1, ft.Colors.OUTLINE_VARIANT),
-                    bottom=ft.BorderSide(1, ft.Colors.OUTLINE_VARIANT),
+    _pipeline_controls: list[ft.Control] = [
+        ft.Column(
+            controls=[
+                ft.Row(
+                    controls=[
+                        status_icon,
+                        stage_label,
+                    ],
+                    spacing=8,
+                    vertical_alignment=ft.CrossAxisAlignment.CENTER,
                 ),
-                border_radius=6,
-                bgcolor=Color.dark.surface_variant,
+                ft.Container(
+                    content=progress_bar,
+                    padding=ft.Padding(left=0, right=0, top=4, bottom=8),
+                ),
+            ],
+            spacing=4,
+        ),
+    ]
+    if extra_header is not None:
+        _pipeline_controls.append(extra_header)
+    _pipeline_controls.extend([
+        ft.Container(
+            content=log_list,
+            expand=True,
+            border=ft.Border(
+                left=ft.BorderSide(1, ft.Colors.OUTLINE_VARIANT),
+                right=ft.BorderSide(1, ft.Colors.OUTLINE_VARIANT),
+                top=ft.BorderSide(1, ft.Colors.OUTLINE_VARIANT),
+                bottom=ft.BorderSide(1, ft.Colors.OUTLINE_VARIANT),
             ),
-            ft.Row(controls=[cancel_button], alignment=ft.MainAxisAlignment.END),
-        ],
+            border_radius=6,
+            bgcolor=Color.dark.surface_variant,
+        ),
+        ft.Row(controls=[cancel_button], alignment=ft.MainAxisAlignment.END),
+    ])
+
+    pipeline_panel = ft.Column(
+        controls=_pipeline_controls,
         expand=True,
         spacing=8,
         visible=True,

@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Callable
 
 from src.core.audio.info import get_duration_ffprobe
+from src.utils import sanitize_filename
 
 _TARGET_TP  = -1.0   # True Peak máximo (dBFS)
 _TARGET_LRA = 11.0   # Loudness Range alvo
@@ -32,7 +33,7 @@ def normalize_lufs(
         stats_dict contém os valores medidos (input_i, input_tp, input_lra…).
     """
     out_dir.mkdir(parents=True, exist_ok=True)
-    out_path = out_dir / f"{src.stem}_normalized{src.suffix}"
+    out_path = out_dir / f"{sanitize_filename(src.stem)}_normalized{src.suffix}"
 
     # Passe 1: medição
     measure_cmd = [
