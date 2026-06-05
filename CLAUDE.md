@@ -33,7 +33,7 @@ gui.py                           — entry point GUI (splash → build_app)
 src/
 ├── transcriber.py · formatter.py · analyzer.py · prompter.py
 ├── llm_factory.py               — roteamento gemini-* → Google, demais → Ollama
-├── utils.py                     — logging, validação, metadata, download, paths de output
+├── utils.py                     — logging, validação, metadata, download, paths de output, sanitize_filename()
 ├── core/
 │   ├── audio/
 │   │   ├── downloader.py        — yt-dlp: URL → output/audio/source/
@@ -119,7 +119,7 @@ Download, conversão e processamento via yt-dlp e ffmpeg. Encoding 100% CPU — 
 - **`pipeline_log.py`**: 7 `OP_VERBS`/`OP_LABELS`, builders `fmt_*` por operação (metadados ffprobe + detalhe específico), `resolve_messages()` e `resolve_stage_label()` delegados por `progress_view.py`.
 - **Saída**: downloads → `output/video/source/`; processados → `output/video/processed/`.
 - **Bridge extract_audio**: resultado de áudio exibe botões "Transcrever" e "Processar no Áudio" no painel de resultados.
-- **Downloader — quirks Windows**: WebM requer formato `bestvideo[vcodec^=vp]+bestaudio[acodec^=opus]` — **não** adicionar `FFmpegVideoConvertor` para WebM (gera `.temp.webm` bloqueado pelo antivírus com `[WinError 32]`). Opções obrigatórias: `nopart=True`, `overwrites=True`, `paths={"temp": tempfile.gettempdir()}` (redireciona merge temporário para `%TEMP%`, excluído do Defender por padrão). Solução definitiva: adicionar a pasta `output/` às exclusões do Windows Defender.
+- **Downloader — quirks Windows**: **Nunca usar `FFmpegVideoConvertor`** em nenhum formato (MP4, WebM ou outro) — o post-processor cria `.temp.<ext>` no diretório de saída e o Windows Defender bloqueia o rename com `[WinError 32]`. Usar apenas `merge_output_format` para garantir o container; ele opera sobre arquivos temporários em `%TEMP%`. Opções obrigatórias: `nopart=True`, `overwrites=True`, `paths={"temp": tempfile.gettempdir()}`. Solução definitiva: adicionar a pasta `output/` às exclusões do Windows Defender.
 - **Progresso yt-dlp**: campos `_percent_str`, `_speed_str`, `_eta_str` contêm códigos ANSI — strip obrigatório antes de exibir: `re.sub(r'\x1b\[[0-9;]*m', '', s).strip()`.
 
 ## Módulo Imagens (PR-IMG-2B)
@@ -213,6 +213,7 @@ Iniciada com `uv run gui.py`. Flutter desktop no Windows.
 | `BoxDecoration(shadow=...)` | deve ser `shadows=[ft.BoxShadow(...)]` — plural, lista |
 | `Container(box_shadow=...)` | deve ser `Container(shadow=ft.BoxShadow(...))` — sem prefixo `box_` |
 | `ink=True` em Container | cria Flutter InkWell que **absorve** eventos de ponteiro e anula o cursor do GestureDetector externo — cursor só aparece nas margens. Nunca usar `ink=True` em containers clicáveis; usar `GestureDetector` externo + `Cursor.*` |
+| `Container.on_click` + `GestureDetector` externo | os dois handlers competem — o clique pode não registrar. Padrão correto: remover `Container.on_click` e colocar o handler em `GestureDetector.on_tap`. Nunca mutar `ctr.disabled` de dentro de callbacks de mudança de estado (ex.: `_on_items_change`) — causa rebuild do widget que desfaz mudanças de `border`/`bgcolor` feitas por `_refresh_op_cards()`. |
 | `ft.Tooltip` sem `size_constraints` | texto renderiza em linha única sem quebra. Usar `size_constraints=ft.BoxConstraints(max_width=280)` |
 | `ft.NavigationRailDestination` cursor | não tem propriedade `mouse_cursor`. Solução: envolver o `NavigationRail` num `ft.GestureDetector(mouse_cursor=Cursor.interactive)` e alternar para `Cursor.forbidden` via `page.pubsub` quando pipeline estiver rodando |
 | `ButtonStyle.mouse_cursor` | aceita valor flat (`Cursor.interactive`) **ou** dict por estado (`Cursor.btn`). `ControlState.DISABLED` existe e funciona — usar `Cursor.btn` em botões que podem ser desabilitados |
