@@ -9,10 +9,11 @@ Multiferramenta pessoal extensível para processamento de áudio, vídeo e trans
 - **yt-dlp** — download de áudio/vídeo e metadados
 - **ffmpeg** — conversão/extração de áudio e normalização loudnorm (EBU R128)
 - **noisereduce>=3.0** + **soundfile>=0.12** — spectral gating e I/O PCM (pós-processamento de áudio, CPU-only, sem torch)
+- **sounddevice>=0.4** — reprodução de áudio PCM via PortAudio (CPU-only, sem torch); usado pelo reprodutor embutido na GUI
 - **Pillow 12.2+** — processamento de imagens (AVIF nativo, EXIF transpose, conversão multi-formato)
 - **rembg[cpu]** + **onnxruntime** (extra `[ai-image]`) — remoção de fundo CPU/ONNX
 - **LangChain** + **Ollama** (local) / **Google Gemini** (nuvem) — formatação, análise, condensação e descrição de imagens (vision)
-- **Flet 0.85** — GUI desktop (Flutter no Windows)
+- **Flet 0.85** — GUI desktop (Flutter no Windows); constraint em `pyproject.toml`: `flet>=0.28`, versão instalada e testada: 0.85.2
 - **tqdm** — barra de progresso (CLI)
 
 > Decisão consciente: o projeto evita **PyTorch**. O pós-processamento de áudio (PR3.1-A: denoise + normalize) é CPU-only e torch-free. Qualquer IA que dependa de torch (ex.: Demucs, DeepFilterNet neural) ficará isolada num extra opcional `[ai-audio]` (PR3.1-B) — o app base permanece torch-free.
@@ -62,7 +63,8 @@ src/
     ├── workers.py               — pipeline de Transcrição em thread (module_id="transcription")
     ├── help_content.py          — HELP_SHORT/LONG: registro central de tooltips/modais
     ├── components/
-    │   └── input_source.py      — InputItem, InputSource (URL + FilePicker, allow_multiple)
+    │   ├── input_source.py      — InputItem, InputSource (URL + FilePicker, allow_multiple)
+    │   └── audio_player.py      — build_audio_player(): reprodutor play/pause/seek via sounddevice + ffmpeg; AudioPlayer.load(path)
     ├── modules/
     │   ├── base.py              — dataclass Module (id, label, icon, control, on_mount/on_unmount)
     │   ├── transcription/view.py
@@ -96,6 +98,7 @@ Ordem na rail: Áudio → Vídeo → Imagens → Transcrição.
 - **Capa + metadados**: embutidos por padrão; switch desligável. Fallback gracioso em ogg/opus.
 - **Fila sequencial**: um item por vez. Progresso via `queue_progress` + `progress_update`.
 - **Saída**: downloads → `output/audio/source/`; convertidos/pós-processados → `output/audio/processed/`.
+- **Reprodutor embutido** (`components/audio_player.py`): aparece acima do log após o pipeline concluir. Decodifica via ffmpeg (qualquer formato) em thread de background, reproduz via sounddevice. UI: nome do arquivo + anel de carregamento + play/pause + seek slider (`on_change_end`). `AudioPlayer.load(path)` carregado automaticamente em `_on_done` com o primeiro arquivo de áudio de `output_paths`.
 
 ### Pós-processamento (PR3.1-A)
 
@@ -106,7 +109,7 @@ Ativado por switches no formulário; as duas operações são encadeáveis após
 | **Reduzir ruído** | `denoiser.py` | Spectral gating via noisereduce (CPU-only). Decodifica via ffmpeg, processa canal por canal, salva WAV preservando subtype PCM original (`sf.info` + `subtype=meta.subtype`). |
 | **Normalizar volume** | `normalizer.py` | EBU R128 via ffmpeg loudnorm em 2 passes: passe 1 mede IL/LRA/TP; passe 2 aplica ganho linear (`linear=true`). Alvo configurável −23..−6 LUFS. True Peak máx. −1 dBFS. Retorna `(path, stats_dict)`. |
 
-- **`pipeline_log.py`**: vocabulário centralizado — `OP_VERBS`/`OP_LABELS` para 5 operações (download, convert, extract, denoise, normalize), builders `fmt_denoise_*` / `fmt_normalize_*`, `resolve_messages()` e `resolve_stage_label()` delegados pelo `progress_view.py`. Padrão idêntico ao `modules/image/pipeline_log.py`.
+- **`pipeline_log.py`**: vocabulário centralizado para 5 operações (download, convert, extract, denoise, normalize). Segue o padrão descrito em "Arquitetura GUI > pipeline_log.py".
 - **`AudioArgs`**: expandido com `denoise: bool`, `normalize: bool`, `normalize_target_lufs: float = -14.0`. Estado persistido em `~/.mill-tools/config.json`.
 
 ## Módulo Vídeo (PR4)
@@ -116,7 +119,7 @@ Download, conversão e processamento via yt-dlp e ffmpeg. Encoding 100% CPU — 
 - **Operações** (7, selecionadas via card grid 3 colunas): `download` (yt-dlp), `convert` (codec/container), `trim` (corte por tempo, copy ou reenc), `compress` (H.264/CRF 18–28), `resize` (scale ffmpeg, aspect ratio preservado), `extract_audio` (bridge para `core/audio/converter.py`), `thumbnail` (frame → jpg/png).
 - **Core** (`core/video/`): `info.py` — `VideoInfo` + `get_video_info()` via ffprobe; `downloader.py` — `download_video()` via yt-dlp com hook de progresso; `converter.py` — 6 funções ffmpeg com `_run_ffmpeg()` e `-progress pipe:1`.
 - **GUI** (`form_view.py`): `VideoArgs` com 17 campos. Detecção automática URL → operação forçada para `download` (seletor desabilitado). 7 blocos condicionais com `visible=`/`animate_opacity`.
-- **`pipeline_log.py`**: 7 `OP_VERBS`/`OP_LABELS`, builders `fmt_*` por operação (metadados ffprobe + detalhe específico), `resolve_messages()` e `resolve_stage_label()` delegados por `progress_view.py`.
+- **`pipeline_log.py`**: 7 operações (download, convert, trim, compress, resize, extract_audio, thumbnail). Segue o padrão descrito em "Arquitetura GUI > pipeline_log.py".
 - **Saída**: downloads → `output/video/source/`; processados → `output/video/processed/`.
 - **Bridge extract_audio**: resultado de áudio exibe botões "Transcrever" e "Processar no Áudio" no painel de resultados.
 - **Downloader — quirks Windows**: **Nunca usar `FFmpegVideoConvertor`** em nenhum formato (MP4, WebM ou outro) — o post-processor cria `.temp.<ext>` no diretório de saída e o Windows Defender bloqueia o rename com `[WinError 32]`. Usar apenas `merge_output_format` para garantir o container; ele opera sobre arquivos temporários em `%TEMP%`. Opções obrigatórias: `nopart=True`, `overwrites=True`, `paths={"temp": tempfile.gettempdir()}`. Solução definitiva: adicionar a pasta `output/` às exclusões do Windows Defender.
@@ -131,7 +134,7 @@ Conversão, manipulação e operações de IA com visor Before/After integrado.
 - **GUI** (`form_view.py`): `ImageArgs` com 33 campos. Card `remove_bg` desabilitado com tooltip quando extra não instalado (`_UNAVAILABLE`). Blocos `rembg_block` e `describe_block` com Dropdown de modelo. Formato oculto para `favicon` e `describe`.
 - **Visor Before/After**: `_single_pane` (placeholder ou input thumb) e `_before_after_row` (Antes/Depois em `ft.Row`) num `ft.Row` pai, toggle por `visible=`. `_last_input_thumb` preserva o thumb do input para o split após `image_op_done`.
 - **Formatos**: JPG, PNG, WebP, AVIF, TIFF, BMP, GIF, ICO. `LOSSY_FMTS = {"jpg", "jpeg", "webp"}`.
-- **`pipeline_log.py`**: fonte única de mensagens do módulo — constantes `OP_VERBS`/`OP_LABELS`, builders `fmt_*` por operação (metadados PIL, detalhes de cada op, rembg, describe), `resolve_messages()` e `resolve_stage_label()` usados por `view.py`. `worker.py` emite metadados lazy (`_try_read_meta` lê cabeçalho sem decodificar pixels) e detalhe específico antes de cada chamada ao core. **Padrão a replicar nos módulos Áudio e Vídeo (PR4).**
+- **`pipeline_log.py`**: fonte única de mensagens do módulo — constantes `OP_VERBS`/`OP_LABELS`, builders `fmt_*` por operação (metadados PIL, detalhes de cada op, rembg, describe), `resolve_messages()` e `resolve_stage_label()` usados por `view.py`. `worker.py` emite metadados lazy (`_try_read_meta` lê cabeçalho sem decodificar pixels) e detalhe específico antes de cada chamada ao core.
 - **Saída**: downloads → `output/image/source/`; processadas → `output/image/processed/`.
 
 ## Splash + spinner (branding)
@@ -185,10 +188,11 @@ Iniciada com `uv run gui.py`. Flutter desktop no Windows.
 
 ### Arquitetura
 
-- **Sidebar (NavigationRail)** + `ft.Stack` com todos os módulos montados; só um visível por vez (toggle de `visible`).
+- **Sidebar (NavigationRail)** + `ft.Stack` com todos os módulos montados; só um visível por vez (toggle de `visible`). Detalhes de registry/navigate_to/bridges em "Sistema de módulos".
 - **EventBus** (`events.py`): publica `PipelineEvent(type, stage, payload, module_id)` via `page.pubsub.send_all()` (thread-safe). Worker em thread daemon; UI atualiza na thread principal.
 - **LogEventHandler**: captura `logging.INFO` e encaminha como eventos `log`. `_SUPPRESSED_PREFIXES` filtra duplicados. Recebe `module_id`.
-- **`pipeline_log.py` (por módulo)**: vocabulário centralizado de mensagens — `worker.py` importa `fmt_*` para `emit("log", ...)`, `view.py`/`progress_view.py` importa `resolve_messages()`/`resolve_stage_label()`. Separa "o que emitir" de "como exibir" e elimina strings inline espalhadas. Implementado em `modules/image/` (PR-IMG-2B), `modules/audio/` (PR3.1-A) e `modules/video/` (PR4).
+- **`pipeline_log.py` (por módulo)**: padrão de vocabulário centralizado — `worker.py` importa `fmt_*` para `emit("log", ...)`, `view.py`/`progress_view.py` importa `resolve_messages()`/`resolve_stage_label()`. Separa "o que emitir" de "como exibir". Constantes `OP_VERBS`/`OP_LABELS` por operação; builders `fmt_*` encapsulam metadados e detalhes. Implementado em todos os módulos: `audio/`, `image/`, `video/`.
+- **`extra_header` no `build_progress_view`**: parâmetro opcional `ft.Control | None` inserido entre a barra de progresso e o log. Usado pelo módulo Áudio para injetar o `AudioPlayer`.
 - **Design System** (`theme/components/`): factories, tokens de tipografia, cursores e help system → skill `design-system` (`.claude/skills/design-system/SKILL.md`).
 
 ### Flet 0.85 — quirks conhecidos
@@ -217,6 +221,8 @@ Iniciada com `uv run gui.py`. Flutter desktop no Windows.
 | `ft.Tooltip` sem `size_constraints` | texto renderiza em linha única sem quebra. Usar `size_constraints=ft.BoxConstraints(max_width=280)` |
 | `ft.NavigationRailDestination` cursor | não tem propriedade `mouse_cursor`. Solução: envolver o `NavigationRail` num `ft.GestureDetector(mouse_cursor=Cursor.interactive)` e alternar para `Cursor.forbidden` via `page.pubsub` quando pipeline estiver rodando |
 | `ButtonStyle.mouse_cursor` | aceita valor flat (`Cursor.interactive`) **ou** dict por estado (`Cursor.btn`). `ControlState.DISABLED` existe e funciona — usar `Cursor.btn` em botões que podem ser desabilitados |
+| `ft.Audio` | **não existe no 0.85** — `AttributeError` ao importar. Para reprodução de áudio usar `sounddevice` + ffmpeg (ver `components/audio_player.py`) |
+| `ft.Slider` eventos de drag | `on_change_start` e `on_change_end` **existem** no 0.85 — usar `on_change_end` para seek (evita seeks contínuos durante drag). `on_change` programático (setar `.value` + `update()`) **não** dispara `on_change` no Python |
 
 ### Eventos do pipeline
 
