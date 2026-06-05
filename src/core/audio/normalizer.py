@@ -43,8 +43,8 @@ def normalize_lufs(
         ),
         "-f", "null", "-",
     ]
-    r = subprocess.run(measure_cmd, capture_output=True, text=True)
-    stats = _parse_loudnorm_json(r.stderr)
+    r = subprocess.run(measure_cmd, capture_output=True)
+    stats = _parse_loudnorm_json(r.stderr.decode('utf-8', errors='replace'))
 
     # Passe 2: aplicação
     if stats:
@@ -68,24 +68,21 @@ def normalize_lufs(
     ]
 
     total_secs = get_duration_ffprobe(src) if progress_cb else None
-    proc = subprocess.Popen(
-        apply_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True
-    )
+    proc = subprocess.Popen(apply_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 
     stderr_lines: list[str] = []
 
     def _drain() -> None:
-        for line in proc.stderr:
-            stderr_lines.append(line.rstrip())
+        for raw in proc.stderr:
+            stderr_lines.append(raw.decode('utf-8', errors='replace').rstrip())
 
     threading.Thread(target=_drain, daemon=True).start()
 
-    for line in proc.stdout:
-        if line.strip().startswith("out_time_us=") and progress_cb and total_secs:
+    for raw in proc.stdout:
+        line = raw.decode('utf-8', errors='replace').strip()
+        if line.startswith("out_time_us=") and progress_cb and total_secs:
             try:
-                ratio = min(
-                    int(line.strip().split("=", 1)[1]) / 1_000_000 / total_secs, 1.0
-                )
+                ratio = min(int(line.split("=", 1)[1]) / 1_000_000 / total_secs, 1.0)
                 progress_cb(ratio)
             except (ValueError, IndexError):
                 pass

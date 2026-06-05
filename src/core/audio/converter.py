@@ -32,14 +32,13 @@ def _run_ffmpeg_with_progress(
         cmd,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
-        text=True,
     )
 
     stderr_lines: list[str] = []
 
     def _drain_stderr() -> None:
-        for line in process.stderr:
-            stderr_lines.append(line.rstrip())
+        for raw in process.stderr:
+            stderr_lines.append(raw.decode('utf-8', errors='replace').rstrip())
             if len(stderr_lines) > 100:
                 del stderr_lines[:-100]
 
@@ -47,8 +46,8 @@ def _run_ffmpeg_with_progress(
     stderr_thread.start()
 
     # Lê progresso estruturado de stdout (out_time_us=, progress=end, …)
-    for line in process.stdout:
-        line = line.strip()
+    for raw in process.stdout:
+        line = raw.decode('utf-8', errors='replace').strip()
         if line.startswith("out_time_us=") and progress_cb and total_secs:
             try:
                 current_us = int(line.split("=", 1)[1])

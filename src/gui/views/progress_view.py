@@ -174,12 +174,15 @@ def _resolve_messages(event: PipelineEvent) -> list[str]:
         case "audio_op_start" | "audio_op_done":
             from src.gui.modules.audio import pipeline_log as _audio_log
             return _audio_log.resolve_messages(event)
+        case "video_op_start" | "video_op_done" | "video_op_error":
+            from src.gui.modules.video import pipeline_log as _video_log
+            return _video_log.resolve_messages(event)
         case "queue_progress" | "progress_start" | "progress_update":
             return []
         case "task_done":
             paths = p.get("output_paths", [])
             if paths:
-                return [f"[✓] Pipeline de áudio concluído — {len(paths)} arquivo(s)."]
+                return [f"[✓] Concluído — {len(paths)} arquivo(s) gerado(s)."]
             return ["[✓] Pipeline concluído."]
         case "task_error":
             msg = p.get("message", "erro desconhecido")
@@ -263,6 +266,9 @@ def _resolve_stage_label(event: PipelineEvent) -> str | None:
         case "audio_op_start" | "audio_op_done":
             from src.gui.modules.audio import pipeline_log as _audio_log
             return _audio_log.resolve_stage_label(event)
+        case "video_op_start" | "video_op_done" | "video_op_error":
+            from src.gui.modules.video import pipeline_log as _video_log
+            return _video_log.resolve_stage_label(event)
         case "task_done":
             return "Pipeline concluído!"
         case "task_error":
@@ -346,6 +352,7 @@ def build_progress_view(
     """
     audio_duration: list[float] = [0.0]
     _done_called: list[bool] = [False]  # guard contra duplo on_done
+    _mutable_line: list[ft.Text | None] = [None]  # última linha "viva" de progresso
 
     def _call_on_done(payload: dict) -> None:
         if not _done_called[0]:
@@ -495,8 +502,14 @@ def build_progress_view(
             return
 
         msgs = _resolve_messages(event)
+        mutable = isinstance(event.payload, dict) and event.payload.get("mutable", False)
         for msg in msgs:
-            log_list.controls.append(log_line(msg))
+            if mutable and _mutable_line[0] is not None:
+                _mutable_line[0].value = msg
+            else:
+                new_line = log_line(msg)
+                log_list.controls.append(new_line)
+                _mutable_line[0] = new_line if mutable else None
         _trim_log()
 
         # --- eventos genéricos (usados por todos os módulos em PR3+) ---
@@ -555,6 +568,7 @@ def build_progress_view(
     def _reset() -> None:
         """Limpa o log, reseta a barra e desabilita o tab Resultados."""
         _done_called[0] = False
+        _mutable_line[0] = None
         _stop_spin()
         log_list.controls.clear()
         progress_bar.value = None

@@ -64,6 +64,39 @@ HELP_SHORT: dict[str, str] = {
         "Alvo de loudness integrado. −14 LUFS: streaming (Spotify/YouTube). "
         "−23 LUFS: broadcast. −16 a −18 LUFS: podcasts."
     ),
+    # --- Vídeo ---
+    "video.input": (
+        "Cole a URL do vídeo ou selecione um arquivo local. "
+        "Suporta YouTube, Vimeo, Twitter, Instagram, TikTok, Twitch e centenas de outros via yt-dlp."
+    ),
+    "video.operation": (
+        "O que fazer com o vídeo. 'Converter' sem reencoding usa -c copy (rápido, sem perda extra)."
+    ),
+    "video.resolution": (
+        "Resolução máxima do download. Resoluções maiores = arquivo maior e download mais lento."
+    ),
+    "video.embed_meta": (
+        "Embute título, uploader e outros metadados no arquivo de saída via FFmpegMetadata."
+    ),
+    "video.codec": (
+        "'copy' preserva codec original sem reencoding (rápido, sem perda). "
+        "H.264 é o mais compatível para reprodução em qualquer dispositivo."
+    ),
+    "video.trim": (
+        "Recorta um trecho. 'Corte rápido' usa -c copy (impreciso ao keyframe mais próximo). "
+        "'Frame-preciso' reencoda com H.264 — mais lento, mas exato."
+    ),
+    "video.crf": (
+        "Fator de qualidade do H.264. 18 = alta qualidade. 23 = padrão ffmpeg. 28 = arquivo menor."
+    ),
+    "video.preset": (
+        "Velocidade de encoding H.264. 'medium' é o equilíbrio padrão. "
+        "'slow' gera arquivo menor, mas demora mais."
+    ),
+    "video.resize": (
+        "Redimensiona preservando aspect ratio. "
+        "Deixe largura ou altura em branco para calcular automaticamente."
+    ),
     # --- Imagens ---
     "image.input": (
         "Cole URLs diretas de imagens ou selecione arquivos locais. "
@@ -195,6 +228,22 @@ HELP_LONG: dict[str, str] = {
         "• −16 a −18 LUFS: podcasts.\n\n"
         "O resultado mantém o mesmo contêiner e codec do arquivo de entrada."
     ),
+    "video.codec": (
+        "Codec de Vídeo\n\n"
+        "'copy' é o modo mais rápido: o ffmpeg apenas remonta o container sem reprocessar o vídeo. "
+        "H.264 (libx264) é o codec mais compatível para reprodução em qualquer dispositivo. "
+        "H.265 (libx265) gera arquivos ~50% menores que H.264 com a mesma qualidade, "
+        "mas o encoding é ~3× mais lento. "
+        "VP9 é ideal para WebM/web, com boa compressão e formato aberto."
+    ),
+    "video.crf": (
+        "CRF — Constant Rate Factor\n\n"
+        "Controla a qualidade do encoding H.264. Valores menores = melhor qualidade = arquivo maior.\n"
+        "• 18: praticamente imperceptível vs original.\n"
+        "• 23: padrão do ffmpeg, boa qualidade.\n"
+        "• 28: compressão visível, arquivo pequeno.\n\n"
+        "Para arquivamento use 18–20; para compartilhamento use 23–26."
+    ),
     "transcription.beam_size": (
         "O decodificador do Whisper usa busca em feixe (beam search) para gerar "
         "a transcrição.\n\n"
@@ -203,6 +252,25 @@ HELP_LONG: dict[str, str] = {
         "trechos ambíguos, porém aumenta o tempo de processamento proporcionalmente.\n"
         "• Para a maioria dos casos (fala clara, português ou inglês), "
         "beam_size=1 já produz resultados excelentes."
+    ),
+    "video.input": (
+        "Sites suportados pelo yt-dlp (seleção):\n\n"
+        "Principais:\n"
+        "• YouTube e YouTube Shorts (youtube.com, youtu.be)\n"
+        "• Vimeo\n"
+        "• Twitter / X\n"
+        "• Instagram — posts, Reels, Stories\n"
+        "• Facebook\n"
+        "• TikTok\n"
+        "• Dailymotion\n"
+        "• Twitch — clipes e VODs\n\n"
+        "Outros:\n"
+        "• LinkedIn, Reddit, Pinterest (vídeos)\n"
+        "• Rumble, Odysee / LBRY\n"
+        "• Bilibili, Niconico\n"
+        "• Streamable, Imgur (vídeo)\n"
+        "• Globoplay, Band, R7 (portais BR)\n\n"
+        "Lista completa: yt-dlp --list-extractors (1000+ sites)"
     ),
 }
 
