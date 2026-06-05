@@ -183,6 +183,15 @@ def run_video_pipeline(
                         )
 
                     case "extract_audio":
+                        if not info.acodec:
+                            emit("task_error", payload={
+                                "message": (
+                                    f"[!] Arquivo sem faixa de áudio: {item_name}\n"
+                                    "[i] Arquivos .webm de stream de vídeo puro (ex.: f313.webm) "
+                                    "não contêm áudio. Use o arquivo mesclado completo."
+                                )
+                            })
+                            return False
                         emit("log", payload={"message": pipeline_log.fmt_extract_audio_detail(
                             args.audio_fmt
                         )})
@@ -227,7 +236,14 @@ def run_video_pipeline(
         return True
 
     except Exception as exc:
-        emit("task_error", payload={"message": str(exc)})
+        msg = str(exc)
+        if "WinError 32" in msg or "being used by another process" in msg:
+            msg += (
+                "\n[i] Arquivo bloqueado pelo antivírus durante o rename. "
+                "Aguarde alguns segundos e tente novamente, ou adicione a pasta "
+                "output/ às exclusões do Windows Defender."
+            )
+        emit("task_error", payload={"message": msg})
         return False
 
     finally:

@@ -122,21 +122,27 @@ def build_video_form(
 
     def _on_items_change(items: list[InputItem]) -> None:
         has_url = any(i.kind == "url" for i in items)
+        has_local = any(i.kind == "local" for i in items)
         _has_url_items[0] = has_url
         start_btn.disabled = len(items) == 0
-        # URL → força download e bloqueia seletor de operação
-        if has_url and _current_op[0] != "download":
-            _current_op[0] = "download"
-            _refresh_op_cards()
-        _set_op_disabled(has_url)
+        if has_url:
+            _op_grid_disabled[0] = True
+            if _current_op[0] != "download":
+                _current_op[0] = "download"
+                _refresh_op_cards()
+        else:
+            _op_grid_disabled[0] = False
+            if has_local and _current_op[0] == "download":
+                _current_op[0] = "convert"
+                _refresh_op_cards()
         _show_op_block("download" if has_url else _get_op())
-        if start_btn.page:
-            start_btn.update()
+        page.update()
 
     input_source = build_input_source(
         page,
         allowed_extensions=_ALLOWED_EXTS,
         on_change=_on_items_change,
+        url_hint="URL do vídeo (YouTube, Vimeo, Twitter, TikTok…)",
     )
 
     # ── Seletor de operação (card grid) ───────────────────────────────────────
@@ -166,9 +172,6 @@ def build_video_form(
         _current_op[0] = op_id
         _refresh_op_cards()
         _show_op_block(op_id)
-        for blk in _op_blocks.values():
-            if blk.page:
-                blk.update()
         page.update()
 
     def _make_op_card(op_id: str, icon_name: str, label: str) -> ft.GestureDetector:
@@ -192,14 +195,19 @@ def build_video_form(
                 offset=ft.Offset(0, 3),
                 color=ft.Colors.with_opacity(0.4, ft.Colors.BLACK),
             ),
-            on_click=lambda e, oid=op_id: _on_op_card_click(oid),
             alignment=ft.Alignment.CENTER,
         )
         _op_card_ctr_refs[op_id] = ctr
-        return ft.GestureDetector(mouse_cursor=Cursor.interactive, content=ctr, expand=True)
+        return ft.GestureDetector(
+            mouse_cursor=Cursor.interactive,
+            on_tap=lambda e, oid=op_id: _on_op_card_click(oid),
+            content=ctr,
+            expand=True,
+        )
 
     _OP_COLS = 3
     _op_card_list = [_make_op_card(oid, icon, lbl) for oid, icon, lbl in _OP_ICONS]
+    _refresh_op_cards()
     while len(_op_card_list) % _OP_COLS != 0:
         _op_card_list.append(ft.Container(expand=True))
     op_grid = ft.Column(
@@ -217,8 +225,7 @@ def build_video_form(
         _op_grid_disabled[0] = disabled
         for ctr in _op_card_ctr_refs.values():
             ctr.disabled = disabled
-            if ctr.page:
-                ctr.update()
+        # sem update individual — o chamador é responsável pelo page.update()
 
     _sel_disable_fns.append(_set_op_disabled)
 
@@ -312,8 +319,9 @@ def build_video_form(
     _text_fields += [trim_start_field, trim_end_field]
 
     trim_reenc_switch = switch_row(
-        "Corte frame-preciso (reencoda, mais lento)",
+        "Frame-preciso (reencoda — mais lento)",
         cfg.get("last_video_trim_reenc", False),
+        label_size=13,
     )
     _switches_extra.append(trim_reenc_switch)
 

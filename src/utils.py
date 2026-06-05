@@ -32,6 +32,32 @@ YOUTUBE_URL_PATTERN = re.compile(
 )
 DOWNLOAD_TIMEOUT = 300  # seconds
 
+_SANITIZE_SEPS = re.compile(r'\s*[｜|·–—]\s*')
+_SANITIZE_WIDE_COLON = re.compile(r'\s*[：]\s*')
+_SANITIZE_INVALID = re.compile(r'[<>"\\/?*\x00-\x1f]')
+_SANITIZE_PUNCT = re.compile(r'[!！？]')
+_SANITIZE_DASH_SPACE = re.compile(r'\s*-\s*')
+_SANITIZE_SPACES = re.compile(r'\s+')
+_SANITIZE_MULTI_US = re.compile(r'_+')
+_SANITIZE_MULTI_HY = re.compile(r'-+')
+
+
+def sanitize_filename(name: str) -> str:
+    """Converte título para nome de arquivo limpo (sem espaços ou chars problemáticos).
+
+    Regras: separadores de seção (｜ |) → hífen; espaços → underscore;
+    chars inválidos no Windows removidos. Acentos preservados (NTFS suporta).
+    """
+    name = _SANITIZE_SEPS.sub('-', name)
+    name = _SANITIZE_WIDE_COLON.sub('-', name)
+    name = _SANITIZE_INVALID.sub('', name)
+    name = _SANITIZE_PUNCT.sub('', name)
+    name = _SANITIZE_DASH_SPACE.sub('-', name.strip())
+    name = _SANITIZE_SPACES.sub('_', name)
+    name = _SANITIZE_MULTI_US.sub('_', name)
+    name = _SANITIZE_MULTI_HY.sub('-', name)
+    return name.strip('-_.')
+
 
 class TqdmLoggingHandler(logging.Handler):
     """Logging handler that writes through tqdm to avoid progress bar conflicts."""

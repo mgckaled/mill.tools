@@ -8,6 +8,8 @@ from typing import Callable
 
 import yt_dlp
 
+from src.utils import sanitize_filename
+
 logger = logging.getLogger(__name__)
 
 _RESOLUTIONS = {"best": None, "2160": 2160, "1080": 1080, "720": 720, "480": 480, "360": 360}
@@ -46,19 +48,19 @@ def download_video(
         else:
             fmt = (
                 f"bestvideo[height<={max_h}][ext=mp4]+bestaudio[ext=m4a]"
-                f"/bestvideo[height<={max_h}]+bestaudio/best[height<={max_h}]"
+                f"/bestvideo[height<={max_h}]+bestaudio"
+                f"/best[height<={max_h}][ext=mp4]/best[height<={max_h}]"
             )
     else:
         if container == "webm":
             fmt = "bestvideo[vcodec^=vp]+bestaudio[acodec^=opus]/bestvideo+bestaudio/best"
         else:
-            fmt = "bestvideo[ext=mp4]+bestaudio[ext=m4a]/bestvideo+bestaudio/best"
+            fmt = "bestvideo[ext=mp4]+bestaudio[ext=m4a]/bestvideo+bestaudio/best[ext=mp4]/best"
 
+    # Não usar FFmpegVideoConvertor: cria .temp.<ext> no diretório de saída que o
+    # Windows Defender bloqueia durante o rename → WinError 32. merge_output_format
+    # já garante o container correto para downloads com streams separados.
     postprocessors: list[dict] = []
-    if container == "mp4":
-        postprocessors.append({"key": "FFmpegVideoConvertor", "preferedformat": "mp4"})
-    # WebM: merge_output_format já cuida do container com streams VP9+Opus nativos;
-    # FFmpegVideoConvertor criaria .temp.webm → WinError 32 (rename bloqueado pelo SO)
     if embed_meta:
         postprocessors.append({"key": "FFmpegMetadata"})
 
@@ -88,22 +90,36 @@ def download_video(
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
         info = ydl.extract_info(url, download=True)
 
-    if final_path and Path(final_path[-1]).exists():
-        return Path(final_path[-1])
+    out_path: Path | None = None
 
-    if info:
+    if final_path and Path(final_path[-1]).exists():
+        out_path = Path(final_path[-1])
+    elif info:
         downloads = info.get("requested_downloads", [])
         if downloads:
             fp = downloads[0].get("filepath", "")
             if fp and Path(fp).exists():
-                return Path(fp)
+                out_path = Path(fp)
 
-    files = sorted(
-        (f for f in out_dir.iterdir() if f.is_file()),
-        key=lambda f: f.stat().st_mtime,
-        reverse=True,
-    )
-    if files:
-        return files[0]
+    if out_path is None:
+        files = sorted(
+            (f for f in out_dir.iterdir() if f.is_file()),
+            key=lambda f: f.stat().st_mtime,
+            reverse=True,
+        )
+        if files:
+            out_path = files[0]
 
-    raise FileNotFoundError(f"Download concluído mas arquivo não encontrado em: {out_dir}")
+    if out_path is None:
+        raise FileNotFoundError(f"Download concluído mas arquivo não encontrado em: {out_dir}")
+
+    safe_stem = sanitize_filename(out_path.stem)
+    if safe_stem and safe_stem != out_path.stem:
+        new_path = out_path.with_stem(safe_stem)
+        try:
+            out_path.rename(new_path)
+            out_path = new_path
+        except OSError:
+            pass  # mantém nome original se o rename falhar
+
+    return out_path

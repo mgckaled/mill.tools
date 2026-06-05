@@ -66,8 +66,8 @@ HELP_SHORT: dict[str, str] = {
     ),
     # --- Vídeo ---
     "video.input": (
-        "Cole URLs (YouTube, etc.) ou selecione arquivos locais. "
-        "URL → download automático. Arquivo local → operação selecionada."
+        "Cole a URL do vídeo ou selecione um arquivo local. "
+        "Suporta YouTube, Vimeo, Twitter, Instagram, TikTok, Twitch e centenas de outros via yt-dlp."
     ),
     "video.operation": (
         "O que fazer com o vídeo. 'Converter' sem reencoding usa -c copy (rápido, sem perda extra)."
@@ -252,6 +252,25 @@ HELP_LONG: dict[str, str] = {
         "trechos ambíguos, porém aumenta o tempo de processamento proporcionalmente.\n"
         "• Para a maioria dos casos (fala clara, português ou inglês), "
         "beam_size=1 já produz resultados excelentes."
+    ),
+    "video.input": (
+        "Sites suportados pelo yt-dlp (seleção):\n\n"
+        "Principais:\n"
+        "• YouTube e YouTube Shorts (youtube.com, youtu.be)\n"
+        "• Vimeo\n"
+        "• Twitter / X\n"
+        "• Instagram — posts, Reels, Stories\n"
+        "• Facebook\n"
+        "• TikTok\n"
+        "• Dailymotion\n"
+        "• Twitch — clipes e VODs\n\n"
+        "Outros:\n"
+        "• LinkedIn, Reddit, Pinterest (vídeos)\n"
+        "• Rumble, Odysee / LBRY\n"
+        "• Bilibili, Niconico\n"
+        "• Streamable, Imgur (vídeo)\n"
+        "• Globoplay, Band, R7 (portais BR)\n\n"
+        "Lista completa: yt-dlp --list-extractors (1000+ sites)"
     ),
 }
 

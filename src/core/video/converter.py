@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Callable
 
 from src.core.video.info import get_video_info
+from src.utils import sanitize_filename
 
 # Codecs disponíveis — sem NVENC (decisão definitiva, CPU-only)
 VCODEC_MAP = {
@@ -70,7 +71,7 @@ def convert_video(
     """Converte container e/ou codec. 'copy' = sem reencoding (rápido)."""
     out_dir.mkdir(parents=True, exist_ok=True)
     ext = CONTAINER_EXT.get(container, "mp4")
-    out_path = out_dir / f"{src.stem}_converted.{ext}"
+    out_path = out_dir / f"{sanitize_filename(src.stem)}_converted.{ext}"
     codec_flags = VCODEC_MAP.get(vcodec, ["-c:v", "copy"])
     cmd = (
         ["ffmpeg", "-y", "-i", str(src)]
@@ -94,7 +95,7 @@ def trim_video(
     reenc=True usa libx264 (corte frame-preciso, mais lento).
     """
     out_dir.mkdir(parents=True, exist_ok=True)
-    out_path = out_dir / f"{src.stem}_trimmed{src.suffix}"
+    out_path = out_dir / f"{sanitize_filename(src.stem)}_trimmed{src.suffix}"
 
     cmd = ["ffmpeg", "-y"]
     if start:
@@ -125,7 +126,7 @@ def compress_video(
     preset: ultrafast, fast, medium, slow.
     """
     out_dir.mkdir(parents=True, exist_ok=True)
-    out_path = out_dir / f"{src.stem}_compressed.mp4"
+    out_path = out_dir / f"{sanitize_filename(src.stem)}_compressed.mp4"
     cmd = [
         "ffmpeg", "-y", "-i", str(src),
         "-c:v", "libx264", "-crf", str(crf), "-preset", preset,
@@ -148,7 +149,7 @@ def resize_video(
     Passar apenas width ou height: o outro eixo usa -2 (múltiplo de 2 compatível).
     """
     out_dir.mkdir(parents=True, exist_ok=True)
-    out_path = out_dir / f"{src.stem}_resized.mp4"
+    out_path = out_dir / f"{sanitize_filename(src.stem)}_resized.mp4"
     w = width if width else -2
     h = height if height else -2
     cmd = [
@@ -181,7 +182,7 @@ def make_thumbnail(
 ) -> Path:
     """Extrai um frame do vídeo como imagem."""
     out_dir.mkdir(parents=True, exist_ok=True)
-    out_path = out_dir / f"{src.stem}_thumb.{fmt}"
+    out_path = out_dir / f"{sanitize_filename(src.stem)}_thumb.{fmt}"
     cmd = [
         "ffmpeg", "-y",
         "-ss", time,
