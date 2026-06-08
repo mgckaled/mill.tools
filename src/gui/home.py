@@ -54,7 +54,7 @@ _MODULE_CARDS: list[dict] = [
         "id": "transcription",
         "title": "Transcrição",
         "icon": ft.Icons.SUBTITLES_OUTLINED,
-        "accent": Color.dark.primary,
+        "accent": Color.log.work,
         "desc": "Converta áudio em texto com Whisper, 100 % local",
         "features": [
             "Transcreva com faster-whisper acelerado por GPU",
@@ -78,7 +78,10 @@ def _on_card_hover(
 ) -> None:
     is_hover = e.data == "true"
     pal = _palette(page)
-    ctr.bgcolor = pal.surface_hover if is_hover else ft.Colors.SURFACE
+    ctr.bgcolor = (
+        ft.Colors.with_opacity(0.88, pal.surface_hover) if is_hover
+        else ft.Colors.with_opacity(0.75, pal.surface)
+    )
     side = ft.BorderSide(1.5, ft.Colors.with_opacity(0.6, accent))
     outline = ft.BorderSide(1.5, pal.outline_variant)
     ctr.border = ft.Border(
@@ -102,11 +105,11 @@ def _make_card(
     feature_rows = [
         ft.Row(
             controls=[
-                ft.Icon(ft.Icons.CIRCLE, size=5, color=pal.text_secondary),
+                ft.Icon(ft.Icons.CIRCLE, size=5, color=ft.Colors.ON_SURFACE_VARIANT),
                 ft.Text(
                     f,
                     size=Type.caption.size,
-                    color=pal.text_secondary,
+                    color=ft.Colors.ON_SURFACE_VARIANT,
                     expand=True,
                     no_wrap=False,
                 ),
@@ -127,7 +130,7 @@ def _make_card(
             top=ft.BorderSide(1.5, pal.outline_variant),
             bottom=ft.BorderSide(1.5, pal.outline_variant),
         ),
-        bgcolor=ft.Colors.SURFACE,
+        bgcolor=ft.Colors.with_opacity(0.75, pal.surface),
         padding=ft.Padding(left=Space.xl, right=Space.xl, top=Space.xl, bottom=Space.xl),
         shadow=ft.BoxShadow(
             blur_radius=12,
@@ -152,11 +155,11 @@ def _make_card(
                                 ft.Text(
                                     data["desc"],
                                     size=Type.caption.size,
-                                    color=pal.text_secondary,
+                                    color=ft.Colors.ON_SURFACE_VARIANT,
                                     no_wrap=False,
                                 ),
                             ],
-                            spacing=2,
+                            spacing=Space.xxs,
                             expand=True,
                         ),
                     ],
@@ -247,7 +250,6 @@ def show_home(page: ft.Page, on_complete: Callable[[str], None]) -> None:
         page.run_task(_navigate, module_id)
 
     # ── header ──────────────────────────────────────────────────────────────────
-    pal = _palette(page)
     header = ft.Row(
         controls=[
             ft.Text(
@@ -256,15 +258,15 @@ def show_home(page: ft.Page, on_complete: Callable[[str], None]) -> None:
                         "mill",
                         ft.TextStyle(
                             color=ft.Colors.ON_SURFACE,
-                            size=44,
+                            size=Type.wordmark.size,
                             weight=ft.FontWeight.W_600,
                         ),
                     ),
                     ft.TextSpan(
                         ".tools",
                         ft.TextStyle(
-                            color=pal.primary,
-                            size=44,
+                            color=ft.Colors.PRIMARY,
+                            size=Type.wordmark.size,
                             weight=ft.FontWeight.W_400,
                         ),
                     ),

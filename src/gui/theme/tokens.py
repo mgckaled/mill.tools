@@ -69,6 +69,7 @@ class Type:
     FONT_UI = "Verdana"
     FONT_MONO = "JetBrains Mono"
 
+    wordmark = _TypeSpec(44.0, 600)
     display = _TypeSpec(34.0, 600)
     title = _TypeSpec(22.0, 600)
     heading = _TypeSpec(18.0, 600)
@@ -85,6 +86,7 @@ class Type:
 class Space:
     """Grade de espaçamento em px (múltiplos de 4)."""
 
+    xxs = 2
     xs = 6
     sm = 12
     md = 16
