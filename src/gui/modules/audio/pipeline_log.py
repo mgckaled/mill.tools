@@ -56,6 +56,11 @@ def _relative_output_dir(path_str: str) -> str:
 
 # ─── Builders — informação geral ──────────────────────────────────────────────
 
+def fmt_ffmpeg_progress(ratio: float) -> str:
+    """Linha dinâmica (mutable) de progresso ffmpeg: [d] X%"""
+    return f"[d] {int(ratio * 100)}%"
+
+
 def fmt_audio_info(name: str, duration: float | None, size_bytes: int) -> str:
     dur = f"{duration:.1f}s" if duration else "duração desconhecida"
     return f"[i] {name} | {dur} | {_fmt_size(size_bytes)}"

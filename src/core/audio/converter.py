@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Callable
 
 from src.core.audio.info import get_duration_ffprobe
+from src.utils import sanitize_filename
 
 # Extensões de vídeo que disparam extração (em vez de conversão)
 VIDEO_EXTENSIONS = {".mp4", ".mkv", ".webm", ".avi", ".mov"}
@@ -90,7 +91,7 @@ def convert_audio(
         Path do arquivo convertido.
     """
     out_dir.mkdir(parents=True, exist_ok=True)
-    out_path = out_dir / f"{src.stem}.{fmt}"
+    out_path = out_dir / f"{sanitize_filename(src.stem)}.{fmt}"
 
     # Evita "same as Input #0" quando src já está em out_dir com mesmo formato
     if out_path.resolve() == src.resolve():
@@ -122,7 +123,7 @@ def extract_audio(
         Path do arquivo de áudio extraído.
     """
     out_dir.mkdir(parents=True, exist_ok=True)
-    out_path = out_dir / f"{video.stem}_audio.{fmt}"
+    out_path = out_dir / f"{sanitize_filename(video.stem)}_audio.{fmt}"
 
     cmd = ["ffmpeg", "-y", "-i", str(video), "-vn"]  # -vn: sem stream de vídeo
     cmd += ["-progress", "pipe:1", "-nostats", str(out_path)]

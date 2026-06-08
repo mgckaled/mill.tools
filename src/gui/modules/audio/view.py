@@ -8,10 +8,11 @@ from typing import TYPE_CHECKING
 
 import flet as ft
 
+from src.gui.components.audio_player import build_audio_player
 from src.gui.modules.audio.form_view import AudioArgs, AudioFormPanel, build_audio_form
 from src.gui.modules.audio.worker import start_audio_pipeline
 from src.gui.modules.base import Module
-from src.gui.theme.components import action_button, output_card
+from src.gui.theme.components import action_button, hairline, output_card
 from src.gui.theme.tokens import Color
 from src.gui.views.progress_view import ProgressPanel, build_progress_view
 
@@ -52,11 +53,18 @@ def build_audio_module(
     def _on_cancel() -> None:
         cancel_event.set()
 
+    _AUDIO_EXTS = {".mp3", ".wav", ".flac", ".ogg", ".opus", ".aac", ".m4a"}
+
     def _on_done(payload: dict) -> None:
         pipeline_running[0] = False
         form_panel.set_running(False)
         if not payload.get("error"):
             progress_panel.show_results(payload)
+            # Carrega o primeiro arquivo de áudio da saída no reprodutor
+            for path_str in payload.get("output_paths", []):
+                if Path(path_str).suffix.lower() in _AUDIO_EXTS:
+                    player.load(path_str)
+                    break
 
     # ------------------------------------------------------------------
     # Renderização dos resultados de áudio
@@ -108,6 +116,8 @@ def build_audio_module(
     # Painéis
     # ------------------------------------------------------------------
 
+    player = build_audio_player(page)
+
     form_panel: AudioFormPanel = build_audio_form(page, on_start=_on_start)
     progress_panel: ProgressPanel = build_progress_view(
         page,
@@ -118,21 +128,29 @@ def build_audio_module(
     )
 
     # ------------------------------------------------------------------
-    # Layout split form | pipeline
+    # Painel direito: player dedicado (expand) + divisória + pipeline (fixo)
+    # ------------------------------------------------------------------
+
+    right_panel = ft.Column(
+        controls=[
+            player.control,
+            hairline(),
+            progress_panel.control,
+        ],
+        expand=True,
+        spacing=8,
+    )
+
+    # ------------------------------------------------------------------
+    # Layout split form | right_panel
     # ------------------------------------------------------------------
 
     control = ft.Row(
         controls=[
-            ft.Container(
-                content=ft.Container(
-                    content=form_panel.control,
-                    expand=True,
-                ),
-                width=380,
-            ),
+            ft.Container(content=form_panel.control, width=380),
             ft.VerticalDivider(width=2, thickness=1.5, color=ft.Colors.OUTLINE_VARIANT),
             ft.Container(
-                content=progress_panel.control,
+                content=right_panel,
                 expand=True,
                 padding=ft.Padding(left=12, right=12, top=8, bottom=8),
             ),

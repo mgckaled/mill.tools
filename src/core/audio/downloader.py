@@ -8,6 +8,8 @@ from typing import Callable
 
 import yt_dlp
 
+from src.utils import sanitize_filename
+
 logger = logging.getLogger(__name__)
 
 # Formatos que não suportam thumbnail embutida de forma confiável
@@ -79,25 +81,36 @@ def download_audio(
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
         info = ydl.extract_info(url, download=True)
 
-    # Tenta obter o caminho final do postprocessor hook
-    if final_path and Path(final_path[-1]).exists():
-        return Path(final_path[-1])
+    out_path: Path | None = None
 
-    # Fallback: info dict
-    if info:
+    if final_path and Path(final_path[-1]).exists():
+        out_path = Path(final_path[-1])
+    elif info:
         downloads = info.get("requested_downloads", [])
         if downloads:
             fp = downloads[0].get("filepath", "")
             if fp and Path(fp).exists():
-                return Path(fp)
+                out_path = Path(fp)
 
-    # Último recurso: arquivo mais recente em out_dir
-    files = sorted(
-        (f for f in out_dir.iterdir() if f.is_file()),
-        key=lambda f: f.stat().st_mtime,
-        reverse=True,
-    )
-    if files:
-        return files[0]
+    if out_path is None:
+        files = sorted(
+            (f for f in out_dir.iterdir() if f.is_file()),
+            key=lambda f: f.stat().st_mtime,
+            reverse=True,
+        )
+        if files:
+            out_path = files[0]
 
-    raise FileNotFoundError(f"Download concluído mas arquivo não encontrado em: {out_dir}")
+    if out_path is None:
+        raise FileNotFoundError(f"Download concluído mas arquivo não encontrado em: {out_dir}")
+
+    safe_stem = sanitize_filename(out_path.stem)
+    if safe_stem and safe_stem != out_path.stem:
+        new_path = out_path.with_stem(safe_stem)
+        try:
+            out_path.rename(new_path)
+            out_path = new_path
+        except OSError:
+            pass
+
+    return out_path

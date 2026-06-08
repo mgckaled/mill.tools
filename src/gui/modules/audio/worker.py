@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import re
 import threading
 from time import time
 from typing import TYPE_CHECKING
@@ -95,6 +96,9 @@ def run_audio_pipeline(
                         if total_b > 0:
                             ratio = min(downloaded / total_b, 1.0)
                             emit("progress_update", payload={"current": ratio})
+                        line = _fmt_ydl_progress(d)
+                        if line:
+                            emit("log", payload={"message": line, "mutable": True})
 
                 out_path = download_audio(
                     url=item.value,
@@ -121,6 +125,11 @@ def run_audio_pipeline(
 
                     def _progress_cb(ratio: float) -> None:
                         emit("progress_update", payload={"current": ratio})
+                        if ratio > 0:
+                            emit("log", payload={
+                                "message": pipeline_log.fmt_ffmpeg_progress(ratio),
+                                "mutable": True,
+                            })
 
                     out_path = extract_audio(
                         video=src,
@@ -140,6 +149,11 @@ def run_audio_pipeline(
 
                     def _progress_cb(ratio: float) -> None:  # type: ignore[no-redef]
                         emit("progress_update", payload={"current": ratio})
+                        if ratio > 0:
+                            emit("log", payload={
+                                "message": pipeline_log.fmt_ffmpeg_progress(ratio),
+                                "mutable": True,
+                            })
 
                     out_path = convert_audio(
                         src=src,
@@ -185,6 +199,11 @@ def run_audio_pipeline(
 
                 def _norm_cb(ratio: float) -> None:
                     emit("progress_update", payload={"current": ratio})
+                    if ratio > 0:
+                        emit("log", payload={
+                            "message": pipeline_log.fmt_ffmpeg_progress(ratio),
+                            "mutable": True,
+                        })
 
                 out_path, stats = _normalize_lufs(
                     out_path, AUDIO_PROCESSED_DIR, args.normalize_target_lufs, _norm_cb
@@ -249,12 +268,36 @@ def start_audio_pipeline(
     return thread
 
 
+_ANSI_ESC = re.compile(r'\x1b\[[0-9;]*m')
+
+
+def _strip_ansi(s: str) -> str:
+    return _ANSI_ESC.sub('', s).strip()
+
+
+def _fmt_ydl_progress(d: dict) -> str:
+    """Formata linha de progresso yt-dlp para exibição mutable no log."""
+    pct   = _strip_ansi(d.get("_percent_str") or "")
+    total = _strip_ansi(d.get("_total_bytes_str") or d.get("_total_bytes_estimate_str") or "")
+    speed = _strip_ansi(d.get("_speed_str") or "")
+    eta   = _strip_ansi(d.get("_eta_str") or "")
+    parts: list[str] = []
+    if pct:
+        parts.append(pct)
+    if total:
+        parts.append(f"de {total}")
+    if speed and speed not in ("Unknown B/s", "N/A"):
+        parts.append(speed)
+    if eta and eta not in ("Unknown", "N/A"):
+        parts.append(f"ETA {eta}")
+    return f"[d] {' | '.join(parts)}" if parts else ""
+
+
 def _item_label(item) -> str:
     """Retorna label legível para o item (nome do arquivo ou domínio da URL)."""
     from pathlib import Path
     if item.kind == "local":
         return Path(item.value).name
-    # Para URL, extrai o domínio como hint
     try:
         from urllib.parse import urlparse
         parsed = urlparse(item.value)
