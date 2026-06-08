@@ -116,9 +116,9 @@ O `.env` é carregado automaticamente quando `--fm`, `--am` ou `--pm` recebe um 
 uv run gui.py
 ```
 
-Abre com uma splash screen animada e, em seguida, a interface com **barra lateral de módulos** (NavigationRail). Cada módulo tem layout split: formulário à esquerda, painel de acompanhamento (log em tempo real + barra de progresso + spinner) à direita.
+Abre maximizado com uma splash screen animada, seguida de uma **Home Screen** com 4 cards de módulo — clique em qualquer card para entrar diretamente no módulo escolhido. O AppBar exibe a wordmark "mill.tools" e botões "Home" e "Splash" para navegar de volta a qualquer momento.
 
-Durante um pipeline em execução a troca de módulo é bloqueada — os logs e a barra de progresso são preservados mesmo ao navegar entre módulos.
+Cada módulo tem layout split: formulário à esquerda, painel de acompanhamento (log em tempo real + barra de progresso + spinner) à direita. Durante um pipeline em execução a troca de módulo é bloqueada — os logs e a barra de progresso são preservados mesmo ao navegar entre módulos.
 
 ### CLI — Transcrição
 
@@ -408,7 +408,7 @@ Para adicionar ajuda a um novo controle: inserir a chave em `HELP_SHORT` (e opci
 ```text
 mill-tools/
 ├── main.py              — entry point CLI
-├── gui.py               — entry point GUI (splash → app)
+├── gui.py               — entry point GUI (splash → home → app, maximizado)
 ├── src/
 │   ├── transcriber.py · formatter.py · analyzer.py · prompter.py · llm_factory.py · utils.py
 │   ├── core/
@@ -416,8 +416,9 @@ mill-tools/
 │   │   ├── video/       — downloader (yt-dlp), converter (ffmpeg), info (ffprobe)
 │   │   └── image/       — downloader, converter, transform, info (Pillow; lógica pura, sem Flet)
 │   └── gui/
-│       ├── app.py       — NavigationRail + registry de módulos + navigate_to
+│       ├── app.py       — NavigationRail + registry de módulos + navigate_to + AppBar
 │       ├── splash.py    — animação de entrada (moinho + fade)
+│       ├── home.py      — Home Screen: 4 cards de módulo + moinho animado ao fundo
 │       ├── assets.py    — helpers de imagem (b64, WINDOW_ICON)
 │       ├── events.py    — EventBus, PipelineEvent (com module_id)
 │       ├── settings.py  — persistência em ~/.mill-tools/config.json
@@ -456,6 +457,7 @@ mill-tools/
 
 ## Roadmap
 
+- **Home Screen** ✅ — Tela inicial entre splash e app: 4 cards de módulo, moinho animado ao fundo, botões "Home" e "Splash" no AppBar, transições suavizadas. App abre maximizado.
 - **PR3.1-A** ✅ — Pós-processamento de áudio: redução de ruído (spectral gating, CPU) e normalização de loudness (EBU R128). Sem torch, sem extra — já incluído na instalação padrão.
 - **PR3.1-B** — IA de áudio com torch (extra `[ai-audio]`): DeepFilterNet (denoise neural); Demucs (separação de stems) a avaliar.
 - **PR4** ✅ — Módulo Vídeo: 7 operações (download, convert, trim, compress, resize, extract_audio, thumbnail). CPU-only, fila sequencial, bridge extract_audio → Transcrição/Áudio.

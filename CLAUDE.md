@@ -30,7 +30,7 @@ Multiferramenta pessoal extensível para processamento de áudio, vídeo e trans
 
 ```
 main.py                          — entry point CLI (argparse)
-gui.py                           — entry point GUI (splash → build_app)
+gui.py                           — entry point GUI (splash → home → build_app)
 src/
 ├── transcriber.py · formatter.py · analyzer.py · prompter.py
 ├── llm_factory.py               — roteamento gemini-* → Google, demais → Ollama
@@ -56,7 +56,8 @@ src/
 │       └── info.py              — image_info() + thumbnail_bytes()
 └── gui/
     ├── app.py                   — build_app(): NavigationRail + registry de módulos + navigate_to
-    ├── splash.py                — show_splash(): cata-vento + fade → build_app
+    ├── splash.py                — show_splash(): cata-vento + fade → show_home
+    ├── home.py                  — show_home(): 4 cards de módulo + moinho animado → build_app(initial_module)
     ├── assets.py                — b64() (bytes p/ ft.Image), WINDOW_ICON
     ├── events.py                — EventBus, PipelineEvent (com module_id), LogEventHandler
     ├── settings.py              — persistência em ~/.mill-tools/config.json
@@ -82,6 +83,8 @@ src/
 A GUI é dividida em módulos selecionáveis numa **NavigationRail** à esquerda. Estado:
 **Áudio** (PR3, completo), **Vídeo** (PR4, completo), **Imagens** (PR-IMG-2B, completo), **Transcrição** (completo).
 Ordem na rail: Áudio → Vídeo → Imagens → Transcrição.
+
+A entrada no app é mediada pela **Home Screen** (`home.py`): ao clicar num card, `on_complete(module_id)` chama `build_app(initial_module=mid)` — o módulo escolhido abre diretamente sem passar pelo módulo padrão.
 
 - **Registry** (`app.py`): `MODULES: list[Module]` é a fonte única. Adicionar um módulo = uma entrada na lista.
 - **Module** (`modules/base.py`): dataclass com `id`, `label`, `icon`, `selected_icon`, `control`, `on_mount(payload)`, `on_unmount()`. O `control` é construído uma vez; trocar de aba **não** destrói o estado.
@@ -137,9 +140,13 @@ Conversão, manipulação e operações de IA com visor Before/After integrado.
 - **`pipeline_log.py`**: fonte única de mensagens do módulo — constantes `OP_VERBS`/`OP_LABELS`, builders `fmt_*` por operação (metadados PIL, detalhes de cada op, rembg, describe), `resolve_messages()` e `resolve_stage_label()` usados por `view.py`. `worker.py` emite metadados lazy (`_try_read_meta` lê cabeçalho sem decodificar pixels) e detalhe específico antes de cada chamada ao core.
 - **Saída**: downloads → `output/image/source/`; processadas → `output/image/processed/`.
 
-## Splash + spinner (branding)
+## Splash + Home Screen + spinner (branding)
 
-- **Splash** (`gui/splash.py`): fade-in + scale + uma volta do cata-vento, então chama `build_app`. Cores via `Color.dark.*` — sem literais hardcoded.
+Fluxo completo de entrada: `show_splash` → `show_home` → `build_app(initial_module)`.
+
+- **Splash** (`gui/splash.py`): fade-in + scale + uma volta do cata-vento, então chama `show_home`. Cores via `Color.dark.*` — sem literais hardcoded.
+- **Home Screen** (`gui/home.py`): tela intermediária com 4 cards de módulo (grid 2×2) sobre um fundo com o símbolo do moinho girando lentamente (opacity 0.16, 20s/volta). Ao clicar num card: fade-out 350ms EASE_IN → `build_app(initial_module=id)` com fade-in 500ms EASE_OUT. Tema salvo é aplicado em `show_home` (antes de `build_app`) para que `_palette()` retorne as cores corretas desde o primeiro frame. Cada card é um `GestureDetector` + `Container` (sem `ink=True`, sem `on_click` — quirk Flet 0.85); hover muta `bgcolor` e `border` com animação `Motion.fast`.
+- **AppBar** (`app.py`): wordmark "mill.tools" com spans (`ft.Colors.ON_SURFACE` / `pal_title.primary`). Botões "Home" e "Splash" em `actions` — chamam `_go_home` / `_go_splash` (bloqueados se pipeline rodando). `page.pubsub.unsubscribe_all()` no início de `build_app` evita acúmulo de subscribers em re-entradas. `page.appbar = None` antes de navegar para splash/home.
 - **Spinner**: `ft.Image` do cata-vento, giro encadeado via `on_animation_end` (curva LINEAR). Para na vertical ao terminar.
 - **Assets** (`gui/assets.py`): `b64(name)` retorna bytes; `WINDOW_ICON` → `assets/icons/mill.ico`.
 
@@ -275,6 +282,7 @@ Flet (DirectX) e Whisper (CUDA) disputam a MX150. Uso simultâneo pode causar BS
 
 ## Roadmap
 
+- **Home Screen** ✅ — Tela inicial entre splash e NavigationRail: 4 cards de módulo, fundo animado (moinho girando), botões "Home" e "Splash" no AppBar, transição com fade suavizado (EASE_IN out / EASE_OUT in). App abre maximizado.
 - **PR3.1-A** ✅ — Pós-processamento de áudio (CPU, torch-free): denoise spectral (noisereduce) + normalização loudnorm (EBU R128, 2 passes). Switches no formulário, encadeável, estado persistido.
 - **PR3.1-B** — IA de áudio com torch (extra `[ai-audio]`): DeepFilterNet (denoise neural, CPU); Demucs (separação de stems) a avaliar.
 - **PR4** ✅ — Módulo Vídeo: 7 operações (download, convert, trim, compress, resize, extract_audio, thumbnail). CPU-only, fila sequencial, pipeline_log, bridge extract_audio → Transcrição/Áudio.
