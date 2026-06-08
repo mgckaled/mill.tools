@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import threading
 
 import flet as ft
@@ -9,8 +10,11 @@ from flet.controls.core.stack import StackFit
 
 from src.gui import settings
 from src.gui.events import EventBus, PipelineEvent
+from src.gui.home import show_home
+from src.gui.splash import show_splash
 from src.gui.theme import sync_page_bgcolor
 from src.gui.theme.components import Cursor
+from src.gui.theme.tokens import Color, Motion, Type
 from src.gui.modules.audio.view import build_audio_module
 from src.gui.modules.base import Module
 from src.gui.modules.image.view import build_image_module
@@ -25,6 +29,7 @@ def build_app(page: ft.Page, initial_module: str = "transcription") -> None:
     alterna visible= em vez de reatribuir content — evita object_patch IndexError
     do Flet 0.85 que forçou o abandono de ft.Tabs.
     """
+    page.pubsub.unsubscribe_all()
     cfg = settings.load()
     page.theme_mode = (
         ft.ThemeMode.DARK if cfg.get("theme_mode", "dark") == "dark" else ft.ThemeMode.LIGHT
@@ -39,6 +44,38 @@ def build_app(page: ft.Page, initial_module: str = "transcription") -> None:
     # AppBar
     # ------------------------------------------------------------------
 
+    pal_title = Color.dark if page.theme_mode != ft.ThemeMode.LIGHT else Color.light
+
+    def _go_home(_e=None) -> None:
+        if pipeline_running[0]:
+            page.snack_bar = ft.SnackBar(
+                content=ft.Text("Aguarde o pipeline terminar antes de navegar."),
+                bgcolor=ft.Colors.ERROR,
+            )
+            page.snack_bar.open = True
+            page.update()
+            return
+        page.appbar = None
+        show_home(page, on_complete=lambda mid: build_app(page, initial_module=mid))
+
+    def _go_splash(_e=None) -> None:
+        if pipeline_running[0]:
+            page.snack_bar = ft.SnackBar(
+                content=ft.Text("Aguarde o pipeline terminar antes de navegar."),
+                bgcolor=ft.Colors.ERROR,
+            )
+            page.snack_bar.open = True
+            page.update()
+            return
+        page.appbar = None
+        show_splash(
+            page,
+            on_complete=lambda: show_home(
+                page,
+                on_complete=lambda mid: build_app(page, initial_module=mid),
+            ),
+        )
+
     def _toggle_theme(_e) -> None:
         is_dark = page.theme_mode == ft.ThemeMode.DARK
         page.theme_mode = ft.ThemeMode.LIGHT if is_dark else ft.ThemeMode.DARK
@@ -47,6 +84,18 @@ def build_app(page: ft.Page, initial_module: str = "transcription") -> None:
         settings.set("theme_mode", "light" if is_dark else "dark")
         page.update()
 
+    home_btn = ft.TextButton(
+        "Home",
+        icon=ft.Icons.HOME_OUTLINED,
+        on_click=_go_home,
+        style=ft.ButtonStyle(mouse_cursor=Cursor.interactive),
+    )
+    splash_btn = ft.TextButton(
+        "Splash",
+        icon=ft.Icons.SLIDESHOW,
+        on_click=_go_splash,
+        style=ft.ButtonStyle(mouse_cursor=Cursor.interactive),
+    )
     theme_btn = ft.IconButton(
         icon=ft.Icons.LIGHT_MODE if page.theme_mode == ft.ThemeMode.DARK else ft.Icons.DARK_MODE,
         tooltip="Alternar tema",
@@ -55,9 +104,28 @@ def build_app(page: ft.Page, initial_module: str = "transcription") -> None:
     )
 
     page.appbar = ft.AppBar(
-        title=ft.Text("mill.tools", weight=ft.FontWeight.BOLD),
+        title=ft.Text(
+            spans=[
+                ft.TextSpan(
+                    "mill",
+                    ft.TextStyle(
+                        color=ft.Colors.ON_SURFACE,
+                        size=Type.title.size,
+                        weight=ft.FontWeight.W_600,
+                    ),
+                ),
+                ft.TextSpan(
+                    ".tools",
+                    ft.TextStyle(
+                        color=pal_title.primary,
+                        size=Type.title.size,
+                        weight=ft.FontWeight.W_400,
+                    ),
+                ),
+            ]
+        ),
         center_title=False,
-        actions=[theme_btn],
+        actions=[home_btn, splash_btn, theme_btn],
     )
 
     # ------------------------------------------------------------------
@@ -175,6 +243,8 @@ def build_app(page: ft.Page, initial_module: str = "transcription") -> None:
         expand=True,
         spacing=0,
         vertical_alignment=ft.CrossAxisAlignment.STRETCH,
+        opacity=0,
+        animate_opacity=ft.Animation(Motion.slow, ft.AnimationCurve.EASE_OUT),
     )
 
     # ------------------------------------------------------------------
@@ -203,3 +273,10 @@ def build_app(page: ft.Page, initial_module: str = "transcription") -> None:
     page.controls.clear()
     page.add(layout)
     page.update()
+
+    async def _fade_in() -> None:
+        await asyncio.sleep(0.05)
+        layout.opacity = 1
+        page.update()
+
+    page.run_task(_fade_in)

@@ -17,6 +17,7 @@ async def main(page: ft.Page) -> None:
     page.window.height = 800
     page.window.min_width = 1000
     page.window.min_height = 600
+    page.window.maximized = True
     page.update()
     await page.window.center()
     # Windows-only; caminho absoluto (issue #3438)

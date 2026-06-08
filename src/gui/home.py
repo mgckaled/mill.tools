@@ -212,7 +212,7 @@ def show_home(page: ft.Page, on_complete: Callable[[str], None]) -> None:
         src=b64("mill-symbol.png"),
         width=500,
         height=500,
-        opacity=0.10,
+        opacity=0.16,
         rotate=ft.Rotate(angle=0, alignment=ft.Alignment.CENTER),
         animate_rotation=ft.Animation(20_000, ft.AnimationCurve.LINEAR),
     )
@@ -237,9 +237,10 @@ def show_home(page: ft.Page, on_complete: Callable[[str], None]) -> None:
     home_root: list[ft.Container] = [None]
 
     async def _navigate(module_id: str) -> None:
+        home_root[0].animate_opacity = ft.Animation(350, ft.AnimationCurve.EASE_IN)
         home_root[0].opacity = 0
         page.update()
-        await asyncio.sleep(0.35)
+        await asyncio.sleep(0.37)
         on_complete(module_id)
 
     def _on_tap(module_id: str) -> None:
