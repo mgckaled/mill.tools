@@ -16,15 +16,7 @@ Multiferramenta pessoal extensível para processamento de áudio, vídeo e trans
 - **Flet 0.85** — GUI desktop (Flutter no Windows); constraint em `pyproject.toml`: `flet>=0.28`, versão instalada e testada: 0.85.2
 - **tqdm** — barra de progresso (CLI)
 
-> Decisão consciente: o projeto evita **PyTorch**. O pós-processamento de áudio (PR3.1-A: denoise + normalize) é CPU-only e torch-free. Qualquer IA que dependa de torch (ex.: Demucs, DeepFilterNet neural) ficará isolada num extra opcional `[ai-audio]` (PR3.1-B) — o app base permanece torch-free.
-
-## Hardware de desenvolvimento
-
-- Dell Inspiron 7580 — i5-8265U, 16GB RAM
-- NVIDIA GeForce MX150 (2GB VRAM), CUDA 12.6
-- Compute type: `int8_float32` (arquitetura Pascal)
-- Thermal throttling gerenciado pelo EC Dell (~63-65°C) — comportamento esperado
-- OS: Windows 10 Home
+> Decisão consciente: o projeto evita **PyTorch**. O pós-processamento de áudio (denoise + normalize) é CPU-only e torch-free. Qualquer IA que dependa de torch (ex.: Demucs, DeepFilterNet neural) ficará isolada num extra opcional `[ai-audio]` — o app base permanece torch-free.
 
 ## Estrutura
 
@@ -69,9 +61,13 @@ src/
     ├── modules/
     │   ├── base.py              — dataclass Module (id, label, icon, control, on_mount/on_unmount)
     │   ├── transcription/view.py
-    │   ├── audio/               — form_view.py, worker.py, view.py, pipeline_log.py (PR3.1-A)
-    │   ├── image/               — form_view.py, worker.py, view.py, pipeline_log.py (PR-IMG-2B)
-    │   └── video/               — form_view.py, worker.py, view.py, pipeline_log.py (PR4)
+    │   ├── audio/               — form_view.py, worker.py, view.py, pipeline_log.py
+    │   ├── image/               — form_view.py, worker.py, view.py, pipeline_log.py
+    │   └── video/               — form_view.py, worker.py, view.py, pipeline_log.py
+    ├── theme/
+    │   ├── theme.py             — apply_theme(), sync_page_bgcolor()
+    │   ├── tokens.py            — Color, Type, Space, Radius, Motion, Layout
+    │   └── components/          — factories de botões, cards, inputs, layout, feedback, help; Cursor
     └── views/
         ├── form_view.py         — formulário de Transcrição → FormPanel
         ├── progress_view.py     — ProgressPanel (logs/barra/spinner), filtro por owner_id
@@ -80,20 +76,18 @@ src/
 
 ## Sistema de módulos (GUI)
 
-A GUI é dividida em módulos selecionáveis numa **NavigationRail** à esquerda. Estado:
-**Áudio** (PR3, completo), **Vídeo** (PR4, completo), **Imagens** (PR-IMG-2B, completo), **Transcrição** (completo).
-Ordem na rail: Áudio → Vídeo → Imagens → Transcrição.
+A GUI é dividida em módulos selecionáveis numa **NavigationRail** à esquerda. Módulos disponíveis: **Áudio**, **Vídeo**, **Imagens**, **Transcrição** — todos completos. Ordem na rail: Áudio → Vídeo → Imagens → Transcrição.
 
-A entrada no app é mediada pela **Home Screen** (`home.py`): ao clicar num card, `on_complete(module_id)` chama `build_app(initial_module=mid)` — o módulo escolhido abre diretamente sem passar pelo módulo padrão.
+A entrada no app é mediada pela **Home Screen** (`src/gui/home.py`): ao clicar num card, `on_complete(module_id)` chama `build_app(initial_module=mid)` — o módulo escolhido abre diretamente sem passar pelo módulo padrão.
 
-- **Registry** (`app.py`): `MODULES: list[Module]` é a fonte única. Adicionar um módulo = uma entrada na lista.
-- **Module** (`modules/base.py`): dataclass com `id`, `label`, `icon`, `selected_icon`, `control`, `on_mount(payload)`, `on_unmount()`. O `control` é construído uma vez; trocar de aba **não** destrói o estado.
+- **Registry** (`src/gui/app.py`): `MODULES: list[Module]` é a fonte única. Adicionar um módulo = uma entrada na lista.
+- **Module** (`src/gui/modules/base.py`): dataclass com `id`, `label`, `icon`, `selected_icon`, `control`, `on_mount(payload)`, `on_unmount()`. O `control` é construído uma vez; trocar de aba **não** destrói o estado.
 - **navigate_to(module_id, payload)**: alterna **visibilidade** dos controles num `ft.Stack` (não reatribui `content` — evita o `object_patch` IndexError do Flet 0.85). **Bloqueia a troca** enquanto `pipeline_running[0]` for `True`.
 - **Bridge Áudio → Transcrição**: `navigate_to("transcription", {"file": path})` — o `on_mount` preenche o campo URL percorrendo a árvore de controles.
 - **Bridge Vídeo → Transcrição/Áudio**: resultado de `extract_audio` exibe botões "Transcrever" e "Processar no Áudio" no painel de resultados de vídeo.
 - **Escopo de eventos por módulo**: cada `ProgressPanel` recebe um `owner_id` e ignora eventos cujo `module_id` não casa.
 
-## Módulo Áudio (PR3 + PR3.1-A)
+## Módulo Áudio
 
 - **Operações principais** (auto-detectadas): URL → download; vídeo local → extração; áudio local → conversão.
 - **Entrada**: URL + FilePicker via `page.services`, `allow_multiple=True`. Arrastar do SO fora de escopo.
@@ -101,9 +95,9 @@ A entrada no app é mediada pela **Home Screen** (`home.py`): ao clicar num card
 - **Capa + metadados**: embutidos por padrão; switch desligável. Fallback gracioso em ogg/opus.
 - **Fila sequencial**: um item por vez. Progresso via `queue_progress` + `progress_update`.
 - **Saída**: downloads → `output/audio/source/`; convertidos/pós-processados → `output/audio/processed/`.
-- **Reprodutor embutido** (`components/audio_player.py`): aparece acima do log após o pipeline concluir. Decodifica via ffmpeg (qualquer formato) em thread de background, reproduz via sounddevice. UI: nome do arquivo + anel de carregamento + play/pause + seek slider (`on_change_end`). `AudioPlayer.load(path)` carregado automaticamente em `_on_done` com o primeiro arquivo de áudio de `output_paths`.
+- **Reprodutor embutido** (`src/gui/components/audio_player.py`): aparece acima do log após o pipeline concluir. Decodifica via ffmpeg (qualquer formato) em thread de background, reproduz via sounddevice. UI: nome do arquivo + anel de carregamento + play/pause + seek slider (`on_change_end`). `AudioPlayer.load(path)` carregado automaticamente em `_on_done` com o primeiro arquivo de áudio de `output_paths`.
 
-### Pós-processamento (PR3.1-A)
+### Pós-processamento
 
 Ativado por switches no formulário; as duas operações são encadeáveis após a operação principal.
 
@@ -115,26 +109,26 @@ Ativado por switches no formulário; as duas operações são encadeáveis após
 - **`pipeline_log.py`**: vocabulário centralizado para 5 operações (download, convert, extract, denoise, normalize). Segue o padrão descrito em "Arquitetura GUI > pipeline_log.py".
 - **`AudioArgs`**: expandido com `denoise: bool`, `normalize: bool`, `normalize_target_lufs: float = -14.0`. Estado persistido em `~/.mill-tools/config.json`.
 
-## Módulo Vídeo (PR4)
+## Módulo Vídeo
 
 Download, conversão e processamento via yt-dlp e ffmpeg. Encoding 100% CPU — sem NVENC (decisão definitiva).
 
 - **Operações** (7, selecionadas via card grid 3 colunas): `download` (yt-dlp), `convert` (codec/container), `trim` (corte por tempo, copy ou reenc), `compress` (H.264/CRF 18–28), `resize` (scale ffmpeg, aspect ratio preservado), `extract_audio` (bridge para `core/audio/converter.py`), `thumbnail` (frame → jpg/png).
-- **Core** (`core/video/`): `info.py` — `VideoInfo` + `get_video_info()` via ffprobe; `downloader.py` — `download_video()` via yt-dlp com hook de progresso; `converter.py` — 6 funções ffmpeg com `_run_ffmpeg()` e `-progress pipe:1`.
-- **GUI** (`form_view.py`): `VideoArgs` com 17 campos. Detecção automática URL → operação forçada para `download` (seletor desabilitado). 7 blocos condicionais com `visible=`/`animate_opacity`.
+- **Core** (`src/core/video/`): `info.py` — `VideoInfo` + `get_video_info()` via ffprobe; `downloader.py` — `download_video()` via yt-dlp com hook de progresso; `converter.py` — 6 funções ffmpeg com `_run_ffmpeg()` e `-progress pipe:1`.
+- **GUI** (`src/gui/modules/video/form_view.py`): `VideoArgs` com 17 campos. Detecção automática URL → operação forçada para `download` (seletor desabilitado). 7 blocos condicionais com `visible=`/`animate_opacity`.
 - **`pipeline_log.py`**: 7 operações (download, convert, trim, compress, resize, extract_audio, thumbnail). Segue o padrão descrito em "Arquitetura GUI > pipeline_log.py".
 - **Saída**: downloads → `output/video/source/`; processados → `output/video/processed/`.
 - **Bridge extract_audio**: resultado de áudio exibe botões "Transcrever" e "Processar no Áudio" no painel de resultados.
 - **Downloader — quirks Windows**: **Nunca usar `FFmpegVideoConvertor`** em nenhum formato (MP4, WebM ou outro) — o post-processor cria `.temp.<ext>` no diretório de saída e o Windows Defender bloqueia o rename com `[WinError 32]`. Usar apenas `merge_output_format` para garantir o container; ele opera sobre arquivos temporários em `%TEMP%`. Opções obrigatórias: `nopart=True`, `overwrites=True`, `paths={"temp": tempfile.gettempdir()}`. Solução definitiva: adicionar a pasta `output/` às exclusões do Windows Defender.
 - **Progresso yt-dlp**: campos `_percent_str`, `_speed_str`, `_eta_str` contêm códigos ANSI — strip obrigatório antes de exibir: `re.sub(r'\x1b\[[0-9;]*m', '', s).strip()`.
 
-## Módulo Imagens (PR-IMG-2B)
+## Módulo Imagens
 
 Conversão, manipulação e operações de IA com visor Before/After integrado.
 
 - **Operações** (12, selecionadas via card grid 3 colunas): `convert`, `resize` (caber/exato/escala%), `crop` (manual/proporção/auto-trim), `rotate` (ângulo/flip/EXIF), `watermark` (texto ou imagem), `border`, `adjust` (brilho/contraste/saturação/nitidez), `filter` (blur/sharpen/autocontrast/equalizar/cinza), `favicon` (.ico multires), `contact_sheet` (N→1), `remove_bg` (rembg/ONNX, CPU), `describe` (Ollama vision → .txt).
-- **Core** (`core/image/`): `transform.py` com 9 funções puras; `background.py` — `remove_background()` via rembg (imports lazy, extra `[ai-image]`); `describe.py` — `describe_image()` + `save_description()` via LangChain + Ollama.
-- **GUI** (`form_view.py`): `ImageArgs` com 33 campos. Card `remove_bg` desabilitado com tooltip quando extra não instalado (`_UNAVAILABLE`). Blocos `rembg_block` e `describe_block` com Dropdown de modelo. Formato oculto para `favicon` e `describe`.
+- **Core** (`src/core/image/`): `transform.py` com 9 funções puras; `background.py` — `remove_background()` via rembg (imports lazy, extra `[ai-image]`); `describe.py` — `describe_image()` + `save_description()` via LangChain + Ollama.
+- **GUI** (`src/gui/modules/image/form_view.py`): `ImageArgs` com 33 campos. Card `remove_bg` desabilitado com tooltip quando extra não instalado (`_UNAVAILABLE`). Blocos `rembg_block` e `describe_block` com Dropdown de modelo. Formato oculto para `favicon` e `describe`.
 - **Visor Before/After**: `_single_pane` (placeholder ou input thumb) e `_before_after_row` (Antes/Depois em `ft.Row`) num `ft.Row` pai, toggle por `visible=`. `_last_input_thumb` preserva o thumb do input para o split após `image_op_done`.
 - **Formatos**: JPG, PNG, WebP, AVIF, TIFF, BMP, GIF, ICO. `LOSSY_FMTS = {"jpg", "jpeg", "webp"}`.
 - **`pipeline_log.py`**: fonte única de mensagens do módulo — constantes `OP_VERBS`/`OP_LABELS`, builders `fmt_*` por operação (metadados PIL, detalhes de cada op, rembg, describe), `resolve_messages()` e `resolve_stage_label()` usados por `view.py`. `worker.py` emite metadados lazy (`_try_read_meta` lê cabeçalho sem decodificar pixels) e detalhe específico antes de cada chamada ao core.
@@ -144,11 +138,11 @@ Conversão, manipulação e operações de IA com visor Before/After integrado.
 
 Fluxo completo de entrada: `show_splash` → `show_home` → `build_app(initial_module)`.
 
-- **Splash** (`gui/splash.py`): fade-in + scale + uma volta do cata-vento, então chama `show_home`. Cores via `Color.dark.*` — sem literais hardcoded.
-- **Home Screen** (`gui/home.py`): tela intermediária com 4 cards de módulo (grid 2×2) sobre um fundo com o símbolo do moinho girando lentamente (opacity 0.16, 20s/volta). Ao clicar num card: fade-out 350ms EASE_IN → `build_app(initial_module=id)` com fade-in 500ms EASE_OUT. Tema salvo é aplicado em `show_home` (antes de `build_app`) para que `_palette()` retorne as cores corretas desde o primeiro frame. Cada card é um `GestureDetector` + `Container` (sem `ink=True`, sem `on_click` — quirk Flet 0.85); hover muta `bgcolor` e `border` com animação `Motion.fast`.
-- **AppBar** (`app.py`): wordmark "mill.tools" com spans (`ft.Colors.ON_SURFACE` / `pal_title.primary`). Botões "Home" e "Splash" em `actions` — chamam `_go_home` / `_go_splash` (bloqueados se pipeline rodando). `page.pubsub.unsubscribe_all()` no início de `build_app` evita acúmulo de subscribers em re-entradas. `page.appbar = None` antes de navegar para splash/home.
+- **Splash** (`src/gui/splash.py`): fade-in + scale + uma volta do cata-vento, então chama `show_home`. Cores via `Color.dark.*` — sem literais hardcoded.
+- **Home Screen** (`src/gui/home.py`): tela intermediária com 4 cards de módulo (grid 2×2) sobre um fundo com o símbolo do moinho girando lentamente (opacity 0.16, 20s/volta). Ao clicar num card: fade-out 350ms EASE_IN → `build_app(initial_module=id)` com fade-in 500ms EASE_OUT. Tema salvo é aplicado em `show_home` (antes de `build_app`) para que `_palette()` retorne as cores corretas desde o primeiro frame. Cada card é um `GestureDetector` + `Container` (sem `ink=True`, sem `on_click` — quirk Flet 0.85); hover muta `bgcolor` e `border` com animação `Motion.fast`.
+- **AppBar** (`src/gui/app.py`): wordmark "mill.tools" com spans (`ft.Colors.ON_SURFACE` / `pal_title.primary`). Botões "Home" e "Splash" em `actions` — chamam `_go_home` / `_go_splash` (bloqueados se pipeline rodando). `page.pubsub.unsubscribe_all()` no início de `build_app` evita acúmulo de subscribers em re-entradas. `page.appbar = None` antes de navegar para splash/home.
 - **Spinner**: `ft.Image` do cata-vento, giro encadeado via `on_animation_end` (curva LINEAR). Para na vertical ao terminar.
-- **Assets** (`gui/assets.py`): `b64(name)` retorna bytes; `WINDOW_ICON` → `assets/icons/mill.ico`.
+- **Assets** (`src/gui/assets.py`): `b64(name)` retorna bytes; `WINDOW_ICON` → `assets/icons/mill.ico`.
 
 ## Comandos
 
@@ -174,9 +168,9 @@ uv run -m src output/transcriptions/text/<file>.txt  # análise standalone
 
 ## LLM pipeline (Formatter / Analyzer / Prompter)
 
-- **Formatter**: `RecursiveCharacterTextSplitter` 4500 chars/150 overlap. Modelo padrão: `phi4mini-custom`.
-- **Analyzer**: 4500 chars/300 overlap, merge parcial. 10 campos, tradução automática PT-BR. Modelo padrão: `qwen7b-custom`. Temperaturas 0.4 (análise) / 0.0 (tradução).
-- **Prompter**: 4500 chars/200 overlap, ~40% de compressão. Remove CTAs/patrocinadores. Modelo padrão: `qwen7b-custom`.
+- **Formatter** (`src/formatter.py`): `RecursiveCharacterTextSplitter` 4500 chars/150 overlap. Modelo padrão: `phi4mini-custom`.
+- **Analyzer** (`src/analyzer.py`): 4500 chars/300 overlap, merge parcial. 10 campos, tradução automática PT-BR. Modelo padrão: `qwen7b-custom`. Temperaturas 0.4 (análise) / 0.0 (tradução).
+- **Prompter** (`src/prompter.py`): 4500 chars/200 overlap, ~40% de compressão. Remove CTAs/patrocinadores. Modelo padrão: `qwen7b-custom`.
 
 ## Métricas de qualidade de transcrição
 
@@ -195,14 +189,15 @@ Iniciada com `uv run gui.py`. Flutter desktop no Windows.
 
 ### Arquitetura
 
-- **Sidebar (NavigationRail)** + `ft.Stack` com todos os módulos montados; só um visível por vez (toggle de `visible`). Detalhes de registry/navigate_to/bridges em "Sistema de módulos".
-- **EventBus** (`events.py`): publica `PipelineEvent(type, stage, payload, module_id)` via `page.pubsub.send_all()` (thread-safe). Worker em thread daemon; UI atualiza na thread principal.
+- **EventBus** (`src/gui/events.py`): publica `PipelineEvent(type, stage, payload, module_id)` via `page.pubsub.send_all()` (thread-safe). Worker em thread daemon; UI atualiza na thread principal.
 - **LogEventHandler**: captura `logging.INFO` e encaminha como eventos `log`. `_SUPPRESSED_PREFIXES` filtra duplicados. Recebe `module_id`.
 - **`pipeline_log.py` (por módulo)**: padrão de vocabulário centralizado — `worker.py` importa `fmt_*` para `emit("log", ...)`, `view.py`/`progress_view.py` importa `resolve_messages()`/`resolve_stage_label()`. Separa "o que emitir" de "como exibir". Constantes `OP_VERBS`/`OP_LABELS` por operação; builders `fmt_*` encapsulam metadados e detalhes. Implementado em todos os módulos: `audio/`, `image/`, `video/`.
 - **`extra_header` no `build_progress_view`**: parâmetro opcional `ft.Control | None` inserido entre a barra de progresso e o log. Usado pelo módulo Áudio para injetar o `AudioPlayer`.
-- **Design System** (`theme/components/`): factories, tokens de tipografia, cursores e help system → skill `design-system` (`.claude/skills/design-system/SKILL.md`).
+- **Design System** (`src/gui/theme/components/`): factories, tokens de tipografia, cursores e help system → skill `design-system` (`.claude/skills/design-system/SKILL.md`).
 
 ### Flet 0.85 — quirks conhecidos
+
+#### APIs renomeadas ou inexistentes
 
 | API antiga / armadilha | Correto no 0.85 |
 |---|---|
@@ -210,30 +205,50 @@ Iniciada com `uv run gui.py`. Flutter desktop no Windows.
 | `ft.border.all(w, c)` | `ft.Border(left=ft.BorderSide(...), ...)` |
 | `ft.alignment.center` | `ft.Alignment.CENTER` |
 | `ft.Image(src_base64=...)` | `ft.Image(src=<bytes>)` — `src` posicional e **obrigatório** mesmo para imagem vazia |
-| `rotate=<float>` | `ft.Rotate(angle=, alignment=ft.Alignment.CENTER)`; animar mutando `.angle` |
-| `animate_*` | `int` (ms, LINEAR), `bool` ou `ft.Animation(dur, ft.AnimationCurve.X)` |
-| FilePicker | `page.services.append(picker)` + async `await picker.pick_files(...)` |
-| trocar `Container.content` em runtime | reatribuir árvore quebra o patcher → toggle de `visible` num Stack |
-| `page.update()` em cascata | causa IndexError no `object_patch` — um update por evento |
-| `ft.Column(controls=[]).append()` | preferir `Container(content=None)` (diff None→árvore quebra) |
 | `ft.ImageFit.CONTAIN` | `ft.BoxFit.CONTAIN` — `ft.ImageFit` não existe no 0.85 |
-| `control.page` antes do mount | lança `RuntimeError` — proteger com `try/except RuntimeError` |
+| `ft.Audio` | **não existe no 0.85** — `AttributeError` ao importar. Para reprodução de áudio usar `sounddevice` + ffmpeg (ver `src/gui/components/audio_player.py`) |
+
+#### Sistema de cores / tema
+
+| API antiga / armadilha | Correto no 0.85 |
+|---|---|
 | `ColorScheme.surface` vs page.bgcolor | `surface` → `ft.Colors.SURFACE` (painéis). `page.bgcolor` explícito via `sync_page_bgcolor(page)` |
 | `surface_variant` / `surface_container_*` no ColorScheme | kwargs inválidos — geram `TypeError`. Suportados: `surface`, `on_surface`, `on_surface_variant`, `outline`, `outline_variant` |
 | `ft.Colors.SURFACE_VARIANT` / `SURFACE_CONTAINER` | não existem no 0.85 — geram `AttributeError`. Usar `ft.Colors.SURFACE` |
+
+#### Layout e árvore de widgets
+
+| API antiga / armadilha | Correto no 0.85 |
+|---|---|
+| trocar `Container.content` em runtime | reatribuir árvore quebra o patcher → toggle de `visible` num Stack |
+| `page.update()` em cascata | causa IndexError no `object_patch` — um update por evento |
+| `ft.Column(controls=[]).append()` | preferir `Container(content=None)` (diff None→árvore quebra) |
 | `BoxDecoration(shadow=...)` | deve ser `shadows=[ft.BoxShadow(...)]` — plural, lista |
 | `Container(box_shadow=...)` | deve ser `Container(shadow=ft.BoxShadow(...))` — sem prefixo `box_` |
+
+#### Animação e transformações
+
+| API antiga / armadilha | Correto no 0.85 |
+|---|---|
+| `rotate=<float>` | `ft.Rotate(angle=, alignment=ft.Alignment.CENTER)`; animar mutando `.angle` |
+| `animate_*` | `int` (ms, LINEAR), `bool` ou `ft.Animation(dur, ft.AnimationCurve.X)` |
+
+#### Interação, eventos e cursores
+
+| API antiga / armadilha | Correto no 0.85 |
+|---|---|
+| FilePicker | `page.services.append(picker)` + async `await picker.pick_files(...)` |
+| `control.page` antes do mount | lança `RuntimeError` — proteger com `try/except RuntimeError` |
 | `ink=True` em Container | cria Flutter InkWell que **absorve** eventos de ponteiro e anula o cursor do GestureDetector externo — cursor só aparece nas margens. Nunca usar `ink=True` em containers clicáveis; usar `GestureDetector` externo + `Cursor.*` |
 | `Container.on_click` + `GestureDetector` externo | os dois handlers competem — o clique pode não registrar. Padrão correto: remover `Container.on_click` e colocar o handler em `GestureDetector.on_tap`. Nunca mutar `ctr.disabled` de dentro de callbacks de mudança de estado (ex.: `_on_items_change`) — causa rebuild do widget que desfaz mudanças de `border`/`bgcolor` feitas por `_refresh_op_cards()`. |
 | `ft.Tooltip` sem `size_constraints` | texto renderiza em linha única sem quebra. Usar `size_constraints=ft.BoxConstraints(max_width=280)` |
 | `ft.NavigationRailDestination` cursor | não tem propriedade `mouse_cursor`. Solução: envolver o `NavigationRail` num `ft.GestureDetector(mouse_cursor=Cursor.interactive)` e alternar para `Cursor.forbidden` via `page.pubsub` quando pipeline estiver rodando |
 | `ButtonStyle.mouse_cursor` | aceita valor flat (`Cursor.interactive`) **ou** dict por estado (`Cursor.btn`). `ControlState.DISABLED` existe e funciona — usar `Cursor.btn` em botões que podem ser desabilitados |
-| `ft.Audio` | **não existe no 0.85** — `AttributeError` ao importar. Para reprodução de áudio usar `sounddevice` + ffmpeg (ver `components/audio_player.py`) |
 | `ft.Slider` eventos de drag | `on_change_start` e `on_change_end` **existem** no 0.85 — usar `on_change_end` para seek (evita seeks contínuos durante drag). `on_change` programático (setar `.value` + `update()`) **não** dispara `on_change` no Python |
 
 ### Eventos do pipeline
 
-`PipelineEvent(type, stage, payload, module_id)`. `module_id` ∈ {`"transcription"`, `"audio"`, `"image"`, `""` (legado)}. O `ProgressPanel` ignora eventos cujo `module_id` ≠ `owner_id`.
+`PipelineEvent(type, stage, payload, module_id)`. `module_id` ∈ {`"transcription"`, `"audio"`, `"image"`, `"video"`, `""` (legado)}. O `ProgressPanel` ignora eventos cujo `module_id` ≠ `owner_id`.
 
 **Genéricos (todos os módulos):**
 
@@ -280,11 +295,16 @@ Iniciada com `uv run gui.py`. Flutter desktop no Windows.
 
 Flet (DirectX) e Whisper (CUDA) disputam a MX150. Uso simultâneo pode causar BSOD `WIN32K_POWER_WATCHDOG_TIMEOUT`. Mitigações: `LogEventHandler` em INFO; libs ruidosas capadas em WARNING; fila de áudio sequencial. Se persistir: forçar `python.exe` em "Economia de energia" (iGPU Intel) nas configurações de gráficos do Windows.
 
+## Hardware de desenvolvimento
+
+- Dell Inspiron 7580 — i5-8265U, 16GB RAM
+- NVIDIA GeForce MX150 (2GB VRAM), CUDA 12.6
+- Compute type: `int8_float32` (arquitetura Pascal)
+- Thermal throttling gerenciado pelo EC Dell (~63-65°C) — comportamento esperado
+- OS: Windows 10 Home
+
 ## Roadmap
 
-- **Home Screen** ✅ — Tela inicial entre splash e NavigationRail: 4 cards de módulo, fundo animado (moinho girando), botões "Home" e "Splash" no AppBar, transição com fade suavizado (EASE_IN out / EASE_OUT in). App abre maximizado.
-- **PR3.1-A** ✅ — Pós-processamento de áudio (CPU, torch-free): denoise spectral (noisereduce) + normalização loudnorm (EBU R128, 2 passes). Switches no formulário, encadeável, estado persistido.
 - **PR3.1-B** — IA de áudio com torch (extra `[ai-audio]`): DeepFilterNet (denoise neural, CPU); Demucs (separação de stems) a avaliar.
-- **PR4** ✅ — Módulo Vídeo: 7 operações (download, convert, trim, compress, resize, extract_audio, thumbnail). CPU-only, fila sequencial, pipeline_log, bridge extract_audio → Transcrição/Áudio.
 - **Futuro** — melhorias no Módulo Imagens (batch rename, redimensionamento guiado); IA de imagens (upscale).
 - **Fora de escopo (definitivo)** — arrastar arquivos do SO (não nativo no Flet).
