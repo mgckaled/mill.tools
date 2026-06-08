@@ -18,7 +18,7 @@ from src.gui.modules.transcription.view import build_transcription_module, get_f
 from src.gui.modules.video.view import build_video_module
 
 
-def build_app(page: ft.Page) -> None:
+def build_app(page: ft.Page, initial_module: str = "transcription") -> None:
     """Monta o layout raiz: NavigationRail + Stack de módulos.
 
     Todos os módulos são montados simultaneamente num ft.Stack; navigate_to
@@ -74,7 +74,7 @@ def build_app(page: ft.Page) -> None:
     _image = build_image_module(page, bus, cancel_event, pipeline_running)
 
     MODULES: list[Module] = [_audio, _video, _image, _transcription]
-    _DEFAULT_ID = "transcription"
+    _DEFAULT_ID = initial_module
 
     current_idx: list[int] = [
         next(i for i, m in enumerate(MODULES) if m.id == _DEFAULT_ID)
