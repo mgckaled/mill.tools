@@ -8,11 +8,9 @@ from typing import Callable
 import flet as ft
 
 from src.gui.assets import b64
-from src.gui.theme.tokens import Color
+from src.gui.theme.tokens import Color, Type
 
 BG   = Color.dark.bg       # fundo do splash = fundo da janela dark
-GOLD = Color.dark.primary  # acento dourado
-LIGHT = Color.dark.text    # texto "mill"
 
 
 def show_splash(page: ft.Page, on_complete: Callable[[], None]) -> None:
@@ -33,10 +31,10 @@ def show_splash(page: ft.Page, on_complete: Callable[[], None]) -> None:
     )
     title = ft.Text(
         spans=[
-            ft.TextSpan("mill", ft.TextStyle(color=LIGHT, weight=ft.FontWeight.W_600)),
-            ft.TextSpan(".tools", ft.TextStyle(color=GOLD, weight=ft.FontWeight.W_400)),
+            ft.TextSpan("mill", ft.TextStyle(color=ft.Colors.ON_SURFACE, weight=ft.FontWeight.W_600)),
+            ft.TextSpan(".tools", ft.TextStyle(color=ft.Colors.PRIMARY, weight=ft.FontWeight.W_400)),
         ],
-        size=68,
+        size=Type.hero.size,
         opacity=0,
         animate_opacity=ft.Animation(500, ft.AnimationCurve.EASE_OUT),
     )

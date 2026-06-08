@@ -13,6 +13,7 @@ import flet as ft
 
 from src.gui import settings
 from src.gui.theme.components import Cursor, hairline, section, section_label
+from src.gui.theme.tokens import Type
 from src.gui.workers import PipelineArgs
 
 
@@ -136,7 +137,7 @@ def build_form_view(page: ft.Page, on_start: Callable[[PipelineArgs], None]) -> 
     # ------------------------------------------------------------------
     beam_label = ft.Text(
         f"Beam size: {int(cfg.get('last_beam_size', 1))}",
-        size=13,
+        size=Type.input.size,
         color=ft.Colors.ON_SURFACE_VARIANT,
     )
 
@@ -378,7 +379,7 @@ def build_form_view(page: ft.Page, on_start: Callable[[PipelineArgs], None]) -> 
                         ft.Row(controls=[api_key_field]),
                         ft.Text(
                             "Necessária apenas para modelos Gemini. Salva automaticamente no .env.",
-                            size=11,
+                            size=Type.small.size,
                             color=ft.Colors.ON_SURFACE_VARIANT,
                             italic=True,
                         ),

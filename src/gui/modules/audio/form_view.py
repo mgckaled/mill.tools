@@ -114,7 +114,7 @@ def build_audio_form(
     embed_switch = ft.Switch(
         label="Embutir capa e metadados",
         value=cfg.get("last_audio_embed_meta", True),
-        label_text_style=ft.TextStyle(size=13),
+        label_text_style=ft.TextStyle(size=Type.input.size),
         active_color=ft.Colors.PRIMARY,
     )
 

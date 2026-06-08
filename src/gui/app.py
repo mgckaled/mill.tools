@@ -117,7 +117,7 @@ def build_app(page: ft.Page, initial_module: str = "transcription") -> None:
                 ft.TextSpan(
                     ".tools",
                     ft.TextStyle(
-                        color=pal_title.primary,
+                        color=ft.Colors.PRIMARY,
                         size=Type.title.size,
                         weight=ft.FontWeight.W_400,
                     ),

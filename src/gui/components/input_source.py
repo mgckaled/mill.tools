@@ -9,6 +9,7 @@ from typing import Callable
 import flet as ft
 
 from src.gui.theme.components.buttons import Cursor
+from src.gui.theme.tokens import Space, Type
 
 
 @dataclass
@@ -54,13 +55,13 @@ def build_input_source(
         hint_text=url_hint or "URL (YouTube, SoundCloud…)",
         border_color=ft.Colors.OUTLINE_VARIANT,
         focused_border_color=ft.Colors.PRIMARY,
-        text_size=13,
+        text_size=Type.input.size,
         expand=True,
         height=42,
         content_padding=ft.Padding(left=10, right=4, top=0, bottom=0),
     )
 
-    items_col = ft.Column(controls=[], spacing=2)
+    items_col = ft.Column(controls=[], spacing=Space.xxs)
 
     items_border = ft.Container(
         content=items_col,

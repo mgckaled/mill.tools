@@ -69,6 +69,7 @@ class Type:
     FONT_UI = "Verdana"
     FONT_MONO = "JetBrains Mono"
 
+    hero = _TypeSpec(68.0, 600)
     wordmark = _TypeSpec(44.0, 600)
     display = _TypeSpec(34.0, 600)
     title = _TypeSpec(22.0, 600)
@@ -80,6 +81,7 @@ class Type:
     caption = _TypeSpec(14.0, 400)
     small = _TypeSpec(11.0, 400)   # labels de ícone, caminhos, badges
     tiny = _TypeSpec(10.0, 400)    # rótulos micro ("Antes"/"Depois")
+    input = _TypeSpec(13.0, 400)
     mono = _TypeSpec(13, 300, "JetBrains Mono")
 
 
@@ -118,6 +120,7 @@ class Layout:
     """Constantes de layout global."""
 
     form_width = 380
+    field_height = 38
     content_padding = 16
     content_lateral = 24
     nav_rail_width = 80

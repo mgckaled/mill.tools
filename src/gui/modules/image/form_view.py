@@ -19,7 +19,7 @@ from src.gui.theme.components import (
     section_label,
     segmented_selector,
 )
-from src.gui.theme.tokens import Space, Type
+from src.gui.theme.tokens import Layout, Space, Type
 
 _ALLOWED_EXTS = [
     "jpg", "jpeg", "png", "webp", "avif",
@@ -193,7 +193,7 @@ def build_image_form(
     def _make_card(op_id: str, icon_name: str, label: str) -> ft.Container:
         ic = ft.Icon(icon_name, size=24, color=ft.Colors.PRIMARY)
         tx = ft.Text(
-            label, size=11, text_align=ft.TextAlign.CENTER,
+            label, size=Type.small.size, text_align=ft.TextAlign.CENTER,
             color=ft.Colors.PRIMARY, max_lines=2,
         )
         _card_icon_refs[op_id] = ic
@@ -248,7 +248,7 @@ def build_image_form(
     _resize_mode_get: list[Callable] = []
     _resize_w_tf = ft.TextField(
         hint_text="Largura px (opcional)", keyboard_type=ft.KeyboardType.NUMBER,
-        text_size=13, height=38,
+        text_size=Type.input.size, height=Layout.field_height,
         content_padding=ft.Padding(left=10, right=4, top=0, bottom=0),
         border_color=ft.Colors.OUTLINE_VARIANT,
         focused_border_color=ft.Colors.PRIMARY,
@@ -256,14 +256,14 @@ def build_image_form(
     )
     _resize_h_tf = ft.TextField(
         hint_text="Altura px (opcional)", keyboard_type=ft.KeyboardType.NUMBER,
-        text_size=13, height=38,
+        text_size=Type.input.size, height=Layout.field_height,
         content_padding=ft.Padding(left=10, right=4, top=0, bottom=0),
         border_color=ft.Colors.OUTLINE_VARIANT,
         focused_border_color=ft.Colors.PRIMARY,
         expand=True,
     )
     _resize_scale_val: list[float] = [100.0]
-    _resize_scale_lbl = ft.Text("100%", size=13, weight=ft.FontWeight.W_600,
+    _resize_scale_lbl = ft.Text("100%", size=Type.input.size, weight=ft.FontWeight.W_600,
                                  color=ft.Colors.PRIMARY)
     _resize_scale_slider = ft.Slider(
         value=100.0, min=1.0, max=400.0, divisions=399,
@@ -329,34 +329,34 @@ def build_image_form(
     _crop_mode_get: list[Callable] = []
     _crop_left_tf = ft.TextField(
         hint_text="Esquerda px", value="0", keyboard_type=ft.KeyboardType.NUMBER,
-        text_size=13, height=38,
+        text_size=Type.input.size, height=Layout.field_height,
         content_padding=ft.Padding(left=10, right=4, top=0, bottom=0),
         border_color=ft.Colors.OUTLINE_VARIANT, focused_border_color=ft.Colors.PRIMARY,
         expand=True,
     )
     _crop_top_tf = ft.TextField(
         hint_text="Topo px", value="0", keyboard_type=ft.KeyboardType.NUMBER,
-        text_size=13, height=38,
+        text_size=Type.input.size, height=Layout.field_height,
         content_padding=ft.Padding(left=10, right=4, top=0, bottom=0),
         border_color=ft.Colors.OUTLINE_VARIANT, focused_border_color=ft.Colors.PRIMARY,
         expand=True,
     )
     _crop_w_tf = ft.TextField(
         hint_text="Largura px (0=até borda)", value="0",
-        keyboard_type=ft.KeyboardType.NUMBER, text_size=13, height=38,
+        keyboard_type=ft.KeyboardType.NUMBER, text_size=Type.input.size, height=Layout.field_height,
         content_padding=ft.Padding(left=10, right=4, top=0, bottom=0),
         border_color=ft.Colors.OUTLINE_VARIANT, focused_border_color=ft.Colors.PRIMARY,
         expand=True,
     )
     _crop_h_tf = ft.TextField(
         hint_text="Altura px (0=até borda)", value="0",
-        keyboard_type=ft.KeyboardType.NUMBER, text_size=13, height=38,
+        keyboard_type=ft.KeyboardType.NUMBER, text_size=Type.input.size, height=Layout.field_height,
         content_padding=ft.Padding(left=10, right=4, top=0, bottom=0),
         border_color=ft.Colors.OUTLINE_VARIANT, focused_border_color=ft.Colors.PRIMARY,
         expand=True,
     )
     _crop_trim_color_tf = ft.TextField(
-        value="#ffffff", text_size=13, height=38,
+        value="#ffffff", text_size=Type.input.size, height=Layout.field_height,
         content_padding=ft.Padding(left=10, right=4, top=0, bottom=0),
         border_color=ft.Colors.OUTLINE_VARIANT, focused_border_color=ft.Colors.PRIMARY,
     )
@@ -478,18 +478,18 @@ def build_image_form(
 
     _wm_text_tf = ft.TextField(
         hint_text="Texto da marca d'água",
-        text_size=13, height=38,
+        text_size=Type.input.size, height=Layout.field_height,
         content_padding=ft.Padding(left=10, right=4, top=0, bottom=0),
         border_color=ft.Colors.OUTLINE_VARIANT, focused_border_color=ft.Colors.PRIMARY,
         expand=True,
     )
     _wm_text_color_tf = ft.TextField(
-        value="#ffffff", label="Cor (hex)", text_size=13, height=38,
+        value="#ffffff", label="Cor (hex)", text_size=Type.input.size, height=Layout.field_height,
         content_padding=ft.Padding(left=10, right=4, top=0, bottom=0),
         border_color=ft.Colors.OUTLINE_VARIANT, focused_border_color=ft.Colors.PRIMARY,
     )
     _wm_text_size_val: list[float] = [40.0]
-    _wm_text_size_lbl = ft.Text("40", size=13, weight=ft.FontWeight.W_600,
+    _wm_text_size_lbl = ft.Text("40", size=Type.input.size, weight=ft.FontWeight.W_600,
                                   color=ft.Colors.PRIMARY)
     _wm_text_size_slider = ft.Slider(
         value=40.0, min=8.0, max=120.0, divisions=112,
@@ -513,7 +513,7 @@ def build_image_form(
     _wm_text_size_slider.on_change_end = _on_wm_size_end
 
     _wm_opacity_val: list[float] = [0.5]
-    _wm_opacity_lbl = ft.Text("50%", size=13, weight=ft.FontWeight.W_600,
+    _wm_opacity_lbl = ft.Text("50%", size=Type.input.size, weight=ft.FontWeight.W_600,
                                 color=ft.Colors.PRIMARY)
     _wm_opacity_slider = ft.Slider(
         value=0.5, min=0.0, max=1.0, divisions=20,
@@ -604,7 +604,7 @@ def build_image_form(
 
     # -- border ---------------------------------------------------------------
     _border_padding_val: list[float] = [20.0]
-    _border_padding_lbl = ft.Text("20px", size=13, weight=ft.FontWeight.W_600,
+    _border_padding_lbl = ft.Text("20px", size=Type.input.size, weight=ft.FontWeight.W_600,
                                    color=ft.Colors.PRIMARY)
     _border_padding_slider = ft.Slider(
         value=20.0, min=1.0, max=200.0, divisions=199,
@@ -628,7 +628,7 @@ def build_image_form(
     _border_padding_slider.on_change_end = _on_border_padding_end
 
     _border_color_tf = ft.TextField(
-        value="#000000", label="Cor da borda (hex)", text_size=13, height=38,
+        value="#000000", label="Cor da borda (hex)", text_size=Type.input.size, height=Layout.field_height,
         content_padding=ft.Padding(left=10, right=4, top=0, bottom=0),
         border_color=ft.Colors.OUTLINE_VARIANT, focused_border_color=ft.Colors.PRIMARY,
     )
@@ -652,7 +652,7 @@ def build_image_form(
 
     # -- adjust ---------------------------------------------------------------
     def _make_adj_slider(label: str, default: float) -> tuple[ft.Column, ft.Slider, ft.Text]:
-        lbl = ft.Text(f"{default:.1f}", size=13, weight=ft.FontWeight.W_600,
+        lbl = ft.Text(f"{default:.1f}", size=Type.input.size, weight=ft.FontWeight.W_600,
                       color=ft.Colors.PRIMARY)
         val: list[float] = [default]
         slider = ft.Slider(
@@ -747,7 +747,7 @@ def build_image_form(
     def _make_cs_slider(
         label: str, default: float, min_v: float, max_v: float, divs: int
     ) -> tuple[ft.Column, ft.Slider]:
-        lbl = ft.Text(str(int(default)), size=13, weight=ft.FontWeight.W_600,
+        lbl = ft.Text(str(int(default)), size=Type.input.size, weight=ft.FontWeight.W_600,
                       color=ft.Colors.PRIMARY)
         val: list[float] = [default]
         slider = ft.Slider(
@@ -781,7 +781,7 @@ def build_image_form(
     _cs_gap_col, _cs_gap_slider = _make_cs_slider("Espaçamento (px)", 10, 0, 50, 50)
 
     _cs_bg_color_tf = ft.TextField(
-        value="#ffffff", label="Cor de fundo (hex)", text_size=13, height=38,
+        value="#ffffff", label="Cor de fundo (hex)", text_size=Type.input.size, height=Layout.field_height,
         content_padding=ft.Padding(left=10, right=4, top=0, bottom=0),
         border_color=ft.Colors.OUTLINE_VARIANT, focused_border_color=ft.Colors.PRIMARY,
     )
@@ -817,7 +817,7 @@ def build_image_form(
         disabled=not _rembg_available,
         border_color=ft.Colors.OUTLINE_VARIANT,
         focused_border_color=ft.Colors.PRIMARY,
-        text_size=13,
+        text_size=Type.input.size,
         height=42,
         content_padding=ft.Padding(left=10, right=4, top=0, bottom=0),
     )
@@ -854,7 +854,7 @@ def build_image_form(
         value="moondream-custom",
         border_color=ft.Colors.OUTLINE_VARIANT,
         focused_border_color=ft.Colors.PRIMARY,
-        text_size=13,
+        text_size=Type.input.size,
         height=42,
         content_padding=ft.Padding(left=10, right=4, top=0, bottom=0),
     )
@@ -868,7 +868,7 @@ def build_image_form(
     _desc_prompt_tf = ft.TextField(
         hint_text="Prompt customizado (vazio = padrão PT-BR)",
         text_size=Type.caption.size,
-        height=38,
+        height=Layout.field_height,
         content_padding=ft.Padding(left=10, right=4, top=0, bottom=0),
         border_color=ft.Colors.OUTLINE_VARIANT,
         focused_border_color=ft.Colors.PRIMARY,
@@ -911,7 +911,7 @@ def build_image_form(
     )
 
     quality_value_text = ft.Text(
-        f"{int(_QUALITY_DEFAULT)}", size=13,
+        f"{int(_QUALITY_DEFAULT)}", size=Type.input.size,
         weight=ft.FontWeight.W_600, color=ft.Colors.PRIMARY,
     )
     _q_icon = help_icon_for("image.quality", page)
@@ -994,12 +994,12 @@ def build_image_form(
         value="preserve",
         border_color=ft.Colors.OUTLINE_VARIANT,
         focused_border_color=ft.Colors.PRIMARY,
-        text_size=13,
+        text_size=Type.input.size,
         height=42,
         content_padding=ft.Padding(left=10, right=4, top=0, bottom=0),
     )
 
-    _out_quality_lbl = ft.Text("90", size=13, weight=ft.FontWeight.W_600,
+    _out_quality_lbl = ft.Text("90", size=Type.input.size, weight=ft.FontWeight.W_600,
                                 color=ft.Colors.PRIMARY)
     out_quality_slider = ft.Slider(
         value=90.0, min=_QUALITY_MIN, max=_QUALITY_MAX, divisions=10,

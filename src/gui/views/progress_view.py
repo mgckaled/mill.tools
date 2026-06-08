@@ -10,7 +10,7 @@ import flet as ft
 
 from src.gui.events import PipelineEvent
 from src.gui.theme.components import danger_button, log_line, spinner
-from src.gui.theme.tokens import Color, Type
+from src.gui.theme.tokens import Color, Radius, Space, Type
 from src.transcriber import format_elapsed
 from src.utils import format_duration
 
@@ -289,21 +289,21 @@ def _make_summary_card(payload: dict) -> ft.Control:
     flagged = payload.get("flagged_count", 0)
 
     rows = [
-        ft.Text("=" * 52, size=10, color=Color.log.ok, font_family=Type.FONT_MONO),
-        ft.Text(f"  title    : {title}", size=12, color=Color.log.text, font_family=Type.FONT_MONO, selectable=True),
-        ft.Text(f"  duration : {duration}", size=12, color=Color.log.text, font_family=Type.FONT_MONO),
+        ft.Text("=" * 52, size=Type.tiny.size, color=Color.log.ok, font_family=Type.FONT_MONO),
+        ft.Text(f"  title    : {title}", size=Type.mono.size, color=Color.log.text, font_family=Type.FONT_MONO, selectable=True),
+        ft.Text(f"  duration : {duration}", size=Type.mono.size, color=Color.log.text, font_family=Type.FONT_MONO),
         ft.Text(
             f"  output   : {Path(output_path).name}",
-            size=12, color=Color.log.text, font_family=Type.FONT_MONO, selectable=True,
+            size=Type.mono.size, color=Color.log.text, font_family=Type.FONT_MONO, selectable=True,
         ),
-        ft.Text(f"  elapsed  : {elapsed}", size=12, color=Color.log.text, font_family=Type.FONT_MONO),
+        ft.Text(f"  elapsed  : {elapsed}", size=Type.mono.size, color=Color.log.text, font_family=Type.FONT_MONO),
     ]
     if flagged:
         rows.append(ft.Text(
             f"  flagged  : {flagged} segment(s) [?]",
-            size=12, color=Color.log.work, font_family=Type.FONT_MONO,
+            size=Type.mono.size, color=Color.log.work, font_family=Type.FONT_MONO,
         ))
-    rows.append(ft.Text("=" * 52, size=10, color=Color.log.ok, font_family=Type.FONT_MONO))
+    rows.append(ft.Text("=" * 52, size=Type.tiny.size, color=Color.log.ok, font_family=Type.FONT_MONO))
 
     return ft.Container(
         margin=ft.Margin(top=8, bottom=4, left=0, right=0),
@@ -314,9 +314,9 @@ def _make_summary_card(payload: dict) -> ft.Control:
             top=ft.BorderSide(1, ft.Colors.with_opacity(0.5, Color.log.ok)),
             bottom=ft.BorderSide(1, ft.Colors.with_opacity(0.5, Color.log.ok)),
         ),
-        border_radius=6,
+        border_radius=Radius.sm,
         bgcolor=ft.Colors.with_opacity(0.05, Color.log.ok),
-        content=ft.Column(spacing=2, controls=rows),
+        content=ft.Column(spacing=Space.xxs, controls=rows),
     )
 
 
@@ -366,7 +366,7 @@ def build_progress_view(
     # --- widgets do painel Pipeline ---
     stage_label = ft.Text(
         "Inicie o pipeline pelo formulário →",
-        size=14,
+        size=Type.caption.size,
         weight=ft.FontWeight.W_400,
         color=ft.Colors.ON_SURFACE_VARIANT,
         italic=True,
@@ -383,7 +383,7 @@ def build_progress_view(
 
     log_list = ft.ListView(
         expand=True,
-        spacing=2,
+        spacing=Space.xxs,
         padding=ft.Padding(left=8, right=8, top=4, bottom=4),
         auto_scroll=True,
     )
@@ -426,7 +426,7 @@ def build_progress_view(
                 top=ft.BorderSide(1, ft.Colors.OUTLINE_VARIANT),
                 bottom=ft.BorderSide(1, ft.Colors.OUTLINE_VARIANT),
             ),
-            border_radius=6,
+            border_radius=Radius.sm,
             bgcolor=Color.dark.surface_variant,
             **_log_ctr_kwargs,
         ),
@@ -488,7 +488,7 @@ def build_progress_view(
             stage_label.value = label
             stage_label.color = ft.Colors.ON_SURFACE
             stage_label.italic = False
-            stage_label.size = 16
+            stage_label.size = Type.body.size
             stage_label.weight = ft.FontWeight.W_500
 
         prog = _resolve_progress(event, audio_duration)
@@ -584,7 +584,7 @@ def build_progress_view(
         stage_label.value = "Inicie o pipeline pelo formulário →"
         stage_label.color = ft.Colors.ON_SURFACE_VARIANT
         stage_label.italic = True
-        stage_label.size = 14
+        stage_label.size = Type.caption.size
         stage_label.weight = ft.FontWeight.W_400
         progress_bar.visible = False
         progress_bar.value = None

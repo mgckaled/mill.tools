@@ -13,7 +13,7 @@ from typing import Callable
 import flet as ft
 import numpy as np
 
-from src.gui.theme.tokens import Color, Type
+from src.gui.theme.tokens import Color, Radius, Space, Type
 
 # ---------------------------------------------------------------------------
 # Constantes
@@ -326,7 +326,7 @@ def build_audio_player(page: ft.Page) -> AudioPlayer:
 
     file_label = ft.Text(
         "",
-        size=14,
+        size=Type.label.size,
         weight=ft.FontWeight.W_500,
         color=ft.Colors.ON_SURFACE,
         no_wrap=True,
@@ -344,7 +344,7 @@ def build_audio_player(page: ft.Page) -> AudioPlayer:
 
     time_label = ft.Text(
         "0:00 / 0:00",
-        size=13,
+        size=Type.mono.size,
         color=ft.Colors.ON_SURFACE_VARIANT,
         font_family=Type.FONT_MONO,
     )
@@ -451,7 +451,7 @@ def build_audio_player(page: ft.Page) -> AudioPlayer:
                 ft.Icon(ft.Icons.AUDIO_FILE_OUTLINED, size=36, color=ft.Colors.OUTLINE_VARIANT),
                 ft.Text(
                     "Aguardando arquivo de áudio...",
-                    size=13,
+                    size=Type.input.size,
                     color=ft.Colors.ON_SURFACE_VARIANT,
                     italic=True,
                 ),
@@ -501,7 +501,7 @@ def build_audio_player(page: ft.Page) -> AudioPlayer:
                         mute_btn,
                         vol_slider,
                     ],
-                    spacing=2,
+                    spacing=Space.xxs,
                     vertical_alignment=ft.CrossAxisAlignment.CENTER,
                 ),
             ],
@@ -525,7 +525,7 @@ def build_audio_player(page: ft.Page) -> AudioPlayer:
             top=ft.BorderSide(1, ft.Colors.OUTLINE_VARIANT),
             bottom=ft.BorderSide(1, ft.Colors.OUTLINE_VARIANT),
         ),
-        border_radius=6,
+        border_radius=Radius.sm,
         bgcolor=Color.dark.surface_variant,
         padding=ft.Padding(left=10, right=14, top=8, bottom=8),
     )

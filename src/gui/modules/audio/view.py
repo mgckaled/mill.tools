@@ -13,7 +13,7 @@ from src.gui.modules.audio.form_view import AudioArgs, AudioFormPanel, build_aud
 from src.gui.modules.audio.worker import start_audio_pipeline
 from src.gui.modules.base import Module
 from src.gui.theme.components import action_button, hairline, output_card
-from src.gui.theme.tokens import Color
+from src.gui.theme.tokens import Color, Type
 from src.gui.views.progress_view import ProgressPanel, build_progress_view
 
 if TYPE_CHECKING:
@@ -85,7 +85,7 @@ def build_audio_module(
 
         results_col.controls.append(ft.Text(
             f"Arquivo(s) gerado(s): {len(output_paths)}",
-            size=13,
+            size=Type.input.size,
             weight=ft.FontWeight.W_500,
             color=ft.Colors.ON_SURFACE,
         ))

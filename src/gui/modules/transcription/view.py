@@ -6,6 +6,7 @@ import threading
 
 import flet as ft
 
+from src.gui.theme.tokens import Layout, Space, Type
 from src.gui.modules.base import Module
 from src.gui.views.form_view import build_form_view
 from src.gui.views.progress_view import build_progress_view
@@ -77,10 +78,10 @@ def build_transcription_module(
     def _key_chip(label: str) -> ft.Container:
         return ft.Container(
             content=ft.Text(
-                label, size=11, font_family="monospace",
+                label, size=Type.small.size, font_family=Type.FONT_MONO,
                 color=ft.Colors.ON_SURFACE_VARIANT,
             ),
-            padding=ft.Padding(left=6, right=6, top=2, bottom=2),
+            padding=ft.Padding(left=Space.xs, right=Space.xs, top=Space.xxs, bottom=Space.xxs),
             border=ft.Border(
                 left=ft.BorderSide(1, ft.Colors.OUTLINE_VARIANT),
                 right=ft.BorderSide(1, ft.Colors.OUTLINE_VARIANT),
@@ -94,17 +95,17 @@ def build_transcription_module(
         content=ft.Row(
             controls=[
                 _key_chip("Ctrl"),
-                ft.Text("+", size=11, color=ft.Colors.ON_SURFACE_VARIANT),
+                ft.Text("+", size=Type.small.size, color=ft.Colors.ON_SURFACE_VARIANT),
                 _key_chip("Enter"),
-                ft.Text(" Iniciar", size=11, color=ft.Colors.ON_SURFACE_VARIANT),
-                ft.Container(width=12),
+                ft.Text(" Iniciar", size=Type.small.size, color=ft.Colors.ON_SURFACE_VARIANT),
+                ft.Container(width=Space.sm),
                 _key_chip("Esc"),
-                ft.Text(" Cancelar", size=11, color=ft.Colors.ON_SURFACE_VARIANT),
+                ft.Text(" Cancelar", size=Type.small.size, color=ft.Colors.ON_SURFACE_VARIANT),
             ],
             spacing=3,
             vertical_alignment=ft.CrossAxisAlignment.CENTER,
         ),
-        padding=ft.Padding(left=12, right=8, top=6, bottom=6),
+        padding=ft.Padding(left=Space.sm, right=8, top=Space.xs, bottom=Space.xs),
         border=ft.Border(top=ft.BorderSide(1, ft.Colors.OUTLINE_VARIANT)),
     )
 
@@ -123,7 +124,7 @@ def build_transcription_module(
                     spacing=0,
                     expand=True,
                 ),
-                width=380,
+                width=Layout.form_width,
             ),
             ft.VerticalDivider(width=2, thickness=1.5, color=ft.Colors.OUTLINE_VARIANT),
             ft.Container(

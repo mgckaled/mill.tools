@@ -12,7 +12,7 @@ from src.gui.modules.base import Module
 from src.gui.modules.image.form_view import ImageArgs, ImageFormPanel, build_image_form
 from src.gui.modules.image import pipeline_log
 from src.gui.modules.image.worker import start_image_pipeline
-from src.gui.theme.tokens import Color
+from src.gui.theme.tokens import Color, Radius, Space, Type
 from src.gui.theme.components import (
     action_button,
     danger_button,
@@ -65,7 +65,7 @@ def build_image_module(
     _placeholder = ft.Container(
         content=ft.Text(
             "Selecione imagens para começar",
-            color=ft.Colors.ON_SURFACE_VARIANT, italic=True, size=13,
+            color=ft.Colors.ON_SURFACE_VARIANT, italic=True, size=Type.input.size,
         ),
         alignment=ft.Alignment.CENTER,
         expand=True,
@@ -85,14 +85,14 @@ def build_image_module(
     # Before/After pane
     _before_col = ft.Column(
         [
-            ft.Text("Antes", size=10, color=ft.Colors.ON_SURFACE_VARIANT),
+            ft.Text("Antes", size=Type.tiny.size, color=ft.Colors.ON_SURFACE_VARIANT),
             ft.Container(content=_img_before, expand=True, alignment=ft.Alignment.CENTER),
         ],
         expand=True, spacing=4,
     )
     _after_col = ft.Column(
         [
-            ft.Text("Depois", size=10, color=ft.Colors.ON_SURFACE_VARIANT),
+            ft.Text("Depois", size=Type.tiny.size, color=ft.Colors.ON_SURFACE_VARIANT),
             ft.Container(content=_img_after, expand=True, alignment=ft.Alignment.CENTER),
         ],
         expand=True, spacing=4,
@@ -112,7 +112,7 @@ def build_image_module(
             top=ft.BorderSide(1, ft.Colors.OUTLINE_VARIANT),
             bottom=ft.BorderSide(1, ft.Colors.OUTLINE_VARIANT),
         ),
-        border_radius=6,
+        border_radius=Radius.sm,
         bgcolor=Color.dark.surface_variant,
     )
 
@@ -142,7 +142,7 @@ def build_image_module(
 
     stage_label = ft.Text(
         "Inicie o pipeline pelo formulário →",
-        size=13,
+        size=Type.input.size,
         color=ft.Colors.ON_SURFACE_VARIANT,
         italic=True,
     )
@@ -156,7 +156,7 @@ def build_image_module(
     )
 
     log_list = ft.ListView(
-        spacing=2,
+        spacing=Space.xxs,
         padding=ft.Padding(left=6, right=6, top=4, bottom=4),
         auto_scroll=True,
     )
@@ -206,7 +206,7 @@ def build_image_module(
                     top=ft.BorderSide(1, ft.Colors.OUTLINE_VARIANT),
                     bottom=ft.BorderSide(1, ft.Colors.OUTLINE_VARIANT),
                 ),
-                border_radius=6,
+                border_radius=Radius.sm,
                 bgcolor=Color.dark.surface_variant,
             ),
             ft.Row(

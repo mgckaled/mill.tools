@@ -181,7 +181,7 @@ def build_video_form(
         bc = ft.Colors.PRIMARY if active else ft.Colors.OUTLINE_VARIANT
         side = ft.BorderSide(bw, bc)
         ic = ft.Icon(icon_name, size=24, color=color)
-        tx = ft.Text(label, size=11, text_align=ft.TextAlign.CENTER, color=color, max_lines=2)
+        tx = ft.Text(label, size=Type.small.size, text_align=ft.TextAlign.CENTER, color=color, max_lines=2)
         _op_card_icon_refs[op_id] = ic
         _op_card_text_refs[op_id] = tx
         ctr = ft.Container(
@@ -252,7 +252,7 @@ def build_video_form(
     embed_switch = ft.Switch(
         label="Embutir metadados",
         value=cfg.get("last_video_embed_meta", True),
-        label_text_style=ft.TextStyle(size=13),
+        label_text_style=ft.TextStyle(size=Type.input.size),
         active_color=ft.Colors.PRIMARY,
     )
     _switches_extra.append(embed_switch)
@@ -321,7 +321,7 @@ def build_video_form(
     trim_reenc_switch = switch_row(
         "Frame-preciso (reencoda — mais lento)",
         cfg.get("last_video_trim_reenc", False),
-        label_size=13,
+        label_size=Type.input.size,
     )
     _switches_extra.append(trim_reenc_switch)
 

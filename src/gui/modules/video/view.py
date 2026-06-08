@@ -11,7 +11,7 @@ from src.gui.modules.base import Module
 from src.gui.modules.video.form_view import VideoArgs, VideoFormPanel, build_video_form
 from src.gui.modules.video.worker import start_video_pipeline
 from src.gui.theme.components import action_button, output_card
-from src.gui.theme.tokens import Color
+from src.gui.theme.tokens import Color, Type
 from src.gui.views.progress_view import ProgressPanel, build_progress_view
 
 if TYPE_CHECKING:
@@ -75,7 +75,7 @@ def build_video_module(
 
         results_col.controls.append(ft.Text(
             f"Arquivo(s) gerado(s): {len(output_paths)}",
-            size=13,
+            size=Type.input.size,
             weight=ft.FontWeight.W_500,
             color=ft.Colors.ON_SURFACE,
         ))
