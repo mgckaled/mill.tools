@@ -286,6 +286,145 @@ def test_out_path_no_collision(jpg_image, out_dir):
     assert p1 != p2
 
 
+# ── crop_image — branches adicionais ─────────────────────────────────────────
+
+@pytest.mark.unit
+def test_crop_ratio_height_clamp(jpg_image, out_dir):
+    """Branch if target_h > ih: imagem 200×150 + ratio 1:1 → target_h=200>150."""
+    from src.core.image.transform import crop_image
+    out = crop_image(
+        jpg_image, out_dir,
+        crop_mode="ratio", left=0, top=0,
+        crop_width=0, crop_height=0,
+        ratio="1:1", trim_color="#ffffff",
+        out_fmt=None, quality=85,
+    )
+    with Image.open(out) as im:
+        assert im.size == (150, 150)
+
+
+@pytest.mark.unit
+def test_crop_autotrim_uniform_image_unchanged(tmp_path, out_dir):
+    """Imagem uniforme == trim_color: diff todo zero, getbbox()=None, sem recorte."""
+    from src.core.image.transform import crop_image
+    img = Image.new("RGB", (100, 100), (255, 0, 0))
+    src = tmp_path / "solid_red.png"
+    img.save(src)
+    out = crop_image(
+        src, out_dir,
+        crop_mode="autotrim", left=0, top=0,
+        crop_width=0, crop_height=0,
+        ratio="1:1", trim_color="#ff0000",
+        out_fmt=None, quality=85,
+    )
+    with Image.open(out) as im:
+        assert im.size == (100, 100)
+
+
+# ── rotate_image — branches adicionais ───────────────────────────────────────
+
+@pytest.mark.unit
+def test_rotate_exif_auto_true(jpg_image, out_dir):
+    """exif_auto=True em imagem sem dados EXIF deve preservar dimensões."""
+    from src.core.image.transform import rotate_image
+    out = rotate_image(
+        jpg_image, out_dir,
+        angle=0, flip_h=False, flip_v=False,
+        exif_auto=True, out_fmt=None, quality=85,
+    )
+    with Image.open(out) as im:
+        assert im.size == (200, 150)
+
+
+@pytest.mark.unit
+def test_rotate_flip_vertical(jpg_image, out_dir):
+    """flip_v=True deve preservar dimensões."""
+    from src.core.image.transform import rotate_image
+    out = rotate_image(
+        jpg_image, out_dir,
+        angle=0, flip_h=False, flip_v=True,
+        exif_auto=False, out_fmt=None, quality=85,
+    )
+    with Image.open(out) as im:
+        assert im.size == (200, 150)
+
+
+# ── watermark_image — modo image ──────────────────────────────────────────────
+
+@pytest.mark.unit
+def test_watermark_image_mode(jpg_image, tmp_path, out_dir):
+    """wm_mode='image' aplica marca d'água PNG RGBA sem alterar tamanho da base."""
+    from src.core.image.transform import watermark_image
+    wm_img = Image.new("RGBA", (30, 30), (0, 255, 0, 200))
+    wm_path = tmp_path / "watermark.png"
+    wm_img.save(wm_path)
+    out = watermark_image(
+        jpg_image, out_dir,
+        wm_mode="image", text="", text_color="#000000", text_size=20,
+        wm_path=wm_path, position="bottom-right", opacity=0.8,
+        out_fmt="png", quality=85,
+    )
+    assert out.exists()
+    with Image.open(out) as im:
+        assert im.size == (200, 150)
+
+
+# ── watermark_image — modo texto ─────────────────────────────────────────────
+
+@pytest.mark.unit
+def test_watermark_text_mode(jpg_image, out_dir):
+    """wm_mode='text' renderiza texto sobre a imagem sem alterar dimensões."""
+    from src.core.image.transform import watermark_image
+    out = watermark_image(
+        jpg_image, out_dir,
+        wm_mode="text", text="TESTE", text_color="#ffffff", text_size=16,
+        wm_path=None, position="top-left", opacity=0.9,
+        out_fmt="png", quality=85,
+    )
+    assert out.exists()
+    with Image.open(out) as im:
+        assert im.size == (200, 150)
+
+
+# ── make_favicon — fallback de tamanho ───────────────────────────────────────
+
+@pytest.mark.unit
+def test_make_favicon_size_fallback(tmp_path, out_dir):
+    """Quando todos os sizes > imagem, fallback usa (min_dim, min_dim)."""
+    from src.core.image.transform import make_favicon
+    small = Image.new("RGB", (10, 10), (255, 0, 0))
+    src = tmp_path / "tiny.png"
+    small.save(src)
+    out = make_favicon(src, out_dir, sizes=[32, 48, 64])
+    assert out.exists()
+    assert out.suffix.lower() == ".ico"
+
+
+# ── make_contact_sheet — except no loop de paste ──────────────────────────────
+
+@pytest.mark.unit
+def test_make_contact_sheet_paste_failure_is_ignored(jpg_image, out_dir, mocker):
+    """Arquivo válido no verify que falha no paste é silenciosamente ignorado."""
+    from PIL import Image as PILImage
+    original_open = PILImage.open
+    call_count = {"n": 0}
+
+    def selective_open(path, *args, **kwargs):
+        call_count["n"] += 1
+        if call_count["n"] == 2:
+            raise OSError("mocked paste failure")
+        return original_open(path, *args, **kwargs)
+
+    mocker.patch("PIL.Image.open", side_effect=selective_open)
+    from src.core.image.transform import make_contact_sheet
+    out = make_contact_sheet(
+        [jpg_image], out_dir,
+        cols=1, thumb_size=50, gap=2,
+        bg_color="#eeeeee", out_fmt="png", quality=85,
+    )
+    assert out.exists()
+
+
 # ── _wm_coords (helper watermark) ─────────────────────────────────────────────
 
 @pytest.mark.unit

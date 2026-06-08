@@ -159,8 +159,26 @@ uv run -m src output/transcriptions/text/<file>.txt  # análise standalone
 - Docstrings em todas as funções e módulos
 - Logging via handler dedicado — nunca usar `print()` para logs
 - Core (`src/core/`) é puro: sem dependência de Flet, reutilizável por CLI e GUI
-- Linter: ruff · Testes: pytest (dev dependency)
+- Linter: ruff · Testes: pytest (ver seção abaixo)
 - `subprocess` — sempre **modo binário** (`Popen`/`run` sem `text=True`); decodificar manualmente com `.decode('utf-8', errors='replace')`. Em Windows, `text=True` herda cp1252 do sistema e causa `UnicodeDecodeError` em saídas UTF-8 de ffmpeg/ffprobe. Aplica-se a todos os módulos em `src/core/`.
+
+## Testes
+
+- **Framework**: pytest 9+ com pytest-mock e pytest-cov (dependências dev)
+- **Marcadores**: `unit` — puro Python, sem ffmpeg/rede/GPU · `integration` — requer ffmpeg ou rede
+- **Cobertura**: `src/` todo, excluindo `src/gui/` (Flet não é testável headless)
+- **Regra**: rodar `uv run pytest -m unit` antes de qualquer commit
+
+```bash
+uv run pytest -m unit -v                                                   # testes unitários
+uv run pytest -m "not integration" --cov=src --cov-report=term-missing    # cobertura completa
+uv run pytest tests/caminho/test_arquivo.py -v                            # arquivo específico
+uv run pytest -k "sanitize" -v                                            # filtrar por nome
+```
+
+Estrutura de pastas espelha `src/`: `tests/core/audio/`, `tests/core/image/`, `tests/gui/`. Cada subpasta tem `__init__.py` vazio para evitar conflitos de import. Fixtures globais em `tests/conftest.py` (`jpg_image`, `png_image`, `out_dir`).
+
+> Guia completo para adicionar/revisar testes → skill `testing` (`.claude/skills/testing/SKILL.md`)
 
 ## Dependências externas (PATH)
 
