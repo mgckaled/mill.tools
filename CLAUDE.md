@@ -165,18 +165,26 @@ uv run -m src output/transcriptions/text/<file>.txt  # análise standalone
 ## Testes
 
 - **Framework**: pytest 9+ com pytest-mock e pytest-cov (dependências dev)
-- **Marcadores**: `unit` — puro Python, sem ffmpeg/rede/GPU · `integration` — requer ffmpeg ou rede
+- **Marcadores**: `unit` — Python puro, sem ffmpeg/rede/GPU · `integration` — requer ffmpeg no PATH
 - **Cobertura**: `src/` todo, excluindo `src/gui/` (Flet não é testável headless)
 - **Regra**: rodar `uv run pytest -m unit` antes de qualquer commit
+- **CI sem ffmpeg**: testes `integration` são pulados automaticamente via `pytest_collection_modifyitems`
 
 ```bash
-uv run pytest -m unit -v                                                   # testes unitários
-uv run pytest -m "not integration" --cov=src --cov-report=term-missing    # cobertura completa
+uv run pytest -m unit -v                                                   # unitários apenas (rápido)
+uv run pytest -m integration -v                                            # integração apenas (requer ffmpeg)
+uv run pytest -v                                                           # suíte completa (145 testes)
+uv run pytest --cov=src --cov-report=term-missing                         # cobertura completa
 uv run pytest tests/caminho/test_arquivo.py -v                            # arquivo específico
 uv run pytest -k "sanitize" -v                                            # filtrar por nome
 ```
 
-Estrutura de pastas espelha `src/`: `tests/core/audio/`, `tests/core/image/`, `tests/gui/`. Cada subpasta tem `__init__.py` vazio para evitar conflitos de import. Fixtures globais em `tests/conftest.py` (`jpg_image`, `png_image`, `out_dir`).
+Estrutura de pastas espelha `src/`: `tests/core/audio/`, `tests/core/image/`, `tests/core/video/`, `tests/gui/`. Cada subpasta tem `__init__.py` vazio. Fixtures em `tests/conftest.py`:
+
+- **Function-scoped** (padrão): `jpg_image`, `png_image`, `out_dir`
+- **Session-scoped** (geradas via ffmpeg/Pillow uma vez por sessão): `sample_wav`, `sample_mp3`, `sample_mp4`, `sample_wav_stereo`, `session_jpg`
+
+Cobertura dos módulos `src/core/` atualmente testados: `normalizer.py` 100%, `info.py` (áudio) 100%, `transform.py` 94%, `info.py` (imagem) 94%, `info.py` (vídeo) 93%, `converter.py` (áudio) 91%, `denoiser.py` 79%, `converter.py` (imagem) 79%.
 
 > Guia completo para adicionar/revisar testes → skill `testing` (`.claude/skills/testing/SKILL.md`)
 

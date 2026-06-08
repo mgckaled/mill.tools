@@ -455,6 +455,33 @@ mill-tools/
 
 ---
 
+## Testes
+
+A suíte cobre os módulos `src/core/` em duas camadas, totalizando **145 testes** (0 falhas):
+
+| Camada | Marcador | Requer | O que cobre |
+|---|---|---|---|
+| **Unitários** | `@pytest.mark.unit` | Python puro | Funções puras, parsers, roteamento LLM, settings, mocks de subprocess |
+| **Integração** | `@pytest.mark.integration` | `ffmpeg` no PATH | Conversão/extração real de áudio e vídeo, normalização, denoise, ffprobe, Pillow I/O |
+
+Testes de integração são **pulados automaticamente** em ambientes sem `ffmpeg` (CI, máquinas limpas).
+
+```bash
+# Unitários apenas — rápido, sem ffmpeg
+uv run pytest -m unit -v
+
+# Integração apenas — requer ffmpeg
+uv run pytest -m integration -v
+
+# Suíte completa
+uv run pytest -v
+
+# Com cobertura
+uv run pytest --cov=src --cov-report=term-missing
+```
+
+---
+
 ## Roadmap
 
 - **Home Screen** ✅ — Tela inicial entre splash e app: 4 cards de módulo, moinho animado ao fundo, botões "Home" e "Splash" no AppBar, transições suavizadas. App abre maximizado.

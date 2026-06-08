@@ -1,25 +1,39 @@
 ---
 name: testing
-description: Guia para adicionar, corrigir e revisar testes unitários do projeto mill.tools. Invocar quando: escrever novos testes, investigar expected values errados, aumentar cobertura de um módulo, mockar dependências externas (ctranslate2, PIL.Image.open, llm_factory, settings), ou entender por que um teste falha. Também use ao criar fixtures novas ou revisar tests/core/ e tests/gui/.
+description: Guia para adicionar, corrigir e revisar testes (unitários e de integração) do projeto mill.tools. Invocar quando: escrever novos testes, investigar expected values errados, aumentar cobertura de um módulo, mockar subprocess/ctranslate2/PIL.Image.open/llm_factory/settings, ou entender por que um teste falha. Também use ao criar fixtures novas (session-scoped ou function-scoped), adicionar testes de integração com ffmpeg, ou revisar tests/core/ e tests/gui/.
 ---
 
-# mill.tools — Guia de Testes Unitários
+# mill.tools — Guia de Testes
 
 ## Estrutura de arquivos
 
 ```
 tests/
-├── conftest.py                          # fixtures globais — NÃO duplicar aqui
-├── test_utils.py                        # src/utils.py
-├── test_transcriber.py                  # src/transcriber.py
-├── test_llm_factory.py                  # src/llm_factory.py
+├── conftest.py                              # fixtures globais — NÃO duplicar aqui
+├── test_utils.py                            # src/utils.py
+├── test_transcriber.py                      # src/transcriber.py
+├── test_llm_factory.py                      # src/llm_factory.py
 ├── gui/
 │   ├── __init__.py
-│   ├── test_settings.py                 # src/gui/settings.py
-│   └── modules/*/test_pipeline_log.py  # builders fmt_* (pendente)
+│   ├── test_settings.py                     # src/gui/settings.py
+│   └── modules/
+│       ├── audio/test_pipeline_log.py
+│       └── image/test_pipeline_log.py
 └── core/
-    ├── audio/test_normalizer_parser.py  # _parse_loudnorm_json
-    └── image/test_transform.py          # 9 funções puras Pillow
+    ├── audio/
+    │   ├── test_normalizer_parser.py        # unit — _parse_loudnorm_json (sem ffmpeg)
+    │   ├── test_normalizer_unit.py          # unit — normalize_lufs (subprocess mockado)
+    │   ├── test_converter.py                # integration — convert_audio, extract_audio
+    │   ├── test_normalizer_integration.py   # integration — normalize_lufs 2-pass
+    │   ├── test_denoiser.py                 # integration — denoise mono e estéreo
+    │   ├── test_info.py                     # integration — get_duration_ffprobe
+    │   └── test_pipeline_e2e.py             # integration — smoke test denoise→normalize
+    ├── image/
+    │   ├── test_transform.py                # unit — 9 funções puras Pillow
+    │   ├── test_converter.py                # integration — convert_image
+    │   └── test_info.py                     # integration — image_info, thumbnail_bytes
+    └── video/
+        └── test_info.py                     # integration — get_video_info (VideoInfo dataclass)
 ```
 
 Regras de estrutura:
@@ -30,6 +44,8 @@ Regras de estrutura:
 ---
 
 ## Fixtures globais (`tests/conftest.py`)
+
+### Fixtures function-scoped (padrão — limpas por teste)
 
 | Fixture | O que fornece |
 |---|---|
@@ -44,9 +60,28 @@ src = tmp_path / "portrait.png"
 img.save(src)
 ```
 
+### Fixtures session-scoped (geradas uma vez por sessão via ffmpeg/Pillow)
+
+| Fixture | O que fornece |
+|---|---|
+| `sample_wav` | `Path` → WAV mono 44100 Hz 3 s (sine 440 Hz) via ffmpeg lavfi |
+| `sample_mp3` | `Path` → MP3 mono 128 kbps 3 s via ffmpeg lavfi |
+| `sample_mp4` | `Path` → MP4 320×240 3 s (vídeo azul + áudio sine) via ffmpeg |
+| `sample_wav_stereo` | `Path` → WAV estéreo 44100 Hz 3 s (sine 440 Hz, 2 canais) via ffmpeg |
+| `session_jpg` | `Path` → JPEG RGB 640×480 via Pillow |
+
+Estas fixtures só existem para testes de integração marcados com `@pytest.mark.integration`.
+Não as use em testes unitários — eles não devem depender de ffmpeg.
+
+### Hook de skip automático
+
+`pytest_collection_modifyitems` em `conftest.py` pula automaticamente qualquer teste `@pytest.mark.integration` se `ffmpeg` não estiver no PATH (ex.: CI sem ffmpeg).
+
 ---
 
-## Template de novo arquivo de teste
+## Templates de novos arquivos de teste
+
+### Teste unitário (sem ffmpeg, sem I/O real)
 
 ```python
 import pytest
@@ -65,6 +100,27 @@ Regras:
 - Todo teste unitário deve ter `@pytest.mark.unit`
 - Imports do código testado **dentro** da função de teste (não no topo) — isola falha de import
 - Nome do teste descreve o comportamento, não a implementação
+
+### Teste de integração (requer ffmpeg)
+
+```python
+import pytest
+
+pytestmark = pytest.mark.integration  # aplica a todos no módulo
+
+
+def test_nome_descritivo(sample_wav, out_dir):
+    from src.core.audio.converter import convert_audio
+    out = convert_audio(sample_wav, out_dir, fmt="mp3", bitrate="128")
+    assert out.exists()
+    assert out.stat().st_size > 1000
+```
+
+Regras:
+- Usar `pytestmark = pytest.mark.integration` no nível do módulo (não por função)
+- Fixtures session-scoped (`sample_wav`, `sample_mp4`, `session_jpg`) são somente leitura — não escrever nelas
+- Para testes que modificam entrada, copiar o fixture com `shutil.copy` para `tmp_path`
+- Rodar isoladamente com `uv run pytest -m integration -v`
 
 ---
 
@@ -96,6 +152,17 @@ Uma imagem portrait (100×200) com ratio `"16:9"` **não dispara** a branch (tar
 out = apply_filter(src, out_dir, filter_type="grayscale", out_fmt="png", quality=85)
 with Image.open(out) as im:
     assert im.mode == "L"  # ✓ PNG preserva L; JPEG converteria para RGB
+```
+
+### `convert_audio` — bitrate sem "k"
+
+`convert_audio` acrescenta "k" internamente: `f"{bitrate}k"`. Passar `"128k"` resulta em `"128kk"` (erro ffmpeg):
+```python
+# ERRADO — gera -b:a 128kk
+convert_audio(src, out_dir, fmt="mp3", bitrate="128k")
+
+# CORRETO — gera -b:a 128k
+convert_audio(src, out_dir, fmt="mp3", bitrate="128")
 ```
 
 ### `autotrim` com artefatos JPEG
@@ -143,6 +210,34 @@ def isolate_config(tmp_path, monkeypatch):
     monkeypatch.setattr(mod, "_CONFIG_FILE", tmp_path / ".mill-tools" / "config.json")
 ```
 
+### Mock de `subprocess.Popen` — para testar pipelines ffmpeg
+
+Útil para cobrir branches de erro em `converter.py`, `normalizer.py` e `denoiser.py` sem rodar ffmpeg real:
+
+```python
+def _mock_popen(mocker, returncode: int, stdout: list[bytes] = None, stderr: list[bytes] = None):
+    proc = mocker.MagicMock()
+    proc.stdout = iter(stdout or [])   # iterável de bytes (cada linha = um item)
+    proc.stderr = iter(stderr or [])
+    proc.returncode = returncode
+    proc.wait.return_value = None
+    return proc
+
+
+# Falha no segundo passe (returncode != 0)
+mocker.patch("subprocess.run", return_value=mocker.Mock(returncode=0, stderr=b"...", stdout=b""))
+mock_proc = _mock_popen(mocker, returncode=1, stderr=[b"encoder error\n"])
+mocker.patch("subprocess.Popen", return_value=mock_proc)
+
+# Múltiplos calls sequenciais a subprocess.run (ex.: pass 1 + ffprobe):
+mocker.patch("subprocess.run", side_effect=[
+    mocker.Mock(returncode=0, stderr=LOUDNORM_JSON, stdout=b""),  # pass 1
+    mocker.Mock(returncode=0, stdout=b"3.0\n", stderr=b""),       # ffprobe
+])
+```
+
+**Cuidado com threading**: `_drain()` em `normalizer.py` lê `proc.stderr` em thread daemon. O iterador deve ser thread-safe (um simples `iter([b"..."])` funciona). Para `proc.stdout` linhas de progresso, incluir `b"out_time_us=N\n"` para testar o callback.
+
 ### Mock com contagem de chamadas (`side_effect` com lista)
 
 Para fazer `Image.open` falhar apenas na segunda chamada:
@@ -166,11 +261,27 @@ mocker.patch("PIL.Image.open", side_effect=selective)
 
 ```bash
 # Cobertura de um módulo específico (usar pontos, não barras)
-uv run pytest tests/core/image/test_transform.py \
-    --cov=src.core.image.transform --cov-report=term-missing
+uv run pytest tests/core/audio/test_normalizer_unit.py \
+    --cov=src.core.audio.normalizer --cov-report=term-missing
 
-# Cobertura geral (exclui src/gui/ automaticamente via pyproject.toml)
+# Cobertura unitária apenas (rápido, sem ffmpeg)
 uv run pytest -m "not integration" --cov=src --cov-report=term-missing
+
+# Cobertura completa (unit + integration — requer ffmpeg)
+uv run pytest --cov=src --cov-report=term-missing
 ```
 
-O alvo é **≥ 90%** por módulo de `src/core/`. Linhas difíceis de cobrir sem dependências externas (ffmpeg, GPU) devem ser marcadas como `# pragma: no cover` somente se for impossível testar sem infra.
+O alvo é **≥ 90%** por módulo de `src/core/`. Estado atual:
+
+| Módulo | Cobertura |
+|---|---|
+| `core/audio/normalizer.py` | **100%** |
+| `core/audio/info.py` | **100%** |
+| `core/image/transform.py` | 94% |
+| `core/image/info.py` | 94% |
+| `core/video/info.py` | 93% |
+| `core/audio/converter.py` | 91% |
+| `core/audio/denoiser.py` | 79% |
+| `core/image/converter.py` | 79% |
+
+Linhas impossíveis de cobrir sem desinstalar dependências (ex.: `is_available()` no `denoiser.py` — branch `ImportError`) devem ser marcadas como `# pragma: no cover`.
