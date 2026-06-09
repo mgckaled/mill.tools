@@ -14,7 +14,7 @@ from src.core.audio.downloader import download_audio
 from src.core.audio.normalizer import normalize_lufs as _normalize_lufs
 from src.gui.events import LogEventHandler
 from src.gui.modules.audio import pipeline_log
-from src.gui.modules.audio.form_view import AudioArgs
+from src.core.audio.args import AudioArgs
 from src.utils import AUDIO_PROCESSED_DIR, AUDIO_SOURCE_DIR
 
 if TYPE_CHECKING:

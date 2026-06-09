@@ -20,7 +20,7 @@ from src.core.video.downloader import download_video
 from src.core.video.info import get_video_info
 from src.gui.events import LogEventHandler
 from src.gui.modules.video import pipeline_log
-from src.gui.modules.video.form_view import VideoArgs
+from src.core.video.args import VideoArgs
 from src.utils import VIDEO_PROCESSED_DIR, VIDEO_SOURCE_DIR
 
 if TYPE_CHECKING:

@@ -25,7 +25,7 @@ from src.core.image.transform import (
 )
 from src.gui.events import LogEventHandler
 from src.gui.modules.image import pipeline_log
-from src.gui.modules.image.form_view import ImageArgs
+from src.core.image.args import ImageArgs
 from src.utils import IMAGE_PROCESSED_DIR, IMAGE_SOURCE_DIR
 
 if TYPE_CHECKING:
