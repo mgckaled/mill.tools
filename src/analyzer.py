@@ -28,9 +28,9 @@ from time import time
 
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.prompts import ChatPromptTemplate
-from langchain_text_splitters import RecursiveCharacterTextSplitter
 
-from src.llm_factory import is_gemini_model, make_llm
+from src.llm_factory import make_llm
+from src.llm_utils import split_text
 from src.utils import TRANSCRIPTIONS_ANALYSIS_DIR, setup_logging
 
 DEFAULT_MODEL = "qwen7b-custom"
@@ -170,9 +170,6 @@ def _parse_json_response(text: str) -> dict:
 def _split_text(text: str, model_name: str) -> list[str]:
     """Split transcription text into chunks for processing.
 
-    Uses RecursiveCharacterTextSplitter to break text at natural boundaries
-    (paragraphs, sentences, words) while respecting chunk size limits.
-
     When the provider supports a very large context window (Gemini, 1M tokens),
     chunking is skipped — the full body is processed in a single call. This
     produces a more coherent analysis (no merge step) and consumes fewer
@@ -186,22 +183,13 @@ def _split_text(text: str, model_name: str) -> list[str]:
         List of text chunks. Returns single-element list if text is short enough
         or if the provider supports the full body in a single call.
     """
-    if is_gemini_model(model_name):
-        logging.debug("[d] Provider supports long context — chunking skipped (%d chars)",
-                      len(text))
-        return [text]
-
-    if len(text) <= CHUNK_SIZE:
-        return [text]
-
-    logging.debug("[d] Splitting text: chunk_size=%d | overlap=%d",
-                  CHUNK_SIZE, CHUNK_OVERLAP)
-    splitter = RecursiveCharacterTextSplitter(
+    return split_text(
+        text,
         chunk_size=CHUNK_SIZE,
         chunk_overlap=CHUNK_OVERLAP,
-        separators=["\n\n", "\n", ". ", " ", ""],
+        model_name=model_name,
+        bypass_long_context=True,
     )
-    return splitter.split_text(text)
 
 
 def _extract_transcription_body(raw_text: str) -> str:

@@ -19,9 +19,9 @@ from pathlib import Path
 from time import time
 
 from langchain_core.prompts import ChatPromptTemplate
-from langchain_text_splitters import RecursiveCharacterTextSplitter
 
 from src.llm_factory import make_llm
+from src.llm_utils import split_text
 
 DEFAULT_FORMAT_MODEL = "phi4mini-custom"
 FORMAT_CHUNK_SIZE = 4500
@@ -46,6 +46,11 @@ FORMAT_PROMPT = ChatPromptTemplate.from_messages([
 ])
 
 
+# Sentence-boundary separators — formatter splits at sentence ends, not paragraph
+# breaks, to avoid cutting mid-sentence when inserting paragraph markers.
+_FORMAT_SEPARATORS = [". ", "? ", "! ", " ", ""]
+
+
 def _split_for_format(text: str) -> list[str]:
     """Split transcription body into chunks for paragraph formatting.
 
@@ -57,17 +62,12 @@ def _split_for_format(text: str) -> list[str]:
     Returns:
         List of text chunks.
     """
-    if len(text) <= FORMAT_CHUNK_SIZE:
-        return [text]
-
-    logging.debug("[d] Splitting for format: chunk_size=%d | overlap=%d",
-                  FORMAT_CHUNK_SIZE, FORMAT_CHUNK_OVERLAP)
-    splitter = RecursiveCharacterTextSplitter(
+    return split_text(
+        text,
         chunk_size=FORMAT_CHUNK_SIZE,
         chunk_overlap=FORMAT_CHUNK_OVERLAP,
-        separators=[". ", "? ", "! ", " ", ""],
+        separators=_FORMAT_SEPARATORS,
     )
-    return splitter.split_text(text)
 
 
 def format_transcription(

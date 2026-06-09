@@ -22,9 +22,9 @@ from pathlib import Path
 from time import time
 
 from langchain_core.prompts import ChatPromptTemplate
-from langchain_text_splitters import RecursiveCharacterTextSplitter
 
-from src.llm_factory import is_gemini_model, make_llm
+from src.llm_factory import make_llm
+from src.llm_utils import split_text
 from src.utils import TRANSCRIPTIONS_DIGEST_DIR
 
 DEFAULT_PROMPT_MODEL = "qwen7b-custom"
@@ -80,22 +80,13 @@ def _split_for_prompt(text: str, model_name: str) -> list[str]:
     Returns:
         List of text chunks.
     """
-    if is_gemini_model(model_name):
-        logging.debug("[d] Provider supports long context — chunking skipped (%d chars)",
-                      len(text))
-        return [text]
-
-    if len(text) <= PROMPT_CHUNK_SIZE:
-        return [text]
-
-    logging.debug("[d] Splitting for prompt-ready: chunk_size=%d | overlap=%d",
-                  PROMPT_CHUNK_SIZE, PROMPT_CHUNK_OVERLAP)
-    splitter = RecursiveCharacterTextSplitter(
+    return split_text(
+        text,
         chunk_size=PROMPT_CHUNK_SIZE,
         chunk_overlap=PROMPT_CHUNK_OVERLAP,
-        separators=["\n\n", "\n", ". ", " ", ""],
+        model_name=model_name,
+        bypass_long_context=True,
     )
-    return splitter.split_text(text)
 
 
 def _extract_body_and_meta(raw_text: str) -> tuple[str, dict]:
