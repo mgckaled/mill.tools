@@ -143,6 +143,10 @@ def format_transcription(
 
     formatted_body = "\n\n".join(formatted_chunks)
 
+    if not formatted_body:
+        logging.warning("[!] LLM retornou resposta vazia — arquivo não modificado.")
+        return body
+
     if header:
         result = header + SEPARATOR + "\n\n" + formatted_body + "\n"
     else:

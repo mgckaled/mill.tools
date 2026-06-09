@@ -18,6 +18,7 @@ Examples:
 
 import argparse
 import logging
+import sys
 
 from src.transcriber import print_summary, transcribe
 from src.utils import (
@@ -119,52 +120,57 @@ def parse_args() -> argparse.Namespace:
 def main() -> None:
     """Entry point: validate inputs, fetch metadata, download audio, and transcribe."""
     args = parse_args()
-
     setup_logging(args.verbose)
-    check_dependencies()
-    validate_url(args.url)
 
-    video_id = extract_video_id(args.url)
-    audio_path = AUDIO_SOURCE_DIR / f"{video_id}.mp3"
+    try:
+        check_dependencies()
+        validate_url(args.url)
 
-    TRANSCRIPTIONS_TEXT_DIR.mkdir(parents=True, exist_ok=True)
-    output_stem = args.output_name or f"transcricao_{video_id}"
-    output_path = TRANSCRIPTIONS_TEXT_DIR / f"{output_stem}.txt"
+        video_id = extract_video_id(args.url)
+        audio_path = AUDIO_SOURCE_DIR / f"{video_id}.mp3"
 
-    logging.debug("Video ID slug: %s", video_id)
-    logging.debug("Audio path: %s", audio_path)
-    logging.debug("Output path: %s", output_path)
+        TRANSCRIPTIONS_TEXT_DIR.mkdir(parents=True, exist_ok=True)
+        output_stem = args.output_name or f"transcricao_{video_id}"
+        output_path = TRANSCRIPTIONS_TEXT_DIR / f"{output_stem}.txt"
 
-    meta = fetch_metadata(args.url)
-    download_audio(args.url, audio_path)
+        logging.debug("Video ID slug: %s", video_id)
+        logging.debug("Audio path: %s", audio_path)
+        logging.debug("Output path: %s", output_path)
 
-    elapsed = transcribe(
-        audio_path,
-        output_path,
-        meta,
-        args.url,
-        args.whisper_model,
-        args.language,
-        args.threads,
-        args.beam_size,
-    )
+        meta = fetch_metadata(args.url)
+        download_audio(args.url, audio_path)
 
-    if elapsed is not None:
-        logging.info("[✓] Transcription saved to: %s", output_path)
-        print_summary(meta, output_path, elapsed)
+        elapsed = transcribe(
+            audio_path,
+            output_path,
+            meta,
+            args.url,
+            args.whisper_model,
+            args.language,
+            args.threads,
+            args.beam_size,
+        )
 
-    formatted_body = None
-    if args.format:
-        from src.formatter import format_transcription  # lazy import
-        formatted_body = format_transcription(output_path, model_name=args.format_model)
+        if elapsed is not None:
+            logging.info("[✓] Transcription saved to: %s", output_path)
+            print_summary(meta, output_path, elapsed)
 
-    if args.analyze:
-        from src.analyzer import analyze  # lazy import — only loads LangChain when needed
-        analyze(output_path, model_name=args.analyzer_model, transcription=formatted_body)
+        formatted_body = None
+        if args.format:
+            from src.formatter import format_transcription  # lazy import
+            formatted_body = format_transcription(output_path, model_name=args.format_model)
 
-    if args.prompt:
-        from src.prompter import build_prompt_ready  # lazy import
-        build_prompt_ready(output_path, model_name=args.prompt_model)
+        if args.analyze:
+            from src.analyzer import analyze  # lazy import — only loads LangChain when needed
+            analyze(output_path, model_name=args.analyzer_model, transcription=formatted_body)
+
+        if args.prompt:
+            from src.prompter import build_prompt_ready  # lazy import
+            build_prompt_ready(output_path, model_name=args.prompt_model)
+
+    except (RuntimeError, ValueError, FileNotFoundError) as exc:
+        logging.error("%s", exc)
+        sys.exit(1)
 
 
 if __name__ == "__main__":

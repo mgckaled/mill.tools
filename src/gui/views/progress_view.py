@@ -6,6 +6,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable
 
+import threading
+
 import flet as ft
 
 from src.gui.events import PipelineEvent
@@ -357,6 +359,8 @@ def build_progress_view(
     audio_duration: list[float] = [0.0]
     _done_called: list[bool] = [False]  # guard contra duplo on_done
     _mutable_line: list[ft.Text | None] = [None]  # última linha "viva" de progresso
+    _seg_counter: list[int] = [0]  # throttle: render every N segments
+    _ui_lock = threading.Lock()  # serializes concurrent pubsub callbacks → prevents ObjectPatch race
 
     def _call_on_done(payload: dict) -> None:
         if not _done_called[0]:
@@ -478,11 +482,7 @@ def build_progress_view(
     tab_bar = ft.Row(controls=[*tab_btns, ft.Container(expand=True)], spacing=0)
 
     # --- handler pubsub (assinatura persistente — não cancela entre runs) ---
-    def _handle_event(event: PipelineEvent) -> None:
-        # Filtro de cross-talk: ignora eventos de outros módulos
-        if owner_id and event.module_id and event.module_id != owner_id:
-            return
-
+    def _do_handle_event(event: PipelineEvent) -> None:
         label = _resolve_stage_label(event)
         if label is not None:
             stage_label.value = label
@@ -565,11 +565,25 @@ def build_progress_view(
             page.update()
             return
 
-        page.update()
+        # Throttle: render every 5 segments to reduce update frequency.
+        if event.type == "transcribe_segment":
+            _seg_counter[0] += 1
+            if _seg_counter[0] % 5 == 0:
+                page.update()
+        else:
+            page.update()
+
+    def _handle_event(event: PipelineEvent) -> None:
+        if owner_id and event.module_id and event.module_id != owner_id:
+            return
+        with _ui_lock:
+            _do_handle_event(event)
 
     def _trim_log() -> None:
-        if len(log_list.controls) > _MAX_LOG_LINES:
-            log_list.controls = log_list.controls[-_MAX_LOG_LINES:]
+        excess = len(log_list.controls) - _MAX_LOG_LINES
+        if excess > 0:
+            # del em vez de reassignment — evita IndexError no ObjectPatch do Flet
+            del log_list.controls[:excess]
 
     page.pubsub.subscribe(_handle_event)
 
@@ -578,6 +592,7 @@ def build_progress_view(
         """Limpa o log, reseta a barra e desabilita o tab Resultados."""
         _done_called[0] = False
         _mutable_line[0] = None
+        _seg_counter[0] = 0
         _stop_spin()
         log_list.controls.clear()
         progress_bar.value = None

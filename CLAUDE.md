@@ -156,6 +156,7 @@ uv run -m src output/transcriptions/text/<file>.txt  # análise standalone
 
 ## Convenções de código
 
+- **Idioma do código**: docstrings, mensagens de log, comentários e strings internas devem ser em **inglês**. Português é reservado exclusivamente para labels e textos visíveis na GUI (botões, labels, tooltips, seções do formulário). O projeto tem inconsistências históricas nesse ponto — ao tocar em qualquer arquivo, corrigir docstrings/logs em português para inglês na mesma passagem.
 - Docstrings em todas as funções e módulos
 - Logging via handler dedicado — nunca usar `print()` para logs
 - Core (`src/core/`) é puro: sem dependência de Flet, reutilizável por CLI e GUI

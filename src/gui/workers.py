@@ -41,6 +41,7 @@ class PipelineArgs:
     analyzer_model: str = "gemini-2.5-flash"
     use_prompt: bool = False
     prompt_model: str = "gemini-2.5-flash"
+    reprocess: bool = False
 
 
 @dataclass
@@ -160,18 +161,24 @@ def run_pipeline(
         output_path = TRANSCRIPTIONS_TEXT_DIR / f"transcricao_{_slug}.txt"
 
         pipeline_start = time()
-        transcriber.transcribe(
-            audio_path=audio_path,
-            output_path=output_path,
-            meta=meta,
-            url=_input,
-            model_size=args.whisper_model,
-            language=None if args.language == "auto" else args.language,
-            threads=args.threads,
-            beam_size=args.beam_size,
-            on_event=on_event,
-            force_overwrite=True,
-        )
+        if output_path.exists() and not args.reprocess:
+            emit("log", "transcribe", {
+                "message": f"[»] Reusing existing transcription: {output_path.name}",
+                "level": "info",
+            })
+        else:
+            transcriber.transcribe(
+                audio_path=audio_path,
+                output_path=output_path,
+                meta=meta,
+                url=_input,
+                model_size=args.whisper_model,
+                language=None if args.language == "auto" else args.language,
+                threads=args.threads,
+                beam_size=args.beam_size,
+                on_event=on_event,
+                force_overwrite=True,
+            )
         result.raw_path = output_path
 
         # --- resumo de transcrição ---
@@ -230,6 +237,12 @@ def run_pipeline(
     except Exception as exc:
         result.error = str(exc)
         emit("task_error", "pipeline", {"message": str(exc)})
+    except SystemExit as exc:
+        # sys.exit() em funções de biblioteca — não deve mais ocorrer após as correções,
+        # mas mantido como rede de segurança para garantir que task_error seja emitido.
+        _msg = f"Erro de inicialização (código {exc.code}) — verifique dependências e configuração."
+        result.error = _msg
+        emit("task_error", "pipeline", {"message": _msg})
 
     finally:
         root_logger.removeHandler(log_handler)

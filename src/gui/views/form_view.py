@@ -156,6 +156,11 @@ def build_form_view(page: ft.Page, on_start: Callable[[PipelineArgs], None]) -> 
 
     beam_slider.on_change = _on_beam_change
 
+    reprocess_switch = ft.Switch(
+        label="Reprocessar se já existir",
+        value=cfg.get("last_reprocess", False),
+    )
+
     # ------------------------------------------------------------------
     # Format section
     # ------------------------------------------------------------------
@@ -282,6 +287,7 @@ def build_form_view(page: ft.Page, on_start: Callable[[PipelineArgs], None]) -> 
             analyzer_model=analyzer_model_field.value or "gemini-2.5-flash",
             use_prompt=use_prompt_switch.value,
             prompt_model=prompt_model_field.value or "gemini-2.5-flash",
+            reprocess=reprocess_switch.value,
         )
 
         settings.save({
@@ -294,6 +300,7 @@ def build_form_view(page: ft.Page, on_start: Callable[[PipelineArgs], None]) -> 
             "last_use_format": args.use_format,
             "last_use_analyze": args.use_analyze,
             "last_use_prompt": args.use_prompt,
+            "last_reprocess": args.reprocess,
             "theme_mode": cfg.get("theme_mode", "dark"),
         })
 
@@ -347,6 +354,7 @@ def build_form_view(page: ft.Page, on_start: Callable[[PipelineArgs], None]) -> 
                                 ft.Row(controls=[beam_slider]),
                             ],
                         ),
+                        reprocess_switch,
 
                         hairline(),
 

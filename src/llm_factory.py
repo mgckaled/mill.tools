@@ -104,7 +104,13 @@ def _make_ollama(model_name: str, temperature: float) -> "BaseChatModel":
 
     logging.debug("[d] Provider: Ollama (local) | model=%s | temperature=%.2f",
                   model_name, temperature)
-    return ChatOllama(model=model_name, temperature=temperature)
+    # client_kwargs é repassado ao httpx.Client subjacente — define timeout de leitura
+    # para evitar que chain.invoke() fique pendurado indefinidamente se o Ollama travar.
+    return ChatOllama(
+        model=model_name,
+        temperature=temperature,
+        client_kwargs={"timeout": 300.0},
+    )
 
 
 def make_llm(model_name: str, temperature: float = 0.0) -> "BaseChatModel":

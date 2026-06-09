@@ -455,7 +455,7 @@ def analyze(
 
     if not body:
         logging.error("Transcription body is empty: %s", input_path)
-        sys.exit(1)
+        raise ValueError(f"Corpo da transcrição está vazio: {input_path.name}")
 
     chunks=_split_text(body, model_name)
     logging.info("[i] Text split into %d chunk(s) (%d chars total)",

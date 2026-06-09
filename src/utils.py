@@ -95,8 +95,8 @@ def setup_logging(verbose: bool) -> None:
 def check_dependencies() -> None:
     """Verify that required external tools are available on PATH.
 
-    Checks for yt-dlp and ffmpeg. Exits with a clear message if either
-    is missing.
+    Raises:
+        RuntimeError: If yt-dlp or ffmpeg are not found on PATH.
     """
     missing = [tool for tool in ("yt-dlp", "ffmpeg") if not shutil.which(tool)]
     if missing:
@@ -107,7 +107,10 @@ def check_dependencies() -> None:
                 "  ffmpeg:  https://ffmpeg.org/download.html",
                 tool,
             )
-        sys.exit(1)
+        raise RuntimeError(
+            f"Dependência(s) não encontrada(s) no PATH: {', '.join(missing)}. "
+            "Instale e adicione ao PATH."
+        )
     logging.debug("Dependencies OK: yt-dlp and ffmpeg found.")
 
 
@@ -118,7 +121,7 @@ def validate_url(url: str) -> None:
         url: The URL string to validate.
 
     Raises:
-        SystemExit: If the URL does not match the expected YouTube pattern.
+        ValueError: If the URL does not match the expected YouTube pattern.
     """
     if not YOUTUBE_URL_PATTERN.match(url):
         logging.error(
@@ -128,7 +131,10 @@ def validate_url(url: str) -> None:
             "  https://youtu.be/VIDEO_ID",
             url,
         )
-        sys.exit(1)
+        raise ValueError(
+            f"URL inválida: '{url}'. "
+            "Formato esperado: https://www.youtube.com/watch?v=VIDEO_ID ou https://youtu.be/VIDEO_ID"
+        )
     logging.debug("URL validated: %s", url)
 
 
@@ -229,7 +235,7 @@ def download_audio(url: str, audio_path: Path) -> None:
         audio_path: Destination path for the downloaded MP3 file.
 
     Raises:
-        SystemExit: If yt-dlp returns a non-zero exit code or times out.
+        RuntimeError: If yt-dlp returns a non-zero exit code or times out.
     """
     if audio_path.exists():
         logging.info(
@@ -260,11 +266,15 @@ def download_audio(url: str, audio_path: Path) -> None:
             "Check your internet connection or try again later.",
             DOWNLOAD_TIMEOUT,
         )
-        sys.exit(1)
+        raise RuntimeError(
+            f"Download expirou após {DOWNLOAD_TIMEOUT}s. Verifique a conexão."
+        )
 
     if result.returncode != 0:
         logging.error("yt-dlp error:\n%s", result.stderr.strip())
-        sys.exit(1)
+        raise RuntimeError(
+            f"Erro no yt-dlp (código {result.returncode}): {result.stderr.strip()}"
+        )
 
     logging.info("[✓] Audio downloaded successfully.")
     size_mb = audio_path.stat().st_size / (1024 * 1024)
