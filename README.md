@@ -133,6 +133,42 @@ uv run main.py <YOUTUBE_URL> --format --analyze
 uv run -m src output/transcriptions/text/transcricao_ovabeV.txt
 ```
 
+### CLI — Áudio
+
+```bash
+# download do YouTube com pós-processamento
+uv run main.py audio <URL> --fmt mp3 --quality 320 --denoise --normalize
+
+# converter arquivo local
+uv run main.py audio audio.wav --fmt ogg --quality 192
+
+# extrair áudio de vídeo local
+uv run main.py audio video.mp4 --fmt m4a
+```
+
+### CLI — Vídeo
+
+```bash
+uv run main.py video download <URL> --quality 1080 --container mp4
+uv run main.py video convert video.mkv --codec h264 --container mp4
+uv run main.py video trim video.mp4 --start 0:30 --end 2:15
+uv run main.py video compress video.mp4 --crf 23 --preset medium
+uv run main.py video extract-audio video.mp4 --fmt mp3
+uv run main.py video thumbnail video.mp4 --time 00:00:05 --fmt jpg
+```
+
+### CLI — Imagens
+
+```bash
+uv run main.py image convert photo.jpg --fmt webp --quality 85
+uv run main.py image resize photo.jpg --mode contain --width 1920
+uv run main.py image crop photo.jpg --mode ratio --ratio 16:9
+uv run main.py image watermark photo.jpg --text "© 2025" --opacity 0.5
+uv run main.py image contact-sheet *.jpg --cols 4 --thumb 200
+uv run main.py image remove-bg photo.png --model u2net
+uv run main.py image describe photo.jpg --model moondream-custom
+```
+
 ### Referência de flags
 
 | Flag            | Default           | Descrição                                                    |
@@ -457,7 +493,7 @@ mill-tools/
 
 ## Testes
 
-A suíte cobre os módulos `src/core/` em duas camadas, totalizando **145 testes** (0 falhas):
+A suíte cobre os módulos `src/core/` e `src/cli/` em duas camadas, totalizando **207 testes** (0 falhas):
 
 | Camada | Marcador | Requer | O que cobre |
 |---|---|---|---|

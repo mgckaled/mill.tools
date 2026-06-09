@@ -21,25 +21,37 @@ Multiferramenta pessoal extensível para processamento de áudio, vídeo e trans
 ## Estrutura
 
 ```
-main.py                          — entry point CLI (argparse)
+main.py                          — entry point CLI (argparse); despacha audio/video/image para src/cli/
 gui.py                           — entry point GUI (splash → home → build_app)
 src/
 ├── transcriber.py · formatter.py · analyzer.py · prompter.py
 ├── llm_factory.py               — roteamento gemini-* → Google, demais → Ollama
-├── utils.py                     — logging, validação, metadata, download, paths de output, sanitize_filename()
+├── llm_utils.py                 — split_text(): chunking compartilhado + bypass Gemini (1M ctx)
+├── utils.py                     — logging, validação, metadata, paths de output, sanitize_filename()
+├── cli/
+│   ├── bus.py                   — CLIEventBus: TqdmLoggingHandler + barra tqdm (sem Flet)
+│   ├── transcription.py         — resolve_input(), build_output_stem() (helpers CLI)
+│   ├── audio.py                 — subcomando `audio`: add_audio_parser(), run_audio_cli()
+│   ├── video.py                 — subcomando `video`: 7 sub-subcomandos (download/convert/trim/…)
+│   └── image.py                 — subcomando `image`: 12 sub-subcomandos (convert/resize/crop/…)
 ├── core/
+│   ├── ffmpeg.py                — run_ffmpeg(): runner binário compartilhado com progresso pipe:1
+│   ├── io_types.py              — InputItem: NamedTuple(kind, value) — compartilhado CLI e GUI
 │   ├── audio/
+│   │   ├── args.py              — AudioArgs: parâmetros do pipeline de áudio
 │   │   ├── downloader.py        — yt-dlp: URL → output/audio/source/
-│   │   ├── converter.py         — ffmpeg (-progress pipe:1): convert_audio(), extract_audio()
+│   │   ├── converter.py         — ffmpeg: convert_audio(), extract_audio() (usa core.ffmpeg)
 │   │   ├── denoiser.py          — denoise() via noisereduce + soundfile (spectral gating, CPU)
 │   │   ├── normalizer.py        — normalize_lufs() via ffmpeg loudnorm, dois passes (EBU R128)
 │   │   └── info.py              — get_duration_ffprobe()
 │   ├── video/
 │   │   ├── __init__.py
+│   │   ├── args.py              — VideoArgs: parâmetros do pipeline de vídeo
 │   │   ├── downloader.py        — yt-dlp: URL → output/video/source/
-│   │   ├── converter.py         — ffmpeg (-progress pipe:1): convert, trim, compress, resize, extract_audio, thumbnail
+│   │   ├── converter.py         — ffmpeg: convert, trim, compress, resize, extract_audio, thumbnail (usa core.ffmpeg)
 │   │   └── info.py              — get_video_info() via ffprobe (VideoInfo dataclass)
 │   └── image/
+│       ├── args.py              — ImageArgs: parâmetros do pipeline de imagens
 │       ├── downloader.py        — urllib: URL → output/image/source/
 │       ├── converter.py         — convert_image(): EXIF transpose, RGBA→RGB, quality lossy
 │       ├── transform.py         — 9 funções de manipulação (resize/crop/rotate/watermark/border/adjust/filter/favicon/contact_sheet)
@@ -56,21 +68,22 @@ src/
     ├── workers.py               — pipeline de Transcrição em thread (module_id="transcription")
     ├── help_content.py          — HELP_SHORT/LONG: registro central de tooltips/modais
     ├── components/
-    │   ├── input_source.py      — InputItem, InputSource (URL + FilePicker, allow_multiple)
+    │   ├── input_source.py      — InputSource (URL + FilePicker, allow_multiple); InputItem → core/io_types.py
     │   └── audio_player.py      — build_audio_player(): reprodutor play/pause/seek via sounddevice + ffmpeg; AudioPlayer.load(path)
     ├── modules/
     │   ├── base.py              — dataclass Module (id, label, icon, control, on_mount/on_unmount)
-    │   ├── transcription/view.py
+    │   ├── _pipeline_runner.py  — run_queue_pipeline(): loop base compartilhado por audio/video/image
+    │   ├── transcription/       — view.py, pipeline_log.py
     │   ├── audio/               — form_view.py, worker.py, view.py, pipeline_log.py
-    │   ├── image/               — form_view.py, worker.py, view.py, pipeline_log.py
+    │   ├── image/               — form_view.py, worker.py, view.py, pipeline_log.py, blocks/ (12 blocos)
     │   └── video/               — form_view.py, worker.py, view.py, pipeline_log.py
     ├── theme/
     │   ├── theme.py             — apply_theme(), sync_page_bgcolor()
     │   ├── tokens.py            — Color, Type, Space, Radius, Motion, Layout
-    │   └── components/          — factories de botões, cards, inputs, layout, feedback, help; Cursor
+    │   └── components/          — factories de botões, cards, inputs, layout, feedback, help; Cursor; sliders.py
     └── views/
         ├── form_view.py         — formulário de Transcrição → FormPanel
-        ├── progress_view.py     — ProgressPanel (logs/barra/spinner), filtro por owner_id
+        ├── progress_view.py     — ProgressPanel (logs/barra/spinner), filtro por owner_id; dispatcha para pipeline_log de cada módulo
         └── result_view.py       — resultados em abas (Transcrição/Análise/Digest)
 ```
 
@@ -114,7 +127,7 @@ Ativado por switches no formulário; as duas operações são encadeáveis após
 Download, conversão e processamento via yt-dlp e ffmpeg. Encoding 100% CPU — sem NVENC (decisão definitiva).
 
 - **Operações** (7, selecionadas via card grid 3 colunas): `download` (yt-dlp), `convert` (codec/container), `trim` (corte por tempo, copy ou reenc), `compress` (H.264/CRF 18–28), `resize` (scale ffmpeg, aspect ratio preservado), `extract_audio` (bridge para `core/audio/converter.py`), `thumbnail` (frame → jpg/png).
-- **Core** (`src/core/video/`): `info.py` — `VideoInfo` + `get_video_info()` via ffprobe; `downloader.py` — `download_video()` via yt-dlp com hook de progresso; `converter.py` — 6 funções ffmpeg com `_run_ffmpeg()` e `-progress pipe:1`.
+- **Core** (`src/core/video/`): `info.py` — `VideoInfo` + `get_video_info()` via ffprobe; `downloader.py` — `download_video()` via yt-dlp com hook de progresso; `converter.py` — 6 funções ffmpeg delegando para `src.core.ffmpeg.run_ffmpeg`.
 - **GUI** (`src/gui/modules/video/form_view.py`): `VideoArgs` com 17 campos. Detecção automática URL → operação forçada para `download` (seletor desabilitado). 7 blocos condicionais com `visible=`/`animate_opacity`.
 - **`pipeline_log.py`**: 7 operações (download, convert, trim, compress, resize, extract_audio, thumbnail). Segue o padrão descrito em "Arquitetura GUI > pipeline_log.py".
 - **Saída**: downloads → `output/video/source/`; processados → `output/video/processed/`.
@@ -128,7 +141,7 @@ Conversão, manipulação e operações de IA com visor Before/After integrado.
 
 - **Operações** (12, selecionadas via card grid 3 colunas): `convert`, `resize` (caber/exato/escala%), `crop` (manual/proporção/auto-trim), `rotate` (ângulo/flip/EXIF), `watermark` (texto ou imagem), `border`, `adjust` (brilho/contraste/saturação/nitidez), `filter` (blur/sharpen/autocontrast/equalizar/cinza), `favicon` (.ico multires), `contact_sheet` (N→1), `remove_bg` (rembg/ONNX, CPU), `describe` (Ollama vision → .txt).
 - **Core** (`src/core/image/`): `transform.py` com 9 funções puras; `background.py` — `remove_background()` via rembg (imports lazy, extra `[ai-image]`); `describe.py` — `describe_image()` + `save_description()` via LangChain + Ollama.
-- **GUI** (`src/gui/modules/image/form_view.py`): `ImageArgs` com 33 campos. Card `remove_bg` desabilitado com tooltip quando extra não instalado (`_UNAVAILABLE`). Blocos `rembg_block` e `describe_block` com Dropdown de modelo. Formato oculto para `favicon` e `describe`.
+- **GUI** (`src/gui/modules/image/form_view.py` + `blocks/`): `ImageArgs` com 33 campos. Formulário quebrado em 12 blocos — cada um é `build_X_block(page) → (ft.Column, XRefs)` onde `XRefs` é NamedTuple com `get_*` callables. Card `remove_bg` desabilitado com tooltip quando extra não instalado (`_UNAVAILABLE`).
 - **Visor Before/After**: `_single_pane` (placeholder ou input thumb) e `_before_after_row` (Antes/Depois em `ft.Row`) num `ft.Row` pai, toggle por `visible=`. `_last_input_thumb` preserva o thumb do input para o split após `image_op_done`.
 - **Formatos**: JPG, PNG, WebP, AVIF, TIFF, BMP, GIF, ICO. `LOSSY_FMTS = {"jpg", "jpeg", "webp"}`.
 - **`pipeline_log.py`**: fonte única de mensagens do módulo — constantes `OP_VERBS`/`OP_LABELS`, builders `fmt_*` por operação (metadados PIL, detalhes de cada op, rembg, describe), `resolve_messages()` e `resolve_stage_label()` usados por `view.py`. `worker.py` emite metadados lazy (`_try_read_meta` lê cabeçalho sem decodificar pixels) e detalhe específico antes de cada chamada ao core.
@@ -147,12 +160,29 @@ Fluxo completo de entrada: `show_splash` → `show_home` → `build_app(initial_
 ## Comandos
 
 ```bash
-uv run gui.py                                        # GUI desktop
-uv run main.py <YOUTUBE_URL>                         # transcrição básica
-uv run main.py <URL> --format --analyze              # pipeline completo
-uv run main.py <URL> --analyze --am gemini-2.5-flash # análise via Gemini
-uv run -m src output/transcriptions/text/<file>.txt  # análise standalone
+uv run gui.py                                         # GUI desktop
+
+# Transcrição (legado + subcomando explícito)
+uv run main.py <YOUTUBE_URL>                          # básico
+uv run main.py transcribe <URL> --format --analyze    # pipeline completo
+uv run main.py transcribe <URL> --am gemini-2.5-flash # análise via Gemini
+uv run -m src output/transcriptions/text/<file>.txt   # análise standalone
+
+# Áudio
+uv run main.py audio <URL_OR_FILE> [--fmt mp3] [--quality 320] [--denoise] [--normalize]
+
+# Vídeo (sub-subcomandos: download convert trim compress resize extract-audio thumbnail)
+uv run main.py video download <URL> [--quality 1080] [--container mp4]
+uv run main.py video convert <FILE> [--codec h264]
+uv run main.py video trim <FILE> --start 0:30 --end 1:00
+
+# Imagens (sub-subcomandos: convert resize crop rotate watermark border adjust filter
+#          favicon contact-sheet remove-bg describe)
+uv run main.py image convert <FILE> [--fmt webp] [--quality 85]
+uv run main.py image resize <FILE> --mode contain --width 1920
 ```
+
+> Referência completa de flags CLI → skill `cli` (`.claude/skills/cli/SKILL.md`)
 
 ## Convenções de código
 
@@ -174,18 +204,20 @@ uv run -m src output/transcriptions/text/<file>.txt  # análise standalone
 ```bash
 uv run pytest -m unit -v                                                   # unitários apenas (rápido)
 uv run pytest -m integration -v                                            # integração apenas (requer ffmpeg)
-uv run pytest -v                                                           # suíte completa (145 testes)
+uv run pytest -v                                                           # suíte completa (207 testes)
 uv run pytest --cov=src --cov-report=term-missing                         # cobertura completa
 uv run pytest tests/caminho/test_arquivo.py -v                            # arquivo específico
 uv run pytest -k "sanitize" -v                                            # filtrar por nome
 ```
 
-Estrutura de pastas espelha `src/`: `tests/core/audio/`, `tests/core/image/`, `tests/core/video/`, `tests/gui/`. Cada subpasta tem `__init__.py` vazio. Fixtures em `tests/conftest.py`:
+Estrutura espelha `src/`: `tests/core/audio/`, `tests/core/image/`, `tests/core/video/`, `tests/cli/`, `tests/gui/`. Fixtures em `tests/conftest.py`:
 
-- **Function-scoped** (padrão): `jpg_image`, `png_image`, `out_dir`
-- **Session-scoped** (geradas via ffmpeg/Pillow uma vez por sessão): `sample_wav`, `sample_mp3`, `sample_mp4`, `sample_wav_stereo`, `session_jpg`
+- **Function-scoped**: `jpg_image`, `png_image`, `out_dir`
+- **Session-scoped**: `sample_wav`, `sample_mp3`, `sample_mp4`, `sample_wav_stereo`, `session_jpg`
 
-Cobertura dos módulos `src/core/` atualmente testados: `normalizer.py` 100%, `info.py` (áudio) 100%, `transform.py` 94%, `info.py` (imagem) 94%, `info.py` (vídeo) 93%, `converter.py` (áudio) 91%, `denoiser.py` 79%, `converter.py` (imagem) 79%.
+Novos arquivos de teste (pós-refatoração): `tests/core/test_ffmpeg.py` (8 unit, 100% cobertura), `tests/test_llm_utils.py` (7 unit, 100%), `tests/cli/test_audio_cli.py` (5 unit), `tests/cli/test_video_cli.py` (10 unit), `tests/cli/test_image_cli.py` (15 unit).
+
+Cobertura dos módulos `src/core/`: `normalizer.py` 100%, `info.py` (áudio) 100%, `ffmpeg.py` 100%, `llm_utils.py` 100%, `transform.py` 94%, `info.py` (imagem) 94%, `info.py` (vídeo) 93%, `converter.py` (áudio) 91%, `denoiser.py` 79%, `converter.py` (imagem) 79%.
 
 > Guia completo para adicionar/revisar testes → skill `testing` (`.claude/skills/testing/SKILL.md`)
 
@@ -195,7 +227,8 @@ Cobertura dos módulos `src/core/` atualmente testados: `normalizer.py` 100%, `i
 
 ## LLM pipeline (Formatter / Analyzer / Prompter)
 
-- **Formatter** (`src/formatter.py`): `RecursiveCharacterTextSplitter` 4500 chars/150 overlap. Modelo padrão: `phi4mini-custom`.
+- **Chunking compartilhado** (`src/llm_utils.py`): `split_text(text, *, chunk_size, chunk_overlap, model_name, bypass_long_context, separators)`. Formatter usa separadores orientados a frases `[". ", "? ", "! ", ...]`; analyzer/prompter usam separadores padrão `["\n\n", "\n", ". ", ...]`. Bypass Gemini (1M tokens) ativado por `bypass_long_context=True` em analyzer e prompter.
+- **Formatter** (`src/formatter.py`): 4500 chars/150 overlap. Modelo padrão: `phi4mini-custom`.
 - **Analyzer** (`src/analyzer.py`): 4500 chars/300 overlap, merge parcial. 10 campos, tradução automática PT-BR. Modelo padrão: `qwen7b-custom`. Temperaturas 0.4 (análise) / 0.0 (tradução).
 - **Prompter** (`src/prompter.py`): 4500 chars/200 overlap, ~40% de compressão. Remove CTAs/patrocinadores. Modelo padrão: `qwen7b-custom`.
 
@@ -218,60 +251,29 @@ Iniciada com `uv run gui.py`. Flutter desktop no Windows.
 
 - **EventBus** (`src/gui/events.py`): publica `PipelineEvent(type, stage, payload, module_id)` via `page.pubsub.send_all()` (thread-safe). Worker em thread daemon; UI atualiza na thread principal.
 - **LogEventHandler**: captura `logging.INFO` e encaminha como eventos `log`. `_SUPPRESSED_PREFIXES` filtra duplicados. Recebe `module_id`.
-- **`pipeline_log.py` (por módulo)**: padrão de vocabulário centralizado — `worker.py` importa `fmt_*` para `emit("log", ...)`, `view.py`/`progress_view.py` importa `resolve_messages()`/`resolve_stage_label()`. Separa "o que emitir" de "como exibir". Constantes `OP_VERBS`/`OP_LABELS` por operação; builders `fmt_*` encapsulam metadados e detalhes. Implementado em todos os módulos: `audio/`, `image/`, `video/`.
+- **`pipeline_log.py` (por módulo)**: padrão de vocabulário centralizado — `worker.py` importa `fmt_*` para `emit("log", ...)`, `view.py`/`progress_view.py` importa `resolve_messages()`/`resolve_stage_label()`. Separa "o que emitir" de "como exibir". Implementado em todos os módulos: `audio/`, `image/`, `video/`, `transcription/`. `progress_view._resolve_messages` e `_resolve_stage_label` são dispatchers genéricos: delegam para o `pipeline_log` correto por tipo de evento.
 - **`extra_header` no `build_progress_view`**: parâmetro opcional `ft.Control | None` inserido entre a barra de progresso e o log. Usado pelo módulo Áudio para injetar o `AudioPlayer`.
 - **Design System** (`src/gui/theme/components/`): factories, tokens de tipografia, cursores e help system → skill `design-system` (`.claude/skills/design-system/SKILL.md`).
 
-### Flet 0.85 — quirks conhecidos
+### Flet 0.85 — quirks críticos
 
-#### APIs renomeadas ou inexistentes
+> Lista completa → skill `design-system` (`.claude/skills/design-system/SKILL.md`)
 
-| API antiga / armadilha | Correto no 0.85 |
+| Armadilha | Correto |
 |---|---|
-| `ft.Tabs`/`ft.Tab` | abas manuais com `TextButton` + `visible=` |
-| `ft.border.all(w, c)` | `ft.Border(left=ft.BorderSide(...), ...)` |
-| `ft.alignment.center` | `ft.Alignment.CENTER` |
-| `ft.Image(src_base64=...)` | `ft.Image(src=<bytes>)` — `src` posicional e **obrigatório** mesmo para imagem vazia |
-| `ft.ImageFit.CONTAIN` | `ft.BoxFit.CONTAIN` — `ft.ImageFit` não existe no 0.85 |
-| `ft.Audio` | **não existe no 0.85** — `AttributeError` ao importar. Para reprodução de áudio usar `sounddevice` + ffmpeg (ver `src/gui/components/audio_player.py`) |
-
-#### Sistema de cores / tema
-
-| API antiga / armadilha | Correto no 0.85 |
-|---|---|
-| `ColorScheme.surface` vs page.bgcolor | `surface` → `ft.Colors.SURFACE` (painéis). `page.bgcolor` explícito via `sync_page_bgcolor(page)` |
-| `surface_variant` / `surface_container_*` no ColorScheme | kwargs inválidos — geram `TypeError`. Suportados: `surface`, `on_surface`, `on_surface_variant`, `outline`, `outline_variant` |
-| `ft.Colors.SURFACE_VARIANT` / `SURFACE_CONTAINER` | não existem no 0.85 — geram `AttributeError`. Usar `ft.Colors.SURFACE` |
-
-#### Layout e árvore de widgets
-
-| API antiga / armadilha | Correto no 0.85 |
-|---|---|
-| trocar `Container.content` em runtime | reatribuir árvore quebra o patcher → toggle de `visible` num Stack |
-| `page.update()` em cascata | causa IndexError no `object_patch` — um update por evento |
-| `ft.Column(controls=[]).append()` | preferir `Container(content=None)` (diff None→árvore quebra) |
-| `BoxDecoration(shadow=...)` | deve ser `shadows=[ft.BoxShadow(...)]` — plural, lista |
-| `Container(box_shadow=...)` | deve ser `Container(shadow=ft.BoxShadow(...))` — sem prefixo `box_` |
-
-#### Animação e transformações
-
-| API antiga / armadilha | Correto no 0.85 |
-|---|---|
-| `rotate=<float>` | `ft.Rotate(angle=, alignment=ft.Alignment.CENTER)`; animar mutando `.angle` |
-| `animate_*` | `int` (ms, LINEAR), `bool` ou `ft.Animation(dur, ft.AnimationCurve.X)` |
-
-#### Interação, eventos e cursores
-
-| API antiga / armadilha | Correto no 0.85 |
-|---|---|
-| FilePicker | `page.services.append(picker)` + async `await picker.pick_files(...)` |
+| `ft.Audio` | **não existe** — usar `sounddevice` + ffmpeg (`audio_player.py`) |
+| `ft.ImageFit` | usar `ft.BoxFit` |
+| `ft.Tabs`/`ft.Tab` | abas manuais: `TextButton` + `visible=` |
+| `ft.Colors.SURFACE_VARIANT` / `SURFACE_CONTAINER` | não existem no 0.85 — usar `ft.Colors.SURFACE` ou `Color.dark.surface_variant` |
+| `surface_container_*` no `ColorScheme(...)` | kwarg inválido → `TypeError`; suportados: `surface`, `on_surface`, `on_surface_variant`, `outline`, `outline_variant` |
+| trocar `Container.content` em runtime | reatribuir árvore quebra o patcher → toggle `visible` num `ft.Stack` |
+| `page.update()` em cascata | causa `IndexError` no `object_patch` — um update por evento |
+| `ink=True` em Container clicável | absorve eventos de ponteiro, anula cursor do `GestureDetector` externo — nunca usar; colocar handler em `GestureDetector.on_tap` |
+| `ft.Slider` programático | setar `.value` + `update()` **não** dispara `on_change` no Python; usar `on_change_end` para seek |
 | `control.page` antes do mount | lança `RuntimeError` — proteger com `try/except RuntimeError` |
-| `ink=True` em Container | cria Flutter InkWell que **absorve** eventos de ponteiro e anula o cursor do GestureDetector externo — cursor só aparece nas margens. Nunca usar `ink=True` em containers clicáveis; usar `GestureDetector` externo + `Cursor.*` |
-| `Container.on_click` + `GestureDetector` externo | os dois handlers competem — o clique pode não registrar. Padrão correto: remover `Container.on_click` e colocar o handler em `GestureDetector.on_tap`. Nunca mutar `ctr.disabled` de dentro de callbacks de mudança de estado (ex.: `_on_items_change`) — causa rebuild do widget que desfaz mudanças de `border`/`bgcolor` feitas por `_refresh_op_cards()`. |
-| `ft.Tooltip` sem `size_constraints` | texto renderiza em linha única sem quebra. Usar `size_constraints=ft.BoxConstraints(max_width=280)` |
-| `ft.NavigationRailDestination` cursor | não tem propriedade `mouse_cursor`. Solução: envolver o `NavigationRail` num `ft.GestureDetector(mouse_cursor=Cursor.interactive)` e alternar para `Cursor.forbidden` via `page.pubsub` quando pipeline estiver rodando |
-| `ButtonStyle.mouse_cursor` | aceita valor flat (`Cursor.interactive`) **ou** dict por estado (`Cursor.btn`). `ControlState.DISABLED` existe e funciona — usar `Cursor.btn` em botões que podem ser desabilitados |
-| `ft.Slider` eventos de drag | `on_change_start` e `on_change_end` **existem** no 0.85 — usar `on_change_end` para seek (evita seeks contínuos durante drag). `on_change` programático (setar `.value` + `update()`) **não** dispara `on_change` no Python |
+| FilePicker | `page.services.append(picker)` + `await picker.pick_files(...)` |
+| `Container(box_shadow=...)` | usar `Container(shadow=ft.BoxShadow(...))` — sem prefixo `box_` |
+| `ft.NavigationRailDestination` cursor | sem `mouse_cursor` — envolver o `NavigationRail` em `GestureDetector`|
 
 ### Eventos do pipeline
 
