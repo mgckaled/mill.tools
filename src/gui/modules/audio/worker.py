@@ -31,6 +31,8 @@ def run_audio_pipeline(
     args: AudioArgs,
     bus: "EventBus",
     cancel_event: threading.Event,
+    *,
+    install_log_handler: bool = True,
 ) -> bool:
     """Execute the audio item queue sequentially.
 
@@ -42,6 +44,8 @@ def run_audio_pipeline(
         args: Audio form parameters.
         bus: Shared application EventBus.
         cancel_event: threading.Event set by the Cancel button.
+        install_log_handler: When False, skips LogEventHandler installation
+            (use False in CLI to avoid duplicating TqdmLoggingHandler output).
 
     Returns:
         True if all items completed without error.
@@ -53,6 +57,7 @@ def run_audio_pipeline(
         default_stage="audio",
         cancel_event=cancel_event,
         process_item=_make_process_item(args),
+        install_log_handler=install_log_handler,
     )
 
 

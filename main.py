@@ -1,13 +1,18 @@
 """
-mill.tools CLI — transcription pipeline.
+mill.tools CLI — multimodal pipeline.
 
 Usage:
     uv run main.py <URL>                                        # basic transcription
-    uv run main.py transcribe <URL>                            # explicit subcommand
-    uv run main.py transcribe <URL> --format --analyze         # full pipeline
+    uv run main.py transcribe <URL>                            # explicit transcribe subcommand
+    uv run main.py transcribe <URL> --format --analyze         # full transcription pipeline
     uv run main.py transcribe /path/to/audio.mp3               # local file
     uv run main.py transcribe <URL> --am gemini-2.5-flash      # analysis via Gemini
     uv run -m src output/transcriptions/text/<file>.txt        # standalone analysis
+
+    uv run main.py audio URL [--fmt mp3] [--quality 320]       # audio download/convert
+    uv run main.py video download URL [--quality 1080]         # video download
+    uv run main.py video convert FILE [--codec h264]           # video convert
+    uv run main.py image convert FILE [--fmt webp]             # image convert
 """
 
 import argparse
@@ -116,8 +121,40 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
+_NON_TRANSCRIBE_CMDS = frozenset({"audio", "video", "image"})
+
+
+def _dispatch_other(cmd: str) -> None:
+    """Dispatch audio / video / image subcommands to their CLI modules."""
+    from src.cli.audio import add_audio_parser
+    from src.cli.image import add_image_parser
+    from src.cli.video import add_video_parser
+
+    parser = argparse.ArgumentParser(
+        prog="main.py",
+        description="mill.tools — audio, video and image processing",
+    )
+    subparsers = parser.add_subparsers(dest="command", required=True)
+    add_audio_parser(subparsers)
+    add_video_parser(subparsers)
+    add_image_parser(subparsers)
+
+    ns = parser.parse_args(sys.argv[1:])
+    setup_logging(getattr(ns, "verbose", False))
+    try:
+        ns.func(ns)
+    except (RuntimeError, ValueError, FileNotFoundError) as exc:
+        logging.error("%s", exc)
+        sys.exit(1)
+
+
 def main() -> None:
-    """Entry point: resolve input, download if needed, and transcribe."""
+    """Entry point: dispatch to the correct pipeline based on the first argument."""
+    # Dispatch audio / video / image to their dedicated CLI modules.
+    if len(sys.argv) > 1 and sys.argv[1] in _NON_TRANSCRIBE_CMDS:
+        _dispatch_other(sys.argv[1])
+        return
+
     # Transparent "transcribe" subcommand for forward compatibility.
     # Allows both "main.py <URL>" (legacy) and "main.py transcribe <URL>".
     if len(sys.argv) > 1 and sys.argv[1] == "transcribe":

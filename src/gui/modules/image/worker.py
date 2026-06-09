@@ -46,6 +46,8 @@ def run_image_pipeline(
     args: ImageArgs,
     bus: "EventBus",
     cancel_event: threading.Event,
+    *,
+    install_log_handler: bool = True,
 ) -> bool:
     """Execute the image item queue sequentially.
 
@@ -57,6 +59,8 @@ def run_image_pipeline(
         args: Image form parameters.
         bus: Shared application EventBus.
         cancel_event: threading.Event set by the Cancel button.
+        install_log_handler: When False, skips LogEventHandler installation
+            (use False in CLI to avoid duplicating TqdmLoggingHandler output).
 
     Returns:
         True if at least one item completed without error.
@@ -65,11 +69,11 @@ def run_image_pipeline(
 
     # Short-circuit modes run under their own LogScope
     if args.operation == "contact_sheet":
-        return _run_contact_sheet(args, cancel_event, emit, bus)
+        return _run_contact_sheet(args, cancel_event, emit, bus, install_log_handler=install_log_handler)
     if args.operation == "remove_bg":
-        return _run_batch_rembg(args, cancel_event, emit, bus)
+        return _run_batch_rembg(args, cancel_event, emit, bus, install_log_handler=install_log_handler)
     if args.operation == "describe":
-        return _run_batch_describe(args, cancel_event, emit, bus)
+        return _run_batch_describe(args, cancel_event, emit, bus, install_log_handler=install_log_handler)
 
     # Standard ops: run_queue_pipeline manages its own LogScope
     return run_queue_pipeline(
@@ -81,6 +85,7 @@ def run_image_pipeline(
         process_item=_make_process_item(args),
         stop_on_error=False,
         error_event="image_op_error",
+        install_log_handler=install_log_handler,
     )
 
 
@@ -249,9 +254,13 @@ def _run_contact_sheet(
     cancel_event: threading.Event,
     emit: Callable,
     bus: "EventBus",
+    *,
+    install_log_handler: bool = True,
 ) -> bool:
     """Resolve all items and build a contact sheet (N→1)."""
-    with _LogScope(bus, _MODULE_ID):
+    from contextlib import nullcontext
+    ctx = _LogScope(bus, _MODULE_ID) if install_log_handler else nullcontext()
+    with ctx:
         emit("progress_start")
         sources: list[Path] = []
         total = len(args.items)
@@ -315,6 +324,8 @@ def _run_batch_rembg(
     cancel_event: threading.Event,
     emit: Callable,
     bus: "EventBus",
+    *,
+    install_log_handler: bool = True,
 ) -> bool:
     """Remove background from each item via rembg (CPU/ONNX)."""
     if not is_available():
@@ -329,7 +340,9 @@ def _run_batch_rembg(
         return False
     emit("log", payload={"message": pipeline_log.fmt_rembg_loaded(args.rembg_model)})
 
-    with _LogScope(bus, _MODULE_ID):
+    from contextlib import nullcontext
+    ctx = _LogScope(bus, _MODULE_ID) if install_log_handler else nullcontext()
+    with ctx:
         emit("progress_start")
         output_paths: list[str] = []
         failed_count = 0
@@ -396,9 +409,13 @@ def _run_batch_describe(
     cancel_event: threading.Event,
     emit: Callable,
     bus: "EventBus",
+    *,
+    install_log_handler: bool = True,
 ) -> bool:
     """Describe each image via Ollama vision and save .txt output."""
-    with _LogScope(bus, _MODULE_ID):
+    from contextlib import nullcontext
+    ctx = _LogScope(bus, _MODULE_ID) if install_log_handler else nullcontext()
+    with ctx:
         emit("progress_start")
         output_paths: list[str] = []
         failed_count = 0
