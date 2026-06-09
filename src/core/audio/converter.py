@@ -1,74 +1,18 @@
-"""Conversão e extração de áudio via ffmpeg com progresso estruturado."""
+"""Audio conversion and extraction via ffmpeg with structured progress."""
 
 from __future__ import annotations
 
-import subprocess
-import threading
 from pathlib import Path
 from typing import Callable
 
 from src.core.audio.info import get_duration_ffprobe
+from src.core.ffmpeg import run_ffmpeg
 from src.utils import sanitize_filename
 
-# Extensões de vídeo que disparam extração (em vez de conversão)
+# Video extensions that trigger extraction (instead of conversion)
 VIDEO_EXTENSIONS = {".mp4", ".mkv", ".webm", ".avi", ".mov"}
-# Extensões de áudio aceitas para conversão
+# Audio extensions accepted for conversion
 AUDIO_EXTENSIONS = {".mp3", ".wav", ".flac", ".ogg", ".opus", ".aac", ".m4a"}
-
-
-def _run_ffmpeg_with_progress(
-    cmd: list[str],
-    src: Path,
-    out_path: Path,
-    progress_cb: Callable[[float], None] | None = None,
-) -> Path:
-    """Executa ffmpeg com progresso estruturado via -progress pipe:1.
-
-    Lê out_time_us do stdout para calcular razão current/total.
-    Cai para barra indeterminada (sem chamar progress_cb) se a duração for desconhecida.
-    """
-    total_secs = get_duration_ffprobe(src) if progress_cb else None
-
-    process = subprocess.Popen(
-        cmd,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-    )
-
-    stderr_lines: list[str] = []
-
-    def _drain_stderr() -> None:
-        for raw in process.stderr:
-            stderr_lines.append(raw.decode('utf-8', errors='replace').rstrip())
-            if len(stderr_lines) > 100:
-                del stderr_lines[:-100]
-
-    stderr_thread = threading.Thread(target=_drain_stderr, daemon=True)
-    stderr_thread.start()
-
-    # Lê progresso estruturado de stdout (out_time_us=, progress=end, …)
-    for raw in process.stdout:
-        line = raw.decode('utf-8', errors='replace').strip()
-        if line.startswith("out_time_us=") and progress_cb and total_secs:
-            try:
-                current_us = int(line.split("=", 1)[1])
-                current_secs = current_us / 1_000_000
-                ratio = min(current_secs / total_secs, 1.0)
-                progress_cb(ratio)
-            except (ValueError, IndexError):
-                pass
-
-    process.wait()
-    stderr_thread.join(timeout=2)
-
-    if process.returncode != 0:
-        last_err = "\n".join(stderr_lines[-10:]) if stderr_lines else "(sem detalhes)"
-        raise RuntimeError(f"ffmpeg retornou {process.returncode}: {last_err}")
-
-    if not out_path.exists():
-        raise FileNotFoundError(f"ffmpeg concluiu mas arquivo não encontrado: {out_path}")
-
-    return out_path
 
 
 def convert_audio(
@@ -102,7 +46,8 @@ def convert_audio(
         cmd += ["-b:a", f"{bitrate}k"]
     cmd += ["-progress", "pipe:1", "-nostats", str(out_path)]
 
-    return _run_ffmpeg_with_progress(cmd, src, out_path, progress_cb)
+    total_secs = get_duration_ffprobe(src) if progress_cb else None
+    return run_ffmpeg(cmd, out_path, total_secs=total_secs, progress_cb=progress_cb)
 
 
 def extract_audio(
@@ -125,7 +70,8 @@ def extract_audio(
     out_dir.mkdir(parents=True, exist_ok=True)
     out_path = out_dir / f"{sanitize_filename(video.stem)}_audio.{fmt}"
 
-    cmd = ["ffmpeg", "-y", "-i", str(video), "-vn"]  # -vn: sem stream de vídeo
+    cmd = ["ffmpeg", "-y", "-i", str(video), "-vn"]  # -vn: drop video stream
     cmd += ["-progress", "pipe:1", "-nostats", str(out_path)]
 
-    return _run_ffmpeg_with_progress(cmd, video, out_path, progress_cb)
+    total_secs = get_duration_ffprobe(video) if progress_cb else None
+    return run_ffmpeg(cmd, out_path, total_secs=total_secs, progress_cb=progress_cb)

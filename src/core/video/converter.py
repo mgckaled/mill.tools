@@ -1,15 +1,15 @@
-"""Operações de vídeo via ffmpeg: convert, trim, compress, resize, thumbnail, extract_audio."""
+"""Video operations via ffmpeg: convert, trim, compress, resize, thumbnail, extract_audio."""
 from __future__ import annotations
 
 import subprocess
-import threading
 from pathlib import Path
 from typing import Callable
 
+from src.core.ffmpeg import run_ffmpeg
 from src.core.video.info import get_video_info
 from src.utils import sanitize_filename
 
-# Codecs disponíveis — sem NVENC (decisão definitiva, CPU-only)
+# Available codecs — no NVENC (CPU-only by design)
 VCODEC_MAP = {
     "copy": ["-c:v", "copy"],
     "h264": ["-c:v", "libx264", "-preset", "medium"],
@@ -17,48 +17,6 @@ VCODEC_MAP = {
     "vp9":  ["-c:v", "libvpx-vp9"],
 }
 CONTAINER_EXT = {"mp4": "mp4", "mkv": "mkv", "webm": "webm", "avi": "avi"}
-
-
-def _run_ffmpeg(
-    cmd: list[str],
-    src: Path,
-    out_path: Path,
-    progress_cb: Callable[[float], None] | None = None,
-) -> Path:
-    """Executa ffmpeg com progresso estruturado via -progress pipe:1."""
-    info = get_video_info(src)
-    total_secs = info.duration if progress_cb else None
-
-    proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-
-    stderr_lines: list[str] = []
-
-    def _drain() -> None:
-        for raw in proc.stderr:
-            stderr_lines.append(raw.decode('utf-8', errors='replace').rstrip())
-            if len(stderr_lines) > 100:
-                del stderr_lines[:-100]
-
-    threading.Thread(target=_drain, daemon=True).start()
-
-    for raw in proc.stdout:
-        line = raw.decode('utf-8', errors='replace').strip()
-        if line.startswith("out_time_us=") and progress_cb and total_secs:
-            try:
-                ratio = min(int(line.split("=", 1)[1]) / 1_000_000 / total_secs, 1.0)
-                progress_cb(ratio)
-            except (ValueError, IndexError):
-                pass
-
-    proc.wait()
-    if proc.returncode != 0:
-        tail = "\n".join(stderr_lines[-10:]) if stderr_lines else "(sem detalhes)"
-        raise RuntimeError(f"ffmpeg retornou {proc.returncode}: {tail}")
-
-    if not out_path.exists():
-        raise FileNotFoundError(f"Arquivo não encontrado: {out_path}")
-
-    return out_path
 
 
 def convert_video(
@@ -78,7 +36,8 @@ def convert_video(
         + codec_flags
         + ["-c:a", "copy", "-progress", "pipe:1", "-nostats", str(out_path)]
     )
-    return _run_ffmpeg(cmd, src, out_path, progress_cb)
+    total_secs = get_video_info(src).duration if progress_cb else None
+    return run_ffmpeg(cmd, out_path, total_secs=total_secs, progress_cb=progress_cb)
 
 
 def trim_video(
@@ -110,7 +69,8 @@ def trim_video(
         cmd += ["-c", "copy"]
 
     cmd += ["-progress", "pipe:1", "-nostats", str(out_path)]
-    return _run_ffmpeg(cmd, src, out_path, progress_cb)
+    total_secs = get_video_info(src).duration if progress_cb else None
+    return run_ffmpeg(cmd, out_path, total_secs=total_secs, progress_cb=progress_cb)
 
 
 def compress_video(
@@ -134,7 +94,8 @@ def compress_video(
         "-progress", "pipe:1", "-nostats",
         str(out_path),
     ]
-    return _run_ffmpeg(cmd, src, out_path, progress_cb)
+    total_secs = get_video_info(src).duration if progress_cb else None
+    return run_ffmpeg(cmd, out_path, total_secs=total_secs, progress_cb=progress_cb)
 
 
 def resize_video(
@@ -160,7 +121,8 @@ def resize_video(
         "-progress", "pipe:1", "-nostats",
         str(out_path),
     ]
-    return _run_ffmpeg(cmd, src, out_path, progress_cb)
+    total_secs = get_video_info(src).duration if progress_cb else None
+    return run_ffmpeg(cmd, out_path, total_secs=total_secs, progress_cb=progress_cb)
 
 
 def extract_audio_from_video(
