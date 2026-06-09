@@ -1,13 +1,13 @@
-"""Worker do pipeline de vídeo rodando em thread separada."""
+"""Worker for the video pipeline running in a background thread."""
+
 from __future__ import annotations
 
-import logging
-import re
 import threading
 from pathlib import Path
 from time import time
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Callable
 
+from src.core.video.args import VideoArgs
 from src.core.video.converter import (
     compress_video,
     convert_video,
@@ -18,9 +18,13 @@ from src.core.video.converter import (
 )
 from src.core.video.downloader import download_video
 from src.core.video.info import get_video_info
-from src.gui.events import LogEventHandler
+from src.gui.modules._pipeline_runner import (
+    fmt_ydl_progress,
+    item_label,
+    run_queue_pipeline,
+    start_pipeline,
+)
 from src.gui.modules.video import pipeline_log
-from src.gui.modules.video.form_view import VideoArgs
 from src.utils import VIDEO_PROCESSED_DIR, VIDEO_SOURCE_DIR
 
 if TYPE_CHECKING:
@@ -28,114 +32,101 @@ if TYPE_CHECKING:
 
 _MODULE_ID = "video"
 
-logger = logging.getLogger(__name__)
-
 
 def run_video_pipeline(
     args: VideoArgs,
     bus: "EventBus",
     cancel_event: threading.Event,
+    *,
+    install_log_handler: bool = True,
 ) -> bool:
-    """Executa a fila de itens de vídeo sequencialmente.
+    """Execute the video item queue sequentially.
 
     Args:
-        args: Parâmetros do formulário de vídeo.
-        bus: EventBus compartilhado da aplicação.
-        cancel_event: threading.Event setado pelo botão Cancelar.
+        args: Video form parameters.
+        bus: Shared application EventBus.
+        cancel_event: threading.Event set by the Cancel button.
+        install_log_handler: When False, skips LogEventHandler installation
+            (use False in CLI to avoid duplicating TqdmLoggingHandler output).
 
     Returns:
-        True se todos os itens concluíram sem erro.
+        True if all items completed without error.
     """
+    return run_queue_pipeline(
+        items=args.items,
+        bus=bus,
+        module_id=_MODULE_ID,
+        default_stage="video",
+        cancel_event=cancel_event,
+        process_item=_make_process_item(args),
+        install_log_handler=install_log_handler,
+    )
 
-    def emit(type: str, stage: str = "video", payload: dict | None = None) -> None:
-        bus.emit(type, stage, payload or {}, module_id=_MODULE_ID)
 
-    log_handler = LogEventHandler(bus, module_id=_MODULE_ID)
-    log_handler.setLevel(logging.INFO)
-    log_handler.setFormatter(logging.Formatter("%(message)s"))
-    root_logger = logging.getLogger()
-    root_logger.addHandler(log_handler)
-    original_level = root_logger.level
-    root_logger.setLevel(logging.INFO)
-    for _noisy in ("httpx", "httpcore", "yt_dlp", "urllib3"):
-        logging.getLogger(_noisy).setLevel(logging.WARNING)
+def _make_process_item(args: VideoArgs) -> Callable:
+    """Return a process_item closure capturing the pipeline args."""
 
-    output_paths: list[str] = []
-    total = len(args.items)
+    def _process_item(
+        emit: Callable,
+        item,
+        idx: int,
+        total: int,
+        cancel_event: threading.Event,
+    ) -> str:
+        item_name = item_label(item)
 
-    try:
-        emit("progress_start")
+        # URL → always download; local → use chosen operation
+        effective_op = "download" if item.kind == "url" else args.operation
 
-        for idx, item in enumerate(args.items, start=1):
-            if cancel_event.is_set():
-                emit("task_error", payload={"message": "Cancelado pelo usuário."})
-                return False
+        if effective_op == "download" and item.kind != "url":
+            raise ValueError(f"Operation 'download' requires a URL: {item_name}")
+        if effective_op != "download" and item.kind == "url":
+            raise ValueError(f"Local file expected for '{effective_op}': {item_name}")
 
-            item_name = _item_label(item)
-            emit("queue_progress", payload={
-                "current_item": idx,
-                "total_items":  total,
-                "item_name":    item_name,
-            })
+        emit("video_op_start", payload={
+            "operation": effective_op,
+            "item_name": item_name,
+            "item_idx":  idx,
+            "total":     total,
+        })
 
-            # URL → forçar download; local → operação escolhida
-            effective_op = "download" if item.kind == "url" else args.operation
+        t0 = time()
 
-            if effective_op == "download" and item.kind != "url":
-                emit("task_error", payload={
-                    "message": f"Operação 'download' requer URL, não arquivo local: {item_name}"
-                })
-                return False
+        def _progress_cb(ratio: float) -> None:
+            emit("progress_update", payload={"current": ratio})
 
-            if effective_op != "download" and item.kind == "url":
-                emit("task_error", payload={
-                    "message": f"Arquivo local esperado para '{effective_op}': {item_name}"
-                })
-                return False
+        if effective_op == "download":
+            emit("log", payload={"message": pipeline_log.fmt_download_detail(
+                args.resolution, args.container
+            )})
 
-            emit("video_op_start", payload={
-                "operation": effective_op,
-                "item_name": item_name,
-                "item_idx":  idx,
-                "total":     total,
-            })
+            def _ydl_hook(d: dict) -> None:
+                if d.get("status") == "downloading":
+                    downloaded = d.get("downloaded_bytes", 0) or 0
+                    total_b = d.get("total_bytes") or d.get("total_bytes_estimate") or 0
+                    if total_b > 0:
+                        emit("progress_update", payload={"current": min(downloaded / total_b, 1.0)})
+                    line = fmt_ydl_progress(d)
+                    if line:
+                        emit("log", payload={"message": line, "mutable": True})
 
-            t0 = time()
+            out_path = download_video(
+                url=item.value,
+                out_dir=VIDEO_SOURCE_DIR,
+                resolution=args.resolution,
+                container=args.container,
+                embed_meta=args.embed_meta,
+                progress_hook=_ydl_hook,
+            )
+            info = get_video_info(out_path)
+            emit("log", payload={"message": pipeline_log.fmt_video_info(info)})
 
-            def _progress_cb(ratio: float) -> None:
-                emit("progress_update", payload={"current": ratio})
+        else:
+            src = Path(item.value)
+            info = get_video_info(src)
+            emit("log", payload={"message": pipeline_log.fmt_video_info(info)})
 
-            if effective_op == "download":
-                emit("log", payload={"message": pipeline_log.fmt_download_detail(
-                    args.resolution, args.container
-                )})
-
-                def _ydl_hook(d: dict) -> None:
-                    if d.get("status") == "downloading":
-                        downloaded = d.get("downloaded_bytes", 0) or 0
-                        total_b = d.get("total_bytes") or d.get("total_bytes_estimate") or 0
-                        if total_b > 0:
-                            emit("progress_update", payload={"current": min(downloaded / total_b, 1.0)})
-                        line = _fmt_ydl_progress(d)
-                        if line:
-                            emit("log", payload={"message": line, "mutable": True})
-
-                out_path = download_video(
-                    url=item.value,
-                    out_dir=VIDEO_SOURCE_DIR,
-                    resolution=args.resolution,
-                    container=args.container,
-                    embed_meta=args.embed_meta,
-                    progress_hook=_ydl_hook,
-                )
-                info = get_video_info(out_path)
-                emit("log", payload={"message": pipeline_log.fmt_video_info(info)})
-
-            else:
-                src = Path(item.value)
-                info = get_video_info(src)
-                emit("log", payload={"message": pipeline_log.fmt_video_info(info)})
-
+            try:
                 match effective_op:
                     case "convert":
                         emit("log", payload={"message": pipeline_log.fmt_convert_detail(
@@ -184,14 +175,11 @@ def run_video_pipeline(
 
                     case "extract_audio":
                         if not info.acodec:
-                            emit("task_error", payload={
-                                "message": (
-                                    f"[!] Arquivo sem faixa de áudio: {item_name}\n"
-                                    "[i] Arquivos .webm de stream de vídeo puro (ex.: f313.webm) "
-                                    "não contêm áudio. Use o arquivo mesclado completo."
-                                )
-                            })
-                            return False
+                            raise ValueError(
+                                f"[!] No audio track in: {item_name}\n"
+                                "[i] Video-only .webm streams (e.g. f313.webm) contain no audio. "
+                                "Use the merged full file instead."
+                            )
                         emit("log", payload={"message": pipeline_log.fmt_extract_audio_detail(
                             args.audio_fmt
                         )})
@@ -212,104 +200,52 @@ def run_video_pipeline(
                         )
 
                     case _:
-                        emit("task_error", payload={"message": f"Operação desconhecida: {effective_op}"})
-                        return False
+                        raise ValueError(f"Unknown operation: {effective_op}")
 
-            elapsed = time() - t0
-            src_size = Path(item.value).stat().st_size if item.kind == "local" and Path(item.value).exists() else 0
-            output_paths.append(str(out_path))
+            except Exception as exc:
+                # Enrich Windows file-lock errors with actionable guidance
+                msg = str(exc)
+                if "WinError 32" in msg or "being used by another process" in msg:
+                    msg += (
+                        "\n[i] File locked by antivirus during rename. "
+                        "Wait a few seconds and retry, or add the output/ folder "
+                        "to Windows Defender exclusions."
+                    )
+                raise RuntimeError(msg) from exc
 
-            emit("video_op_done", payload={
-                "output_path":    str(out_path),
-                "elapsed":        f"{elapsed:.1f}s",
-                "item_idx":       idx,
-                "total":          total,
-                "src_size_bytes": src_size,
-                "out_size_bytes": out_path.stat().st_size,
-            })
+        elapsed = time() - t0
+        src_size = (
+            Path(item.value).stat().st_size
+            if item.kind == "local" and Path(item.value).exists() else 0
+        )
+        emit("video_op_done", payload={
+            "output_path":    str(out_path),
+            "elapsed":        f"{elapsed:.1f}s",
+            "item_idx":       idx,
+            "total":          total,
+            "src_size_bytes": src_size,
+            "out_size_bytes": out_path.stat().st_size,
+        })
+        return str(out_path)
 
-            if cancel_event.is_set():
-                emit("task_error", payload={"message": "Cancelado pelo usuário."})
-                return False
-
-        emit("task_done", payload={"output_paths": output_paths})
-        return True
-
-    except Exception as exc:
-        msg = str(exc)
-        if "WinError 32" in msg or "being used by another process" in msg:
-            msg += (
-                "\n[i] Arquivo bloqueado pelo antivírus durante o rename. "
-                "Aguarde alguns segundos e tente novamente, ou adicione a pasta "
-                "output/ às exclusões do Windows Defender."
-            )
-        emit("task_error", payload={"message": msg})
-        return False
-
-    finally:
-        root_logger.removeHandler(log_handler)
-        root_logger.setLevel(original_level)
+    return _process_item
 
 
 def start_video_pipeline(
     args: VideoArgs,
     bus: "EventBus",
     cancel_event: threading.Event,
-    on_finish: "callable" = None,
+    on_finish: Callable | None = None,
 ) -> threading.Thread:
-    """Inicia o pipeline de vídeo em thread daemon.
+    """Launch the video pipeline in a daemon thread.
 
     Args:
-        args: Parâmetros do formulário.
-        bus: EventBus compartilhado.
-        cancel_event: threading.Event para cancelamento.
-        on_finish: Callback opcional chamado ao término.
+        args: Form parameters.
+        bus: Shared EventBus.
+        cancel_event: threading.Event for cancellation.
+        on_finish: Optional callback called on completion (success or error).
 
     Returns:
-        Thread iniciada.
+        Started daemon thread.
     """
-    def _run() -> None:
-        run_video_pipeline(args, bus, cancel_event)
-        if on_finish:
-            on_finish()
-
-    thread = threading.Thread(target=_run, daemon=True)
-    thread.start()
-    return thread
-
-
-_ANSI_ESC = re.compile(r'\x1b\[[0-9;]*m')
-
-
-def _strip_ansi(s: str) -> str:
-    return _ANSI_ESC.sub('', s).strip()
-
-
-def _fmt_ydl_progress(d: dict) -> str:
-    """Formata a linha de progresso do yt-dlp para exibição no log."""
-    pct   = _strip_ansi(d.get("_percent_str") or "")
-    total = _strip_ansi(d.get("_total_bytes_str") or d.get("_total_bytes_estimate_str") or "")
-    speed = _strip_ansi(d.get("_speed_str") or "")
-    eta   = _strip_ansi(d.get("_eta_str") or "")
-    parts: list[str] = []
-    if pct:
-        parts.append(pct)
-    if total:
-        parts.append(f"de {total}")
-    if speed and speed not in ("Unknown B/s", "N/A"):
-        parts.append(speed)
-    if eta and eta not in ("Unknown", "N/A"):
-        parts.append(f"ETA {eta}")
-    return f"[d] {' | '.join(parts)}" if parts else ""
-
-
-def _item_label(item) -> str:
-    """Retorna label legível para o item (nome do arquivo ou domínio da URL)."""
-    if item.kind == "local":
-        return Path(item.value).name
-    try:
-        from urllib.parse import urlparse
-        parsed = urlparse(item.value)
-        return parsed.netloc or item.value[:40]
-    except Exception:
-        return item.value[:40]
+    return start_pipeline(run_video_pipeline, args, bus, cancel_event, on_finish)

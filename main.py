@@ -1,36 +1,40 @@
 """
-yt-transcriber: Transcribe YouTube videos using faster-whisper.
+mill.tools CLI — multimodal pipeline.
 
 Usage:
-    uv run yt-transcriber <YOUTUBE_URL> [options]
+    uv run main.py <URL>                                        # basic transcription
+    uv run main.py transcribe <URL>                            # explicit transcribe subcommand
+    uv run main.py transcribe <URL> --format --analyze         # full transcription pipeline
+    uv run main.py transcribe /path/to/audio.mp3               # local file
+    uv run main.py transcribe <URL> --am gemini-2.5-flash      # analysis via Gemini
+    uv run -m src output/transcriptions/text/<file>.txt        # standalone analysis
 
-Examples:
-    uv run yt-transcriber https://www.youtube.com/watch?v=ovabeVoWrA0
-    uv run yt-transcriber https://www.youtube.com/watch?v=ovabeVoWrA0 --wm medium
-    uv run yt-transcriber https://www.youtube.com/watch?v=ovabeVoWrA0 --language pt
-    uv run yt-transcriber https://www.youtube.com/watch?v=ovabeVoWrA0 --format
-    uv run yt-transcriber https://www.youtube.com/watch?v=ovabeVoWrA0 --analyze
-    uv run yt-transcriber https://www.youtube.com/watch?v=ovabeVoWrA0 --prompt
-    uv run yt-transcriber https://www.youtube.com/watch?v=ovabeVoWrA0 --format --analyze
-    uv run yt-transcriber https://www.youtube.com/watch?v=ovabeVoWrA0 --format --fm phi4-mini --analyze --am qwen7b-custom
-    uv run yt-transcriber https://www.youtube.com/watch?v=ovabeVoWrA0 --prompt --pm qwen7b-custom
+    uv run main.py audio URL [--fmt mp3] [--quality 320]       # audio download/convert
+    uv run main.py video download URL [--quality 1080]         # video download
+    uv run main.py video convert FILE [--codec h264]           # video convert
+    uv run main.py image convert FILE [--fmt webp]             # image convert
 """
 
 import argparse
 import logging
+import re
 import sys
+from pathlib import Path
 
+from tqdm import tqdm
+
+from src.cli.transcription import build_output_stem, resolve_input
+from src.core.audio.downloader import download_audio as _core_download_audio
+from src.core.metadata import fetch_metadata
 from src.transcriber import print_summary, transcribe
 from src.utils import (
     AUDIO_SOURCE_DIR,
     TRANSCRIPTIONS_TEXT_DIR,
     check_dependencies,
-    download_audio,
-    extract_video_id,
-    fetch_metadata,
     setup_logging,
-    validate_url,
 )
+
+_ANSI_ESC = re.compile(r"\x1b\[[0-9;]*m")
 
 
 def parse_args() -> argparse.Namespace:
@@ -42,10 +46,10 @@ def parse_args() -> argparse.Namespace:
         prompt, prompt_model and verbose fields.
     """
     parser = argparse.ArgumentParser(
-        description="Transcribe a YouTube video to plain text using faster-whisper.",
+        description="Transcribe a YouTube video or local audio file using faster-whisper.",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
-    parser.add_argument("url", help="YouTube video URL")
+    parser.add_argument("url", help="YouTube URL or path to local audio file")
     parser.add_argument(
         "--wm",
         default="small",
@@ -117,34 +121,94 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
+_NON_TRANSCRIBE_CMDS = frozenset({"audio", "video", "image"})
+
+
+def _dispatch_other(cmd: str) -> None:
+    """Dispatch audio / video / image subcommands to their CLI modules."""
+    from src.cli.audio import add_audio_parser
+    from src.cli.image import add_image_parser
+    from src.cli.video import add_video_parser
+
+    parser = argparse.ArgumentParser(
+        prog="main.py",
+        description="mill.tools — audio, video and image processing",
+    )
+    subparsers = parser.add_subparsers(dest="command", required=True)
+    add_audio_parser(subparsers)
+    add_video_parser(subparsers)
+    add_image_parser(subparsers)
+
+    ns = parser.parse_args(sys.argv[1:])
+    setup_logging(getattr(ns, "verbose", False))
+    try:
+        ns.func(ns)
+    except (RuntimeError, ValueError, FileNotFoundError) as exc:
+        logging.error("%s", exc)
+        sys.exit(1)
+
+
 def main() -> None:
-    """Entry point: validate inputs, fetch metadata, download audio, and transcribe."""
+    """Entry point: dispatch to the correct pipeline based on the first argument."""
+    # Dispatch audio / video / image to their dedicated CLI modules.
+    if len(sys.argv) > 1 and sys.argv[1] in _NON_TRANSCRIBE_CMDS:
+        _dispatch_other(sys.argv[1])
+        return
+
+    # Transparent "transcribe" subcommand for forward compatibility.
+    # Allows both "main.py <URL>" (legacy) and "main.py transcribe <URL>".
+    if len(sys.argv) > 1 and sys.argv[1] == "transcribe":
+        sys.argv.pop(1)
+
     args = parse_args()
     setup_logging(args.verbose)
 
     try:
         check_dependencies()
-        validate_url(args.url)
 
-        video_id = extract_video_id(args.url)
-        audio_path = AUDIO_SOURCE_DIR / f"{video_id}.mp3"
+        kind, value = resolve_input(args.url)
 
         TRANSCRIPTIONS_TEXT_DIR.mkdir(parents=True, exist_ok=True)
-        output_stem = args.output_name or f"transcricao_{video_id}"
+
+        if kind == "file":
+            audio_path = Path(value)
+            meta: dict = {"title": audio_path.stem, "duration": 0}
+        else:
+            meta = fetch_metadata(value)
+            _stem = build_output_stem(meta)
+            audio_path = AUDIO_SOURCE_DIR / f"{_stem}.mp3"
+            AUDIO_SOURCE_DIR.mkdir(parents=True, exist_ok=True)
+
+            if not audio_path.exists():
+                logging.info("[↓] Downloading audio from: %s", value)
+
+                def _hook(d: dict) -> None:
+                    if d.get("status") == "downloading":
+                        pct = _ANSI_ESC.sub("", d.get("_percent_str", "")).strip()
+                        speed = _ANSI_ESC.sub("", d.get("_speed_str", "")).strip()
+                        eta = _ANSI_ESC.sub("", d.get("_eta_str", "")).strip()
+                        if pct:
+                            tqdm.write(f"\r  ↓ {pct} — {speed}  ETA {eta}", end="")
+                    elif d.get("status") == "finished":
+                        tqdm.write("")
+
+                audio_path = _core_download_audio(
+                    value, AUDIO_SOURCE_DIR, fmt="mp3",
+                    embed_meta=False, progress_hook=_hook,
+                )
+                logging.info("[✓] Audio downloaded: %s", audio_path.name)
+
+        output_stem = build_output_stem(meta, args.output_name)
         output_path = TRANSCRIPTIONS_TEXT_DIR / f"{output_stem}.txt"
 
-        logging.debug("Video ID slug: %s", video_id)
         logging.debug("Audio path: %s", audio_path)
         logging.debug("Output path: %s", output_path)
-
-        meta = fetch_metadata(args.url)
-        download_audio(args.url, audio_path)
 
         elapsed = transcribe(
             audio_path,
             output_path,
             meta,
-            args.url,
+            value,
             args.whisper_model,
             args.language,
             args.threads,

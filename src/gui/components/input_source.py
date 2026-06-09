@@ -8,16 +8,9 @@ from typing import Callable
 
 import flet as ft
 
+from src.core.io_types import InputItem
 from src.gui.theme.components.buttons import Cursor
 from src.gui.theme.tokens import Space, Type
-
-
-@dataclass
-class InputItem:
-    """Representa um item de entrada: URL ou arquivo local."""
-
-    kind: str   # "url" | "local"
-    value: str  # URL completa ou caminho absoluto
 
 
 @dataclass

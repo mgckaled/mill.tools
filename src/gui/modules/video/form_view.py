@@ -7,7 +7,9 @@ from typing import Callable
 import flet as ft
 
 from src.gui import settings
-from src.gui.components.input_source import InputItem, build_input_source
+from src.core.io_types import InputItem
+from src.core.video.args import VideoArgs
+from src.gui.components.input_source import build_input_source
 from src.gui.theme.components import (
     Cursor,
     hairline,
@@ -49,43 +51,6 @@ _AUDIO_FMT_LABELS  = {"mp3": "MP3", "m4a": "M4A", "wav": "WAV"}
 
 _THUMB_FMT_OPTIONS = ["jpg", "png"]
 _THUMB_FMT_LABELS  = {"jpg": "JPG", "png": "PNG"}
-
-
-@dataclass
-class VideoArgs:
-    """Parâmetros do pipeline de vídeo recebidos do formulário."""
-
-    items: list[InputItem] = field(default_factory=list)
-    operation: str = "download"
-
-    # Download
-    resolution: str = "1080"
-    container: str = "mp4"
-    embed_meta: bool = True
-
-    # Convert
-    vcodec: str = "copy"
-    out_container: str = "mp4"
-
-    # Trim
-    trim_start: str = ""
-    trim_end: str = ""
-    trim_reenc: bool = False
-
-    # Compress
-    crf: int = 23
-    preset: str = "medium"
-
-    # Resize
-    resize_width: int = 0
-    resize_height: int = 0
-
-    # Extract audio
-    audio_fmt: str = "mp3"
-
-    # Thumbnail
-    thumb_time: str = "00:00:01"
-    thumb_fmt: str = "jpg"
 
 
 @dataclass

@@ -12,7 +12,7 @@ import ctranslate2
 from faster_whisper import WhisperModel
 from tqdm import tqdm
 
-from src.utils import format_duration, format_metadata
+from src.core.metadata import format_duration, format_metadata
 
 LOW_CONF_LOGPROB = -1.0   # avg_logprob abaixo disso indica baixa confiança
 HIGH_NO_SPEECH_PROB = 0.6  # no_speech_prob acima disso indica provável silêncio/ruído

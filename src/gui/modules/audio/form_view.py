@@ -8,7 +8,9 @@ from typing import Callable
 import flet as ft
 
 from src.gui import settings
-from src.gui.components.input_source import InputItem, build_input_source
+from src.core.audio.args import AudioArgs
+from src.core.io_types import InputItem
+from src.gui.components.input_source import build_input_source
 from src.gui.theme.components import Cursor, hairline, help_icon_for, section, segmented_selector, switch_row
 from src.gui.theme.tokens import Space, Type
 
@@ -28,19 +30,6 @@ _QUALITY_LABELS = {
     "64": "64 kb/s",
 }
 _NO_BITRATE_FMTS = {"wav", "best"}
-
-
-@dataclass
-class AudioArgs:
-    """Parâmetros do pipeline de áudio recebidos do formulário."""
-
-    items: list[InputItem] = field(default_factory=list)
-    fmt: str = "mp3"
-    quality: str = "best"
-    embed_meta: bool = True
-    denoise: bool = False
-    normalize: bool = False
-    normalize_target_lufs: float = -14.0
 
 
 @dataclass
