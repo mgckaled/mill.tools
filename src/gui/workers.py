@@ -1,8 +1,9 @@
-"""Worker do pipeline de transcrição rodando em thread separada."""
+"""Worker for the transcription pipeline running in a background thread."""
 
 from __future__ import annotations
 
 import logging
+import re
 import threading
 from dataclasses import dataclass
 from pathlib import Path
@@ -10,25 +11,26 @@ from time import time
 from typing import TYPE_CHECKING
 
 from src import analyzer, formatter, prompter, transcriber
-from src.gui.events import LogEventHandler
+from src.core.audio.downloader import download_audio as _core_download_audio
 from src.core.audio.converter import AUDIO_EXTENSIONS as _AUDIO_EXTS
+from src.core.metadata import fetch_metadata
+from src.gui.events import LogEventHandler
 from src.utils import (
     AUDIO_SOURCE_DIR,
     TRANSCRIPTIONS_TEXT_DIR,
     check_dependencies,
-    download_audio,
-    extract_video_id,
-    fetch_metadata,
-    validate_url,
+    sanitize_filename,
 )
 
 if TYPE_CHECKING:
     from src.gui.events import EventBus
 
+_ANSI_ESC = re.compile(r"\x1b\[[0-9;]*m")
+
 
 @dataclass
 class PipelineArgs:
-    """Parâmetros do pipeline recebidos do form_view."""
+    """Parameters for the transcription pipeline received from the form."""
 
     url: str
     whisper_model: str = "small"
@@ -46,13 +48,13 @@ class PipelineArgs:
 
 @dataclass
 class PipelineResult:
-    """Caminhos dos arquivos gerados pelo pipeline."""
+    """Output file paths produced by the pipeline."""
 
     raw_path: Path | None = None
     analysis_path: Path | None = None
     prompt_path: Path | None = None
     error: str | None = None
-    completed: bool = False  # True apenas quando pipeline_done foi emitido
+    completed: bool = False  # True only when task_done was emitted
 
 
 def run_pipeline(
@@ -60,23 +62,22 @@ def run_pipeline(
     bus: EventBus,
     cancel_event: threading.Event,
 ) -> PipelineResult:
-    """Executa o pipeline completo em uma thread de background.
+    """Execute the full transcription pipeline in a background thread.
 
-    Orquestra download → transcrição → formatação? → análise? → prompt-ready?.
-    Emite PipelineEvents via bus para atualizar a progress_view em tempo real.
-    Checa cancel_event entre etapas — não interrompe Whisper mid-segment.
+    Orchestrates download → transcription → formatting? → analysis? → prompt?.
+    Emits PipelineEvents via bus to update the progress_view in real time.
+    Checks cancel_event between stages — does not interrupt Whisper mid-segment.
 
     Args:
-        args: Parâmetros do pipeline configurados no form.
-        bus: EventBus para emissão de eventos thread-safe via pubsub.
-        cancel_event: threading.Event setado pelo botão Cancelar.
+        args: Pipeline parameters configured in the form.
+        bus: EventBus for thread-safe event emission via pubsub.
+        cancel_event: threading.Event set by the Cancel button.
 
     Returns:
-        PipelineResult com paths dos arquivos gerados ou mensagem de erro.
+        PipelineResult with paths of generated files or an error message.
     """
     _MID = "transcription"
 
-    # captura de estado entre eventos
     _capture: dict = {}
 
     def on_event(type: str, stage: str, payload: dict) -> None:
@@ -87,14 +88,14 @@ def run_pipeline(
     def emit(type: str, stage: str = "pipeline", payload: dict | None = None) -> None:
         bus.emit(type, stage, payload or {}, module_id=_MID)
 
-    # instala LogEventHandler no root logger para capturar logs granulares
+    # Install LogEventHandler on the root logger to capture granular logs
     log_handler = LogEventHandler(bus, module_id=_MID)
     log_handler.setLevel(logging.INFO)
     log_handler.setFormatter(logging.Formatter("%(message)s"))
     root_logger = logging.getLogger()
     root_logger.addHandler(log_handler)
     original_level = root_logger.level
-    # INFO evita flood de DEBUG de libs terceiras (faster_whisper, ctranslate2, langchain)
+    # INFO prevents flooding from third-party libs (faster_whisper, ctranslate2, langchain)
     root_logger.setLevel(logging.INFO)
     for _noisy in ("httpx", "httpcore", "faster_whisper", "huggingface_hub",
                    "langchain", "langchain_core", "ctranslate2"):
@@ -111,11 +112,11 @@ def run_pipeline(
         _input = args.url.strip()
         _local = Path(_input)
 
-        # --- arquivo local (bridge do módulo Áudio) ---
+        # --- local file (bridge from the Audio module) ---
         if _local.is_file():
             if _local.suffix.lower() not in _AUDIO_EXTS:
                 emit("task_error", "pipeline", {
-                    "message": f"Formato não suportado para transcrição: {_local.suffix}"
+                    "message": f"Unsupported format for transcription: {_local.suffix}"
                 })
                 return result
             audio_path = _local
@@ -123,14 +124,11 @@ def run_pipeline(
             emit("audio_cached", "download", {"audio_path": str(audio_path)})
 
         else:
-            # --- URL: validar, buscar metadados e baixar ---
-            validate_url(_input)
-
+            # --- URL: fetch metadata and download ---
             if cancel_event.is_set():
                 return result
 
             emit("metadata_start", "download", {"url": _input})
-            video_id = extract_video_id(_input)
             meta = fetch_metadata(_input)
             emit("metadata_done", "download", {
                 "title": meta.get("title", ""),
@@ -141,24 +139,37 @@ def run_pipeline(
             if cancel_event.is_set():
                 return result
 
-            audio_slug = video_id[:6]
-            audio_path = AUDIO_SOURCE_DIR / f"{audio_slug}.mp3"
             AUDIO_SOURCE_DIR.mkdir(parents=True, exist_ok=True)
+            _title_slug = sanitize_filename(meta.get("title", "download"))
+            audio_path = AUDIO_SOURCE_DIR / f"{_title_slug}.mp3"
 
             if audio_path.exists():
                 emit("audio_cached", "download", {"audio_path": str(audio_path)})
             else:
                 emit("download_start", "download", {"url": _input})
-                download_audio(_input, audio_path)
+
+                def _dl_hook(d: dict) -> None:
+                    if d.get("status") == "downloading":
+                        pct = _ANSI_ESC.sub("", d.get("_percent_str", "")).strip()
+                        if pct:
+                            emit("log", "download", {
+                                "message": f"[↓] {pct}",
+                                "level": "info",
+                                "mutable": True,
+                            })
+
+                audio_path = _core_download_audio(
+                    _input, AUDIO_SOURCE_DIR, fmt="mp3",
+                    embed_meta=False, progress_hook=_dl_hook,
+                )
                 emit("download_done", "download", {"audio_path": str(audio_path)})
 
         if cancel_event.is_set():
             return result
 
-        # --- transcrição ---
+        # --- transcription ---
         TRANSCRIPTIONS_TEXT_DIR.mkdir(parents=True, exist_ok=True)
-        _slug = audio_slug if not _local.is_file() else audio_path.stem[:6]
-        output_path = TRANSCRIPTIONS_TEXT_DIR / f"transcricao_{_slug}.txt"
+        output_path = TRANSCRIPTIONS_TEXT_DIR / f"transcription_{audio_path.stem}.txt"
 
         pipeline_start = time()
         if output_path.exists() and not args.reprocess:
@@ -181,7 +192,7 @@ def run_pipeline(
             )
         result.raw_path = output_path
 
-        # --- resumo de transcrição ---
+        # --- transcription summary ---
         elapsed_transcribe = time() - pipeline_start
         flagged_count = _capture.get("flagged_count", 0)
         emit("transcribe_summary", "pipeline", {
@@ -238,9 +249,8 @@ def run_pipeline(
         result.error = str(exc)
         emit("task_error", "pipeline", {"message": str(exc)})
     except SystemExit as exc:
-        # sys.exit() em funções de biblioteca — não deve mais ocorrer após as correções,
-        # mas mantido como rede de segurança para garantir que task_error seja emitido.
-        _msg = f"Erro de inicialização (código {exc.code}) — verifique dependências e configuração."
+        # sys.exit() from a library — kept as safety net to ensure task_error is emitted.
+        _msg = f"Initialization error (code {exc.code}) — check dependencies and configuration."
         result.error = _msg
         emit("task_error", "pipeline", {"message": _msg})
 
@@ -256,22 +266,22 @@ def start_pipeline(
     bus: "EventBus",
     cancel_event: threading.Event,
 ) -> threading.Thread:
-    """Inicia o pipeline em uma thread de background e retorna a thread.
+    """Start the pipeline in a background thread and return the thread.
 
-    Detecta cancelamento (retorno antecipado sem pipeline_done/pipeline_error)
-    e emite pipeline_cancelled para que o ProgressPanel possa resetar o estado.
+    Detects cancellation (early return without task_done/task_error) and
+    emits pipeline_cancelled so the ProgressPanel can reset its state.
 
     Args:
-        args: Parâmetros do pipeline.
-        bus: EventBus para comunicação thread-safe.
-        cancel_event: threading.Event para cancelamento.
+        args: Pipeline parameters.
+        bus: EventBus for thread-safe communication.
+        cancel_event: threading.Event for cancellation.
 
     Returns:
-        Thread iniciada (daemon=True).
+        Started daemon thread.
     """
     def _run() -> None:
         result = run_pipeline(args, bus, cancel_event)
-        # Cancelamento: sem completed e sem erro → retorno antecipado via cancel_event
+        # Cancellation: no completed and no error → early return via cancel_event
         if not result.completed and result.error is None:
             bus.emit("pipeline_cancelled", "pipeline", {}, module_id="transcription")
 
