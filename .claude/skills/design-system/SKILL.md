@@ -97,8 +97,11 @@ from src.gui.theme.theme import apply_theme, sync_page_bgcolor
 | `text_secondary` | `#A1A1AA` | texto ON_SURFACE_VARIANT |
 | `text_disabled` | `#6B6B75` | texto desabilitado |
 | `primary` | `#F4A63C` | dourado — acento único |
+| `primary_hover` | `#F7B65C` | hover do dourado |
+| `primary_pressed` | `#D88E2A` | pressed do dourado |
 | `on_primary` | `#1E1E20` | texto sobre botão primário |
 | `error` | `#E05A51` | erros |
+| `on_error` | `#1E1E20` | texto sobre fundo de erro |
 
 Use `Color.dark.*` / `Color.light.*` apenas quando precisar de hardcode fora do tema (ex: tooltip decoration, bg fixo). Para cores dinâmicas use `ft.Colors.PRIMARY`, `ft.Colors.ON_SURFACE`, etc.
 
@@ -119,9 +122,9 @@ Use `Color.dark.*` / `Color.light.*` apenas quando precisar de hardcode fora do 
 ## Tokens de Espaçamento (`Space`), Raio (`Radius`), Animação (`Motion`), Layout
 
 ```python
-# Space — grade em px (múltiplos de 4)
-Space.xs = 6   Space.sm = 12   Space.md = 16
-Space.lg = 18  Space.xl = 24   Space.xxl = 32  Space.xxxl = 48
+# Space — grade em px
+Space.xxs = 2  Space.xs = 6   Space.sm = 12   Space.md = 16
+Space.lg = 18  Space.xl = 24  Space.xxl = 32  Space.xxxl = 48
 
 # Radius
 Radius.sm = 6   Radius.md = 10   Radius.lg = 14   Radius.pill = 999
@@ -130,7 +133,8 @@ Radius.sm = 6   Radius.md = 10   Radius.lg = 14   Radius.pill = 999
 Motion.fast = 200   Motion.base = 300   Motion.slow = 500   Motion.spin = 900
 
 # Layout — constantes globais
-Layout.form_width = 380          # largura do painel de formulário
+Layout.form_width = 380          # largura do painel de formulário (px)
+Layout.field_height = 38         # altura padrão de TextField em formulários
 Layout.content_padding = 16
 Layout.content_lateral = 24
 Layout.nav_rail_width = 80
@@ -145,6 +149,8 @@ Layout.section_gap = Space.xl    # 24px
 
 | Token | Tamanho / Peso | Uso |
 |---|---|---|
+| `Type.hero` | 68 / 600 | branding da splash screen |
+| `Type.wordmark` | 44 / 600 | wordmark da home screen |
 | `Type.display` | 34 / 600 | títulos grandes |
 | `Type.title` | 22 / 600 | títulos de seção de resultado |
 | `Type.heading` | 18 / 600 | sub-títulos |
@@ -153,6 +159,7 @@ Layout.section_gap = Space.xl    # 24px
 | `Type.body_strong` | 16 / 600 | texto em destaque |
 | `Type.button` | 16 / 600 | texto de botão |
 | `Type.caption` | 14 / 400 | texto secundário, tooltips |
+| `Type.input` | 13 / 400 | rótulo de TextField, Switch, Dropdown |
 | `Type.small` | 11 / 400 | labels de ícone, badges, caminhos compactos |
 | `Type.tiny` | 10 / 400 | rótulos micro ("Antes"/"Depois") |
 | `Type.mono` | 13 / 300 | caminhos, código — `font_family=Type.FONT_MONO` |
