@@ -26,6 +26,9 @@ from src.gui.theme.components.inputs import (
     slider_row,
     switch_row,
 )
+from src.gui.theme.components.sliders import (
+    labeled_slider,
+)
 from src.gui.theme.components.layout import (
     hairline,
     module_scaffold,
@@ -51,6 +54,7 @@ __all__ = [
     "labeled_field",
     "slider_row",
     "switch_row",
+    "labeled_slider",
     "hairline",
     "module_scaffold",
     "section",
