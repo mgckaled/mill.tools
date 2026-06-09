@@ -1,3 +1,10 @@
+---
+name: cli
+description: Guia da CLI modular do mill.tools (subcomandos audio/video/image + transcribe,
+  CLIEventBus, padrões de argparse). Invocar ao criar/editar subcomandos em src/cli/,
+  adicionar flags, mexer no dispatcher de main.py ou escrever testes em tests/cli/.
+---
+
 # mill.tools — Guia da CLI Modular
 
 ## Visão geral
@@ -68,7 +75,7 @@ Classifica entrada como URL ou arquivo local:
 
 ```python
 kind, value = resolve_input("https://youtu.be/abc")  # → ("url", "https://…")
-kind, value = resolve_input("/path/to/file.mp3")      # → ("file", "/path/…")
+kind, value = resolve_input("/path/to/file.mp3")      # → ("local", "/path/…")
 ```
 
 Usado por todos os CLI runners para popular `InputItem(kind, value)`.

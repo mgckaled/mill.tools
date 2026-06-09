@@ -36,7 +36,7 @@ src/
 │   └── image.py                 — subcomando `image`: 12 sub-subcomandos (convert/resize/crop/…)
 ├── core/
 │   ├── ffmpeg.py                — run_ffmpeg(): runner binário compartilhado com progresso pipe:1
-│   ├── io_types.py              — InputItem: NamedTuple(kind, value) — compartilhado CLI e GUI
+│   ├── io_types.py              — InputItem: dataclass(kind, value) — compartilhado CLI e GUI
 │   ├── audio/
 │   │   ├── args.py              — AudioArgs: parâmetros do pipeline de áudio
 │   │   ├── downloader.py        — yt-dlp: URL → output/audio/source/
@@ -204,7 +204,7 @@ uv run main.py image resize <FILE> --mode contain --width 1920
 ```bash
 uv run pytest -m unit -v                                                   # unitários apenas (rápido)
 uv run pytest -m integration -v                                            # integração apenas (requer ffmpeg)
-uv run pytest -v                                                           # suíte completa (207 testes)
+uv run pytest -v                                                           # suíte completa (209 testes)
 uv run pytest --cov=src --cov-report=term-missing                         # cobertura completa
 uv run pytest tests/caminho/test_arquivo.py -v                            # arquivo específico
 uv run pytest -k "sanitize" -v                                            # filtrar por nome

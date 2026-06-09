@@ -41,11 +41,11 @@ def resolve_input(value: str) -> tuple[str, str]:
         value: CLI positional argument (URL or file path).
 
     Returns:
-        Tuple of (kind, resolved_value) where kind is 'file' or 'url'.
-        resolved_value is the absolute path string for files, or the
+        Tuple of (kind, resolved_value) where kind is 'local' or 'url'.
+        resolved_value is the absolute path string for local files, or the
         original string for URLs.
     """
     path = Path(value)
     if path.is_file():
-        return ("file", str(path.resolve()))
+        return ("local", str(path.resolve()))
     return ("url", value)

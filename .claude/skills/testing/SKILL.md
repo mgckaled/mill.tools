@@ -13,27 +13,38 @@ tests/
 ├── test_utils.py                            # src/utils.py
 ├── test_transcriber.py                      # src/transcriber.py
 ├── test_llm_factory.py                      # src/llm_factory.py
-├── gui/
+├── test_llm_utils.py                        # src/llm_utils.py — split_text, bypass Gemini
+├── cli/
 │   ├── __init__.py
-│   ├── test_settings.py                     # src/gui/settings.py
-│   └── modules/
-│       ├── audio/test_pipeline_log.py
-│       └── image/test_pipeline_log.py
-└── core/
-    ├── audio/
-    │   ├── test_normalizer_parser.py        # unit — _parse_loudnorm_json (sem ffmpeg)
-    │   ├── test_normalizer_unit.py          # unit — normalize_lufs (subprocess mockado)
-    │   ├── test_converter.py                # integration — convert_audio, extract_audio
-    │   ├── test_normalizer_integration.py   # integration — normalize_lufs 2-pass
-    │   ├── test_denoiser.py                 # integration — denoise mono e estéreo
-    │   ├── test_info.py                     # integration — get_duration_ffprobe
-    │   └── test_pipeline_e2e.py             # integration — smoke test denoise→normalize
-    ├── image/
-    │   ├── test_transform.py                # unit — 9 funções puras Pillow
-    │   ├── test_converter.py                # integration — convert_image
-    │   └── test_info.py                     # integration — image_info, thumbnail_bytes
-    └── video/
-        └── test_info.py                     # integration — get_video_info (VideoInfo dataclass)
+│   ├── test_transcription.py               # unit — resolve_input, build_output_stem, item_label
+│   ├── test_audio_cli.py                   # unit — add_audio_parser (defaults e flags)
+│   ├── test_video_cli.py                   # unit — sub-subparsers de vídeo (10 testes)
+│   ├── test_image_cli.py                   # unit — sub-subparsers de imagem (15 testes)
+│   └── test_bus.py                         # unit — CLIEventBus (eventos e formatação)
+├── core/
+│   ├── __init__.py
+│   ├── test_ffmpeg.py                      # unit — run_ffmpeg (subprocess mockado, 8 testes)
+│   ├── test_metadata.py                    # unit — format_duration e helpers de metadata
+│   ├── audio/
+│   │   ├── test_normalizer_parser.py       # unit — _parse_loudnorm_json (sem ffmpeg)
+│   │   ├── test_normalizer_unit.py         # unit — normalize_lufs (subprocess mockado)
+│   │   ├── test_converter.py               # integration — convert_audio, extract_audio
+│   │   ├── test_normalizer_integration.py  # integration — normalize_lufs 2-pass
+│   │   ├── test_denoiser.py                # integration — denoise mono e estéreo
+│   │   ├── test_info.py                    # integration — get_duration_ffprobe
+│   │   └── test_pipeline_e2e.py            # integration — smoke test denoise→normalize
+│   ├── image/
+│   │   ├── test_transform.py               # unit — 9 funções puras Pillow
+│   │   ├── test_converter.py               # integration — convert_image
+│   │   └── test_info.py                    # integration — image_info, thumbnail_bytes
+│   └── video/
+│       └── test_info.py                    # integration — get_video_info (VideoInfo dataclass)
+└── gui/
+    ├── __init__.py
+    ├── test_settings.py                    # src/gui/settings.py
+    └── modules/
+        ├── audio/test_pipeline_log.py
+        └── image/test_pipeline_log.py
 ```
 
 Regras de estrutura:
@@ -76,6 +87,38 @@ Não as use em testes unitários — eles não devem depender de ffmpeg.
 ### Hook de skip automático
 
 `pytest_collection_modifyitems` em `conftest.py` pula automaticamente qualquer teste `@pytest.mark.integration` se `ffmpeg` não estiver no PATH (ex.: CI sem ffmpeg).
+
+---
+
+## Padrão de teste de CLI (`tests/cli/`)
+
+Nunca chamar `sys.argv` diretamente — criar `_parse(*argv)` local com parser isolado:
+
+```python
+def _parse(*argv: str) -> argparse.Namespace:
+    parser = argparse.ArgumentParser()
+    sub = parser.add_subparsers(dest="command", required=True)
+    add_audio_parser(sub)
+    return parser.parse_args(["audio", *argv])
+
+@pytest.mark.unit
+def test_defaults():
+    ns = _parse("https://youtu.be/abc")
+    assert ns.fmt == "mp3"
+    assert callable(ns.func)
+```
+
+Para testar o comportamento do runner sem executar o pipeline real, mockar as funções de core:
+
+```python
+def test_run_cli_calls_pipeline(mocker):
+    mock_pipeline = mocker.patch("src.gui.modules.audio.worker.run_audio_pipeline", return_value=True)
+    ns = _parse("https://youtu.be/abc")
+    ns.func(ns)
+    assert mock_pipeline.called
+```
+
+`_pipeline_runner.item_label` é testável diretamente — sempre verificar que `kind="local"` retorna `Path(value).name` e `kind="url"` retorna o `netloc` (ver `tests/cli/test_transcription.py`).
 
 ---
 
@@ -277,6 +320,8 @@ O alvo é **≥ 90%** por módulo de `src/core/`. Estado atual:
 |---|---|
 | `core/audio/normalizer.py` | **100%** |
 | `core/audio/info.py` | **100%** |
+| `core/ffmpeg.py` | **100%** |
+| `llm_utils.py` | **100%** |
 | `core/image/transform.py` | 94% |
 | `core/image/info.py` | 94% |
 | `core/video/info.py` | 93% |

@@ -15,6 +15,7 @@ from src.gui.theme.components import (
     segmented_selector, output_card,
     spinner, log_line, helper_text, section_title, summary_card,
     labeled_field, slider_row, switch_row,
+    labeled_slider,
     hairline, module_scaffold, section, section_label,
     help_icon, help_icon_for,
 )
@@ -50,7 +51,8 @@ from src.gui.theme.theme import apply_theme, sync_page_bgcolor
 | `section_title(text)` | `ft.Text` | Título 22px W600 para seções de resultado |
 | `summary_card(content)` | `ft.Container` | Card com fundo `surface_variant`, borda e raio `lg` |
 | `labeled_field(label, control, helper, help_key, page)` | `ft.Column` | Rótulo + controle + helper opcional; `help_key` adiciona ⓘ automático |
-| `slider_row(label, value, min_val, max_val, divisions, on_change, help_key, page)` | `ft.Column` | Rótulo + slider dourado; `help_key` adiciona ⓘ |
+| `slider_row(label, value, min_val, max_val, divisions, on_change, help_key, page)` | `ft.Column` | Rótulo + slider dourado com `on_change` externo; `help_key` adiciona ⓘ — definido em `inputs.py` |
+| `labeled_slider(*, label, value, min, max, divisions, fmt, on_commit)` | `(ft.Column, ft.Slider)` | Slider com label ao vivo (atualiza a cada tick via `on_change`) e `on_commit` no `on_change_end`; retorna `(coluna, slider)` — ler `slider.value` para o valor atual. Definido em `sliders.py`. Usado nos blocos de imagem (`resize`, `border`, `adjust`, `watermark`, `contact_sheet`, `convert_fmt`). |
 | `switch_row(label, value, on_change, label_size)` | `ft.Switch` | Switch com cor `PRIMARY` e rótulo inline |
 | `hairline(vertical)` | `ft.Divider` \| `ft.VerticalDivider` | Divisor 1.5px em `OUTLINE_VARIANT` |
 | `module_scaffold(form, panel)` | `ft.Row` | Layout padrão: form 380px fixo \| divisor \| painel expand |

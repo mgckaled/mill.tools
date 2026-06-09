@@ -1,6 +1,8 @@
 import pytest
 from pathlib import Path
 from src.cli.transcription import build_output_stem, resolve_input
+from src.core.io_types import InputItem
+from src.gui.modules._pipeline_runner import item_label
 
 
 # ── build_output_stem ────────────────────────────────────────────────────────
@@ -69,7 +71,7 @@ def test_resolve_input_existing_file(tmp_path):
     f = tmp_path / "audio.mp3"
     f.write_bytes(b"")
     kind, value = resolve_input(str(f))
-    assert kind == "file"
+    assert kind == "local"
     assert Path(value).exists()
 
 
@@ -77,3 +79,19 @@ def test_resolve_input_existing_file(tmp_path):
 def test_resolve_input_nonexistent_path_treated_as_url():
     kind, _ = resolve_input("/nonexistent/path/audio.mp3")
     assert kind == "url"
+
+
+# ── item_label ───────────────────────────────────────────────────────────────
+
+@pytest.mark.unit
+def test_item_label_local_returns_filename(tmp_path):
+    f = tmp_path / "my_audio.mp3"
+    f.write_bytes(b"")
+    item = InputItem(kind="local", value=str(f))
+    assert item_label(item) == "my_audio.mp3"
+
+
+@pytest.mark.unit
+def test_item_label_url_returns_netloc():
+    item = InputItem(kind="url", value="https://www.youtube.com/watch?v=abc")
+    assert item_label(item) == "www.youtube.com"
