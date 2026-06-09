@@ -32,144 +32,11 @@ def _fmt_dur(seconds: int | float) -> str:
 # ---------------------------------------------------------------------------
 
 def _resolve_messages(event: PipelineEvent) -> list[str]:
-    """Converte um PipelineEvent em zero ou mais linhas de log estilo CLI."""
+    """Dispatch a PipelineEvent to the appropriate pipeline_log resolver."""
     p = event.payload
     t = event.type
 
     match t:
-        case "metadata_start":
-            return ["[i] Fetching video metadata..."]
-        case "metadata_done":
-            title = p.get("title", "")
-            dur = p.get("duration", 0)
-            lines = []
-            if title:
-                lines.append(f"[i] Title: {title}")
-            lines.append(f"[i] Duration: {_fmt_dur(dur)}")
-            return lines
-        case "audio_cached":
-            path = p.get("audio_path", "")
-            name = Path(path).name if path else path
-            return [f"[»] Audio already exists, skipping download: {name}"]
-        case "download_start":
-            return ["[i] Downloading audio..."]
-        case "download_done":
-            path = p.get("audio_path", "")
-            name = Path(path).name if path else path
-            return [f"[✓] Audio downloaded: {name}"]
-        case "whisper_loading":
-            model = p.get("model_size", "?")
-            device = p.get("device", "?").upper()
-            ctype = p.get("compute_type", "?")
-            return [f"[*] Loading model '{model}' on {device} ({ctype})..."]
-        case "whisper_loaded":
-            elapsed = p.get("elapsed", 0)
-            return [f"[d] Model loaded in {elapsed:.1f}s"]
-        case "transcribe_started":
-            return ["[~] Transcribing... (this may take a while for long videos)"]
-        case "language_detected":
-            if event.stage == "transcribe":
-                lang = p.get("language", "?")
-                conf = p.get("confidence", 0)
-                return [f"[i] Detected language: {lang} ({conf * 100:.0f}% confidence)"]
-            else:
-                lang = p.get("lang", p.get("language", "?"))
-                return [
-                    "[~] Detecting analysis language...",
-                    f"[i] Detected language: {lang}",
-                ]
-        case "transcribe_segment":
-            text = p.get("text", "").strip()
-            if not text:
-                return []
-            suffix = " [?]" if p.get("is_low_confidence") else ""
-            return [f"{text}{suffix}"]
-        case "transcribe_done":
-            lines = ["[✓] Transcription saved"]
-            flagged = p.get("flagged_count", 0)
-            if flagged:
-                lines.append(
-                    f"[!] {flagged} segment(s) flagged as low-confidence [?] — review recommended"
-                )
-            return lines
-        case "transcribe_summary":
-            return []
-        case "format_started":
-            name = p.get("filename", "")
-            model = p.get("model_name", "")
-            lines = []
-            if name:
-                lines.append(f"[*] Formatting: {name}")
-            if model:
-                lines.append(f"[*] Format model: {model}")
-            return lines or ["[*] Formatting..."]
-        case "format_chunk_start":
-            i = p.get("i", "?")
-            total = p.get("total", "?")
-            return [f"[~] Formatting chunk {i}/{total}..."]
-        case "format_chunk_done":
-            i = p.get("i", "?")
-            elapsed = p.get("elapsed", 0)
-            return [f"[d] Chunk {i} done in {elapsed:.1f}s"]
-        case "format_done":
-            elapsed = p.get("elapsed", 0)
-            return [f"[✓] Formatted in place ({elapsed:.0f}s)"]
-        case "analyze_started":
-            name = p.get("filename", "")
-            model = p.get("model_name", "")
-            lines = []
-            if name:
-                lines.append(f"[*] Analyzing: {name}")
-            if model:
-                lines.append(f"[*] Model: {model}")
-            return lines or ["[*] Analyzing..."]
-        case "analyze_chunk_start":
-            i = p.get("i", "?")
-            total = p.get("total", "?")
-            return [f"[~] Analyzing chunk {i}/{total}..."]
-        case "analyze_chunk_done":
-            i = p.get("i", "?")
-            elapsed = p.get("elapsed", 0)
-            return [f"[d] Chunk {i} done in {elapsed:.1f}s"]
-        case "analyze_merge_start":
-            n = p.get("total_chunks", "?")
-            return [f"[~] Merging {n} partial analyses..."]
-        case "translation_start":
-            return ["[~] Translating analysis to PT-BR..."]
-        case "translation_done":
-            return ["[✓] Translation complete."]
-        case "analyze_done":
-            path = p.get("output_path", "")
-            elapsed = p.get("elapsed", 0)
-            name = Path(path).name if path else ""
-            return [f"[✓] Analysis saved to: {name} ({elapsed:.0f}s)"]
-        case "prompt_started":
-            name = p.get("filename", "")
-            model = p.get("model_name", "")
-            lines = []
-            if name:
-                lines.append(f"[*] Building prompt-ready: {name}")
-            if model:
-                lines.append(f"[*] Prompt model: {model}")
-            return lines or ["[*] Building prompt-ready..."]
-        case "prompt_chunk_start":
-            i = p.get("i", "?")
-            total = p.get("total", "?")
-            return [f"[~] Condensing chunk {i}/{total}..."]
-        case "prompt_chunk_done":
-            i = p.get("i", "?")
-            elapsed = p.get("elapsed", 0)
-            return [f"[d] Chunk {i} done in {elapsed:.1f}s"]
-        case "prompt_done":
-            path = p.get("output_path", "")
-            elapsed = p.get("elapsed", 0)
-            name = Path(path).name if path else ""
-            return [f"[✓] Prompt-ready saved to: {name} ({elapsed:.0f}s)"]
-        case "pipeline_done":
-            return ["[✓] Pipeline complete."]
-        case "pipeline_error":
-            msg = p.get("message", "erro desconhecido")
-            return [f"[!] Error: {msg}"]
         case "log":
             msg = p.get("message", "")
             return [msg] if msg else []
@@ -190,7 +57,8 @@ def _resolve_messages(event: PipelineEvent) -> list[str]:
             msg = p.get("message", "erro desconhecido")
             return [f"[!] Erro: {msg}"]
         case _:
-            return []
+            from src.gui.modules.transcription import pipeline_log as _txn_log
+            return _txn_log.resolve_messages(event)
 
 
 # ---------------------------------------------------------------------------
@@ -232,33 +100,8 @@ def _resolve_progress(event: PipelineEvent, audio_duration: list[float]) -> floa
 # ---------------------------------------------------------------------------
 
 def _resolve_stage_label(event: PipelineEvent) -> str | None:
+    """Dispatch a PipelineEvent to the appropriate stage-label resolver."""
     match event.type:
-        case "metadata_start":
-            return "Buscando metadados..."
-        case "audio_cached":
-            return "Áudio em cache."
-        case "download_start":
-            return "Baixando áudio..."
-        case "download_done":
-            return "Áudio pronto."
-        case "whisper_loading":
-            return "Carregando modelo Whisper..."
-        case "transcribe_started":
-            return "Transcrevendo..."
-        case "format_started":
-            return "Formatando parágrafos..."
-        case "analyze_started":
-            return "Analisando..."
-        case "analyze_merge_start":
-            return "Consolidando análises..."
-        case "translation_start":
-            return "Traduzindo para PT-BR..."
-        case "prompt_started":
-            return "Gerando prompt-ready..."
-        case "pipeline_done":
-            return "Pipeline concluído!"
-        case "pipeline_error":
-            return "Erro no pipeline."
         case "queue_progress":
             p = event.payload
             name = p.get("item_name", "")
@@ -276,7 +119,8 @@ def _resolve_stage_label(event: PipelineEvent) -> str | None:
         case "task_error":
             return "Erro no pipeline."
         case _:
-            return None
+            from src.gui.modules.transcription import pipeline_log as _txn_log
+            return _txn_log.resolve_stage_label(event)
 
 
 # ---------------------------------------------------------------------------
@@ -521,7 +365,6 @@ def build_progress_view(
                 _mutable_line[0] = new_line if mutable else None
         _trim_log()
 
-        # --- eventos genéricos (usados por todos os módulos em PR3+) ---
         if event.type == "task_done":
             progress_bar.value = 1.0
             cancel_button.disabled = True
@@ -530,23 +373,6 @@ def build_progress_view(
             return
 
         if event.type == "task_error":
-            progress_bar.visible = False
-            cancel_button.disabled = True
-            _stop_spin()
-            _call_on_done({"error": True})
-            page.update()
-            return
-
-        # --- eventos legados de Transcrição (TODO(PR3): remover) ---
-        if event.type == "pipeline_done":
-            progress_bar.value = 1.0
-            cancel_button.disabled = True
-            _stop_spin()
-            _call_on_done(event.payload)  # no-op se task_done já processado
-            page.update()  # renderiza "[✓] Pipeline complete." e mudanças de barra
-            return
-
-        if event.type == "pipeline_error":
             progress_bar.visible = False
             cancel_button.disabled = True
             _stop_spin()
