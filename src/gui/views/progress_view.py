@@ -14,7 +14,7 @@ from src.gui.events import PipelineEvent
 from src.gui.theme.components import danger_button, log_line, spinner
 from src.gui.theme.tokens import Color, Radius, Space, Type
 from src.transcriber import format_elapsed
-from src.utils import format_duration
+from src.core.metadata import format_duration
 
 _MAX_LOG_LINES = 500
 

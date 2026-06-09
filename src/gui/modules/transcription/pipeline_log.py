@@ -13,7 +13,7 @@ if TYPE_CHECKING:
 
 
 def _fmt_dur(seconds: int | float) -> str:
-    from src.utils import format_duration
+    from src.core.metadata import format_duration
     return format_duration(int(seconds))
 
 
