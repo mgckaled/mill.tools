@@ -27,8 +27,8 @@ def build_watermark_block(page: ft.Page) -> tuple[ft.Column, WatermarkRefs]:
 
     _opacity: list[float] = [0.3]
 
-    def _on_opacity(v: float) -> None:
-        _opacity[0] = round(v, 2)
+    def _on_opacity(e) -> None:
+        _opacity[0] = round(e.control.value, 2)
 
     opacity_col = slider_row(
         "Opacidade",

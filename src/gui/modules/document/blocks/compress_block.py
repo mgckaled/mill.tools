@@ -17,8 +17,8 @@ def build_compress_block(page: ft.Page) -> tuple[ft.Column, CompressRefs]:
     """Build the compress operation block."""
     _quality: list[int] = [75]
 
-    def _on_change(v: float) -> None:
-        _quality[0] = int(v)
+    def _on_change(e) -> None:
+        _quality[0] = int(e.control.value)
 
     quality_col = slider_row(
         "Qualidade da imagem",

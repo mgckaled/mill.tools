@@ -27,8 +27,8 @@ def build_qr_block(page: ft.Page) -> tuple[ft.Column, QrRefs]:
 
     _size: list[int] = [300]
 
-    def _on_size(v: float) -> None:
-        _size[0] = int(v)
+    def _on_size(e) -> None:
+        _size[0] = int(e.control.value)
 
     size_col = slider_row(
         "Tamanho (px)",
