@@ -230,23 +230,33 @@ def watermark_pdf(
     output_dir.mkdir(parents=True, exist_ok=True)
     doc = pymupdf.open(str(path))
 
+    import math
+
     for page in doc:
         rect = page.rect
         if position == "top":
-            y = rect.height * 0.25
+            y_frac = 0.25
         elif position == "bottom":
-            y = rect.height * 0.75
+            y_frac = 0.75
         else:
-            y = rect.height / 2
+            y_frac = 0.5
 
-        page.insert_text(
-            pymupdf.Point(rect.width * 0.15, y),
+        # Use a TextWriter with a rotation matrix for diagonal (45°) watermark
+        tw = pymupdf.TextWriter(rect, opacity=opacity)
+        font = pymupdf.Font("helv")
+        tw.append(
+            pymupdf.Point(rect.width * 0.10, rect.height * y_frac),
             text,
+            font=font,
             fontsize=48,
-            color=(0.5, 0.5, 0.5),
-            rotate=45,
-            fill_opacity=opacity,
         )
+        # Build 45-degree rotation matrix around the text insertion point
+        angle_rad = math.radians(45)
+        cos_a = math.cos(angle_rad)
+        sin_a = math.sin(angle_rad)
+        pivot = pymupdf.Point(rect.width / 2, rect.height / 2)
+        rot_matrix = pymupdf.Matrix(cos_a, sin_a, -sin_a, cos_a, 0, 0)
+        tw.write_text(page, color=(0.5, 0.5, 0.5), morph=(pivot, rot_matrix))
 
     stem = sanitize_filename(path.stem)
     out_path = output_dir / f"{stem}_watermark.pdf"

@@ -62,6 +62,18 @@ _MODULE_CARDS: list[dict] = [
             "Exporte em TXT, Markdown ou formato prompt",
         ],
     },
+    {
+        "id": "document",
+        "title": "Documentos",
+        "icon": ft.Icons.DESCRIPTION_OUTLINED,
+        "accent": Color.log.error,
+        "desc": "12 operações para PDFs — local, sem nuvem, torch-free",
+        "features": [
+            "Una, divida, comprima e gire PDFs com precisão",
+            "Aplique marcas d'água, carimbos e criptografia AES-256",
+            "Extraia texto, converta páginas em imagens e gere QR codes",
+        ],
+    },
 ]
 
 
@@ -282,8 +294,12 @@ def show_home(page: ft.Page, on_complete: Callable[[str], None]) -> None:
 
     cards_grid = ft.Column(
         controls=[
-            ft.Row(controls=[cards[0], cards[1]], spacing=Space.xl),
-            ft.Row(controls=[cards[2], cards[3]], spacing=Space.xl),
+            ft.Row(controls=[cards[0], cards[1], cards[2]], spacing=Space.xl),
+            ft.Row(
+                controls=[cards[3], cards[4]],
+                spacing=Space.xl,
+                alignment=ft.MainAxisAlignment.CENTER,
+            ),
         ],
         spacing=Space.xl,
         horizontal_alignment=ft.CrossAxisAlignment.CENTER,
