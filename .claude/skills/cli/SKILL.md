@@ -1,8 +1,8 @@
 ---
 name: cli
-description: Guia da CLI modular do mill.tools (subcomandos audio/video/image + transcribe,
-  CLIEventBus, padrões de argparse). Invocar ao criar/editar subcomandos em src/cli/,
-  adicionar flags, mexer no dispatcher de main.py ou escrever testes em tests/cli/.
+description: Guia da CLI modular do mill.tools (subcomandos audio/video/image/document +
+  transcribe, CLIEventBus, padrões de argparse). Invocar ao criar/editar subcomandos em
+  src/cli/, adicionar flags, mexer no dispatcher de main.py ou escrever testes em tests/cli/.
 ---
 
 # mill.tools — Guia da CLI Modular
@@ -12,11 +12,11 @@ description: Guia da CLI modular do mill.tools (subcomandos audio/video/image + 
 `main.py` despacha para subcomandos por prefixo do primeiro argumento:
 
 ```python
-_NON_TRANSCRIBE_CMDS = frozenset({"audio", "video", "image"})
+_NON_TRANSCRIBE_CMDS = frozenset({"audio", "video", "image", "document"})
 
 def main():
     if len(sys.argv) > 1 and sys.argv[1] in _NON_TRANSCRIBE_CMDS:
-        _dispatch_other(sys.argv[1])   # → src/cli/{audio,video,image}.py
+        _dispatch_other(sys.argv[1])   # → src/cli/{audio,video,image,document}.py
         return
     # legado: transcrição (parse_args direto)
 ```
@@ -32,8 +32,9 @@ src/cli/
 ├── bus.py            — CLIEventBus: TqdmLoggingHandler + barra tqdm (sem Flet)
 ├── transcription.py  — resolve_input(), build_output_stem()
 ├── audio.py          — add_audio_parser() + run_audio_cli()
-├── video.py          — add_video_parser() + run_video_cli()  (sub-subparsers)
-└── image.py          — add_image_parser() + run_image_cli()  (sub-subparsers)
+├── video.py          — add_video_parser() + run_video_cli()    (sub-subparsers)
+├── image.py          — add_image_parser() + run_image_cli()    (sub-subparsers)
+└── document.py       — add_document_parser() + run_document_cli()  (sub-subparsers)
 ```
 
 ---
@@ -51,7 +52,7 @@ bus = CLIEventBus()
 - `log` → `tqdm.write(msg)` com cor ANSI por prefixo
 - `progress_update` → atualiza barra tqdm (0–100%)
 - `queue_progress` → label "Item N/M — nome"
-- `audio_op_start/done`, `video_op_start/done`, `image_op_start/done` → mensagens formatadas
+- `audio_op_start/done`, `video_op_start/done`, `image_op_start/done`, `document_op_start/done` → mensagens formatadas
 - `task_done` → fecha barra
 - `task_error` → mensagem de erro
 
@@ -151,6 +152,32 @@ Todos (exceto `favicon`, `describe`, `contact-sheet`) aceitam `--out-fmt` e `--o
 
 ---
 
+## Subcomando `document`
+
+```bash
+uv run main.py document <operação> <entrada> [opções]
+```
+
+Usa sub-subparsers. `ns.document_op` contém a operação. Mapeamento kebab → snake: `op.replace("-", "_")` (ex.: `"pdf-to-images"` → `"pdf_to_images"`).
+
+| Operação | Entrada | Flags principais |
+|---|---|---|
+| `merge` | múltiplos PDFs | `files…` |
+| `split` | PDF | `--pages "1-3,5,8-"` |
+| `compress` | PDF | `--image-quality 75` (50–95) |
+| `rotate` | PDF | `--angle 90/180/270`, `--pages "all"` |
+| `watermark` | PDF | `--text "texto"`, `--opacity 0.3`, `--position center/top/bottom` |
+| `stamp` | PDF | `--text "PAGO"` |
+| `encrypt` | PDF | `--password "senha"` |
+| `extract` | PDF | — |
+| `pdf-to-images` | PDF | `--fmt jpg/png`, `--dpi 72/96/150/300` |
+| `images-to-pdf` | imagens | `files…`, `--name "stem"` |
+| `qr` | texto/URL | `data` (posicional), `--size 300`, `--fmt png/jpg` |
+
+Sem operação `analyze` na CLI (apenas GUI).
+
+---
+
 ## Como adicionar um novo subcomando
 
 1. Criar `src/cli/novo.py` com:
@@ -207,4 +234,4 @@ def test_audio_defaults():
     assert callable(ns.func)
 ```
 
-Arquivos de teste: `tests/cli/test_audio_cli.py` (5), `test_video_cli.py` (10), `test_image_cli.py` (15).
+Arquivos de teste: `tests/cli/test_audio_cli.py` (5), `test_video_cli.py` (10), `test_image_cli.py` (15), `test_document_cli.py`.

@@ -1,6 +1,6 @@
 ---
 name: testing
-description: Guia para adicionar, corrigir e revisar testes (unitários e de integração) do projeto mill.tools. Invocar quando: escrever novos testes, investigar expected values errados, aumentar cobertura de um módulo, mockar subprocess/ctranslate2/PIL.Image.open/llm_factory/settings, ou entender por que um teste falha. Também use ao criar fixtures novas (session-scoped ou function-scoped), adicionar testes de integração com ffmpeg, ou revisar tests/core/ e tests/gui/.
+description: Guia para adicionar, corrigir e revisar testes (unitários e de integração) do projeto mill.tools. Invocar quando: escrever novos testes, investigar expected values errados, aumentar cobertura de um módulo, mockar subprocess/ctranslate2/PIL.Image.open/llm_factory/settings/pymupdf/qrcode, ou entender por que um teste falha. Também use ao criar fixtures novas (session-scoped ou function-scoped), adicionar testes de integração com ffmpeg, ou revisar tests/core/ e tests/gui/.
 ---
 
 # mill.tools — Guia de Testes
@@ -37,14 +37,20 @@ tests/
 │   │   ├── test_transform.py               # unit — 9 funções puras Pillow
 │   │   ├── test_converter.py               # integration — convert_image
 │   │   └── test_info.py                    # integration — image_info, thumbnail_bytes
-│   └── video/
-│       └── test_info.py                    # integration — get_video_info (VideoInfo dataclass)
+│   ├── video/
+│   │   └── test_info.py                    # integration — get_video_info (VideoInfo dataclass)
+│   └── document/
+│       ├── test_processor.py               # unit — merge/split/compress/rotate/watermark/stamp/encrypt (pymupdf mockado)
+│       ├── test_converter.py               # unit — pdf_to_images, images_to_pdf, extract_text
+│       ├── test_info.py                    # unit — get_pdf_info, PdfInfo
+│       └── test_qr.py                      # unit — generate_qr (qrcode mockado)
 └── gui/
     ├── __init__.py
     ├── test_settings.py                    # src/gui/settings.py
     └── modules/
         ├── audio/test_pipeline_log.py
-        └── image/test_pipeline_log.py
+        ├── image/test_pipeline_log.py
+        └── document/test_pipeline_log.py   # unit — resolve_messages, resolve_stage_label, fmt_* builders
 ```
 
 Regras de estrutura:
@@ -328,5 +334,27 @@ O alvo é **≥ 90%** por módulo de `src/core/`. Estado atual:
 | `core/audio/converter.py` | 91% |
 | `core/audio/denoiser.py` | 79% |
 | `core/image/converter.py` | 79% |
+| `core/document/processor.py` | medido por testes unit |
+| `core/document/converter.py` | medido por testes unit |
+
+### Mock de pymupdf (testes do módulo document)
+
+`pymupdf` é importado dentro das funções com `import pymupdf` (lazy import). Para mockar sem instalar pymupdf real nos testes:
+
+```python
+import sys
+from unittest.mock import MagicMock
+
+# Criar módulo fake antes de importar o código alvo
+sys.modules["pymupdf"] = MagicMock()
+
+# Ou via mocker.patch no contexto do teste:
+mocker.patch.dict("sys.modules", {"pymupdf": MagicMock()})
+```
+
+Para `qrcode` (mesmo padrão de lazy import em `qr.py`):
+```python
+mocker.patch.dict("sys.modules", {"qrcode": MagicMock(), "qrcode.constants": MagicMock()})
+```
 
 Linhas impossíveis de cobrir sem desinstalar dependências (ex.: `is_available()` no `denoiser.py` — branch `ImportError`) devem ser marcadas como `# pragma: no cover`.
