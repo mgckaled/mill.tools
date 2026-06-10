@@ -133,7 +133,7 @@ def _make_card(
     ]
 
     ctr = ft.Container(
-        height=250,
+        height=260,
         expand=True,
         border_radius=Radius.lg,
         border=ft.Border(
@@ -292,13 +292,22 @@ def show_home(page: ft.Page, on_complete: Callable[[str], None]) -> None:
     # ── cards ────────────────────────────────────────────────────────────────────
     cards = [_make_card(data, _on_tap, page) for data in _MODULE_CARDS]
 
+    # Bottom 2 cards use expand=2 so that with expand=1 spacers the math is
+    # 1+2+2+1 = 6 total, giving each card 2/6 = 1/3 — same as the top row.
+    cards[3].expand = 2
+    cards[4].expand = 2
+
     cards_grid = ft.Column(
         controls=[
             ft.Row(controls=[cards[0], cards[1], cards[2]], spacing=Space.xl),
             ft.Row(
-                controls=[cards[3], cards[4]],
+                controls=[
+                    ft.Container(expand=1),
+                    cards[3],
+                    cards[4],
+                    ft.Container(expand=1),
+                ],
                 spacing=Space.xl,
-                alignment=ft.MainAxisAlignment.CENTER,
             ),
         ],
         spacing=Space.xl,
@@ -307,7 +316,7 @@ def show_home(page: ft.Page, on_complete: Callable[[str], None]) -> None:
 
     cards_wrapper = ft.Container(
         content=cards_grid,
-        width=960,
+        width=1360,
         padding=ft.Padding(left=Space.xl, right=Space.xl, top=0, bottom=0),
     )
 
@@ -315,7 +324,7 @@ def show_home(page: ft.Page, on_complete: Callable[[str], None]) -> None:
     fg_layer = ft.Column(
         controls=[
             header,
-            ft.Container(height=Space.xxxl),
+            ft.Container(height=Space.xl),
             cards_wrapper,
         ],
         alignment=ft.MainAxisAlignment.CENTER,
