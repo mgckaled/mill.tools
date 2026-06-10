@@ -22,7 +22,7 @@ from src.gui.modules.document.blocks.rotate_block import build_rotate_block
 from src.gui.modules.document.blocks.split_block import build_split_block
 from src.gui.modules.document.blocks.stamp_block import build_stamp_block
 from src.gui.modules.document.blocks.watermark_block import build_watermark_block
-from src.gui.theme.components import Cursor, hairline, section_label
+from src.gui.theme.components import Cursor, hairline, section
 from src.gui.theme.tokens import Space, Type
 
 _ALLOWED_EXTS = ["pdf"]
@@ -257,20 +257,30 @@ def build_document_form(
     )
 
     form_col = ft.Column(
-        controls=[
-            section_label("Entrada"),
-            input_source.control,
-            hairline(),
-            section_label("Operação"),
-            card_grid,
-            hairline(),
-            params_stack,
-            ft.Container(expand=True),
-            ft.Row([ft.Container(expand=True), start_btn]),
-        ],
-        spacing=Space.sm,
         scroll=ft.ScrollMode.AUTO,
+        spacing=0,
         expand=True,
+        controls=[
+            ft.Container(
+                padding=Space.xl,
+                content=ft.Column(
+                    spacing=Space.md,
+                    controls=[
+                        section("Entrada", input_source.control,
+                                help_key="document.input", page=page),
+                        hairline(),
+                        section("Operação", card_grid),
+                        hairline(),
+                        params_stack,
+                        hairline(),
+                        ft.Row(
+                            controls=[start_btn],
+                            alignment=ft.MainAxisAlignment.END,
+                        ),
+                    ],
+                ),
+            ),
+        ],
     )
 
     return DocumentFormPanel(control=form_col, set_running=_set_running)
