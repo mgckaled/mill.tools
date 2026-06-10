@@ -94,7 +94,6 @@ def build_document_form(
         allowed_extensions=_ALLOWED_EXTS,
         on_change=_on_items_change,
         url_hint="URL direta de um PDF para download",
-        allow_multiple=True,
     )
 
     # ── Operation Card Grid ────────────────────────────────────────────────────
