@@ -233,17 +233,23 @@ uv run main.py document qr "https://example.com" --size 300
 
 ## Testes
 
-- **Framework**: pytest 9+ com pytest-mock e pytest-cov (dependências dev)
+- **Framework**: pytest 9+ com pytest-mock, pytest-cov, pytest-xdist, pytest-timeout, pytest-clarity, pytest-randomly (todos dev deps)
 - **Marcadores**: `unit` — Python puro, sem ffmpeg/rede/GPU · `integration` — requer ffmpeg no PATH
-- **Cobertura**: `src/` todo, excluindo `src/gui/` (Flet não é testável headless)
+- **Cobertura**: `src/` todo (com `branch = true`), excluindo `src/gui/` (Flet não é testável headless)
 - **Regra**: rodar `uv run pytest -m unit` antes de qualquer commit
 - **CI sem ffmpeg**: testes `integration` são pulados automaticamente via `pytest_collection_modifyitems`
+- **Plugins ativos por padrão**: `pytest-randomly` (ordem aleatória — usar `--randomly-seed=NNN` para reproduzir), `pytest-timeout` (60s default — `@pytest.mark.timeout(N)` para sobrescrever), `pytest-clarity` (diffs melhores)
 
 ```bash
-uv run pytest -m unit -v                                                   # unitários apenas (rápido)
+uv run pytest -m unit -v                                                   # unitários apenas (rápido — <5s)
 uv run pytest -m integration -v                                            # integração apenas (requer ffmpeg)
-uv run pytest -v                                                           # suíte completa (353 testes)
-uv run pytest --cov=src --cov-report=term-missing                         # cobertura completa
+uv run pytest -v                                                           # suíte completa (414 testes)
+uv run pytest -n auto                                                      # paraleliza (pytest-xdist; ganho cresce com a suíte)
+uv run pytest --cov=src --cov-report=term-missing                         # cobertura terminal
+uv run pytest --cov=src --cov-report=html                                  # cobertura HTML em htmlcov/
+uv run pytest --durations=10                                              # top 10 testes mais lentos
+uv run pytest --lf                                                         # só os que falharam no último run
+uv run pytest --randomly-seed=NNN                                          # reproduz ordem específica
 uv run pytest tests/caminho/test_arquivo.py -v                            # arquivo específico
 uv run pytest -k "sanitize" -v                                            # filtrar por nome
 ```
@@ -261,8 +267,16 @@ Cobertura por arquivo (recortes principais):
 - **Core vídeo**: `test_info.py` e `test_converter.py` (ambos integration — `test_converter.py` cobre as 6 funções ffmpeg).
 - **Core document**: `test_processor.py`, `test_converter.py`, `test_info.py`, `test_qr.py` — todos unit, mas usam pymupdf/qrcode **reais** via fixtures de sessão.
 - **GUI**: `tests/gui/modules/<audio|image|video|document>/test_pipeline_log.py` — `resolve_messages`/`resolve_stage_label` + `fmt_*` builders para os 4 módulos.
+- **LLM pipeline** (`tests/test_formatter.py`, `test_analyzer.py`, `test_prompter.py`): mockam LangChain via `GenericFakeChatModel` de `langchain_core.language_models.fake_chat_models` (Runnable real — `prompt | llm` funciona naturalmente sem fighting com MagicMock `__or__`).
 
-Cobertura por módulo `src/core/` (último run): `audio/normalizer.py` 100%, `audio/info.py` 100%, `ffmpeg.py` 100%, `video/converter.py` 100%, `document/info.py` 100%, `llm_utils.py` 100%, `image/downloader.py` 98%, `audio/converter.py` 96%, `document/converter.py` 95%, `document/qr.py` 95%, `document/processor.py` 94%, `image/transform.py` 94%, `image/info.py` 94%, `video/info.py` 93%, `image/converter.py` 79%, `audio/denoiser.py` 79%. Lacunas: `audio/downloader.py` 20%, `video/downloader.py` 18% (yt-dlp não mockado); `image/background.py` 32%, `image/describe.py` 24% (extras opcionais `[ai-image]`).
+Cobertura agregada do projeto: **84%** (com branch coverage). Stmt-only: **87%**.
+
+Cobertura por módulo (último run, com branch):
+
+- **100%**: `formatter.py`, `prompter.py`, `llm_utils.py`, `cli/audio.py`, `cli/transcription.py`, `core/ffmpeg.py`, `core/audio/normalizer.py`, `core/audio/info.py`, `core/video/converter.py`, `core/document/info.py`, e todos os `args.py`/`__init__.py`.
+- **≥ 90%**: `analyzer.py` 99%, `cli/document.py` 98%, `cli/video.py` 97%, `core/image/downloader.py` 96%, `cli/image.py` 94%, `core/audio/converter.py` 93%, `core/document/converter.py` 91%, `core/image/transform.py` 91%, `core/document/processor.py` 91%, `core/document/qr.py` 90%.
+- **80-89%**: `cli/bus.py` 82%, `utils.py` 82%, `llm_factory.py` 81%, `core/audio/denoiser.py` 80%.
+- **Lacunas conscientes**: `audio/downloader.py` 14%, `video/downloader.py` 12% (yt-dlp não mockado); `image/background.py` 32%, `image/describe.py` 23% (extras opcionais `[ai-image]`); `transcriber.py` 31% (Whisper — só `_resolve_device` testado).
 
 > Guia completo para adicionar/revisar testes → skill `testing` (`.claude/skills/testing/SKILL.md`)
 

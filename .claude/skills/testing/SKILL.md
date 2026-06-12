@@ -1,6 +1,6 @@
 ---
 name: testing
-description: Guia para adicionar, corrigir e revisar testes (unitários e de integração) do projeto mill.tools. Invocar quando: escrever novos testes, investigar expected values errados, aumentar cobertura de um módulo, mockar subprocess/ctranslate2/PIL.Image.open/llm_factory/settings/pymupdf/qrcode, ou entender por que um teste falha. Também use ao criar fixtures novas (session-scoped ou function-scoped), adicionar testes de integração com ffmpeg, ou revisar tests/core/ e tests/gui/.
+description: Guia para adicionar, corrigir e revisar testes (unitários e de integração) do projeto mill.tools. Invocar quando: escrever novos testes, investigar expected values errados, aumentar cobertura de um módulo, mockar subprocess/ctranslate2/PIL.Image.open/llm_factory/settings/pymupdf/qrcode/urllib/LangChain (GenericFakeChatModel), ou entender por que um teste falha. Também use ao criar fixtures novas (session-scoped ou function-scoped), adicionar testes de integração com ffmpeg, revisar tests/core/ e tests/gui/, ou ajustar config dos plugins (pytest-xdist, pytest-timeout, pytest-clarity, pytest-randomly).
 ---
 
 # mill.tools — Guia de Testes
@@ -11,9 +11,12 @@ description: Guia para adicionar, corrigir e revisar testes (unitários e de int
 tests/
 ├── conftest.py                              # fixtures globais — NÃO duplicar aqui
 ├── test_utils.py                            # src/utils.py
-├── test_transcriber.py                      # src/transcriber.py
+├── test_transcriber.py                      # src/transcriber.py (parcial — _resolve_device)
 ├── test_llm_factory.py                      # src/llm_factory.py
 ├── test_llm_utils.py                        # src/llm_utils.py — split_text, bypass Gemini
+├── test_formatter.py                        # src/formatter.py — paragraph formatting (GenericFakeChatModel)
+├── test_analyzer.py                         # src/analyzer.py — structured analysis + merge + translation
+├── test_prompter.py                         # src/prompter.py — condensed digest + merge
 ├── cli/
 │   ├── __init__.py
 │   ├── test_transcription.py               # unit — resolve_input, build_output_stem, item_label
@@ -327,6 +330,68 @@ mocker.patch("subprocess.run", side_effect=[
 
 **Cuidado com threading**: `_drain()` em `normalizer.py` lê `proc.stderr` em thread daemon. O iterador deve ser thread-safe (um simples `iter([b"..."])` funciona). Para `proc.stdout` linhas de progresso, incluir `b"out_time_us=N\n"` para testar o callback.
 
+### Mock de LangChain (`GenericFakeChatModel`) — para analyzer/formatter/prompter
+
+Os módulos `src/analyzer.py`, `src/formatter.py` e `src/prompter.py` usam
+o padrão `chain = ANY_PROMPT | llm` seguido de `chain.invoke({"text": ...})`.
+**Não** use `MagicMock` direto — `RunnableSequence` valida que o operando
+direito do `|` seja um `Runnable`, e MagicMock falha nessa checagem.
+
+Use `GenericFakeChatModel` de `langchain_core.language_models.fake_chat_models`:
+é um `Runnable` real que retorna respostas determinísticas a partir de um
+iterador de `AIMessage`.
+
+```python
+from langchain_core.language_models.fake_chat_models import GenericFakeChatModel
+from langchain_core.messages import AIMessage
+
+
+def _fake_llm(*responses: str):
+    return GenericFakeChatModel(messages=iter([AIMessage(content=r) for r in responses]))
+
+
+def test_format_transcription(tmp_path, mocker):
+    from src import formatter
+    src = tmp_path / "t.txt"
+    src.write_text(_HEADER + "\n\nhello.", encoding="utf-8")
+    mocker.patch.object(
+        formatter, "make_llm",
+        return_value=_fake_llm("formatted content"),
+    )
+    out = formatter.format_transcription(src)
+    assert "formatted content" in out
+```
+
+Para o analyzer, que chama `make_llm` **duas vezes** (uma para análise
+em T=0.4, outra para detecção de idioma em T=0), use `side_effect=[fake1, fake2]`:
+
+```python
+mocker.patch.object(
+    analyzer, "make_llm",
+    side_effect=[
+        _fake_llm(json.dumps(analysis_dict, ensure_ascii=False)),   # análise (1ª chamada)
+        _fake_llm("pt"),                                            # detecção (2ª chamada)
+    ],
+)
+```
+
+Quando o fluxo precisa de N respostas em sequência (multi-chunk + merge),
+empilhe-as na mesma fake e o iterador interno avança a cada `.invoke()`:
+
+```python
+_fake_llm(*([partial_json] * n_chunks), merged_json)
+```
+
+**Gotcha**: a `GenericFakeChatModel` levanta `StopIteration` se a chain
+chamar `.invoke()` mais vezes que o número de mensagens fornecidas. Isso é
+útil — falha imediata se você previu errado quantas chamadas o código faz
+(ex.: esquecer que single-chunk **não** invoca o merge).
+
+**Isolation de output dirs**: redirecione `TRANSCRIPTIONS_DIGEST_DIR` ou
+`TRANSCRIPTIONS_ANALYSIS_DIR` via `monkeypatch.setattr(mod, "ATTR", tmp_path)`
+no nível do módulo — esses atributos são lidos só dentro de `analyze()` /
+`build_prompt_ready()`, então um fixture autouse não é necessário.
+
 ### Mock de `urllib.request.urlopen` — para testar download_image
 
 `urlopen` é usado como context manager (`with urlopen(...) as resp`).
@@ -388,34 +453,45 @@ uv run pytest -m "not integration" --cov=src --cov-report=term-missing
 uv run pytest --cov=src --cov-report=term-missing
 ```
 
-O alvo é **≥ 90%** por módulo de `src/core/`. Estado atual:
+O alvo é **≥ 90%** por módulo. Total agregado: **84%** com branch (87% só statements). Estado atual:
 
-| Módulo | Cobertura |
+| Módulo | Cobertura (com branch) |
 |---|---|
+| `formatter.py` | **100%** |
+| `prompter.py` | **100%** |
+| `llm_utils.py` | **100%** |
 | `core/audio/normalizer.py` | **100%** |
 | `core/audio/info.py` | **100%** |
 | `core/ffmpeg.py` | **100%** |
-| `core/video/converter.py` | **100%** |
-| `core/document/info.py` | **100%** |
-| `llm_utils.py` | **100%** |
-| `core/image/downloader.py` | 98% |
-| `core/audio/converter.py` | 96% |
-| `core/document/converter.py` | 95% |
-| `core/document/qr.py` | 95% |
-| `core/document/processor.py` | 94% |
-| `core/image/transform.py` | 94% |
-| `core/image/info.py` | 94% |
-| `core/video/info.py` | 93% |
-| `core/image/converter.py` | 79% |
-| `core/audio/denoiser.py` | 79% |
+| `core/video/converter.py` | 97% (2 partial branches) |
+| `core/document/info.py` | 97% |
+| `analyzer.py` | 99% |
+| `cli/document.py` | 98% |
+| `cli/video.py` | 97% |
+| `core/image/downloader.py` | 96% |
+| `cli/image.py` | 94% |
+| `core/audio/converter.py` | 93% |
+| `core/document/converter.py` | 91% |
+| `core/image/transform.py` | 91% |
+| `core/document/processor.py` | 91% |
+| `core/document/qr.py` | 90% |
+| `core/image/info.py` | 89% |
+| `cli/bus.py` | 82% |
+| `utils.py` | 82% |
+| `llm_factory.py` | 81% |
+| `core/audio/denoiser.py` | 80% |
+| `core/image/converter.py` | 71% |
+| `core/metadata.py` | 76% |
 | `core/image/background.py` | 32% (extra `[ai-image]` — sem teste de uso real) |
-| `core/image/describe.py` | 24% (vision LLM — sem teste de uso real) |
-| `core/audio/downloader.py` | 20% (yt-dlp não mockado) |
-| `core/video/downloader.py` | 18% (yt-dlp não mockado) |
+| `transcriber.py` | 31% (Whisper — só `_resolve_device` testado) |
+| `core/image/describe.py` | 23% (vision LLM — sem teste de uso real) |
+| `core/audio/downloader.py` | 14% (yt-dlp não mockado) |
+| `core/video/downloader.py` | 12% (yt-dlp não mockado) |
 
-Lacunas conhecidas: `audio/downloader.py` e `video/downloader.py` (yt-dlp);
-`image/background.py` e `describe.py` (extras opcionais). Smoke tests
-de lazy import seriam baratos mas ainda não foram escritos.
+Lacunas conhecidas e justificáveis:
+- `audio/downloader.py` + `video/downloader.py` — yt-dlp tem valor real em E2E (que não fazemos). Smoke test de mock daria <40%, retorno pequeno.
+- `image/background.py` + `image/describe.py` — extras opcionais `[ai-image]`. Smoke tests de lazy import seriam baratos mas ainda não escritos.
+- `transcriber.py` — `transcribe()` em si exige mockar `WhisperModel` da faster-whisper. Trabalho médio (~2h), levaria para ~75%.
 
 ### pymupdf nos testes do módulo document — uso REAL via fixture
 

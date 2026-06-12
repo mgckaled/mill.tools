@@ -552,7 +552,7 @@ mill-tools/
 
 ## Testes
 
-A suíte cobre os módulos `src/core/`, `src/cli/` e os `pipeline_log` da GUI em duas camadas, totalizando **353 testes** (0 falhas):
+A suíte cobre `src/core/`, `src/cli/`, os `pipeline_log` da GUI e o pipeline LLM (`analyzer`/`formatter`/`prompter`) em duas camadas, totalizando **414 testes** (0 falhas) e **84% de cobertura** (com branch).
 
 | Camada | Marcador | Requer | O que cobre |
 |---|---|---|---|
@@ -562,7 +562,7 @@ A suíte cobre os módulos `src/core/`, `src/cli/` e os `pipeline_log` da GUI em
 Testes de integração são **pulados automaticamente** em ambientes sem `ffmpeg` (CI, máquinas limpas).
 
 ```bash
-# Unitários apenas — rápido, sem ffmpeg
+# Unitários apenas — rápido, sem ffmpeg (~5s)
 uv run pytest -m unit -v
 
 # Integração apenas — requer ffmpeg
@@ -571,9 +571,14 @@ uv run pytest -m integration -v
 # Suíte completa
 uv run pytest -v
 
-# Com cobertura
-uv run pytest --cov=src --cov-report=term-missing
+# Paralelizada (pytest-xdist)
+uv run pytest -n auto
+
+# Cobertura HTML em htmlcov/
+uv run pytest --cov=src --cov-report=html
 ```
+
+Plugins ativos: `pytest-randomly` (ordem aleatória — `--randomly-seed=N` para reproduzir), `pytest-timeout` (60s default), `pytest-clarity` (diffs melhores), `pytest-xdist` (paralelização opcional).
 
 ---
 
