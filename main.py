@@ -5,6 +5,8 @@ Usage:
     uv run main.py <URL>                                        # basic transcription
     uv run main.py transcribe <URL>                            # explicit transcribe subcommand
     uv run main.py transcribe <URL> --format --analyze         # full transcription pipeline
+    uv run main.py transcribe <URL> --srt                      # also export .srt subtitle file
+    uv run main.py transcribe <URL> --subtitles                # exports .srt + .vtt
     uv run main.py transcribe /path/to/audio.mp3               # local file
     uv run main.py transcribe <URL> --am gemini-2.5-flash      # analysis via Gemini
     uv run -m src output/transcriptions/text/<file>.txt        # standalone analysis
@@ -114,11 +116,42 @@ def parse_args() -> argparse.Namespace:
         dest="prompt_model",
     )
     parser.add_argument(
+        "--srt",
+        action="store_true",
+        help="Export an .srt subtitle file alongside the .txt transcription",
+    )
+    parser.add_argument(
+        "--vtt",
+        action="store_true",
+        help="Export a .vtt (WebVTT) subtitle file alongside the .txt transcription",
+    )
+    parser.add_argument(
+        "--subtitles",
+        action="store_true",
+        help="Shortcut for --srt --vtt (exports both subtitle formats)",
+    )
+    parser.add_argument(
         "--verbose",
         action="store_true",
         help="Enable debug logging",
     )
     return parser.parse_args()
+
+
+def _subtitle_formats_from_args(args: argparse.Namespace) -> tuple[str, ...]:
+    """Resolve the subtitle_formats tuple from CLI flags.
+
+    --subtitles is shorthand for --srt + --vtt. Individual --srt / --vtt
+    flags compose freely. Returns () when no subtitle export was requested.
+    """
+    if getattr(args, "subtitles", False):
+        return ("srt", "vtt")
+    fmts: list[str] = []
+    if getattr(args, "srt", False):
+        fmts.append("srt")
+    if getattr(args, "vtt", False):
+        fmts.append("vtt")
+    return tuple(fmts)
 
 
 _NON_TRANSCRIBE_CMDS = frozenset({"audio", "video", "image", "document"})
@@ -215,6 +248,7 @@ def main() -> None:
             args.language,
             args.threads,
             args.beam_size,
+            subtitle_formats=_subtitle_formats_from_args(args),
         )
 
         if elapsed is not None:
