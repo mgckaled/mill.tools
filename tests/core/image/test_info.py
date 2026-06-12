@@ -1,10 +1,10 @@
-"""Testes de integração — src/core/image/info.py."""
+"""Testes unitários — src/core/image/info.py (PIL puro, sem ffmpeg)."""
 import io
 
 import pytest
 from PIL import Image
 
-pytestmark = pytest.mark.integration
+pytestmark = pytest.mark.unit
 
 
 def test_image_info_returns_dict(session_jpg):

@@ -1,8 +1,8 @@
-"""Testes de integração — src/core/image/converter.py."""
+"""Testes unitários — src/core/image/converter.py (PIL puro, sem ffmpeg)."""
 import pytest
 from PIL import Image
 
-pytestmark = pytest.mark.integration
+pytestmark = pytest.mark.unit
 
 
 def test_convert_jpg_to_png(session_jpg, out_dir):
