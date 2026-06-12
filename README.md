@@ -552,7 +552,7 @@ mill-tools/
 
 ## Testes
 
-A suíte cobre os módulos `src/core/` e `src/cli/` em duas camadas, totalizando **226 testes** (0 falhas):
+A suíte cobre os módulos `src/core/`, `src/cli/` e os `pipeline_log` da GUI em duas camadas, totalizando **353 testes** (0 falhas):
 
 | Camada | Marcador | Requer | O que cobre |
 |---|---|---|---|

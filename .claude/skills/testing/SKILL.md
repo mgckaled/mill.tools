@@ -17,13 +17,14 @@ tests/
 ├── cli/
 │   ├── __init__.py
 │   ├── test_transcription.py               # unit — resolve_input, build_output_stem, item_label
-│   ├── test_audio_cli.py                   # unit — add_audio_parser (defaults e flags)
-│   ├── test_video_cli.py                   # unit — sub-subparsers de vídeo (10 testes)
-│   ├── test_image_cli.py                   # unit — sub-subparsers de imagem (15 testes)
+│   ├── test_audio_cli.py                   # unit — add_audio_parser + run_audio_cli (dispatch)
+│   ├── test_video_cli.py                   # unit — sub-subparsers + run_video_cli (dispatch)
+│   ├── test_image_cli.py                   # unit — sub-subparsers + run_image_cli (dispatch)
+│   ├── test_document_cli.py                # unit — sub-subparsers + run_document_cli (dispatch)
 │   └── test_bus.py                         # unit — CLIEventBus (eventos e formatação)
 ├── core/
 │   ├── __init__.py
-│   ├── test_ffmpeg.py                      # unit — run_ffmpeg (subprocess mockado, 8 testes)
+│   ├── test_ffmpeg.py                      # unit — run_ffmpeg (subprocess mockado)
 │   ├── test_metadata.py                    # unit — format_duration e helpers de metadata
 │   ├── audio/
 │   │   ├── test_normalizer_parser.py       # unit — _parse_loudnorm_json (sem ffmpeg)
@@ -36,9 +37,11 @@ tests/
 │   ├── image/
 │   │   ├── test_transform.py               # unit — 9 funções puras Pillow
 │   │   ├── test_converter.py               # unit — convert_image (PIL puro)
-│   │   └── test_info.py                    # unit — image_info, thumbnail_bytes (PIL puro)
+│   │   ├── test_info.py                    # unit — image_info, thumbnail_bytes (PIL puro)
+│   │   └── test_downloader.py              # unit — download_image (urllib mockado)
 │   ├── video/
-│   │   └── test_info.py                    # integration — get_video_info (VideoInfo dataclass)
+│   │   ├── test_info.py                    # integration — get_video_info (VideoInfo dataclass)
+│   │   └── test_converter.py               # integration — convert/trim/compress/resize/extract_audio/thumbnail
 │   └── document/
 │       ├── test_processor.py               # unit — merge/split/compress/rotate/watermark/stamp/encrypt (pymupdf REAL via sample_pdf)
 │       ├── test_converter.py               # unit — pdf_to_images, images_to_pdf, extract_text (pymupdf REAL)
@@ -46,11 +49,11 @@ tests/
 │       └── test_qr.py                      # unit — generate_qr (qrcode REAL — gera PNG em disco)
 └── gui/
     ├── __init__.py
-    ├── test_settings.py                    # src/gui/settings.py
+    ├── test_settings.py                    # unit — src/gui/settings.py
     └── modules/
-        ├── audio/test_pipeline_log.py      # STUB — preencher seguindo o molde do módulo document
-        ├── image/test_pipeline_log.py      # STUB — preencher seguindo o molde do módulo document
-        ├── video/test_pipeline_log.py      # AUSENTE — pasta tests/gui/modules/video/ ainda não existe
+        ├── audio/test_pipeline_log.py      # unit — resolve_*, fmt_* (download/convert/extract/denoise/normalize)
+        ├── image/test_pipeline_log.py      # unit — resolve_*, fmt_* (13 operações)
+        ├── video/test_pipeline_log.py      # unit — resolve_*, fmt_* (7 operações)
         └── document/test_pipeline_log.py   # unit — resolve_messages, resolve_stage_label, fmt_* builders
 ```
 
@@ -123,15 +126,43 @@ def test_defaults():
     assert callable(ns.func)
 ```
 
-Para testar o comportamento do runner sem executar o pipeline real, mockar as funções de core:
+Para testar o **runner** (a função `run_*_cli` que traduz `Namespace` →
+`XxxArgs` e dispara a pipeline), mocke a função de pipeline no
+**caminho onde ela é importada** (não onde é definida — embora aqui
+seja o mesmo arquivo) e a verificação de dependências:
 
 ```python
-def test_run_cli_calls_pipeline(mocker):
-    mock_pipeline = mocker.patch("src.gui.modules.audio.worker.run_audio_pipeline", return_value=True)
-    ns = _parse("https://youtu.be/abc")
+def test_run_audio_cli_dispatches_to_pipeline(mocker):
+    mocker.patch("src.utils.check_dependencies")  # ou "src.utils.setup_logging" no doc
+    mock_pipeline = mocker.patch(
+        "src.gui.modules.audio.worker.run_audio_pipeline",
+        return_value=True,
+    )
+    ns = _parse("https://youtu.be/abc", "--normalize", "--lufs", "-16")
     ns.func(ns)
     assert mock_pipeline.called
+    args = mock_pipeline.call_args.args[0]   # AudioArgs construído pelo runner
+    assert args.normalize is True
+    assert args.normalize_target_lufs == -16.0
 ```
+
+Caminhos das pipelines a mockar:
+
+| CLI         | Função a mockar                                     |
+|-------------|-----------------------------------------------------|
+| `audio`     | `src.gui.modules.audio.worker.run_audio_pipeline`   |
+| `video`     | `src.gui.modules.video.worker.run_video_pipeline`   |
+| `image`     | `src.gui.modules.image.worker.run_image_pipeline`   |
+| `document`  | `src.gui.modules.document.worker.run_document_pipeline` |
+
+Quando o runner retorna `False`, ele chama `sys.exit(1)`. Para cobrir
+esse caminho, use `pytest.raises(SystemExit)` (apenas `audio`/`video`/
+`image` têm essa branch — `document` não).
+
+Gotcha kebab → snake: operações como `extract-audio` (CLI) viram
+`extract_audio` em `VideoArgs.operation`. `pdf-to-images` vira
+`pdf_to_images`. `contact-sheet` vira `contact_sheet`. Sempre asserte
+o nome em `snake_case` no `Args` construído.
 
 `_pipeline_runner.item_label` é testável diretamente — sempre verificar que `kind="local"` retorna `Path(value).name` e `kind="url"` retorna o `netloc` (ver `tests/cli/test_transcription.py`).
 
@@ -296,6 +327,34 @@ mocker.patch("subprocess.run", side_effect=[
 
 **Cuidado com threading**: `_drain()` em `normalizer.py` lê `proc.stderr` em thread daemon. O iterador deve ser thread-safe (um simples `iter([b"..."])` funciona). Para `proc.stdout` linhas de progresso, incluir `b"out_time_us=N\n"` para testar o callback.
 
+### Mock de `urllib.request.urlopen` — para testar download_image
+
+`urlopen` é usado como context manager (`with urlopen(...) as resp`).
+Substituir por `@contextmanager` quebra na **segunda chamada** porque
+generators são single-use. Use `MagicMock` (reusável):
+
+```python
+from unittest.mock import MagicMock
+
+def _fake_urlopen(payload: bytes) -> MagicMock:
+    cm = MagicMock()
+    cm.__enter__.return_value.read.return_value = payload
+    cm.__exit__.return_value = False
+    return cm
+
+def test_download_image(mocker, out_dir):
+    from src.core.image.downloader import download_image
+    mocker.patch("urllib.request.urlopen", return_value=_fake_urlopen(png_bytes))
+    out = download_image("https://example.com/img.png", out_dir)
+    assert out.exists()
+```
+
+Para erros de rede, use `side_effect=ConnectionError("...")` — o
+downloader empacota qualquer `Exception` num `ValueError` com
+mensagem "Falha ao baixar". Para HTML/404 (resposta válida mas não-imagem),
+passe bytes de HTML como payload — `Image.open(io.BytesIO(html)).verify()`
+levanta exceção e o downloader produz "URL não contém uma imagem válida".
+
 ### Mock com contagem de chamadas (`side_effect` com lista)
 
 Para fazer `Image.open` falhar apenas na segunda chamada:
@@ -336,15 +395,27 @@ O alvo é **≥ 90%** por módulo de `src/core/`. Estado atual:
 | `core/audio/normalizer.py` | **100%** |
 | `core/audio/info.py` | **100%** |
 | `core/ffmpeg.py` | **100%** |
+| `core/video/converter.py` | **100%** |
+| `core/document/info.py` | **100%** |
 | `llm_utils.py` | **100%** |
+| `core/image/downloader.py` | 98% |
+| `core/audio/converter.py` | 96% |
+| `core/document/converter.py` | 95% |
+| `core/document/qr.py` | 95% |
+| `core/document/processor.py` | 94% |
 | `core/image/transform.py` | 94% |
 | `core/image/info.py` | 94% |
 | `core/video/info.py` | 93% |
-| `core/audio/converter.py` | 91% |
-| `core/audio/denoiser.py` | 79% |
 | `core/image/converter.py` | 79% |
-| `core/document/processor.py` | medido por testes unit |
-| `core/document/converter.py` | medido por testes unit |
+| `core/audio/denoiser.py` | 79% |
+| `core/image/background.py` | 32% (extra `[ai-image]` — sem teste de uso real) |
+| `core/image/describe.py` | 24% (vision LLM — sem teste de uso real) |
+| `core/audio/downloader.py` | 20% (yt-dlp não mockado) |
+| `core/video/downloader.py` | 18% (yt-dlp não mockado) |
+
+Lacunas conhecidas: `audio/downloader.py` e `video/downloader.py` (yt-dlp);
+`image/background.py` e `describe.py` (extras opcionais). Smoke tests
+de lazy import seriam baratos mas ainda não foram escritos.
 
 ### pymupdf nos testes do módulo document — uso REAL via fixture
 

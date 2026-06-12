@@ -242,7 +242,7 @@ uv run main.py document qr "https://example.com" --size 300
 ```bash
 uv run pytest -m unit -v                                                   # unitários apenas (rápido)
 uv run pytest -m integration -v                                            # integração apenas (requer ffmpeg)
-uv run pytest -v                                                           # suíte completa (226 testes)
+uv run pytest -v                                                           # suíte completa (353 testes)
 uv run pytest --cov=src --cov-report=term-missing                         # cobertura completa
 uv run pytest tests/caminho/test_arquivo.py -v                            # arquivo específico
 uv run pytest -k "sanitize" -v                                            # filtrar por nome
@@ -251,11 +251,18 @@ uv run pytest -k "sanitize" -v                                            # filt
 Estrutura espelha `src/`: `tests/core/audio/`, `tests/core/image/`, `tests/core/video/`, `tests/core/document/`, `tests/cli/`, `tests/gui/`. Fixtures em `tests/conftest.py`:
 
 - **Function-scoped**: `jpg_image`, `png_image`, `out_dir`
-- **Session-scoped**: `sample_wav`, `sample_mp3`, `sample_mp4`, `sample_wav_stereo`, `session_jpg`
+- **Session-scoped**: `sample_wav`, `sample_mp3`, `sample_mp4`, `sample_wav_stereo`, `session_jpg`, `sample_pdf`, `sample_pdf_with_images` (PDFs gerados via `pytest.importorskip("pymupdf")`)
 
-Arquivos de teste por módulo: `tests/core/test_ffmpeg.py` (8 unit), `tests/test_llm_utils.py` (7 unit), `tests/cli/test_audio_cli.py` (5), `tests/cli/test_video_cli.py` (10), `tests/cli/test_image_cli.py` (15), `tests/cli/test_document_cli.py` (unit), `tests/core/document/` (test_processor, test_converter, test_info, test_qr), `tests/gui/modules/document/test_pipeline_log.py`.
+Cobertura por arquivo (recortes principais):
 
-Cobertura dos módulos `src/core/`: `normalizer.py` 100%, `info.py` (áudio) 100%, `ffmpeg.py` 100%, `llm_utils.py` 100%, `transform.py` 94%, `info.py` (imagem) 94%, `info.py` (vídeo) 93%, `converter.py` (áudio) 91%, `denoiser.py` 79%, `converter.py` (imagem) 79%.
+- **CLI**: `tests/cli/test_*_cli.py` cobrem parser **e** runner (`run_*_cli`) — mocks de `src.gui.modules.<m>.worker.run_*_pipeline` validam que `Namespace → XxxArgs` está correto. `tests/cli/test_bus.py` valida o `CLIEventBus`.
+- **Core áudio**: `test_normalizer_parser.py`/`test_normalizer_unit.py` (unit, subprocess mockado); `test_converter.py`, `test_denoiser.py`, `test_info.py`, `test_normalizer_integration.py`, `test_pipeline_e2e.py` (integration).
+- **Core imagem**: `test_transform.py`, `test_converter.py`, `test_info.py` (unit, PIL puro); `test_downloader.py` (unit, urllib mockado).
+- **Core vídeo**: `test_info.py` e `test_converter.py` (ambos integration — `test_converter.py` cobre as 6 funções ffmpeg).
+- **Core document**: `test_processor.py`, `test_converter.py`, `test_info.py`, `test_qr.py` — todos unit, mas usam pymupdf/qrcode **reais** via fixtures de sessão.
+- **GUI**: `tests/gui/modules/<audio|image|video|document>/test_pipeline_log.py` — `resolve_messages`/`resolve_stage_label` + `fmt_*` builders para os 4 módulos.
+
+Cobertura por módulo `src/core/` (último run): `audio/normalizer.py` 100%, `audio/info.py` 100%, `ffmpeg.py` 100%, `video/converter.py` 100%, `document/info.py` 100%, `llm_utils.py` 100%, `image/downloader.py` 98%, `audio/converter.py` 96%, `document/converter.py` 95%, `document/qr.py` 95%, `document/processor.py` 94%, `image/transform.py` 94%, `image/info.py` 94%, `video/info.py` 93%, `image/converter.py` 79%, `audio/denoiser.py` 79%. Lacunas: `audio/downloader.py` 20%, `video/downloader.py` 18% (yt-dlp não mockado); `image/background.py` 32%, `image/describe.py` 24% (extras opcionais `[ai-image]`).
 
 > Guia completo para adicionar/revisar testes → skill `testing` (`.claude/skills/testing/SKILL.md`)
 
