@@ -117,7 +117,9 @@ A entrada no app é mediada pela **Home Screen** (`src/gui/home.py`): ao clicar 
 - **Capa + metadados**: embutidos por padrão; switch desligável. Fallback gracioso em ogg/opus.
 - **Fila sequencial**: um item por vez. Progresso via `queue_progress` + `progress_update`.
 - **Saída**: downloads → `output/audio/source/`; convertidos/pós-processados → `output/audio/processed/`.
-- **Reprodutor embutido** (`src/gui/components/audio_player.py`): aparece acima do log após o pipeline concluir. Decodifica via ffmpeg em background, reproduz via sounddevice. UI: play/pause + seek slider (`on_change_end`). `AudioPlayer.load(path)` chamado automaticamente em `_on_done`.
+- **Reprodutor embutido** (`src/gui/components/audio_player.py`): aparece acima do log após o pipeline concluir. Reproduz via sounddevice. UI: play/pause, skip ±10s, loop, volume, seek por clique no waveform. `AudioPlayer.load(path)` chamado automaticamente em `_on_done`.
+- **Waveform — arquitetura de duas threads**: `_load()` lança duas threads paralelas — (1) decode rápido a **500 Hz mono** (`_decode_waveform_fast`) para calcular e exibir o waveform rapidamente; (2) decode completo 44100 Hz estéreo (`_decode_via_ffmpeg`) para playback. `_load_generation` (contador inteiro) descarta resultados de cargas anteriores. `gapless_playback=True` no `ft.Image` elimina flickering nas trocas de frame durante o polling do cursor.
+- **Downloader — quirks Windows (áudio)**: `FFmpegExtractAudio` cria `.temp.<ext>` **no mesmo diretório do arquivo de entrada** (hardcoded no yt-dlp) — `paths={"temp": ...}` **não resolve** esse caso. Solução: executar todo o download e pós-processamento em `tempfile.mkdtemp()` (privado, fora do escopo do Defender) e mover o arquivo final para `out_dir` via `shutil.move`. Ver `src/core/audio/downloader.py`.
 
 ### Pós-processamento
 
@@ -310,6 +312,8 @@ Iniciada com `uv run gui.py`. Flutter desktop no Windows.
 | FilePicker | `page.services.append(picker)` + `await picker.pick_files(...)` |
 | `Container(box_shadow=...)` | usar `Container(shadow=ft.BoxShadow(...))` — sem prefixo `box_` |
 | `ft.NavigationRailDestination` cursor | sem `mouse_cursor` — envolver o `NavigationRail` em `GestureDetector`|
+| `ft.Image.src` tipo | aceita `Union[str, bytes]` no 0.85 (confirmado via `ft.Image.__init__`) — bytes PNG passados diretamente sem base64 |
+| `ft.Image` updates frequentes | usar `gapless_playback=True` para manter o frame anterior visível durante a troca — evita flickering (ex.: cursor de waveform a 5 fps) |
 
 ### Eventos do pipeline
 
