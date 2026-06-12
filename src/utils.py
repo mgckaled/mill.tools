@@ -25,6 +25,7 @@ DOCUMENT_PROCESSED_DIR   = OUTPUT_DIR / "document" / "processed"
 TRANSCRIPTIONS_TEXT_DIR  = OUTPUT_DIR / "transcriptions" / "text"
 TRANSCRIPTIONS_ANALYSIS_DIR = OUTPUT_DIR / "transcriptions" / "analysis"
 TRANSCRIPTIONS_DIGEST_DIR = OUTPUT_DIR / "transcriptions" / "digest"
+TRANSCRIPTIONS_SUBTITLES_DIR = OUTPUT_DIR / "transcriptions" / "subtitles"
 
 _SANITIZE_SEPS = re.compile(r'\s*[｜|·–—]\s*')
 _SANITIZE_WIDE_COLON = re.compile(r'\s*[：]\s*')

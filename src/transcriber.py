@@ -69,6 +69,7 @@ def transcribe(
     beam_size: int,
     on_event: Callable[[str, str, dict], None] | None = None,
     force_overwrite: bool = False,
+    subtitle_formats: tuple[str, ...] = (),
 ) -> float | None:
     """Transcribe an audio file using faster-whisper and save plain text output.
 
@@ -87,6 +88,10 @@ def transcribe(
         language: Language code or None for auto-detection.
         threads: Number of CPU threads (used only when GPU is unavailable).
         beam_size: Beam size for decoding (lower = faster, higher = more accurate).
+        subtitle_formats: Optional tuple of formats to export ("srt", "vtt").
+            Empty (default) preserves the original .txt-only behavior. When
+            non-empty, each segment is also collected as a SubtitleCue and the
+            files are written to TRANSCRIPTIONS_SUBTITLES_DIR after the loop.
 
     Returns:
         Elapsed transcription time in seconds.
@@ -156,6 +161,7 @@ def transcribe(
 
         segment_count = 0
         flagged_count = 0
+        cues: list = []  # populated only when subtitle_formats is non-empty
         with output_path.open("w", encoding="utf-8") as f:
             f.write(header)
             current = 0.0
@@ -175,6 +181,14 @@ def transcribe(
                     progress_bar.update(int(elapsed_seg))
                     current = segment.end
                     segment_count += 1
+                    if subtitle_formats:
+                        from src.core.subtitles import SubtitleCue
+                        cues.append(SubtitleCue(
+                            index=segment_count,
+                            start=segment.start,
+                            end=segment.end,
+                            text=text,
+                        ))
                     _emit("transcribe_segment", {
                         "text": segment.text,
                         "start": segment.start,
@@ -193,6 +207,16 @@ def transcribe(
                 "[!] %d segment(s) flagged as low-confidence [?] — review recommended",
                 flagged_count,
             )
+
+        if subtitle_formats and cues:
+            from src.core.subtitles import write_subtitles
+            from src.utils import TRANSCRIPTIONS_SUBTITLES_DIR
+            TRANSCRIPTIONS_SUBTITLES_DIR.mkdir(parents=True, exist_ok=True)
+            sub_stem = TRANSCRIPTIONS_SUBTITLES_DIR / output_path.stem
+            sub_paths = write_subtitles(cues, sub_stem, subtitle_formats)
+            logging.info("[✓] Subtitles written: %s", ", ".join(p.name for p in sub_paths))
+            _emit("subtitles_done", {"paths": [str(p) for p in sub_paths]})
+
         _emit("transcribe_done", {
             "elapsed": elapsed,
             "flagged_count": flagged_count,
