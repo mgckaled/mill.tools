@@ -39,13 +39,18 @@ from src.utils import (
 _ANSI_ESC = re.compile(r"\x1b\[[0-9;]*m")
 
 
-def parse_args() -> argparse.Namespace:
+def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     """Parse command-line arguments.
+
+    Args:
+        argv: Optional argument list. When None (default), argparse reads
+            from sys.argv. Pass an explicit list in tests to keep parser
+            invocation isolated from process state.
 
     Returns:
         Namespace with url, whisper_model, language, threads, beam_size,
         output_name, format, format_model, analyze, analyzer_model,
-        prompt, prompt_model and verbose fields.
+        prompt, prompt_model, srt, vtt, subtitles and verbose fields.
     """
     parser = argparse.ArgumentParser(
         description="Transcribe a YouTube video or local audio file using faster-whisper.",
@@ -135,7 +140,7 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Enable debug logging",
     )
-    return parser.parse_args()
+    return parser.parse_args(argv)
 
 
 def _subtitle_formats_from_args(args: argparse.Namespace) -> tuple[str, ...]:

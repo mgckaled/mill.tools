@@ -7,15 +7,9 @@ pytestmark = pytest.mark.unit
 
 
 def _parse(*argv: str) -> argparse.Namespace:
-    """Run main.parse_args with isolated sys.argv."""
-    import sys
+    """Run main.parse_args with explicit argv (never touches sys.argv)."""
     import main as main_mod
-    original = sys.argv
-    sys.argv = ["main.py", *argv]
-    try:
-        return main_mod.parse_args()
-    finally:
-        sys.argv = original
+    return main_mod.parse_args(list(argv))
 
 
 # ── _subtitle_formats_from_args ──────────────────────────────────────────────
