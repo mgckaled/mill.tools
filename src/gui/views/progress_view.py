@@ -463,6 +463,7 @@ def build_progress_view(
                     raw_path=result.raw_path,
                     analysis_path=result.analysis_path,
                     prompt_path=result.prompt_path,
+                    subtitle_paths=result.subtitle_paths,
                 ))
 
         # Renderizar o conteúdo ENQUANTO o painel ainda está invisível —

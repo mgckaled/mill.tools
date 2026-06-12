@@ -25,6 +25,7 @@ _DEFAULTS: dict = {
     "last_use_format": False,
     "last_use_analyze": False,
     "last_use_prompt": False,
+    "last_export_subtitles": False,
     "theme_mode": "dark",
 }
 

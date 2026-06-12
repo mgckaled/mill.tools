@@ -44,6 +44,7 @@ class PipelineArgs:
     use_prompt: bool = False
     prompt_model: str = "gemini-2.5-flash"
     reprocess: bool = False
+    export_subtitles: bool = False  # exports .srt + .vtt alongside the .txt
 
 
 @dataclass
@@ -53,6 +54,7 @@ class PipelineResult:
     raw_path: Path | None = None
     analysis_path: Path | None = None
     prompt_path: Path | None = None
+    subtitle_paths: list[Path] | None = None
     error: str | None = None
     completed: bool = False  # True only when task_done was emitted
 
@@ -84,6 +86,8 @@ def run_pipeline(
         bus.emit(type, stage, payload, module_id=_MID)
         if type == "transcribe_done":
             _capture.update(payload)
+        elif type == "subtitles_done":
+            _capture["subtitle_paths"] = payload.get("paths", [])
 
     def emit(type: str, stage: str = "pipeline", payload: dict | None = None) -> None:
         bus.emit(type, stage, payload or {}, module_id=_MID)
@@ -189,8 +193,12 @@ def run_pipeline(
                 beam_size=args.beam_size,
                 on_event=on_event,
                 force_overwrite=True,
+                subtitle_formats=("srt", "vtt") if args.export_subtitles else (),
             )
         result.raw_path = output_path
+        _subs = _capture.get("subtitle_paths")
+        if _subs:
+            result.subtitle_paths = [Path(p) for p in _subs]
 
         # --- transcription summary ---
         elapsed_transcribe = time() - pipeline_start
@@ -241,6 +249,7 @@ def run_pipeline(
             "raw_path": str(result.raw_path) if result.raw_path else None,
             "analysis_path": str(result.analysis_path) if result.analysis_path else None,
             "prompt_path": str(result.prompt_path) if result.prompt_path else None,
+            "subtitle_paths": [str(p) for p in result.subtitle_paths] if result.subtitle_paths else None,
         }
         result.completed = True
         emit("task_done", "pipeline", _done_payload)

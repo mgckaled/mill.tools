@@ -23,25 +23,44 @@ def _open_folder(path: Path | None) -> None:
     subprocess.Popen(["explorer", str(Path(path).parent)])
 
 
+def _pick_srt(subtitle_paths: list[Path] | None) -> Path | None:
+    """Return the .srt path if any (preferred for the in-tab preview)."""
+    if not subtitle_paths:
+        return None
+    for p in subtitle_paths:
+        if Path(p).suffix.lower() == ".srt":
+            return Path(p)
+    # Fall back to the first one if no .srt is present
+    return Path(subtitle_paths[0])
+
+
 def build_result_view(
     page: ft.Page,
     raw_path: Path | None,
     analysis_path: Path | None,
     prompt_path: Path | None,
+    subtitle_paths: list[Path] | None = None,
     on_restart: Callable | None = None,
 ) -> ft.Control:
     """Retorna o controle raiz da view de resultados.
 
     Implementa tab switching manual (ft.Tabs/ft.Tab incompatíveis com Flet 0.85).
     Exibe Transcrição, Análise e Prompt-ready com ações de copiar e abrir pasta.
+    Quando subtitle_paths é fornecido, adiciona uma aba "Legendas" com prévia
+    do .srt (mais legível que VTT) e um botão extra para abrir a pasta delas.
     on_restart é opcional — no layout split o usuário reinicia pelo formulário.
     """
     raw_content = _read(raw_path)
     analysis_content = _read(analysis_path)
     prompt_content = _read(prompt_path)
+    srt_path = _pick_srt(subtitle_paths)
+    srt_content = _read(srt_path) if srt_path else None
 
     tab_labels = ["Transcrição", "Análise", "Prompt-ready"]
     tab_contents = [raw_content, analysis_content, prompt_content]
+    if srt_content is not None:
+        tab_labels.append("Legendas")
+        tab_contents.append(srt_content)
     selected: list[int] = [0]
 
     # --- painéis de conteúdo ---
@@ -129,8 +148,16 @@ def build_result_view(
                       on_click=lambda _: _open_folder(raw_path)),
         ft.IconButton(ft.Icons.COPY, tooltip="Copiar conteúdo da aba",
                       on_click=on_copy),
-        ft.Container(expand=True),
     ]
+    if srt_path is not None:
+        action_controls.append(
+            ft.IconButton(
+                ft.Icons.SUBTITLES,
+                tooltip="Abrir pasta de legendas",
+                on_click=lambda _, p=srt_path: _open_folder(p),
+            )
+        )
+    action_controls.append(ft.Container(expand=True))
     if on_restart is not None:
         action_controls.append(
             ft.TextButton("Nova transcrição", on_click=lambda _: on_restart())

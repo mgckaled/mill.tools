@@ -243,6 +243,14 @@ def build_form_view(page: ft.Page, on_start: Callable[[PipelineArgs], None]) -> 
     prompt_model_field.disabled = not use_prompt_switch.value
 
     # ------------------------------------------------------------------
+    # Subtitle export (.srt + .vtt)
+    # ------------------------------------------------------------------
+    export_subtitles_switch = ft.Switch(
+        label="Exportar legendas (.srt + .vtt)",
+        value=cfg.get("last_export_subtitles", False),
+    )
+
+    # ------------------------------------------------------------------
     # Google API Key
     # ------------------------------------------------------------------
     api_key_field = ft.TextField(
@@ -288,6 +296,7 @@ def build_form_view(page: ft.Page, on_start: Callable[[PipelineArgs], None]) -> 
             use_prompt=use_prompt_switch.value,
             prompt_model=prompt_model_field.value or "gemini-2.5-flash",
             reprocess=reprocess_switch.value,
+            export_subtitles=export_subtitles_switch.value,
         )
 
         settings.save({
@@ -301,6 +310,7 @@ def build_form_view(page: ft.Page, on_start: Callable[[PipelineArgs], None]) -> 
             "last_use_analyze": args.use_analyze,
             "last_use_prompt": args.use_prompt,
             "last_reprocess": args.reprocess,
+            "last_export_subtitles": args.export_subtitles,
             "theme_mode": cfg.get("theme_mode", "dark"),
         })
 
@@ -379,6 +389,12 @@ def build_form_view(page: ft.Page, on_start: Callable[[PipelineArgs], None]) -> 
                                 help_key="transcription.prompt", page=page),
                         use_prompt_switch,
                         ft.Row(controls=[prompt_model_field]),
+
+                        hairline(),
+
+                        # --- Subtitles ---
+                        section_label("Legendas"),
+                        export_subtitles_switch,
 
                         hairline(),
 
