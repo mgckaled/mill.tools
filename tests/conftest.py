@@ -132,6 +132,40 @@ def session_jpg(tmp_path_factory: pytest.TempPathFactory) -> Path:
 # Hook: pula testes de integração automaticamente se ffmpeg não estiver no PATH
 # ---------------------------------------------------------------------------
 
+@pytest.fixture(scope="session")
+def sample_pdf(tmp_path_factory: pytest.TempPathFactory):
+    """3-page PDF with extractable text — generated via pymupdf."""
+    import pymupdf  # type: ignore[import-untyped]
+    tmp = tmp_path_factory.mktemp("pdfs")
+    path = tmp / "sample.pdf"
+    doc = pymupdf.open()
+    for i in range(3):
+        page = doc.new_page()
+        page.insert_text((72, 72), f"Page {i + 1}\nTest content for extraction.")
+    doc.save(str(path))
+    doc.close()
+    return path
+
+
+@pytest.fixture(scope="session")
+def sample_pdf_with_images(tmp_path_factory: pytest.TempPathFactory, session_jpg):
+    """PDF with an embedded JPEG — used by compress tests."""
+    import pymupdf  # type: ignore[import-untyped]
+    tmp = tmp_path_factory.mktemp("pdfs")
+    path = tmp / "with_images.pdf"
+    doc = pymupdf.open()
+    page = doc.new_page()
+    rect = pymupdf.Rect(50, 50, 500, 400)
+    page.insert_image(rect, filename=str(session_jpg))
+    doc.save(str(path))
+    doc.close()
+    return path
+
+
+# ---------------------------------------------------------------------------
+# Hook: pula testes de integração automaticamente se ffmpeg não estiver no PATH
+# ---------------------------------------------------------------------------
+
 def pytest_collection_modifyitems(config, items):
     import shutil
     if shutil.which("ffmpeg") is None:

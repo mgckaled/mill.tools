@@ -15,7 +15,7 @@
 
 ## Visão geral
 
-**mill.tools** é uma caixa de ferramentas pessoal para quem trabalha com áudio, vídeo e imagens — tudo rodando diretamente no seu computador, sem enviar arquivos para servidores externos, sem assinaturas e sem limites de uso.
+**mill.tools** é uma caixa de ferramentas pessoal para quem trabalha com áudio, vídeo, imagens e documentos — tudo rodando diretamente no seu computador, sem enviar arquivos para servidores externos, sem assinaturas e sem limites de uso.
 
 A ferramenta é organizada em **módulos independentes**, cada um especializado em uma categoria de tarefa. Você os acessa por uma interface visual (aplicativo desktop) ou pela linha de comando. Os módulos também se integram: após baixar e converter um áudio, por exemplo, um clique já o envia para transcrição.
 
@@ -29,6 +29,8 @@ A ferramenta é organizada em **módulos independentes**, cada um especializado 
 
 - 🖼️ **Processar imagens em lote** — 12 operações disponíveis: converter formatos, redimensionar, recortar, girar, aplicar filtros e ajustes de cor, adicionar marca d'água ou borda, gerar favicon `.ico`, montar colagens — e com IA: remover o fundo automaticamente e gerar descrições textuais detalhadas da imagem. Tudo com visor Antes/Depois integrado.
 
+- 📄 **Manipular documentos PDF** — 12 operações: juntar, dividir, comprimir, girar, aplicar marca d'água ou carimbo (PAGO/RASCUNHO/CONFIDENCIAL), criptografar com AES-256, extrair texto, rasterizar páginas em imagens, montar PDF a partir de imagens, gerar QR codes e analisar conteúdo com IA. 100% local via pymupdf.
+
 - 🔀 **Escolher onde a IA roda** — por padrão, todos os modelos de linguagem funcionam 100% offline via [Ollama](https://ollama.com) (nenhum dado sai do computador). Para quem prefere, o [Google Gemini](https://ai.google.dev/) gratuito está disponível como alternativa na nuvem — basta escolher o modelo na interface.
 
 ### Módulos
@@ -39,6 +41,7 @@ A ferramenta é organizada em **módulos independentes**, cada um especializado 
 | **Áudio** | ✅ Disponível | Download, conversão e extração de faixas em fila; pós-processamento: denoise spectral + normalize loudnorm (EBU R128) |
 | **Imagens** | ✅ Disponível | 12 operações: manipulação, conversão, remoção de fundo e descrição por IA vision |
 | **Vídeo** | ✅ Disponível | 7 operações: download, conversão, corte, compressão, redimensionamento, extração de áudio e thumbnail |
+| **Documentos** | ✅ Disponível | 12 operações PDF: merge, split, compress, rotate, watermark, stamp, encrypt, extract, pdf-to-images, images-to-pdf, QR e análise por IA |
 
 ### Destaques técnicos
 
@@ -49,6 +52,7 @@ A ferramenta é organizada em **módulos independentes**, cada um especializado 
 | Sem dependência de nuvem | Ollama local por padrão; Gemini como opção opt-in por prefixo de modelo |
 | Pós-processamento de áudio | noisereduce (spectral gating, CPU) + ffmpeg loudnorm (EBU R128, 2 passes); torch-free, base deps |
 | Remoção de fundo | rembg + ONNX Runtime, 100% CPU, sem GPU dedicada |
+| Manipulação de PDF | [pymupdf](https://pymupdf.readthedocs.io) — merge/split/compress/rotate/watermark/stamp/encrypt/rasterização, 100% local |
 | Interface desktop | [Flet 0.85](https://flet.dev) (Flutter/Windows) com log em tempo real e design system próprio |
 | Ajuda contextual | Ícone ⓘ em todos os controles — tooltip no hover, modal detalhado ao clicar |
 
@@ -116,7 +120,7 @@ O `.env` é carregado automaticamente quando `--fm`, `--am` ou `--pm` recebe um 
 uv run gui.py
 ```
 
-Abre maximizado com uma splash screen animada, seguida de uma **Home Screen** com 4 cards de módulo — clique em qualquer card para entrar diretamente no módulo escolhido. O AppBar exibe a wordmark "mill.tools" e botões "Home" e "Splash" para navegar de volta a qualquer momento.
+Abre maximizado com uma splash screen animada, seguida de uma **Home Screen** com 5 cards de módulo — clique em qualquer card para entrar diretamente no módulo escolhido. O AppBar exibe a wordmark "mill.tools" e botões "Home" e "Splash" para navegar de volta a qualquer momento.
 
 Cada módulo tem layout split: formulário à esquerda, painel de acompanhamento (log em tempo real + barra de progresso + spinner) à direita. Durante um pipeline em execução a troca de módulo é bloqueada — os logs e a barra de progresso são preservados mesmo ao navegar entre módulos.
 
@@ -167,6 +171,27 @@ uv run main.py image watermark photo.jpg --text "© 2025" --opacity 0.5
 uv run main.py image contact-sheet *.jpg --cols 4 --thumb 200
 uv run main.py image remove-bg photo.png --model u2net
 uv run main.py image describe photo.jpg --model moondream-custom
+```
+
+### CLI — Documentos
+
+```bash
+# juntar, dividir, comprimir
+uv run main.py document merge a.pdf b.pdf c.pdf
+uv run main.py document split doc.pdf --pages "1-3,5,8-"
+uv run main.py document compress doc.pdf --image-quality 60
+
+# anotações
+uv run main.py document rotate doc.pdf --angle 90 --pages "1,3"
+uv run main.py document watermark doc.pdf --text "CONFIDENCIAL" --opacity 0.3
+uv run main.py document stamp doc.pdf --text "PAGO"
+
+# proteção e conversão
+uv run main.py document encrypt doc.pdf --password "senha"
+uv run main.py document extract doc.pdf
+uv run main.py document pdf-to-images doc.pdf --fmt jpg --dpi 150
+uv run main.py document images-to-pdf *.jpg --name "album"
+uv run main.py document qr "https://example.com" --size 300 --fmt png
 ```
 
 ### Referência de flags
@@ -265,6 +290,29 @@ Downloads de URL em `source/`; imagens processadas em `processed/`.
 ### Vídeo — `output/video/`
 
 Downloads de URL em `source/`; vídeos processados (convert, trim, compress, resize, thumbnail) e áudios extraídos em `processed/`.
+
+### Documentos — `output/document/`
+
+Todos os arquivos processados em `processed/`. Nomes de saída incluem sufixo da operação (ex.: `doc_compressed.pdf`, `doc_p1-3.pdf`, `doc_rotated90.pdf`). Operação `pdf_to_images` gera `stem_p001.jpg`, `stem_p002.jpg`… Operação `extract` gera `stem_text.txt`.
+
+---
+
+## Módulo Documentos — operações disponíveis
+
+| Operação | Entrada | O que faz |
+|---|---|---|
+| **Juntar** | múltiplos PDFs | Mescla N arquivos em um único PDF, na ordem fornecida |
+| **Dividir** | PDF | Extrai páginas por intervalo (ex.: `1-3,5,8-`). Cada faixa contígua vira um arquivo separado |
+| **Comprimir** | PDF | Reimprimir imagens embutidas em JPEG (qualidade configurável 50–95) e limpa objetos mortos |
+| **Girar** | PDF | Rotaciona páginas selecionadas em 90°, 180° ou 270° |
+| **Marca d'água** | PDF | Texto diagonal semitransparente em todas as páginas (opacidade e posição configuráveis) |
+| **Carimbo** | PDF | Texto em destaque centralizado (PAGO, RASCUNHO, CONFIDENCIAL ou personalizado) |
+| **Criptografar** | PDF | Protege o arquivo com AES-256 (senha de usuário e proprietário) |
+| **Extrair texto** | PDF | Extrai todo o texto para `.txt`. `has_text=False` indica PDF escaneado (sem texto embutido) |
+| **PDF → Imagens** | PDF | Rasteriza cada página em JPG ou PNG. DPI configurável: 72 / 96 / 150 / 300 |
+| **Imagens → PDF** | imagens | Combina N imagens JPEG/PNG em um único PDF, uma por página |
+| **QR Code** | texto/URL | Gera QR code em PNG ou JPG. Tamanho aproximado em pixels configurável |
+| **Analisar** | PDF | Extrai texto e envia para análise LLM (local via Ollama ou Google Gemini). Apenas na GUI |
 
 ---
 
@@ -434,6 +482,16 @@ O arquivo `src/gui/help_content.py` centraliza todo o conteúdo de ajuda, separa
 | `image.rembg_model` | Resumo dos 5 modelos | ✅ Tamanho, uso ideal e onde são baixados |
 | `image.describe_model` | Resumo dos modelos vision | ✅ RAM, velocidade e setup de cada um |
 | `image.describe_prompt` | Como usar o prompt customizado | — |
+| `document.input` | Formatos suportados, URL vs arquivo local | — |
+| `document.operation` | Descrição das 12 operações | — |
+| `document.pages` | Sintaxe de intervalos de página | ✅ Exemplos: `1-3`, `5`, `8-` |
+| `document.image_quality` | Qualidade JPEG para compressão de imagens embutidas | — |
+| `document.watermark` | Marca d'água diagonal — opacidade e posição | — |
+| `document.stamp` | Carimbo em destaque — textos pré-definidos | — |
+| `document.password` | Proteção AES-256 — permissões preservadas | ✅ Detalhes de permissão |
+| `document.dpi` | Resolução de rasterização em DPI | ✅ Qualidade vs tamanho |
+| `document.qr_size` | Tamanho em pixels do QR code gerado | — |
+| `document.analyze_model` | LLM local (Ollama) ou Gemini para análise do texto extraído | — |
 
 Para adicionar ajuda a um novo controle: inserir a chave em `HELP_SHORT` (e opcionalmente `HELP_LONG`) e passar `help_key=` para a fábrica correspondente.
 
@@ -450,18 +508,19 @@ mill-tools/
 │   ├── core/
 │   │   ├── audio/       — downloader, converter, denoiser, normalizer, info (lógica pura, sem Flet)
 │   │   ├── video/       — downloader (yt-dlp), converter (ffmpeg), info (ffprobe)
-│   │   └── image/       — downloader, converter, transform, info (Pillow; lógica pura, sem Flet)
+│   │   ├── image/       — downloader, converter, transform, info (Pillow; lógica pura, sem Flet)
+│   │   └── document/    — processor (pymupdf), converter, qr, info (PdfInfo)
 │   └── gui/
 │       ├── app.py       — NavigationRail + registry de módulos + navigate_to + AppBar
 │       ├── splash.py    — animação de entrada (moinho + fade)
-│       ├── home.py      — Home Screen: 4 cards de módulo + moinho animado ao fundo
+│       ├── home.py      — Home Screen: 5 cards de módulo + moinho animado ao fundo
 │       ├── assets.py    — helpers de imagem (b64, WINDOW_ICON)
 │       ├── events.py    — EventBus, PipelineEvent (com module_id)
 │       ├── settings.py  — persistência em ~/.mill-tools/config.json
 │       ├── workers.py   — pipeline de Transcrição (thread daemon)
 │       ├── help_content.py — registro central de tooltips e modais (HELP_SHORT/LONG)
 │       ├── components/  — input_source.py (URL + FilePicker, allow_multiple, url_hint)
-│       ├── modules/     — base.py + transcription/ · audio/ · video/ · image/
+│       ├── modules/     — base.py + transcription/ · audio/ · video/ · image/ · document/
 │       │                  (cada módulo: form_view, worker, view, pipeline_log)
 │       ├── theme/       — Design System
 │       │   ├── tokens.py    — Color, Type, Space, Radius, Motion, Layout
@@ -493,7 +552,7 @@ mill-tools/
 
 ## Testes
 
-A suíte cobre os módulos `src/core/` e `src/cli/` em duas camadas, totalizando **207 testes** (0 falhas):
+A suíte cobre os módulos `src/core/` e `src/cli/` em duas camadas, totalizando **226 testes** (0 falhas):
 
 | Camada | Marcador | Requer | O que cobre |
 |---|---|---|---|
@@ -520,8 +579,10 @@ uv run pytest --cov=src --cov-report=term-missing
 
 ## Roadmap
 
-- **Home Screen** ✅ — Tela inicial entre splash e app: 4 cards de módulo, moinho animado ao fundo, botões "Home" e "Splash" no AppBar, transições suavizadas. App abre maximizado.
-- **PR3.1-A** ✅ — Pós-processamento de áudio: redução de ruído (spectral gating, CPU) e normalização de loudness (EBU R128). Sem torch, sem extra — já incluído na instalação padrão.
+- **Home Screen** ✅ — Tela inicial entre splash e app: cards de módulo, moinho animado ao fundo, botões "Home" e "Splash" no AppBar, transições suavizadas. App abre maximizado.
+- **PR3.1-A** ✅ — Pós-processamento de áudio: redução de ruído (spectral gating, CPU) e normalização de loudness (EBU R128). Sem torch, sem extra.
 - **PR3.1-B** — IA de áudio com torch (extra `[ai-audio]`): DeepFilterNet (denoise neural); Demucs (separação de stems) a avaliar.
-- **PR4** ✅ — Módulo Vídeo: 7 operações (download, convert, trim, compress, resize, extract_audio, thumbnail). CPU-only, fila sequencial, bridge extract_audio → Transcrição/Áudio.
-- **Futuro** — melhorias no Módulo Imagens (batch rename, redimensionamento guiado); IA de imagens (upscale).
+- **PR4** ✅ — Módulo Vídeo: 7 operações (download, convert, trim, compress, resize, extract_audio, thumbnail). CPU-only, fila sequencial, bridge → Transcrição/Áudio.
+- **PR5** ✅ — Módulo Documentos: 12 operações PDF/QR (merge, split, compress, rotate, watermark, stamp, encrypt, extract, pdf-to-images, images-to-pdf, qr, analyze). Core pymupdf, 100% local.
+- **PR5.1** — OCR: análise de PDFs escaneados via pytesseract (extra `[ocr]`, requer Tesseract no PATH).
+- **Futuro** — melhorias no Módulo Imagens (batch rename, upscale).

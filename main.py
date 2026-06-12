@@ -121,23 +121,25 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-_NON_TRANSCRIBE_CMDS = frozenset({"audio", "video", "image"})
+_NON_TRANSCRIBE_CMDS = frozenset({"audio", "video", "image", "document"})
 
 
 def _dispatch_other(cmd: str) -> None:
     """Dispatch audio / video / image subcommands to their CLI modules."""
     from src.cli.audio import add_audio_parser
+    from src.cli.document import add_document_parser
     from src.cli.image import add_image_parser
     from src.cli.video import add_video_parser
 
     parser = argparse.ArgumentParser(
         prog="main.py",
-        description="mill.tools — audio, video and image processing",
+        description="mill.tools — audio, video, image and document processing",
     )
     subparsers = parser.add_subparsers(dest="command", required=True)
     add_audio_parser(subparsers)
     add_video_parser(subparsers)
     add_image_parser(subparsers)
+    add_document_parser(subparsers)
 
     ns = parser.parse_args(sys.argv[1:])
     setup_logging(getattr(ns, "verbose", False))

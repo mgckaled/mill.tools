@@ -168,6 +168,30 @@ HELP_SHORT: dict[str, str] = {
         "Instrução enviada ao modelo. "
         "Vazio = descrição geral em português (objetos, contexto, cores, texto visível)."
     ),
+    # --- Documentos ---
+    "document.input": (
+        "Selecione um ou mais PDFs — ou uma URL direta para download. "
+        "Unir e Imagens→PDF aceitam múltiplos arquivos."
+    ),
+    "document.operation": "Escolha a operação a realizar sobre o(s) documento(s).",
+    "document.pages": (
+        'Intervalo de páginas: "1-3,5,8-" = págs. 1, 2, 3, 5, 8 até o fim. '
+        "Numeração começa em 1."
+    ),
+    "document.image_quality": (
+        "Qualidade das imagens recomprimidas. "
+        "75 = boa relação tamanho/qualidade. Menor = arquivo menor, mais artefatos."
+    ),
+    "document.watermark": "Marca d'água sutil em diagonal sobre todas as páginas.",
+    "document.stamp": "Carimbo em destaque centralizado na página: PAGO, RASCUNHO, etc.",
+    "document.password": (
+        "Criptografia AES-256. Guarde a senha — não é possível recuperá-la."
+    ),
+    "document.dpi": (
+        "Resolução da rasterização. 150 = boa qualidade; 300 = imprimir."
+    ),
+    "document.qr_size": "Tamanho do QR code gerado em pixels.",
+    "document.analyze_model": "Modelo para análise do conteúdo extraído. Local ou Gemini.",
 }
 
 #: Texto longo (opcional) — quando presente, a ⓘ vira clicável e abre um modal.
@@ -271,6 +295,28 @@ HELP_LONG: dict[str, str] = {
         "• Streamable, Imgur (vídeo)\n"
         "• Globoplay, Band, R7 (portais BR)\n\n"
         "Lista completa: yt-dlp --list-extractors (1000+ sites)"
+    ),
+    "document.pages": (
+        "Formato de intervalo de páginas\n\n"
+        "1-3     → páginas 1, 2, 3\n"
+        "1,3,5   → páginas 1, 3, 5\n"
+        "8-      → página 8 até o fim\n"
+        "1-3,5,8- → combinação\n\n"
+        "Numeração começa em 1."
+    ),
+    "document.password": (
+        "Criptografia de PDF\n\n"
+        "O documento é protegido com AES-256 (padrão PDF 1.7).\n\n"
+        "Não há como recuperar a senha esquecida — "
+        "guarde-a em um gerenciador de senhas."
+    ),
+    "document.dpi": (
+        "Resolução de rasterização\n\n"
+        "72 dpi  → tela, arquivos menores\n"
+        "96 dpi  → padrão web\n"
+        "150 dpi → boa qualidade, equilíbrio\n"
+        "300 dpi → impressão profissional\n\n"
+        "A cada dobro de DPI, o tamanho do arquivo quadruplica."
     ),
 }
 
