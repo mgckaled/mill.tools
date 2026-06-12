@@ -31,6 +31,10 @@ HELP_SHORT: dict[str, str] = {
         "Cria uma versão condensada (~40%) da transcrição, "
         "pronta para colar como contexto em prompts."
     ),
+    "transcription.subtitles": (
+        "Gera arquivos .srt e .vtt com timestamps a partir dos mesmos "
+        "segmentos do Whisper — sem custo extra de GPU."
+    ),
     "transcription.model_stage": (
         "Modelo desta etapa. Nomes começando com 'gemini' usam a nuvem "
         "(requer GOOGLE_API_KEY); os demais rodam local no Ollama."

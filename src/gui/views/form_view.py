@@ -393,7 +393,8 @@ def build_form_view(page: ft.Page, on_start: Callable[[PipelineArgs], None]) -> 
                         hairline(),
 
                         # --- Subtitles ---
-                        section_label("Legendas"),
+                        section("Legendas",
+                                help_key="transcription.subtitles", page=page),
                         export_subtitles_switch,
 
                         hairline(),
