@@ -11,7 +11,7 @@ description: Guia para adicionar, corrigir e revisar testes (unitários e de int
 tests/
 ├── conftest.py                              # fixtures globais — NÃO duplicar aqui
 ├── test_utils.py                            # src/utils.py
-├── test_transcriber.py                      # src/transcriber.py (parcial — _resolve_device)
+├── test_transcriber.py                      # src/transcriber.py — transcribe() via WhisperModel mock + legendas
 ├── test_llm_factory.py                      # src/llm_factory.py
 ├── test_llm_utils.py                        # src/llm_utils.py — split_text, bypass Gemini
 ├── test_formatter.py                        # src/formatter.py — paragraph formatting (GenericFakeChatModel)
@@ -24,11 +24,13 @@ tests/
 │   ├── test_video_cli.py                   # unit — sub-subparsers + run_video_cli (dispatch)
 │   ├── test_image_cli.py                   # unit — sub-subparsers + run_image_cli (dispatch)
 │   ├── test_document_cli.py                # unit — sub-subparsers + run_document_cli (dispatch)
+│   ├── test_transcribe_main.py             # unit — main.parse_args + _subtitle_formats_from_args
 │   └── test_bus.py                         # unit — CLIEventBus (eventos e formatação)
 ├── core/
 │   ├── __init__.py
 │   ├── test_ffmpeg.py                      # unit — run_ffmpeg (subprocess mockado)
 │   ├── test_metadata.py                    # unit — format_duration e helpers de metadata
+│   ├── test_subtitles.py                   # unit — SubtitleCue + to_srt + to_vtt + write_subtitles
 │   ├── audio/
 │   │   ├── test_normalizer_parser.py       # unit — _parse_loudnorm_json (sem ffmpeg)
 │   │   ├── test_normalizer_unit.py         # unit — normalize_lufs (subprocess mockado)
@@ -392,6 +394,84 @@ chamar `.invoke()` mais vezes que o número de mensagens fornecidas. Isso é
 no nível do módulo — esses atributos são lidos só dentro de `analyze()` /
 `build_prompt_ready()`, então um fixture autouse não é necessário.
 
+### Mock de `WhisperModel` (faster-whisper) — para testar `transcriber.transcribe`
+
+`src/transcriber.py` instancia `WhisperModel(...)` e chama
+`model.transcribe(...)`, que retorna `(segments, info)` onde
+`segments` é um **generator lazy** e cada `Segment` expõe
+`.start/.end/.text/.avg_logprob/.no_speech_prob`. `info` expõe
+`.language/.language_probability/.duration`.
+
+Para mockar sem carregar Whisper (RAM, CUDA, disco), use stand-ins
+duck-typed e patche o ponto de import:
+
+```python
+class _Seg:
+    """Minimal Segment stand-in matching the faster-whisper API surface used."""
+    def __init__(self, start, end, text, avg_logprob=-0.2, no_speech_prob=0.1):
+        self.start = start
+        self.end = end
+        self.text = text
+        self.avg_logprob = avg_logprob
+        self.no_speech_prob = no_speech_prob
+
+
+class _Info:
+    def __init__(self, language="pt", language_probability=0.99, duration=6.0):
+        self.language = language
+        self.language_probability = language_probability
+        self.duration = duration
+
+
+def _patch_whisper(mocker, segments, info=None):
+    """Patcha WhisperModel + _resolve_device (evita lookup de GPU)."""
+    fake = mocker.MagicMock()
+    # IMPORTANTE: iter() — faster-whisper retorna generator, não list.
+    # Usar list direto faria o teste passar mas mascara bugs de consumo lazy.
+    fake.transcribe.return_value = (iter(segments), info or _Info())
+    mocker.patch("src.transcriber.WhisperModel", return_value=fake)
+    mocker.patch("src.transcriber._resolve_device", return_value=("cpu", "int8"))
+    return fake
+
+
+@pytest.mark.unit
+def test_transcribe_flags_low_logprob(tmp_path, mocker):
+    from src.transcriber import transcribe
+    _patch_whisper(mocker, [
+        _Seg(0.0, 3.0, "ok"),
+        _Seg(3.0, 6.0, "ruim", avg_logprob=-2.0),   # < -1.0 → dispara [?]
+    ])
+    audio = tmp_path / "a.mp3"; audio.write_bytes(b"")
+    out = tmp_path / "o.txt"
+    transcribe(audio_path=audio, output_path=out, meta={"title":"x","duration":6},
+               url="x", model_size="small", language="pt",
+               threads=2, beam_size=1, force_overwrite=True)
+    assert "ruim [?]" in out.read_text(encoding="utf-8")
+```
+
+Gotchas específicos:
+
+- **Patche `src.transcriber.WhisperModel`, não `faster_whisper.WhisperModel`.**
+  O `from faster_whisper import WhisperModel` no topo de `transcriber.py`
+  vincula o símbolo localmente — só o ponto de uso responde ao patch.
+- **`_resolve_device` precisa ser mockado também.** Sem isso, o teste
+  tenta consultar `ctranslate2.get_supported_compute_types("cuda")` —
+  em CI sem GPU funciona, mas é tempo gasto à toa.
+- **Para `KeyboardInterrupt` no meio do loop**, use um generator que
+  yielda e depois levanta:
+  ```python
+  def _raise_after_first():
+      yield _Seg(0.0, 3.0, "primeiro")
+      raise KeyboardInterrupt
+  fake.transcribe.return_value = (_raise_after_first(), _Info())
+  ```
+  O teste valida com `pytest.raises(SystemExit)` (transcriber chama
+  `sys.exit(0)` e remove o arquivo incompleto).
+- **Para legendas** (`subtitle_formats=("srt","vtt")`), redirecione
+  `src.utils.TRANSCRIPTIONS_SUBTITLES_DIR` via `monkeypatch.setattr`
+  para `tmp_path` antes da chamada — o transcriber lê esse atributo
+  lazy dentro do `if subtitle_formats and cues:`.
+
 ### Mock de `urllib.request.urlopen` — para testar download_image
 
 `urlopen` é usado como context manager (`with urlopen(...) as resp`).
@@ -453,20 +533,22 @@ uv run pytest -m "not integration" --cov=src --cov-report=term-missing
 uv run pytest --cov=src --cov-report=term-missing
 ```
 
-O alvo é **≥ 90%** por módulo. Total agregado: **84%** com branch (87% só statements). Estado atual:
+O alvo é **≥ 90%** por módulo. Total agregado: **87%** com branch. Estado atual:
 
 | Módulo | Cobertura (com branch) |
 |---|---|
 | `formatter.py` | **100%** |
 | `prompter.py` | **100%** |
 | `llm_utils.py` | **100%** |
+| `core/subtitles.py` | **100%** |
 | `core/audio/normalizer.py` | **100%** |
 | `core/audio/info.py` | **100%** |
 | `core/ffmpeg.py` | **100%** |
-| `core/video/converter.py` | 97% (2 partial branches) |
-| `core/document/info.py` | 97% |
 | `analyzer.py` | 99% |
 | `cli/document.py` | 98% |
+| `transcriber.py` | 97% |
+| `core/video/converter.py` | 97% (2 partial branches) |
+| `core/document/info.py` | 97% |
 | `cli/video.py` | 97% |
 | `core/image/downloader.py` | 96% |
 | `cli/image.py` | 94% |
@@ -480,10 +562,9 @@ O alvo é **≥ 90%** por módulo. Total agregado: **84%** com branch (87% só s
 | `utils.py` | 82% |
 | `llm_factory.py` | 81% |
 | `core/audio/denoiser.py` | 80% |
-| `core/image/converter.py` | 71% |
 | `core/metadata.py` | 76% |
+| `core/image/converter.py` | 71% |
 | `core/image/background.py` | 32% (extra `[ai-image]` — sem teste de uso real) |
-| `transcriber.py` | 31% (Whisper — só `_resolve_device` testado) |
 | `core/image/describe.py` | 23% (vision LLM — sem teste de uso real) |
 | `core/audio/downloader.py` | 14% (yt-dlp não mockado) |
 | `core/video/downloader.py` | 12% (yt-dlp não mockado) |
@@ -491,7 +572,6 @@ O alvo é **≥ 90%** por módulo. Total agregado: **84%** com branch (87% só s
 Lacunas conhecidas e justificáveis:
 - `audio/downloader.py` + `video/downloader.py` — yt-dlp tem valor real em E2E (que não fazemos). Smoke test de mock daria <40%, retorno pequeno.
 - `image/background.py` + `image/describe.py` — extras opcionais `[ai-image]`. Smoke tests de lazy import seriam baratos mas ainda não escritos.
-- `transcriber.py` — `transcribe()` em si exige mockar `WhisperModel` da faster-whisper. Trabalho médio (~2h), levaria para ~75%.
 
 ### pymupdf nos testes do módulo document — uso REAL via fixture
 
