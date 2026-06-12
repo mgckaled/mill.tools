@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import shutil
 import tempfile
 from pathlib import Path
 from typing import Callable
@@ -16,6 +17,9 @@ logger = logging.getLogger(__name__)
 # Formatos que não suportam thumbnail embutida de forma confiável
 _NO_COVER_FMTS = {"ogg", "opus"}
 
+# Extensões de thumbnail geradas pelo yt-dlp — ignoradas ao procurar o arquivo de áudio
+_THUMB_EXTS = {".jpg", ".jpeg", ".png", ".webp"}
+
 
 def download_audio(
     url: str,
@@ -27,6 +31,11 @@ def download_audio(
 ) -> Path:
     """Baixa áudio de URL para out_dir.
 
+    Todo o download e pós-processamento (FFmpegExtractAudio, EmbedThumbnail)
+    ocorre num diretório temporário privado para evitar que o Windows Defender
+    bloqueie o rename de .temp.<ext> com WinError 32. Só o arquivo final é
+    movido para out_dir.
+
     Args:
         url: URL do YouTube, SoundCloud, etc.
         out_dir: Diretório de saída (criado se necessário).
@@ -36,7 +45,7 @@ def download_audio(
         progress_hook: Chamado com dict yt-dlp (status, downloaded_bytes, total_bytes…).
 
     Returns:
-        Path do arquivo gerado.
+        Path do arquivo gerado em out_dir.
     """
     out_dir.mkdir(parents=True, exist_ok=True)
 
@@ -57,21 +66,12 @@ def download_audio(
     if supports_cover:
         postprocessors.append({"key": "EmbedThumbnail", "already_have_thumbnail": False})
     elif embed_meta:
-        logger.info("[i] %s: thumbnail não suportada — só metadados embutidos", fmt)
+        logger.info("[i] %s: thumbnail not supported — metadata only", fmt)
 
-    ydl_opts: dict = {
-        "format": "bestaudio/best",
-        "outtmpl": str(out_dir / "%(title)s.%(ext)s"),
-        "postprocessors": postprocessors,
-        "progress_hooks": [progress_hook] if progress_hook else [],
-        "writethumbnail": supports_cover,
-        "nopart": True,
-        "overwrites": True,
-        # Redireciona .temp/.part para %TEMP% do sistema — evita WinError 32 do Windows Defender
-        "paths": {"temp": tempfile.gettempdir()},
-        "quiet": True,
-        "no_warnings": True,
-    }
+    # Diretório temporário privado: FFmpegExtractAudio cria .temp.<ext> no mesmo
+    # diretório do arquivo de entrada. Usando %TEMP%, o Defender não escaneia e
+    # o rename não falha. Somente o arquivo final é movido para out_dir.
+    tmp_dir = Path(tempfile.mkdtemp(prefix="mill_audio_"))
 
     final_path: list[str] = []
 
@@ -81,41 +81,58 @@ def download_audio(
             if fp:
                 final_path.append(fp)
 
-    ydl_opts["postprocessor_hooks"] = [_pp_hook]
+    ydl_opts: dict = {
+        "format": "bestaudio/best",
+        "outtmpl": str(tmp_dir / "%(title)s.%(ext)s"),
+        "postprocessors": postprocessors,
+        "postprocessor_hooks": [_pp_hook],
+        "progress_hooks": [progress_hook] if progress_hook else [],
+        "writethumbnail": supports_cover,
+        "nopart": True,
+        "overwrites": True,
+        "quiet": True,
+        "no_warnings": True,
+    }
 
-    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-        info = ydl.extract_info(url, download=True)
+    try:
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            info = ydl.extract_info(url, download=True)
 
-    out_path: Path | None = None
+        out_path: Path | None = None
 
-    if final_path and Path(final_path[-1]).exists():
-        out_path = Path(final_path[-1])
-    elif info:
-        downloads = info.get("requested_downloads", [])
-        if downloads:
-            fp = downloads[0].get("filepath", "")
-            if fp and Path(fp).exists():
-                out_path = Path(fp)
+        if final_path and Path(final_path[-1]).exists():
+            out_path = Path(final_path[-1])
+        elif info:
+            downloads = info.get("requested_downloads", [])
+            if downloads:
+                fp = downloads[0].get("filepath", "")
+                if fp and Path(fp).exists():
+                    out_path = Path(fp)
 
-    if out_path is None:
-        files = sorted(
-            (f for f in out_dir.iterdir() if f.is_file()),
-            key=lambda f: f.stat().st_mtime,
-            reverse=True,
-        )
-        if files:
-            out_path = files[0]
+        if out_path is None:
+            files = sorted(
+                (f for f in tmp_dir.iterdir() if f.is_file() and f.suffix.lower() not in _THUMB_EXTS),
+                key=lambda f: f.stat().st_mtime,
+                reverse=True,
+            )
+            if files:
+                out_path = files[0]
 
-    if out_path is None:
-        raise FileNotFoundError(f"Download concluído mas arquivo não encontrado em: {out_dir}")
+        if out_path is None:
+            raise FileNotFoundError(f"Download concluído mas arquivo não encontrado em: {tmp_dir}")
 
-    safe_stem = sanitize_filename(out_path.stem)
-    if safe_stem and safe_stem != out_path.stem:
-        new_path = out_path.with_stem(safe_stem)
-        try:
-            out_path.rename(new_path)
-            out_path = new_path
-        except OSError:
-            pass
+        # Sanitiza o nome enquanto ainda está em tmp_dir (sem Defender)
+        safe_stem = sanitize_filename(out_path.stem)
+        if safe_stem and safe_stem != out_path.stem:
+            try:
+                out_path = out_path.rename(out_path.with_stem(safe_stem))
+            except OSError:
+                pass
 
-    return out_path
+        # Move o arquivo final para out_dir
+        dest = out_dir / out_path.name
+        shutil.move(str(out_path), str(dest))
+        return dest
+
+    finally:
+        shutil.rmtree(tmp_dir, ignore_errors=True)

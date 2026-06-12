@@ -25,7 +25,7 @@ _DTYPE       = "float32"
 _UI_INTERVAL = 0.2     # segundos entre atualizações de UI durante reprodução
 _WF_W        = 600     # largura do waveform em pixels (resolução interna da imagem PNG)
 _WF_H        = 120     # altura do waveform em pixels
-_WF_SR_FAST  = 8_000   # Hz do decode rápido (mono) usado apenas para visualização
+_WF_SR_FAST  = 500     # Hz do decode rápido (mono) — suficiente para 600px (≥50 amostras/pixel em 1 min)
 
 # Color.dark.primary = #F4A63C convertido para RGBA
 _WF_PLAYED   = (244, 166,  60, 210)
