@@ -119,3 +119,43 @@ def test_image_describe_prompt():
 def test_image_func_is_callable():
     ns = _parse("convert", "photo.jpg")
     assert callable(ns.func)
+
+
+@pytest.mark.unit
+def test_run_image_cli_convert_dispatches_to_pipeline(mocker, tmp_path):
+    """image convert FILE → ImageArgs with operation='convert' and single item."""
+    mocker.patch("src.utils.check_dependencies")
+    mock_pipeline = mocker.patch(
+        "src.gui.modules.image.worker.run_image_pipeline",
+        return_value=True,
+    )
+    f = tmp_path / "photo.jpg"
+    f.write_bytes(b"")
+    ns = _parse("convert", str(f), "--fmt", "webp", "--quality", "82")
+    ns.func(ns)
+    assert mock_pipeline.called
+    args = mock_pipeline.call_args.args[0]
+    assert args.operation == "convert"
+    assert args.fmt == "webp"
+    assert args.quality == 82
+    assert len(args.items) == 1
+
+
+@pytest.mark.unit
+def test_run_image_cli_contact_sheet_collects_multiple_items(mocker, tmp_path):
+    """image contact-sheet FILES... → multiple items, op normalised to snake_case."""
+    mocker.patch("src.utils.check_dependencies")
+    mock_pipeline = mocker.patch(
+        "src.gui.modules.image.worker.run_image_pipeline",
+        return_value=True,
+    )
+    files = []
+    for name in ("a.jpg", "b.jpg", "c.jpg"):
+        p = tmp_path / name
+        p.write_bytes(b"")
+        files.append(str(p))
+    ns = _parse("contact-sheet", *files, "--cols", "3")
+    ns.func(ns)
+    args = mock_pipeline.call_args.args[0]
+    assert args.operation == "contact_sheet"
+    assert len(args.items) == 3

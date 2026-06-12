@@ -96,3 +96,48 @@ def test_func_callable_for_all_ops():
     for op, extra in ops_and_args:
         ns = _parse(op, *extra)
         assert callable(ns.func), f"ns.func not callable for op={op}"
+
+
+def test_run_document_cli_merge_dispatches_to_pipeline(mocker, tmp_path):
+    """document merge a.pdf b.pdf → DocumentArgs with operation='merge' and 2 input_paths."""
+    mocker.patch("src.utils.setup_logging")
+    mock_pipeline = mocker.patch(
+        "src.gui.modules.document.worker.run_document_pipeline",
+        return_value=True,
+    )
+    ns = _parse("merge", "a.pdf", "b.pdf")
+    ns.func(ns)
+    assert mock_pipeline.called
+    args = mock_pipeline.call_args.args[0]
+    assert args.operation == "merge"
+    assert len(args.input_paths) == 2
+
+
+def test_run_document_cli_pdf_to_images_normalises_op(mocker):
+    """'pdf-to-images' (kebab) becomes 'pdf_to_images' (snake) in DocumentArgs."""
+    mocker.patch("src.utils.setup_logging")
+    mock_pipeline = mocker.patch(
+        "src.gui.modules.document.worker.run_document_pipeline",
+        return_value=True,
+    )
+    ns = _parse("pdf-to-images", "doc.pdf", "--fmt", "png", "--dpi", "150")
+    ns.func(ns)
+    args = mock_pipeline.call_args.args[0]
+    assert args.operation == "pdf_to_images"
+    assert args.image_fmt == "png"
+    assert args.dpi == 150
+
+
+def test_run_document_cli_qr_has_no_input_paths(mocker):
+    """document qr DATA → DocumentArgs with input_paths=[] and qr_data filled."""
+    mocker.patch("src.utils.setup_logging")
+    mock_pipeline = mocker.patch(
+        "src.gui.modules.document.worker.run_document_pipeline",
+        return_value=True,
+    )
+    ns = _parse("qr", "https://example.com")
+    ns.func(ns)
+    args = mock_pipeline.call_args.args[0]
+    assert args.operation == "qr"
+    assert args.input_paths == []
+    assert args.qr_data == "https://example.com"

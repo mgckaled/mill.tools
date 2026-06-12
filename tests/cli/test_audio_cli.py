@@ -51,3 +51,31 @@ def test_audio_no_meta():
 def test_audio_func_is_callable():
     ns = _parse("https://youtu.be/abc")
     assert callable(ns.func)
+
+
+@pytest.mark.unit
+def test_run_audio_cli_dispatches_to_pipeline(mocker):
+    """ns.func dispatches to run_audio_pipeline with an AudioArgs built from the namespace."""
+    mocker.patch("src.utils.check_dependencies")
+    mock_pipeline = mocker.patch(
+        "src.gui.modules.audio.worker.run_audio_pipeline",
+        return_value=True,
+    )
+    ns = _parse("https://youtu.be/abc", "--fmt", "wav", "--normalize", "--lufs", "-16")
+    ns.func(ns)
+    assert mock_pipeline.called
+    args = mock_pipeline.call_args.args[0]
+    assert args.fmt == "wav"
+    assert args.normalize is True
+    assert args.normalize_target_lufs == -16.0
+
+
+@pytest.mark.unit
+def test_run_audio_cli_nonzero_exit_on_failure(mocker):
+    """Pipeline returning False triggers sys.exit(1)."""
+    mocker.patch("src.utils.check_dependencies")
+    mocker.patch("src.gui.modules.audio.worker.run_audio_pipeline", return_value=False)
+    ns = _parse("https://youtu.be/abc")
+    with pytest.raises(SystemExit) as exc:
+        ns.func(ns)
+    assert exc.value.code == 1

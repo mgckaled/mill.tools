@@ -85,3 +85,37 @@ def test_video_thumbnail_defaults():
 def test_video_func_is_callable():
     ns = _parse("download", "https://youtu.be/abc")
     assert callable(ns.func)
+
+
+@pytest.mark.unit
+def test_run_video_cli_download_dispatches_to_pipeline(mocker):
+    """video download URL → VideoArgs with kind='url' and operation='download'."""
+    mocker.patch("src.utils.check_dependencies")
+    mock_pipeline = mocker.patch(
+        "src.gui.modules.video.worker.run_video_pipeline",
+        return_value=True,
+    )
+    ns = _parse("download", "https://youtu.be/abc", "--quality", "720")
+    ns.func(ns)
+    assert mock_pipeline.called
+    args = mock_pipeline.call_args.args[0]
+    assert args.operation == "download"
+    assert args.items[0].kind == "url"
+    assert args.resolution == "720"
+
+
+@pytest.mark.unit
+def test_run_video_cli_extract_audio_normalises_op_name(mocker, tmp_path):
+    """'extract-audio' (kebab) becomes 'extract_audio' (snake) in VideoArgs."""
+    mocker.patch("src.utils.check_dependencies")
+    mock_pipeline = mocker.patch(
+        "src.gui.modules.video.worker.run_video_pipeline",
+        return_value=True,
+    )
+    f = tmp_path / "movie.mp4"
+    f.write_bytes(b"")
+    ns = _parse("extract-audio", str(f), "--fmt", "wav")
+    ns.func(ns)
+    args = mock_pipeline.call_args.args[0]
+    assert args.operation == "extract_audio"
+    assert args.audio_fmt == "wav"
