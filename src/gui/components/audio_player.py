@@ -19,19 +19,20 @@ from src.gui.theme.tokens import Color, Radius, Space, Type
 # Constantes
 # ---------------------------------------------------------------------------
 
-_SAMPLERATE = 44100
-_CHANNELS   = 2
-_DTYPE      = "float32"
+_SAMPLERATE  = 44100
+_CHANNELS    = 2
+_DTYPE       = "float32"
 _UI_INTERVAL = 0.2     # segundos entre atualizações de UI durante reprodução
-_WF_W = 600            # largura do waveform em pixels (resolução interna da imagem PNG)
-_WF_H = 120            # altura do waveform em pixels
+_WF_W        = 600     # largura do waveform em pixels (resolução interna da imagem PNG)
+_WF_H        = 120     # altura do waveform em pixels
+_WF_SR_FAST  = 8_000   # Hz do decode rápido (mono) usado apenas para visualização
 
 # Color.dark.primary = #F4A63C convertido para RGBA
 _WF_PLAYED   = (244, 166,  60, 210)
 _WF_UNPLAYED = ( 80,  80,  95, 150)
 _WF_CURSOR   = (255, 255, 255, 200)
 
-# 1×1 px PNG transparente (src obrigatório no Flet 0.85)
+# 1×1 px PNG transparente — src aceita bytes diretamente em Flet 0.85
 _BLANK_PNG = (
     b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01"
     b"\x08\x06\x00\x00\x00\x1f\x15\xc4\x89\x00\x00\x00\nIDATx\x9cc\x00\x01"
@@ -52,7 +53,7 @@ def _fmt_s(seconds: float) -> str:
 def _decode_via_ffmpeg(path: str) -> np.ndarray:
     """Decodifica qualquer formato de áudio para float32 PCM via ffmpeg.
 
-    Retorna array (n_samples, 2) a 44100 Hz estéreo.
+    Retorna array (n_samples, 2) a 44100 Hz estéreo — usado para playback.
     """
     cmd = [
         "ffmpeg", "-i", path,
@@ -65,14 +66,36 @@ def _decode_via_ffmpeg(path: str) -> np.ndarray:
     result = subprocess.run(cmd, capture_output=True)
     raw = result.stdout
     if not raw:
-        raise RuntimeError(f"ffmpeg não produziu saída para: {path}")
+        raise RuntimeError(f"ffmpeg returned no output for: {path}")
     return np.frombuffer(raw, dtype=np.float32).reshape(-1, _CHANNELS)
+
+
+def _decode_waveform_fast(path: str) -> np.ndarray:
+    """Decodifica a 8 kHz mono para geração rápida do waveform.
+
+    Aproximadamente 10x mais rápido que o decode completo.
+    Retorna array (n_samples, 1) — não usado para playback.
+    """
+    cmd = [
+        "ffmpeg", "-i", path,
+        "-f", "f32le",
+        "-ar", str(_WF_SR_FAST),
+        "-ac", "1",
+        "pipe:1",
+        "-loglevel", "quiet",
+    ]
+    result = subprocess.run(cmd, capture_output=True)
+    raw = result.stdout
+    if not raw:
+        raise RuntimeError(f"ffmpeg returned no waveform output for: {path}")
+    return np.frombuffer(raw, dtype=np.float32).reshape(-1, 1)
 
 
 def _compute_waveform(data: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
     """Pré-computa os arrays RGBA played/unplayed para o waveform.
 
     Retorna (played_arr, unplayed_arr) com shape (_WF_H, _WF_W, 4).
+    Aceita dados mono (n, 1) ou estéreo (n, 2) — usa mean(axis=1).
     Ambos são calculados uma vez no carregamento e reutilizados em cada tick.
     """
     W, H = _WF_W, _WF_H
@@ -310,15 +333,18 @@ def build_audio_player(page: ft.Page) -> AudioPlayer:
         - Waveform estático com cursor de posição (PIL + numpy, 1 redesenho/tick)
         - Play/pause, skip ±10s, loop, volume + mute
         - Seek por clique no waveform (GestureDetector.on_tap_down → local_x)
-        - Decodificação e cálculo do waveform em threads de background
+        - Decode rápido (8 kHz mono) para waveform em paralelo com decode completo para playback
+          — waveform aparece antes dos controles serem habilitados
+        - gapless_playback=True no ft.Image elimina flickering durante atualizações do cursor
 
     Args:
         page: Página Flet (usada em page.update() nos callbacks de UI).
     """
     engine = _AudioEngine()
-    _timer_running: list[bool]              = [False]
-    _wf_played:     list[np.ndarray | None] = [None]
-    _wf_unplayed:   list[np.ndarray | None] = [None]
+    _timer_running:   list[bool]              = [False]
+    _wf_played:       list[np.ndarray | None] = [None]
+    _wf_unplayed:     list[np.ndarray | None] = [None]
+    _load_generation: list[int]               = [0]   # descarta waveform de carga anterior
 
     # ------------------------------------------------------------------
     # Widgets de informação
@@ -358,7 +384,14 @@ def build_audio_player(page: ft.Page) -> AudioPlayer:
     # Waveform
     # ------------------------------------------------------------------
 
-    waveform_img = ft.Image(src=_BLANK_PNG, fit=ft.BoxFit.FILL, expand=True)
+    # src aceita Union[str, bytes] em Flet 0.85 — bytes PNG diretos sem conversão
+    # gapless_playback=True mantém o frame anterior visível durante a troca — sem flickering
+    waveform_img = ft.Image(
+        src=_BLANK_PNG,
+        fit=ft.BoxFit.FILL,
+        expand=True,
+        gapless_playback=True,
+    )
 
     waveform_gd = ft.GestureDetector(
         content=waveform_img,
@@ -564,8 +597,12 @@ def build_audio_player(page: ft.Page) -> AudioPlayer:
         play_btn.tooltip  = "Pausar" if state == "playing" else "Reproduzir"
         time_label.value  = f"{_fmt_s(pos)} / {_fmt_s(dur)}"
 
+        # Waveform isolado em try/except — exceção aqui não mata o polling
         if _wf_played[0] is not None:
-            waveform_img.src = _render_wf(pos)
+            try:
+                waveform_img.src = _render_wf(pos)
+            except Exception:
+                pass
 
         try:
             page.update()
@@ -578,13 +615,17 @@ def build_audio_player(page: ft.Page) -> AudioPlayer:
         _timer_running[0] = True
 
         def _poll() -> None:
-            while _timer_running[0]:
-                state = engine.state
-                _update_display()
-                if state not in ("playing", "loading"):
-                    _timer_running[0] = False
-                    break
-                time.sleep(_UI_INTERVAL)
+            # try/finally garante reset de _timer_running mesmo com exceção inesperada,
+            # evitando que o guard impeça novos pollings após falha
+            try:
+                while _timer_running[0]:
+                    state = engine.state
+                    _update_display()
+                    if state not in ("playing", "loading"):
+                        break
+                    time.sleep(_UI_INTERVAL)
+            finally:
+                _timer_running[0] = False
 
         threading.Thread(target=_poll, daemon=True).start()
 
@@ -655,7 +696,10 @@ def build_audio_player(page: ft.Page) -> AudioPlayer:
             threading.Thread(target=_restart, daemon=True).start()
         else:
             _stop_polling()
-            waveform_img.src = _render_wf(0.0)
+            try:
+                waveform_img.src = _render_wf(0.0)
+            except Exception:
+                pass
             time_label.value = f"0:00 / {_fmt_s(engine.duration_s)}"
             play_btn.selected = False
             play_btn.tooltip  = "Reproduzir"
@@ -664,36 +708,43 @@ def build_audio_player(page: ft.Page) -> AudioPlayer:
             except Exception:
                 pass
 
-    play_btn.on_click      = _on_play_click
-    skip_back_btn.on_click = _on_skip_back
-    skip_fwd_btn.on_click  = _on_skip_fwd
-    loop_btn.on_click      = _on_loop_click
-    mute_btn.on_click      = _on_mute_click
-    vol_slider.on_change   = _on_vol_change
+    play_btn.on_click       = _on_play_click
+    skip_back_btn.on_click  = _on_skip_back
+    skip_fwd_btn.on_click   = _on_skip_fwd
+    loop_btn.on_click       = _on_loop_click
+    mute_btn.on_click       = _on_mute_click
+    vol_slider.on_change    = _on_vol_change
     waveform_gd.on_tap_down = _on_waveform_tap
-    engine.on_complete     = _on_complete
+    engine.on_complete      = _on_complete
 
     # ------------------------------------------------------------------
     # Função pública de carga
     # ------------------------------------------------------------------
 
     def _load(path: str) -> None:
-        """Carrega arquivo de áudio, calcula waveform e exibe o player."""
+        """Carrega arquivo de áudio, calcula waveform e exibe o player.
+
+        Lança duas threads paralelas:
+          - waveform: decode rápido 8 kHz mono → waveform aparece logo (ring ainda visível)
+          - playback: decode completo 44100 Hz estéreo → habilita controles ao terminar
+        """
         _stop_polling()
+        _load_generation[0] += 1
+        gen = _load_generation[0]
         p = Path(path)
 
         # Reset de UI para estado loading
-        file_label.value   = p.name
-        info_label.value   = ""
-        time_label.value   = "0:00 / 0:00"
-        play_btn.selected  = False
-        play_btn.disabled  = True
+        file_label.value       = p.name
+        info_label.value       = ""
+        time_label.value       = "0:00 / 0:00"
+        play_btn.selected      = False
+        play_btn.disabled      = True
         skip_back_btn.disabled = True
         skip_fwd_btn.disabled  = True
         loading_ring.visible   = True
-        waveform_img.src   = _BLANK_PNG
-        _wf_played[0]   = None
-        _wf_unplayed[0] = None
+        waveform_img.src = _BLANK_PNG
+        _wf_played[0]          = None
+        _wf_unplayed[0]        = None
 
         # Transição placeholder → player
         placeholder_ctr.visible = False
@@ -704,32 +755,43 @@ def build_audio_player(page: ft.Page) -> AudioPlayer:
         except Exception:
             pass
 
-        def _on_loaded() -> None:
-            # Calcula waveform com os dados já disponíveis em engine._data
-            if engine._data is not None:
+        def _load_waveform() -> None:
+            """Decode rápido 8 kHz mono → waveform visível antes do decode completo."""
+            try:
+                wf_data = _decode_waveform_fast(str(p))
+                if _load_generation[0] != gen:
+                    return
+                played, unplayed = _compute_waveform(wf_data)
+                if _load_generation[0] != gen:
+                    return
+                _wf_played[0]          = played
+                _wf_unplayed[0]        = unplayed
+                waveform_img.src = _render_wf(0.0)
                 try:
-                    played, unplayed = _compute_waveform(engine._data)
-                    _wf_played[0]   = played
-                    _wf_unplayed[0] = unplayed
+                    page.update()
                 except Exception:
                     pass
+            except Exception:
+                pass
 
+        def _on_loaded() -> None:
+            """Chamado quando o decode completo (44100 Hz estéreo) termina."""
+            if _load_generation[0] != gen:
+                return
             dur    = engine.duration_s
             sr_str = f"{_SAMPLERATE // 1000}.{(_SAMPLERATE % 1000) // 100}kHz"
-            info_label.value   = f"{_fmt_s(dur)} · {sr_str} · Stereo"
-            play_btn.disabled  = False
+            info_label.value       = f"{_fmt_s(dur)} · {sr_str} · Stereo"
+            play_btn.disabled      = False
             skip_back_btn.disabled = False
             skip_fwd_btn.disabled  = False
             loading_ring.visible   = False
-
-            if _wf_played[0] is not None:
-                waveform_img.src = _render_wf(0.0)
-
             try:
                 page.update()
             except Exception:
                 pass
 
-        engine.load(path, on_loaded=_on_loaded)
+        # Waveform rápido em paralelo com o decode completo para playback
+        threading.Thread(target=_load_waveform, daemon=True).start()
+        engine.load(str(p), on_loaded=_on_loaded)
 
     return AudioPlayer(control=root, load=_load)

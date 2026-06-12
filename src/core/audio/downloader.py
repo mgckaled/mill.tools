@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import tempfile
 from pathlib import Path
 from typing import Callable
 
@@ -64,6 +65,10 @@ def download_audio(
         "postprocessors": postprocessors,
         "progress_hooks": [progress_hook] if progress_hook else [],
         "writethumbnail": supports_cover,
+        "nopart": True,
+        "overwrites": True,
+        # Redireciona .temp/.part para %TEMP% do sistema — evita WinError 32 do Windows Defender
+        "paths": {"temp": tempfile.gettempdir()},
         "quiet": True,
         "no_warnings": True,
     }
