@@ -1,4 +1,4 @@
-"""Unit tests for src/core/document/info.py — 5 tests."""
+"""Unit tests for src/core/document/info.py."""
 import pytest
 
 pytestmark = pytest.mark.unit

@@ -129,13 +129,13 @@ def session_jpg(tmp_path_factory: pytest.TempPathFactory) -> Path:
 
 
 # ---------------------------------------------------------------------------
-# Hook: pula testes de integração automaticamente se ffmpeg não estiver no PATH
+# Fixtures de PDF de sessão — geradas via pymupdf (importorskip se ausente)
 # ---------------------------------------------------------------------------
 
 @pytest.fixture(scope="session")
 def sample_pdf(tmp_path_factory: pytest.TempPathFactory):
     """3-page PDF with extractable text — generated via pymupdf."""
-    import pymupdf  # type: ignore[import-untyped]
+    pymupdf = pytest.importorskip("pymupdf")
     tmp = tmp_path_factory.mktemp("pdfs")
     path = tmp / "sample.pdf"
     doc = pymupdf.open()
@@ -150,7 +150,7 @@ def sample_pdf(tmp_path_factory: pytest.TempPathFactory):
 @pytest.fixture(scope="session")
 def sample_pdf_with_images(tmp_path_factory: pytest.TempPathFactory, session_jpg):
     """PDF with an embedded JPEG — used by compress tests."""
-    import pymupdf  # type: ignore[import-untyped]
+    pymupdf = pytest.importorskip("pymupdf")
     tmp = tmp_path_factory.mktemp("pdfs")
     path = tmp / "with_images.pdf"
     doc = pymupdf.open()

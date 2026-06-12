@@ -1,4 +1,4 @@
-"""Unit tests for src/core/document/converter.py — 7 tests."""
+"""Unit tests for src/core/document/converter.py."""
 import pytest
 
 pytestmark = pytest.mark.unit

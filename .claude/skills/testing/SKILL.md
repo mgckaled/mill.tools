@@ -35,23 +35,32 @@ tests/
 │   │   └── test_pipeline_e2e.py            # integration — smoke test denoise→normalize
 │   ├── image/
 │   │   ├── test_transform.py               # unit — 9 funções puras Pillow
-│   │   ├── test_converter.py               # integration — convert_image
-│   │   └── test_info.py                    # integration — image_info, thumbnail_bytes
+│   │   ├── test_converter.py               # unit — convert_image (PIL puro)
+│   │   └── test_info.py                    # unit — image_info, thumbnail_bytes (PIL puro)
 │   ├── video/
 │   │   └── test_info.py                    # integration — get_video_info (VideoInfo dataclass)
 │   └── document/
-│       ├── test_processor.py               # unit — merge/split/compress/rotate/watermark/stamp/encrypt (pymupdf mockado)
-│       ├── test_converter.py               # unit — pdf_to_images, images_to_pdf, extract_text
-│       ├── test_info.py                    # unit — get_pdf_info, PdfInfo
-│       └── test_qr.py                      # unit — generate_qr (qrcode mockado)
+│       ├── test_processor.py               # unit — merge/split/compress/rotate/watermark/stamp/encrypt (pymupdf REAL via sample_pdf)
+│       ├── test_converter.py               # unit — pdf_to_images, images_to_pdf, extract_text (pymupdf REAL)
+│       ├── test_info.py                    # unit — get_pdf_info, PdfInfo (pymupdf REAL)
+│       └── test_qr.py                      # unit — generate_qr (qrcode REAL — gera PNG em disco)
 └── gui/
     ├── __init__.py
     ├── test_settings.py                    # src/gui/settings.py
     └── modules/
-        ├── audio/test_pipeline_log.py
-        ├── image/test_pipeline_log.py
+        ├── audio/test_pipeline_log.py      # STUB — preencher seguindo o molde do módulo document
+        ├── image/test_pipeline_log.py      # STUB — preencher seguindo o molde do módulo document
+        ├── video/test_pipeline_log.py      # AUSENTE — pasta tests/gui/modules/video/ ainda não existe
         └── document/test_pipeline_log.py   # unit — resolve_messages, resolve_stage_label, fmt_* builders
 ```
+
+> **Nota sobre `unit` no módulo document**: ao contrário do que a tabela
+> sugeria em versões antigas desta skill, `tests/core/document/` **não
+> mocka pymupdf**. As fixtures `sample_pdf` e `sample_pdf_with_images`
+> (em `conftest.py`) usam `pytest.importorskip("pymupdf")` e geram PDFs
+> reais em disco. Mantemos o marcador `unit` porque pymupdf é dependência
+> hard (não opcional) e não há `ffmpeg`/rede/GPU envolvidos — o hook de
+> skip do conftest não precisa pular esses testes.
 
 Regras de estrutura:
 - Espelhar `src/` em `tests/` — `src/core/image/transform.py` → `tests/core/image/test_transform.py`
@@ -337,22 +346,36 @@ O alvo é **≥ 90%** por módulo de `src/core/`. Estado atual:
 | `core/document/processor.py` | medido por testes unit |
 | `core/document/converter.py` | medido por testes unit |
 
-### Mock de pymupdf (testes do módulo document)
+### pymupdf nos testes do módulo document — uso REAL via fixture
 
-`pymupdf` é importado dentro das funções com `import pymupdf` (lazy import). Para mockar sem instalar pymupdf real nos testes:
+Os testes em `tests/core/document/` **não mockam pymupdf** — usam as
+fixtures de sessão `sample_pdf` e `sample_pdf_with_images` (em
+`conftest.py`), que geram PDFs reais em disco com
+`pytest.importorskip("pymupdf")` no topo (skip elegante se a
+dependência sumir).
+
+Justificativa: `pymupdf` é dependência hard do projeto (não está num
+extra opcional), e nenhum desses testes depende de ffmpeg/rede/GPU.
+Portanto eles ficam corretamente marcados como `unit` e exercitam
+o comportamento real de `merge_pdfs`, `split_pdf`, `compress_pdf`,
+`pdf_to_images`, etc.
+
+Se você precisar testar uma função document **sem** invocar
+operações reais (caminho de erro, lazy imports, branches de
+disponibilidade), mocke pontualmente via `mocker.patch.dict`:
 
 ```python
 import sys
 from unittest.mock import MagicMock
 
-# Criar módulo fake antes de importar o código alvo
-sys.modules["pymupdf"] = MagicMock()
-
-# Ou via mocker.patch no contexto do teste:
 mocker.patch.dict("sys.modules", {"pymupdf": MagicMock()})
 ```
 
-Para `qrcode` (mesmo padrão de lazy import em `qr.py`):
+Para `qrcode` (mesmo padrão de lazy import em `qr.py`) o `test_qr.py`
+também usa a biblioteca real — gera PNG em disco e valida o tamanho
+da imagem com Pillow. Mockar só faz sentido para cobrir branches de
+erro:
+
 ```python
 mocker.patch.dict("sys.modules", {"qrcode": MagicMock(), "qrcode.constants": MagicMock()})
 ```

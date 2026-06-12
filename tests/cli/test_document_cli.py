@@ -1,4 +1,4 @@
-"""Unit tests for src/cli/document.py — 13 tests."""
+"""Unit tests for src/cli/document.py."""
 import argparse
 
 import pytest

@@ -1,4 +1,4 @@
-"""Unit tests for src/gui/modules/document/pipeline_log.py — 10 tests."""
+"""Unit tests for src/gui/modules/document/pipeline_log.py."""
 import pytest
 
 pytestmark = pytest.mark.unit
