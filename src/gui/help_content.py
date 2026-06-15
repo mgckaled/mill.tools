@@ -203,6 +203,12 @@ HELP_SHORT: dict[str, str] = {
         "camada de texto são lidas direto; só as imagens são processadas por OCR. "
         "300 DPI é o piso recomendado para boa precisão."
     ),
+    # --- Biblioteca ---
+    "library": (
+        "Reúne tudo que você já gerou — áudio, vídeo, imagens, transcrições e "
+        "documentos — num só lugar. Filtre por tipo, busque por nome, reabra "
+        "arquivos ou reenvie uma saída para outro módulo num clique."
+    ),
 }
 
 #: Texto longo (opcional) — quando presente, a ⓘ vira clicável e abre um modal.
@@ -328,6 +334,22 @@ HELP_LONG: dict[str, str] = {
         "150 dpi → boa qualidade, equilíbrio\n"
         "300 dpi → impressão profissional\n\n"
         "A cada dobro de DPI, o tamanho do arquivo quadruplica."
+    ),
+    "library": (
+        "Biblioteca — o índice de tudo que o mill.tools já produziu.\n\n"
+        "O que ela mostra:\n"
+        "• Todos os arquivos sob output/ — áudio, vídeo, imagens, transcrições "
+        "e documentos — em cards com miniatura (imagem, 1ª página do PDF ou "
+        "frame do vídeo); áudio e texto usam um ícone do tipo.\n\n"
+        "O que você pode fazer:\n"
+        "• Filtrar por tipo e por período (24h, 7 ou 30 dias).\n"
+        "• Buscar por nome e ordenar por data, nome ou tamanho.\n"
+        "• Abrir o arquivo ou a pasta dele no sistema.\n"
+        "• Reenviar uma saída para outro módulo num clique — ex.: mandar um "
+        "áudio baixado para a Transcrição ou reprocessar uma imagem.\n\n"
+        "A lista é recarregada ao abrir a Biblioteca e quando um pipeline "
+        "termina. Há paridade na linha de comando: "
+        "uv run main.py library list."
     ),
 }
 

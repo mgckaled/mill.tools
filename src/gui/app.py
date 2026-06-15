@@ -13,7 +13,7 @@ from src.gui.events import EventBus, PipelineEvent
 from src.gui.home import show_home
 from src.gui.splash import show_splash
 from src.gui.theme import sync_page_bgcolor
-from src.gui.theme.components import Cursor
+from src.gui.theme.components import Cursor, help_icon_for
 from src.gui.theme.tokens import Motion, Space, Type
 from src.gui.modules.audio.view import build_audio_module
 from src.gui.modules.base import Module
@@ -113,18 +113,20 @@ def build_app(page: ft.Page, initial_module: str = "transcription") -> None:
     # Library is a hub over every module's output, not a peer tool — it lives in
     # the AppBar next to the wordmark instead of the NavigationRail. on_click is
     # wired after navigate_to is defined (forward reference, like nav).
-    library_btn = ft.IconButton(
-        icon=ft.Icons.COLLECTIONS_BOOKMARK_OUTLINED,
-        selected_icon=ft.Icons.COLLECTIONS_BOOKMARK,
-        selected=(initial_module == "library"),
-        tooltip="Biblioteca",
-        style=ft.ButtonStyle(
+    def _library_btn_style(active: bool) -> ft.ButtonStyle:
+        c = ft.Colors.PRIMARY if active else ft.Colors.ON_SURFACE_VARIANT
+        return ft.ButtonStyle(
             mouse_cursor=Cursor.interactive,
             color={
-                ft.ControlState.SELECTED: ft.Colors.PRIMARY,
-                ft.ControlState.DEFAULT: ft.Colors.ON_SURFACE_VARIANT,
+                ft.ControlState.DEFAULT: c,
+                ft.ControlState.HOVERED: ft.Colors.PRIMARY,
             },
-        ),
+        )
+
+    library_btn = ft.TextButton(
+        "Biblioteca",
+        icon=ft.Icons.COLLECTIONS_BOOKMARK_OUTLINED,
+        style=_library_btn_style(initial_module == "library"),
     )
 
     wordmark = ft.Text(
@@ -148,9 +150,14 @@ def build_app(page: ft.Page, initial_module: str = "transcription") -> None:
         ]
     )
 
+    _title_controls: list[ft.Control] = [wordmark, library_btn]
+    _library_help = help_icon_for("library", page)
+    if _library_help is not None:
+        _title_controls.append(_library_help)
+
     page.appbar = ft.AppBar(
         title=ft.Row(
-            controls=[wordmark, library_btn],
+            controls=_title_controls,
             spacing=Space.xs,
             vertical_alignment=ft.CrossAxisAlignment.CENTER,
         ),
@@ -221,7 +228,7 @@ def build_app(page: ft.Page, initial_module: str = "transcription") -> None:
         # Library has no rail destination → deselect the rail (selected_index
         # None) and highlight the AppBar button instead.
         rail.selected_index = _rail_index(module_id)
-        library_btn.selected = module_id == "library"
+        library_btn.style = _library_btn_style(module_id == "library")
         for i, m in enumerate(MODULES):
             m.control.visible = i == idx
         MODULES[idx].on_mount(payload or {})
