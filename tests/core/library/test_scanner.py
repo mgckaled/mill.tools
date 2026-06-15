@@ -93,6 +93,20 @@ def test_scan_library_collects_and_sorts_by_mtime_desc(library_tree):
 
 
 @pytest.mark.unit
+def test_scan_library_skips_hidden_placeholder_files(library_tree):
+    from src.core.library.scanner import scan_library
+
+    root = library_tree["AUDIO_SOURCE_DIR"]
+    _touch(root / ".gitkeep")
+    _touch(root / ".DS_Store")
+    _touch(root / "real.mp3")
+
+    items = scan_library()
+
+    assert [it.path.name for it in items] == ["real.mp3"]
+
+
+@pytest.mark.unit
 def test_scan_library_skips_unreadable_files(library_tree, mocker):
     import pathlib
 

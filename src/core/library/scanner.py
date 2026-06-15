@@ -84,6 +84,10 @@ def scan_library(
         for p in root.iterdir():
             if not p.is_file():
                 continue
+            # Skip hidden/placeholder files (.gitkeep, .DS_Store, …) — these
+            # keep empty output dirs in git but are not user artifacts.
+            if p.name.startswith("."):
+                continue
             try:
                 st = p.stat()
             except OSError:
