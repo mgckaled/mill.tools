@@ -198,6 +198,11 @@ HELP_SHORT: dict[str, str] = {
     "document.dpi": ("Resolução da rasterização. 150 = boa qualidade; 300 = imprimir."),
     "document.qr_size": "Tamanho do QR code gerado em pixels.",
     "document.analyze_model": "Modelo para análise do conteúdo extraído. Local ou Gemini.",
+    "document.ocr": (
+        "Reconhece texto em PDFs escaneados via Tesseract. Páginas que já têm "
+        "camada de texto são lidas direto; só as imagens são processadas por OCR. "
+        "300 DPI é o piso recomendado para boa precisão."
+    ),
 }
 
 #: Texto longo (opcional) — quando presente, a ⓘ vira clicável e abre um modal.

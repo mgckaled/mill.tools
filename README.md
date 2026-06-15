@@ -66,6 +66,7 @@ A ferramenta é organizada em **módulos independentes**, cada um especializado 
 - [yt-dlp](https://github.com/yt-dlp/yt-dlp) no PATH
 - [Ollama](https://ollama.com/download) — apenas se usar modelos locais (`--format`/`--analyze`/`--prompt`)
 - Chave da [Google AI Studio](https://aistudio.google.com/apikey) — apenas se usar modelos Gemini
+- [Tesseract OCR](https://github.com/UB-Mannheim/tesseract/wiki) + language packs (`por`, `eng`) — apenas para a operação **OCR** de Documentos (extra `[ocr]`). Detectado no PATH ou em `C:\Program Files\Tesseract-OCR`; o card OCR desabilita-se graciosamente se ausente.
 
 ---
 
@@ -159,6 +160,7 @@ uv run main.py video trim video.mp4 --start 0:30 --end 2:15
 uv run main.py video compress video.mp4 --crf 23 --preset medium
 uv run main.py video extract-audio video.mp4 --fmt mp3
 uv run main.py video thumbnail video.mp4 --time 00:00:05 --fmt jpg
+uv run main.py video subtitle video.mp4 --subs legenda.srt --mode soft
 ```
 
 ### CLI — Imagens
@@ -189,6 +191,7 @@ uv run main.py document stamp doc.pdf --text "PAGO"
 # proteção e conversão
 uv run main.py document encrypt doc.pdf --password "senha"
 uv run main.py document extract doc.pdf
+uv run main.py document ocr scanned.pdf --lang por --dpi 300
 uv run main.py document pdf-to-images doc.pdf --fmt jpg --dpi 150
 uv run main.py document images-to-pdf *.jpg --name "album"
 uv run main.py document qr "https://example.com" --size 300 --fmt png
@@ -309,6 +312,7 @@ Todos os arquivos processados em `processed/`. Nomes de saída incluem sufixo da
 | **Carimbo** | PDF | Texto em destaque centralizado (PAGO, RASCUNHO, CONFIDENCIAL ou personalizado) |
 | **Criptografar** | PDF | Protege o arquivo com AES-256 (senha de usuário e proprietário) |
 | **Extrair texto** | PDF | Extrai todo o texto para `.txt`. `has_text=False` indica PDF escaneado (sem texto embutido) |
+| **OCR** | PDF | Reconhece texto de PDFs escaneados via Tesseract (idioma e DPI configuráveis). Híbrido: usa texto nativo quando existe; OCR só nas páginas-imagem. Requer Tesseract instalado |
 | **PDF → Imagens** | PDF | Rasteriza cada página em JPG ou PNG. DPI configurável: 72 / 96 / 150 / 300 |
 | **Imagens → PDF** | imagens | Combina N imagens JPEG/PNG em um único PDF, uma por página |
 | **QR Code** | texto/URL | Gera QR code em PNG ou JPG. Tamanho aproximado em pixels configurável |
@@ -327,6 +331,7 @@ Todos os arquivos processados em `processed/`. Nomes de saída incluem sufixo da
 | **Redimensionar** | arquivo local | Ajusta resolução preservando aspect ratio. Deixe um eixo em branco para calcular automaticamente |
 | **Extrair áudio** | arquivo local | Extrai faixa de áudio em MP3/M4A/WAV. Resultado aparece com botões "Transcrever" e "Processar no Áudio" |
 | **Thumbnail** | arquivo local | Captura um frame específico (`HH:MM:SS`) como JPG ou PNG |
+| **Legenda** | arquivo local | Insere uma legenda `.srt`/`.vtt` no vídeo: **Embutir** (mux, faixa toggleável, sem reencode) ou **Queimar** (burn-in permanente, reencoda em H.264) |
 
 Encoding 100% CPU — sem NVENC (decisão definitiva). Preset e CRF configuráveis no formulário.
 

@@ -46,11 +46,12 @@ tests/
 │   │   └── test_downloader.py              # unit — download_image (urllib mockado)
 │   ├── video/
 │   │   ├── test_info.py                    # integration — get_video_info (VideoInfo dataclass)
-│   │   └── test_converter.py               # integration — convert/trim/compress/resize/extract_audio/thumbnail
+│   │   └── test_converter.py               # integration — convert/trim/compress/resize/extract_audio/thumbnail/add_subtitles
 │   └── document/
 │       ├── test_processor.py               # unit — merge/split/compress/rotate/watermark/stamp/encrypt (pymupdf REAL via sample_pdf)
 │       ├── test_converter.py               # unit — pdf_to_images, images_to_pdf, extract_text (pymupdf REAL)
 │       ├── test_info.py                    # unit — get_pdf_info, PdfInfo (pymupdf REAL)
+│       ├── test_ocr.py                     # unit — ocr_pdf híbrido (pytesseract mockado) + 1 integration real (Tesseract)
 │       └── test_qr.py                      # unit — generate_qr (qrcode REAL — gera PNG em disco)
 └── gui/
     ├── __init__.py
@@ -58,8 +59,8 @@ tests/
     └── modules/
         ├── audio/test_pipeline_log.py      # unit — resolve_*, fmt_* (download/convert/extract/denoise/normalize)
         ├── image/test_pipeline_log.py      # unit — resolve_*, fmt_* (13 operações)
-        ├── video/test_pipeline_log.py      # unit — resolve_*, fmt_* (7 operações)
-        └── document/test_pipeline_log.py   # unit — resolve_messages, resolve_stage_label, fmt_* builders
+        ├── video/test_pipeline_log.py      # unit — resolve_*, fmt_* (8 operações, inclui subtitle)
+        └── document/test_pipeline_log.py   # unit — resolve_messages, resolve_stage_label, fmt_* builders (13 operações, inclui ocr)
 ```
 
 > **Nota sobre `unit` no módulo document**: ao contrário do que a tabela
@@ -533,7 +534,7 @@ uv run pytest -m "not integration" --cov=src --cov-report=term-missing
 uv run pytest --cov=src --cov-report=term-missing
 ```
 
-O alvo é **≥ 90%** por módulo. Total agregado: **87%** com branch. Estado atual:
+O alvo é **≥ 90%** por módulo. Total agregado: **88%** com branch. Estado atual:
 
 | Módulo | Cobertura (com branch) |
 |---|---|
@@ -550,6 +551,7 @@ O alvo é **≥ 90%** por módulo. Total agregado: **87%** com branch. Estado at
 | `core/video/converter.py` | 97% (2 partial branches) |
 | `core/document/info.py` | 97% |
 | `cli/video.py` | 97% |
+| `core/document/ocr.py` | 97% (2 partial branches) |
 | `core/image/downloader.py` | 96% |
 | `cli/image.py` | 94% |
 | `core/audio/converter.py` | 93% |
@@ -608,3 +610,37 @@ mocker.patch.dict("sys.modules", {"qrcode": MagicMock(), "qrcode.constants": Mag
 ```
 
 Linhas impossíveis de cobrir sem desinstalar dependências (ex.: `is_available()` no `denoiser.py` — branch `ImportError`) devem ser marcadas como `# pragma: no cover`.
+
+### Mock de `pytesseract` (OCR) — `tests/core/document/test_ocr.py`
+
+`core/document/ocr.py` é gateado por `is_available()` (extra `[ocr]` +
+binário Tesseract) e importa `pytesseract` **lazy** dentro de `ocr_pdf`.
+Os testes unit não dependem da instalação real: mockam o módulo via
+`sys.modules` e o resolvedor do binário.
+
+```python
+import sys
+from unittest.mock import MagicMock
+
+def _patch_tesseract(mocker, ocr_text="texto reconhecido"):
+    fake = MagicMock()
+    fake.image_to_string.return_value = ocr_text
+    mocker.patch.dict(sys.modules, {"pytesseract": fake})
+    mocker.patch("src.core.document.ocr._resolve_tesseract_cmd", return_value="tesseract")
+    return fake
+```
+
+Gotchas:
+
+- **Fluxo híbrido**: páginas com texto nativo (`sample_pdf`) **não**
+  invocam `image_to_string` (assert `assert_not_called()`); páginas só-imagem
+  (`sample_pdf_with_images`) caem no OCR. pymupdf/PIL rodam de verdade —
+  só o `image_to_string` é mockado.
+- **`word_count` inclui o cabeçalho** `--- Página N ---` (como `extract_text`);
+  não asserte contagens exatas frágeis — use `>= N`.
+- **`is_available()` False**: mockar `shutil.which → None` **e**
+  `_WINDOWS_FALLBACKS → ()` (a máquina de dev tem o binário no local padrão,
+  então o fallback acharia mesmo sem PATH).
+- **Integration real**: 1 teste `@pytest.mark.integration` renderiza texto
+  num PDF só-imagem e roda Tesseract de verdade; `pytest.skip` se
+  `not ocr.is_available()`.

@@ -1,4 +1,5 @@
 """Unit tests for src/cli/document.py."""
+
 import argparse
 
 import pytest
@@ -9,6 +10,7 @@ pytestmark = pytest.mark.unit
 def _parse(*argv: str) -> argparse.Namespace:
     """Isolated parser helper — never touches sys.argv."""
     from src.cli.document import add_document_parser
+
     parser = argparse.ArgumentParser()
     sub = parser.add_subparsers(dest="command", required=True)
     add_document_parser(sub)
@@ -79,6 +81,20 @@ def test_pdf_to_images_fmt_flag():
     assert ns.fmt == "png"
 
 
+def test_ocr_defaults():
+    ns = _parse("ocr", "scanned.pdf")
+    assert ns.document_op == "ocr"
+    assert ns.file == "scanned.pdf"
+    assert ns.ocr_lang == "por"
+    assert ns.ocr_dpi == 300
+
+
+def test_ocr_lang_and_dpi_flags():
+    ns = _parse("ocr", "scanned.pdf", "--lang", "por+eng", "--dpi", "150")
+    assert ns.ocr_lang == "por+eng"
+    assert ns.ocr_dpi == 150
+
+
 def test_func_callable_for_all_ops():
     ops_and_args = [
         ("merge", ["a.pdf"]),
@@ -89,6 +105,7 @@ def test_func_callable_for_all_ops():
         ("stamp", ["doc.pdf"]),
         ("encrypt", ["doc.pdf", "--password", "x"]),
         ("extract", ["doc.pdf"]),
+        ("ocr", ["doc.pdf"]),
         ("pdf-to-images", ["doc.pdf"]),
         ("images-to-pdf", ["a.jpg"]),
         ("qr", ["data"]),
@@ -126,6 +143,22 @@ def test_run_document_cli_pdf_to_images_normalises_op(mocker):
     assert args.operation == "pdf_to_images"
     assert args.image_fmt == "png"
     assert args.dpi == 150
+
+
+def test_run_document_cli_ocr_dispatches(mocker):
+    """document ocr FILE --lang --dpi → DocumentArgs with operation='ocr' + ocr_*."""
+    mocker.patch("src.utils.setup_logging")
+    mock_pipeline = mocker.patch(
+        "src.gui.modules.document.worker.run_document_pipeline",
+        return_value=True,
+    )
+    ns = _parse("ocr", "scanned.pdf", "--lang", "por+eng", "--dpi", "150")
+    ns.func(ns)
+    args = mock_pipeline.call_args.args[0]
+    assert args.operation == "ocr"
+    assert len(args.input_paths) == 1
+    assert args.ocr_lang == "por+eng"
+    assert args.ocr_dpi == 150
 
 
 def test_run_document_cli_qr_has_no_input_paths(mocker):

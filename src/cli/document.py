@@ -12,10 +12,12 @@ Usage:
     uv run main.py document stamp doc.pdf --text "PAGO"
     uv run main.py document encrypt doc.pdf --password "senha"
     uv run main.py document extract doc.pdf
+    uv run main.py document ocr scanned.pdf --lang por --dpi 300
     uv run main.py document pdf-to-images doc.pdf --fmt jpg --dpi 150
     uv run main.py document images-to-pdf *.jpg --name "album"
     uv run main.py document qr "https://example.com" --size 300 --fmt png
 """
+
 from __future__ import annotations
 
 import argparse
@@ -41,12 +43,14 @@ def add_document_parser(subparsers: argparse._SubParsersAction) -> None:
     _add_stamp(doc_sub)
     _add_encrypt(doc_sub)
     _add_extract(doc_sub)
+    _add_ocr(doc_sub)
     _add_pdf_to_images(doc_sub)
     _add_images_to_pdf(doc_sub)
     _add_qr(doc_sub)
 
 
 # ── Sub-subcommand definitions ─────────────────────────────────────────────────
+
 
 def _add_merge(sub: argparse._SubParsersAction) -> None:
     p = sub.add_parser("merge", help="Merge multiple PDFs into one")
@@ -57,7 +61,8 @@ def _add_split(sub: argparse._SubParsersAction) -> None:
     p = sub.add_parser("split", help="Split a PDF into multiple files")
     p.add_argument("file", help="PDF file to split")
     p.add_argument(
-        "--pages", default="",
+        "--pages",
+        default="",
         help='Page range spec, e.g. "1-3,5,8-" (1-indexed, inclusive)',
     )
 
@@ -66,8 +71,12 @@ def _add_compress(sub: argparse._SubParsersAction) -> None:
     p = sub.add_parser("compress", help="Compress embedded images in a PDF")
     p.add_argument("file", help="PDF file to compress")
     p.add_argument(
-        "--image-quality", type=int, default=75, dest="image_quality",
-        metavar="Q", help="JPEG quality for recompressed images 50–95 (default 75)",
+        "--image-quality",
+        type=int,
+        default=75,
+        dest="image_quality",
+        metavar="Q",
+        help="JPEG quality for recompressed images 50–95 (default 75)",
     )
 
 
@@ -75,11 +84,15 @@ def _add_rotate(sub: argparse._SubParsersAction) -> None:
     p = sub.add_parser("rotate", help="Rotate pages in a PDF")
     p.add_argument("file", help="PDF file")
     p.add_argument(
-        "--angle", type=int, default=90, choices=[90, 180, 270],
+        "--angle",
+        type=int,
+        default=90,
+        choices=[90, 180, 270],
         help="Rotation angle in degrees CW (default 90)",
     )
     p.add_argument(
-        "--pages", default="all",
+        "--pages",
+        default="all",
         help='Pages to rotate: "all" or range like "1,3,5" (default all)',
     )
 
@@ -89,11 +102,14 @@ def _add_watermark(sub: argparse._SubParsersAction) -> None:
     p.add_argument("file", help="PDF file")
     p.add_argument("--text", default="", help="Watermark text")
     p.add_argument(
-        "--opacity", type=float, default=0.3,
+        "--opacity",
+        type=float,
+        default=0.3,
         help="Text opacity 0.1–0.9 (default 0.3)",
     )
     p.add_argument(
-        "--position", default="center",
+        "--position",
+        default="center",
         choices=["center", "top", "bottom"],
         help="Vertical anchor (default center)",
     )
@@ -103,7 +119,8 @@ def _add_stamp(sub: argparse._SubParsersAction) -> None:
     p = sub.add_parser("stamp", help="Add a bold centered stamp to a PDF")
     p.add_argument("file", help="PDF file")
     p.add_argument(
-        "--text", default="RASCUNHO",
+        "--text",
+        default="RASCUNHO",
         help="Stamp text (default RASCUNHO)",
     )
 
@@ -119,15 +136,40 @@ def _add_extract(sub: argparse._SubParsersAction) -> None:
     p.add_argument("file", help="PDF file")
 
 
+def _add_ocr(sub: argparse._SubParsersAction) -> None:
+    p = sub.add_parser(
+        "ocr", help="OCR a scanned PDF to text (hybrid native/Tesseract)"
+    )
+    p.add_argument("file", help="PDF file")
+    p.add_argument(
+        "--lang",
+        default="por",
+        dest="ocr_lang",
+        help="Tesseract language(s): por, eng, por+eng, spa (default por)",
+    )
+    p.add_argument(
+        "--dpi",
+        type=int,
+        default=300,
+        dest="ocr_dpi",
+        choices=[150, 300],
+        help="Rasterization DPI for OCR'd pages (default 300)",
+    )
+
+
 def _add_pdf_to_images(sub: argparse._SubParsersAction) -> None:
     p = sub.add_parser("pdf-to-images", help="Rasterize each PDF page to an image")
     p.add_argument("file", help="PDF file")
     p.add_argument(
-        "--fmt", default="jpg", choices=["jpg", "png"],
+        "--fmt",
+        default="jpg",
+        choices=["jpg", "png"],
         help="Output image format (default jpg)",
     )
     p.add_argument(
-        "--dpi", type=int, default=150,
+        "--dpi",
+        type=int,
+        default=150,
         choices=[72, 96, 150, 300],
         help="Resolution in DPI (default 150)",
     )
@@ -136,17 +178,33 @@ def _add_pdf_to_images(sub: argparse._SubParsersAction) -> None:
 def _add_images_to_pdf(sub: argparse._SubParsersAction) -> None:
     p = sub.add_parser("images-to-pdf", help="Combine images into a single PDF")
     p.add_argument("files", nargs="+", help="Image files to combine in order")
-    p.add_argument("--name", default="", dest="output_name", help="Output PDF stem (default images_combined)")
+    p.add_argument(
+        "--name",
+        default="",
+        dest="output_name",
+        help="Output PDF stem (default images_combined)",
+    )
 
 
 def _add_qr(sub: argparse._SubParsersAction) -> None:
     p = sub.add_parser("qr", help="Generate a QR code image")
     p.add_argument("data", help="Content to encode (URL or text)")
-    p.add_argument("--size", type=int, default=300, help="Approximate output size in pixels (default 300)")
-    p.add_argument("--fmt", default="png", choices=["png", "jpg"], help="Output format (default png)")
+    p.add_argument(
+        "--size",
+        type=int,
+        default=300,
+        help="Approximate output size in pixels (default 300)",
+    )
+    p.add_argument(
+        "--fmt",
+        default="png",
+        choices=["png", "jpg"],
+        help="Output format (default png)",
+    )
 
 
 # ── Runner ─────────────────────────────────────────────────────────────────────
+
 
 def run_document_cli(ns: argparse.Namespace) -> None:
     """Execute the document pipeline from parsed CLI arguments.
@@ -158,7 +216,6 @@ def run_document_cli(ns: argparse.Namespace) -> None:
 
     from src.cli.bus import CLIEventBus
     from src.core.document.args import DocumentArgs
-    from src.core.io_types import InputItem
     from src.gui.modules.document.worker import run_document_pipeline
     from src.utils import setup_logging
 
@@ -204,6 +261,9 @@ def run_document_cli(ns: argparse.Namespace) -> None:
         qr_data=getattr(ns, "data", ""),
         qr_size=getattr(ns, "size", 300),
         qr_fmt=getattr(ns, "fmt", "png") if op == "qr" else "png",
+        # ocr
+        ocr_lang=getattr(ns, "ocr_lang", "por"),
+        ocr_dpi=getattr(ns, "ocr_dpi", 300),
     )
 
     bus = CLIEventBus()

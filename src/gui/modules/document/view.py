@@ -1,4 +1,5 @@
 """Módulo Documentos — visor adaptativo + log de pipeline."""
+
 from __future__ import annotations
 
 import subprocess
@@ -20,9 +21,7 @@ from src.gui.theme.components import (
     danger_button,
     hairline,
     log_line,
-    output_card,
     spinner,
-    summary_card,
 )
 
 if TYPE_CHECKING:
@@ -38,7 +37,7 @@ _BLANK_PNG = (
 )
 
 # Viewer mode classification
-_VISUAL_OPS     = {"rotate", "watermark", "stamp"}
+_VISUAL_OPS = {"rotate", "watermark", "stamp"}
 _STRUCTURAL_OPS = {"merge", "split", "compress", "encrypt"}
 
 
@@ -46,6 +45,7 @@ def _rasterize_first_page(path: Path) -> bytes | None:
     """Rasterize first page at ~72dpi → PNG bytes for preview."""
     try:
         import pymupdf  # type: ignore[import-untyped]
+
         doc = pymupdf.open(str(path))
         pix = doc[0].get_pixmap(matrix=pymupdf.Matrix(1.0, 1.0))
         data = pix.tobytes("png")
@@ -74,63 +74,86 @@ def build_document_module(
 
     # Mode 1 — Before/After thumbnails (visual ops: rotate/watermark/stamp)
     _img_before = ft.Image(_BLANK_PNG, fit=ft.BoxFit.CONTAIN, expand=True)
-    _img_after  = ft.Image(_BLANK_PNG, fit=ft.BoxFit.CONTAIN, expand=True)
+    _img_after = ft.Image(_BLANK_PNG, fit=ft.BoxFit.CONTAIN, expand=True)
     _last_input_thumb: list[bytes | None] = [None]
 
     _before_col = ft.Column(
         [
             ft.Text("Antes", size=Type.tiny.size, color=ft.Colors.ON_SURFACE_VARIANT),
-            ft.Container(content=_img_before, expand=True, alignment=ft.Alignment.CENTER),
+            ft.Container(
+                content=_img_before, expand=True, alignment=ft.Alignment.CENTER
+            ),
         ],
-        expand=True, spacing=4,
+        expand=True,
+        spacing=4,
     )
     _after_col = ft.Column(
         [
             ft.Text("Depois", size=Type.tiny.size, color=ft.Colors.ON_SURFACE_VARIANT),
-            ft.Container(content=_img_after, expand=True, alignment=ft.Alignment.CENTER),
+            ft.Container(
+                content=_img_after, expand=True, alignment=ft.Alignment.CENTER
+            ),
         ],
-        expand=True, spacing=4,
+        expand=True,
+        spacing=4,
     )
     _mode1_view = ft.Row(
         [_before_col, ft.VerticalDivider(width=1), _after_col],
-        expand=True, visible=False,
+        expand=True,
+        visible=False,
     )
 
     # Mode 2 — Metadata diff card (structural ops: merge/split/compress/encrypt)
     _meta_content = ft.Column(spacing=4, expand=True)
     _mode2_view = ft.Container(
         content=_meta_content,
-        expand=True, visible=False,
-        padding=ft.Padding(left=Space.md, right=Space.md, top=Space.md, bottom=Space.md),
+        expand=True,
+        visible=False,
+        padding=ft.Padding(
+            left=Space.md, right=Space.md, top=Space.md, bottom=Space.md
+        ),
     )
 
     # Mode 3 — Single result pane (pdf_to_images, images_to_pdf, extract, analyze, qr)
     _result_img = ft.Image(_BLANK_PNG, fit=ft.BoxFit.CONTAIN, expand=True)
     _result_text = ft.Text(
-        "", size=Type.mono.size, font_family=Type.FONT_MONO,
-        color=Color.log.text, selectable=True, no_wrap=False,
+        "",
+        size=Type.mono.size,
+        font_family=Type.FONT_MONO,
+        color=Color.log.text,
+        selectable=True,
+        no_wrap=False,
         expand=True,
     )
     _result_text_scroll = ft.Column(
         [_result_text],
-        scroll=ft.ScrollMode.AUTO, expand=True, visible=False,
+        scroll=ft.ScrollMode.AUTO,
+        expand=True,
+        visible=False,
     )
     _result_img_ctr = ft.Container(
-        content=_result_img, expand=True,
-        alignment=ft.Alignment.CENTER, visible=False,
+        content=_result_img,
+        expand=True,
+        alignment=ft.Alignment.CENTER,
+        visible=False,
     )
     _mode3_view = ft.Stack(
         [_result_img_ctr, _result_text_scroll],
-        expand=True, visible=False,
+        expand=True,
+        visible=False,
     )
 
     # Placeholder
     _placeholder = ft.Container(
         content=ft.Text(
             "Selecione um PDF e a operação para começar",
-            color=ft.Colors.ON_SURFACE_VARIANT, italic=True, size=Type.input.size,
+            color=ft.Colors.ON_SURFACE_VARIANT,
+            italic=True,
+            size=Type.input.size,
         ),
-        alignment=ft.Alignment.CENTER, expand=True, visible=True,
+        alignment=ft.Alignment.CENTER,
+        expand=True,
+        visible=True,
     )
 
     preview_container = ft.Container(
@@ -170,8 +193,8 @@ def build_document_module(
         _mode2_view.visible = True
         _mode3_view.visible = False
         _meta_content.controls = [
-            ft.Text(l, size=Type.caption.size, selectable=True, no_wrap=False)
-            for l in lines
+            ft.Text(line, size=Type.caption.size, selectable=True, no_wrap=False)
+            for line in lines
         ]
 
     def _show_mode3_image(thumb: bytes) -> None:
@@ -204,7 +227,8 @@ def build_document_module(
     )
 
     progress_bar = ft.ProgressBar(
-        value=None, expand=True,
+        value=None,
+        expand=True,
         color=ft.Colors.PRIMARY,
         bgcolor=ft.Colors.OUTLINE_VARIANT,
         visible=False,
@@ -232,6 +256,7 @@ def build_document_module(
 
     def _open_output_folder(_e) -> None:
         from src.utils import DOCUMENT_PROCESSED_DIR
+
         DOCUMENT_PROCESSED_DIR.mkdir(parents=True, exist_ok=True)
         subprocess.run(["explorer", str(DOCUMENT_PROCESSED_DIR)], check=False)
 
@@ -312,7 +337,9 @@ def build_document_module(
             if op in _VISUAL_OPS:
                 # Mode 1: before/after thumbnails
                 in_thumb = _last_input_thumb[0]
-                out_thumb = _rasterize_first_page(Path(output_path)) if output_path else None
+                out_thumb = (
+                    _rasterize_first_page(Path(output_path)) if output_path else None
+                )
                 if in_thumb and out_thumb:
                     _show_mode1(in_thumb, out_thumb)
                 else:
@@ -331,7 +358,7 @@ def build_document_module(
                 except Exception:
                     _show_placeholder()
 
-            elif op == "extract" and output_path:
+            elif op in ("extract", "ocr") and output_path:
                 # Mode 3: text preview
                 try:
                     text = Path(output_path).read_text(encoding="utf-8")

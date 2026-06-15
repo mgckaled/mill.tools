@@ -120,6 +120,7 @@ Usa sub-subparsers. `ns.video_op` contém a operação. Mapeamento especial: `"e
 | `resize` | arquivo | `--width px`, `--height px` |
 | `extract-audio` | arquivo | `--fmt mp3` |
 | `thumbnail` | arquivo | `--time 00:00:01`, `--fmt jpg` |
+| `subtitle` | arquivo | `--subs PATH` (obrigatório, `.srt`/`.vtt`), `--mode soft\|hard` |
 
 ---
 
@@ -170,6 +171,7 @@ Usa sub-subparsers. `ns.document_op` contém a operação. Mapeamento kebab → 
 | `stamp` | PDF | `--text "PAGO"` |
 | `encrypt` | PDF | `--password "senha"` |
 | `extract` | PDF | — |
+| `ocr` | PDF | `--lang por/eng/por+eng/spa` (dest `ocr_lang`), `--dpi 150/300` (dest `ocr_dpi`) |
 | `pdf-to-images` | PDF | `--fmt jpg/png`, `--dpi 72/96/150/300` |
 | `images-to-pdf` | imagens | `files…`, `--name "stem"` |
 | `qr` | texto/URL | `data` (posicional), `--size 300`, `--fmt png/jpg` |
@@ -234,4 +236,4 @@ def test_audio_defaults():
     assert callable(ns.func)
 ```
 
-Arquivos de teste: `tests/cli/test_audio_cli.py` (5), `test_video_cli.py` (10), `test_image_cli.py` (15), `test_document_cli.py`.
+Arquivos de teste: `tests/cli/test_audio_cli.py` (5), `test_video_cli.py` (14, inclui `subtitle`), `test_image_cli.py` (15), `test_document_cli.py` (inclui `ocr`).

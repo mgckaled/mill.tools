@@ -1,4 +1,5 @@
 """Formulário de entrada do módulo Documentos — 12 operações PDF."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -14,9 +15,14 @@ from src.gui.modules.document.blocks.analyze_block import build_analyze_block
 from src.gui.modules.document.blocks.compress_block import build_compress_block
 from src.gui.modules.document.blocks.encrypt_block import build_encrypt_block
 from src.gui.modules.document.blocks.extract_text_block import build_extract_text_block
-from src.gui.modules.document.blocks.images_to_pdf_block import build_images_to_pdf_block
+from src.gui.modules.document.blocks.images_to_pdf_block import (
+    build_images_to_pdf_block,
+)
 from src.gui.modules.document.blocks.merge_block import build_merge_block
-from src.gui.modules.document.blocks.pdf_to_images_block import build_pdf_to_images_block
+from src.gui.modules.document.blocks.ocr_block import build_ocr_block
+from src.gui.modules.document.blocks.pdf_to_images_block import (
+    build_pdf_to_images_block,
+)
 from src.gui.modules.document.blocks.qr_block import build_qr_block
 from src.gui.modules.document.blocks.rotate_block import build_rotate_block
 from src.gui.modules.document.blocks.split_block import build_split_block
@@ -29,18 +35,19 @@ _ALLOWED_EXTS = ["pdf"]
 _ALLOWED_IMG_EXTS = ["jpg", "jpeg", "png", "webp", "tiff", "bmp"]
 
 _OPS: list[tuple[str, str, str]] = [
-    ("merge",         ft.Icons.MERGE_TYPE,              "Unir"),
-    ("split",         ft.Icons.CALL_SPLIT,              "Dividir"),
-    ("compress",      ft.Icons.COMPRESS,                "Comprimir"),
-    ("rotate",        ft.Icons.ROTATE_90_DEGREES_CW,    "Girar"),
-    ("watermark",     ft.Icons.WATER_DROP_OUTLINED,     "Marca\nd'água"),
-    ("stamp",         ft.Icons.APPROVAL_OUTLINED,       "Carimbo"),
-    ("encrypt",       ft.Icons.LOCK_OUTLINED,           "Criptografar"),
-    ("pdf_to_images", ft.Icons.IMAGE_OUTLINED,          "PDF→\nImagens"),
+    ("merge", ft.Icons.MERGE_TYPE, "Unir"),
+    ("split", ft.Icons.CALL_SPLIT, "Dividir"),
+    ("compress", ft.Icons.COMPRESS, "Comprimir"),
+    ("rotate", ft.Icons.ROTATE_90_DEGREES_CW, "Girar"),
+    ("watermark", ft.Icons.WATER_DROP_OUTLINED, "Marca\nd'água"),
+    ("stamp", ft.Icons.APPROVAL_OUTLINED, "Carimbo"),
+    ("encrypt", ft.Icons.LOCK_OUTLINED, "Criptografar"),
+    ("pdf_to_images", ft.Icons.IMAGE_OUTLINED, "PDF→\nImagens"),
     ("images_to_pdf", ft.Icons.PICTURE_AS_PDF_OUTLINED, "Imagens\n→PDF"),
-    ("extract",       ft.Icons.TEXT_SNIPPET_OUTLINED,   "Extrair\ntexto"),
-    ("analyze",       ft.Icons.AUTO_AWESOME_OUTLINED,   "Analisar"),
-    ("qr",            ft.Icons.QR_CODE_2,               "QR Code"),
+    ("extract", ft.Icons.TEXT_SNIPPET_OUTLINED, "Extrair\ntexto"),
+    ("ocr", ft.Icons.DOCUMENT_SCANNER_OUTLINED, "OCR"),
+    ("analyze", ft.Icons.AUTO_AWESOME_OUTLINED, "Analisar"),
+    ("qr", ft.Icons.QR_CODE_2, "QR Code"),
 ]
 
 # Operations that accept multiple input files
@@ -126,8 +133,11 @@ def build_document_form(
     def _make_card(op_id: str, icon_name: str, label: str) -> ft.GestureDetector:
         ic = ft.Icon(icon_name, size=22, color=ft.Colors.PRIMARY)
         tx = ft.Text(
-            label, size=Type.small.size, text_align=ft.TextAlign.CENTER,
-            color=ft.Colors.PRIMARY, max_lines=2,
+            label,
+            size=Type.small.size,
+            text_align=ft.TextAlign.CENTER,
+            color=ft.Colors.PRIMARY,
+            max_lines=2,
         )
         _card_icon_refs[op_id] = ic
         _card_text_refs[op_id] = tx
@@ -136,14 +146,18 @@ def build_document_form(
             content=ft.Column(
                 [ic, tx],
                 horizontal_alignment=ft.CrossAxisAlignment.CENTER,
-                spacing=4, tight=True,
+                spacing=4,
+                tight=True,
             ),
-            height=64, padding=6, border_radius=8,
+            height=64,
+            padding=6,
+            border_radius=8,
             expand=True,
             bgcolor=ft.Colors.SURFACE,
             border=ft.Border(left=side, right=side, top=side, bottom=side),
             shadow=ft.BoxShadow(
-                blur_radius=8, spread_radius=0,
+                blur_radius=8,
+                spread_radius=0,
                 offset=ft.Offset(0, 3),
                 color=ft.Colors.with_opacity(0.4, ft.Colors.BLACK),
             ),
@@ -151,14 +165,16 @@ def build_document_form(
             alignment=ft.Alignment.CENTER,
         )
         _card_ctr_refs[op_id] = ctr
-        return ft.GestureDetector(mouse_cursor=Cursor.interactive, content=ctr, expand=True)
+        return ft.GestureDetector(
+            mouse_cursor=Cursor.interactive, content=ctr, expand=True
+        )
 
     _cards = [_make_card(oid, icon, lbl) for oid, icon, lbl in _OPS]
     _cols = 3
     card_grid = ft.Column(
         spacing=6,
         controls=[
-            ft.Row(controls=_cards[i:i + _cols], spacing=6)
+            ft.Row(controls=_cards[i : i + _cols], spacing=6)
             for i in range(0, len(_cards), _cols)
         ],
     )
@@ -166,31 +182,41 @@ def build_document_form(
 
     # ── Parameter blocks ───────────────────────────────────────────────────────
 
-    merge_block            = build_merge_block()
-    split_block, split_refs        = build_split_block(page)
-    compress_block, compress_refs  = build_compress_block(page)
-    rotate_block, rotate_refs      = build_rotate_block(page)
-    watermark_block, wm_refs       = build_watermark_block(page)
-    stamp_block, stamp_refs        = build_stamp_block(page)
-    encrypt_block, encrypt_refs    = build_encrypt_block(page)
-    pdf_to_images_block, p2i_refs  = build_pdf_to_images_block(page)
-    images_to_pdf_block, i2p_refs  = build_images_to_pdf_block()
-    extract_text_block             = build_extract_text_block()
-    analyze_block, analyze_refs    = build_analyze_block(page)
-    qr_block, qr_refs              = build_qr_block(page)
+    merge_block = build_merge_block()
+    split_block, split_refs = build_split_block(page)
+    compress_block, compress_refs = build_compress_block(page)
+    rotate_block, rotate_refs = build_rotate_block(page)
+    watermark_block, wm_refs = build_watermark_block(page)
+    stamp_block, stamp_refs = build_stamp_block(page)
+    encrypt_block, encrypt_refs = build_encrypt_block(page)
+    pdf_to_images_block, p2i_refs = build_pdf_to_images_block(page)
+    images_to_pdf_block, i2p_refs = build_images_to_pdf_block()
+    extract_text_block = build_extract_text_block()
+    ocr_block, ocr_refs = build_ocr_block(page)
+    analyze_block, analyze_refs = build_analyze_block(page)
+    qr_block, qr_refs = build_qr_block(page)
 
-    _param_blocks["merge"]         = merge_block
-    _param_blocks["split"]         = split_block
-    _param_blocks["compress"]      = compress_block
-    _param_blocks["rotate"]        = rotate_block
-    _param_blocks["watermark"]     = watermark_block
-    _param_blocks["stamp"]         = stamp_block
-    _param_blocks["encrypt"]       = encrypt_block
+    _param_blocks["merge"] = merge_block
+    _param_blocks["split"] = split_block
+    _param_blocks["compress"] = compress_block
+    _param_blocks["rotate"] = rotate_block
+    _param_blocks["watermark"] = watermark_block
+    _param_blocks["stamp"] = stamp_block
+    _param_blocks["encrypt"] = encrypt_block
     _param_blocks["pdf_to_images"] = pdf_to_images_block
     _param_blocks["images_to_pdf"] = images_to_pdf_block
-    _param_blocks["extract"]       = extract_text_block
-    _param_blocks["analyze"]       = analyze_block
-    _param_blocks["qr"]            = qr_block
+    _param_blocks["extract"] = extract_text_block
+    _param_blocks["ocr"] = ocr_block
+    _param_blocks["analyze"] = analyze_block
+    _param_blocks["qr"] = qr_block
+
+    # Disable the OCR card when Tesseract isn't available (graceful degradation).
+    if not ocr_refs.available:
+        _ocr_card = _card_ctr_refs["ocr"]
+        _ocr_card.disabled = True
+        _ocr_card.tooltip = (
+            "Tesseract não encontrado — instale o binário + uv sync --extra ocr"
+        )
 
     def _refresh_param_blocks() -> None:
         for op_id, blk in _param_blocks.items():
@@ -222,8 +248,11 @@ def build_document_form(
         args = DocumentArgs(
             input_paths=input_paths,
             operation=op,
-            pages=split_refs.get_pages() if op == "split" else
-                  rotate_refs.get_pages() if op == "rotate" else "",
+            pages=split_refs.get_pages()
+            if op == "split"
+            else rotate_refs.get_pages()
+            if op == "rotate"
+            else "",
             image_quality=compress_refs.get_image_quality(),
             angle=rotate_refs.get_angle(),
             rotate_pages=rotate_refs.get_pages(),
@@ -239,6 +268,8 @@ def build_document_form(
             qr_size=qr_refs.get_size(),
             qr_fmt=qr_refs.get_fmt(),
             analyze_model=analyze_refs.get_model(),
+            ocr_lang=ocr_refs.get_lang(),
+            ocr_dpi=ocr_refs.get_dpi(),
         )
         on_start(args)
 
@@ -266,8 +297,12 @@ def build_document_form(
                 content=ft.Column(
                     spacing=Space.md,
                     controls=[
-                        section("Entrada", input_source.control,
-                                help_key="document.input", page=page),
+                        section(
+                            "Entrada",
+                            input_source.control,
+                            help_key="document.input",
+                            page=page,
+                        ),
                         hairline(),
                         section("Operação", card_grid),
                         hairline(),

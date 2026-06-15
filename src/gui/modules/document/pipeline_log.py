@@ -5,6 +5,7 @@ Importado por:
   worker.py  — fmt_* constrói strings para emit("log", ...)
   view.py    — resolve_* traduz PipelineEvent → texto de display
 """
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -17,42 +18,45 @@ if TYPE_CHECKING:
 # ─── Constantes ────────────────────────────────────────────────────────────────
 
 OP_VERBS: dict[str, str] = {
-    "merge":         "Unindo documentos",
-    "split":         "Dividindo documento",
-    "compress":      "Comprimindo",
-    "rotate":        "Girando",
-    "watermark":     "Aplicando marca d'água",
-    "stamp":         "Aplicando carimbo",
-    "encrypt":       "Criptografando",
-    "extract":       "Extraindo texto",
+    "merge": "Unindo documentos",
+    "split": "Dividindo documento",
+    "compress": "Comprimindo",
+    "rotate": "Girando",
+    "watermark": "Aplicando marca d'água",
+    "stamp": "Aplicando carimbo",
+    "encrypt": "Criptografando",
+    "extract": "Extraindo texto",
     "pdf_to_images": "Rasterizando",
     "images_to_pdf": "Convertendo imagens",
-    "analyze":       "Analisando",
-    "qr":            "Gerando QR code",
+    "analyze": "Analisando",
+    "qr": "Gerando QR code",
+    "ocr": "Reconhecendo texto",
 }
 
 OP_LABELS: dict[str, str] = {
-    "merge":         "Unindo documentos...",
-    "split":         "Dividindo documento...",
-    "compress":      "Comprimindo...",
-    "rotate":        "Girando páginas...",
-    "watermark":     "Marca d'água...",
-    "stamp":         "Aplicando carimbo...",
-    "encrypt":       "Criptografando...",
-    "extract":       "Extraindo texto...",
+    "merge": "Unindo documentos...",
+    "split": "Dividindo documento...",
+    "compress": "Comprimindo...",
+    "rotate": "Girando páginas...",
+    "watermark": "Marca d'água...",
+    "stamp": "Aplicando carimbo...",
+    "encrypt": "Criptografando...",
+    "extract": "Extraindo texto...",
     "pdf_to_images": "Rasterizando páginas...",
     "images_to_pdf": "Convertendo imagens...",
-    "analyze":       "Analisando documento...",
-    "qr":            "Gerando QR code...",
+    "analyze": "Analisando documento...",
+    "qr": "Gerando QR code...",
+    "ocr": "OCR (reconhecendo texto)...",
 }
 
 # Operations classified by viewer mode
-_VISUAL_OPS     = {"rotate", "watermark", "stamp"}
+_VISUAL_OPS = {"rotate", "watermark", "stamp"}
 _STRUCTURAL_OPS = {"merge", "split", "compress", "encrypt"}
-_SINGLE_OPS     = {"pdf_to_images", "images_to_pdf", "extract", "analyze", "qr"}
+_SINGLE_OPS = {"pdf_to_images", "images_to_pdf", "extract", "analyze", "qr", "ocr"}
 
 
 # ─── Helpers ───────────────────────────────────────────────────────────────────
+
 
 def _fmt_size(b: int) -> str:
     if b < 1024:
@@ -73,6 +77,7 @@ def _relative_output_dir(path_str: str) -> str:
 
 # ─── Builder genérico ──────────────────────────────────────────────────────────
 
+
 def fmt_op_start(
     operation: str,
     item_name: str,
@@ -81,7 +86,6 @@ def fmt_op_start(
     page_count: int = 0,
 ) -> str:
     """[i] item info line emitted at the start of each operation."""
-    verb = OP_VERBS.get(operation, "Processando")
     pages = f" · {page_count} pág." if page_count > 0 else ""
     prefix = f"{item_idx}/{total} — " if total > 1 else ""
     return f"[i] {prefix}{item_name}{pages}"
@@ -121,7 +125,7 @@ def fmt_op_done(
             resolution = stats.get("resolution", "")
             res_str = f" · {resolution}px" if resolution else ""
             lines.append(f"[✓] {img_count} imagem(ns) gerada(s){res_str} ({elapsed})")
-        case "extract":
+        case "extract" | "ocr":
             word_count = stats.get("word_count", 0)
             lines.append(f"[✓] {name} · ~{word_count} palavras ({elapsed})")
         case "qr":
@@ -143,6 +147,7 @@ def fmt_op_error(item_name: str, message: str) -> str:
 
 # ─── Builders específicos por operação ────────────────────────────────────────
 
+
 def fmt_merge_detail(file_count: int, total_pages: int) -> str:
     return f"[i] {file_count} arquivos · {total_pages} páginas no total"
 
@@ -151,17 +156,20 @@ def fmt_split_detail(filename: str, page_count: int, spec: str) -> str:
     return f"[i] {filename} · {page_count} páginas\n[~] Extraindo páginas {spec}…"
 
 
-def fmt_compress_detail(filename: str, page_count: int, src_mb: float, quality: int) -> str:
+def fmt_compress_detail(
+    filename: str, page_count: int, src_mb: float, quality: int
+) -> str:
     return (
         f"[i] {filename} · {page_count} páginas · {src_mb:.1f} MB\n"
         f"[~] Recomprimindo imagens embutidas (qualidade {quality}%)…"
     )
 
 
-def fmt_rotate_detail(filename: str, page_count: int, pages_desc: str, angle: int) -> str:
+def fmt_rotate_detail(
+    filename: str, page_count: int, pages_desc: str, angle: int
+) -> str:
     return (
-        f"[i] {filename} · {page_count} páginas\n"
-        f"[~] Girando {pages_desc} em {angle}°…"
+        f"[i] {filename} · {page_count} páginas\n[~] Girando {pages_desc} em {angle}°…"
     )
 
 
@@ -204,7 +212,20 @@ def fmt_qr_detail(data_preview: str, size: int) -> str:
     return f"[~] Gerando QR code…\n[»] Conteúdo: {data_preview}\n[»] {size}×{size}px"
 
 
+def fmt_ocr_detail(filename: str, page_count: int, lang: str, dpi: int) -> str:
+    return (
+        f"[i] {filename} · {page_count} páginas · idioma {lang} · {dpi} DPI\n"
+        f"[~] Reconhecendo texto (texto nativo quando houver, OCR no resto)…"
+    )
+
+
+def fmt_ocr_progress(current: int, total: int) -> str:
+    """Mutable progress line during OCR."""
+    return f"[~] Processando página {current}/{total}…"
+
+
 # ─── Resolvers (view.py) ──────────────────────────────────────────────────────
+
 
 def resolve_messages(event: "PipelineEvent") -> list[str]:
     """Translate a PipelineEvent into log lines to display in the panel."""
