@@ -22,9 +22,15 @@ from src.core.library.types import (
     LibraryItem,
 )
 from src.gui import settings
+from src.gui.events import PipelineEvent
 from src.gui.modules.base import Module
 from src.gui.modules.library.cards import ItemCard, build_item_card
-from src.gui.theme.components import Cursor, hairline, segmented_selector
+from src.gui.theme.components import (
+    Cursor,
+    hairline,
+    secondary_button,
+    segmented_selector,
+)
 from src.gui.theme.tokens import Layout, Space, Type
 
 if TYPE_CHECKING:
@@ -65,6 +71,11 @@ _DATE_OPTIONS = [
 ]
 
 _SEARCH_DEBOUNCE_S = 0.25
+
+# Cap how many cards render at once; "Carregar mais" reveals the next batch.
+# Guards against the GridView page.update() slowdown with thousands of items
+# (Flet issue #6270) — a personal library rarely needs more than one page.
+_PAGE_SIZE = 120
 
 # Bridge targets per kind: (module_id, tooltip, icon). Sending a file back to
 # its own module means "reprocess it"; audio/video also reach Transcription.
@@ -116,6 +127,9 @@ def build_library_module(
     _thumb_gen: list[int] = [0]
     _thumb_cache: dict[tuple[str, float], bytes] = {}
 
+    # How many items are currently revealed (paging cap).
+    _shown: list[int] = [_PAGE_SIZE]
+
     # ------------------------------------------------------------------
     # Grid + count + empty state
     # ------------------------------------------------------------------
@@ -165,6 +179,14 @@ def build_library_module(
     )
 
     grid_area = ft.Stack([grid, empty_state], expand=True)
+
+    # "Load more" — on_click wired after _on_load_more is defined.
+    load_more_btn = secondary_button("Carregar mais", icon=ft.Icons.EXPAND_MORE)
+    load_more_btn.visible = False
+    load_more_row = ft.Row(
+        controls=[load_more_btn],
+        alignment=ft.MainAxisAlignment.CENTER,
+    )
 
     # ------------------------------------------------------------------
     # Filter / search / sort state readers
@@ -241,7 +263,7 @@ def build_library_module(
     # ------------------------------------------------------------------
 
     def _apply() -> None:
-        """Filter/sort the cached scan and rebuild the grid (no page.update)."""
+        """Filter/sort the cached scan and rebuild the visible page (no page.update)."""
         by = sort_dd.value or "modified"
         items = sort_items(
             filter_items(
@@ -253,14 +275,23 @@ def build_library_module(
             by=by,
             desc=(by != "name"),
         )
-        cards = [build_item_card(it, page=page) for it in items]
+        visible = items[: _shown[0]]
+        cards = [
+            build_item_card(
+                it, page=page, on_open=_open_file, build_actions=_build_actions
+            )
+            for it in visible
+        ]
         grid.controls = [c.control for c in cards]
         count_label.value = (
             f"{len(items)} arquivo" if len(items) == 1 else f"{len(items)} arquivos"
         )
+        remaining = len(items) - len(visible)
+        load_more_btn.visible = remaining > 0
+        load_more_btn.text = f"Carregar mais ({remaining})"
         empty_state.visible = not items
-        grid.visible = bool(items)
-        _spawn_thumbnail_thread(list(zip(items, cards)))
+        grid.visible = bool(visible)
+        _spawn_thumbnail_thread(list(zip(visible, cards)))
 
     def _spawn_thumbnail_thread(pairs: list[tuple[LibraryItem, ItemCard]]) -> None:
         """Generate thumbnails in one daemon thread, updating each card in place.
@@ -291,17 +322,32 @@ def build_library_module(
 
         threading.Thread(target=_worker, daemon=True).start()
 
-    def _apply_and_update() -> None:
+    def _render_from_top() -> None:
+        """Reset paging to the first page and rebuild (no page.update)."""
+        _shown[0] = _PAGE_SIZE
+        _apply()
+
+    def _render_from_top_and_update() -> None:
+        _render_from_top()
+        try:
+            page.update()
+        except Exception:
+            pass
+
+    def _on_load_more(_e) -> None:
+        _shown[0] += _PAGE_SIZE
         _apply()
         try:
             page.update()
         except Exception:
             pass
 
+    load_more_btn.on_click = _on_load_more
+
     def _rescan() -> None:
         nonlocal _all_items
         _all_items = scan_library()
-        _apply()
+        _render_from_top()
 
     # ------------------------------------------------------------------
     # Kind filter (segmented selector)
@@ -309,7 +355,8 @@ def build_library_module(
 
     def _on_filter_change(value: str) -> None:
         settings.set("last_library_filter", value)
-        _apply()  # segmented_selector flushes page.update() after this returns
+        # segmented_selector flushes page.update() after this returns
+        _render_from_top()
 
     filter_grid, get_filter, _ = segmented_selector(
         options=_FILTER_OPTIONS,
@@ -333,7 +380,7 @@ def build_library_module(
             await asyncio.sleep(_SEARCH_DEBOUNCE_S)
             if gen != _search_gen[0]:
                 return  # superseded by a newer keystroke
-            _apply_and_update()
+            _render_from_top_and_update()
 
         page.run_task(_later)
 
@@ -349,7 +396,7 @@ def build_library_module(
 
     def _on_sort_change(e: ft.ControlEvent) -> None:
         settings.set("last_library_sort", e.control.value)
-        _apply_and_update()
+        _render_from_top_and_update()
 
     # Flet 0.85 Dropdown uses on_select for selection changes (not on_change,
     # which the 0.85.2 constructor rejects — verified against the installed API).
@@ -368,7 +415,7 @@ def build_library_module(
         value="all",
         options=[ft.dropdown.Option(k, lbl) for k, lbl in _DATE_OPTIONS],
         width=170,
-        on_select=lambda _e: _apply_and_update(),
+        on_select=lambda _e: _render_from_top_and_update(),
         border_color=ft.Colors.OUTLINE,
         focused_border_color=ft.Colors.PRIMARY,
     )
@@ -406,6 +453,7 @@ def build_library_module(
             toolbar,
             hairline(),
             grid_area,
+            load_more_row,
         ],
         expand=True,
         spacing=Space.md,
@@ -423,12 +471,28 @@ def build_library_module(
     )
 
     # ------------------------------------------------------------------
-    # Lifecycle
+    # Lifecycle + auto-refresh
     # ------------------------------------------------------------------
 
     def _on_mount(payload: dict) -> None:
-        # Re-scan every time the tab is opened so fresh outputs show up.
+        # Re-scan every time the tab is opened so fresh outputs (and external
+        # deletions) show up.
         _rescan()
+
+    def _on_pipeline_event(event) -> None:
+        # If a pipeline finishes while the Library is the visible module, refresh
+        # live. (Navigation is blocked during a running pipeline, so this is a
+        # safety net / future-proofing rather than a common path today.)
+        if not isinstance(event, PipelineEvent):
+            return
+        if event.type == "task_done" and control.visible:
+            _rescan()
+            try:
+                page.update()
+            except Exception:
+                pass
+
+    page.pubsub.subscribe(_on_pipeline_event)
 
     return Module(
         id=_MODULE_ID,
