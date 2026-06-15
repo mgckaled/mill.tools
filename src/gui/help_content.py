@@ -2,6 +2,7 @@
 
 Chave: "<módulo>.<campo>". Editar aqui é o único lugar para ajustar a cópia.
 """
+
 from __future__ import annotations
 
 #: Texto curto exibido no tooltip (hover). 1–2 frases.
@@ -20,8 +21,7 @@ HELP_SHORT: dict[str, str] = {
         "3–5 = um pouco mais preciso e mais lento."
     ),
     "transcription.format": (
-        "Reinsere quebras de parágrafo na transcrição via LLM, "
-        "sem alterar o texto."
+        "Reinsere quebras de parágrafo na transcrição via LLM, sem alterar o texto."
     ),
     "transcription.analyze": (
         "Gera uma análise estruturada (resumo, pontos-chave, citações…) "
@@ -101,6 +101,11 @@ HELP_SHORT: dict[str, str] = {
         "Redimensiona preservando aspect ratio. "
         "Deixe largura ou altura em branco para calcular automaticamente."
     ),
+    "video.subtitle": (
+        "Insere uma legenda .srt/.vtt no vídeo. 'Embutir' adiciona uma faixa "
+        "toggleável sem reencodar (rápido). 'Queimar' grava a legenda na imagem "
+        "(permanente, reencoda — ideal para Shorts/Reels)."
+    ),
     # --- Imagens ---
     "image.input": (
         "Cole URLs diretas de imagens ou selecione arquivos locais. "
@@ -150,8 +155,7 @@ HELP_SHORT: dict[str, str] = {
         "Equalizar: redistribui histograma. Grayscale: tons de cinza."
     ),
     "image.favicon": (
-        "Gera um .ico com múltiplas resoluções embutidas. "
-        "Marque os tamanhos desejados."
+        "Gera um .ico com múltiplas resoluções embutidas. Marque os tamanhos desejados."
     ),
     "image.contact_sheet": (
         "Monta uma grade com todas as imagens da fila. "
@@ -191,9 +195,7 @@ HELP_SHORT: dict[str, str] = {
     "document.password": (
         "Criptografia AES-256. Guarde a senha — não é possível recuperá-la."
     ),
-    "document.dpi": (
-        "Resolução da rasterização. 150 = boa qualidade; 300 = imprimir."
-    ),
+    "document.dpi": ("Resolução da rasterização. 150 = boa qualidade; 300 = imprimir."),
     "document.qr_size": "Tamanho do QR code gerado em pixels.",
     "document.analyze_model": "Modelo para análise do conteúdo extraído. Local ou Gemini.",
 }

@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING, Callable
 
 from src.core.video.args import VideoArgs
 from src.core.video.converter import (
+    add_subtitles,
     compress_video,
     convert_video,
     extract_audio_from_video,
@@ -83,12 +84,15 @@ def _make_process_item(args: VideoArgs) -> Callable:
         if effective_op != "download" and item.kind == "url":
             raise ValueError(f"Local file expected for '{effective_op}': {item_name}")
 
-        emit("video_op_start", payload={
-            "operation": effective_op,
-            "item_name": item_name,
-            "item_idx":  idx,
-            "total":     total,
-        })
+        emit(
+            "video_op_start",
+            payload={
+                "operation": effective_op,
+                "item_name": item_name,
+                "item_idx": idx,
+                "total": total,
+            },
+        )
 
         t0 = time()
 
@@ -96,16 +100,24 @@ def _make_process_item(args: VideoArgs) -> Callable:
             emit("progress_update", payload={"current": ratio})
 
         if effective_op == "download":
-            emit("log", payload={"message": pipeline_log.fmt_download_detail(
-                args.resolution, args.container
-            )})
+            emit(
+                "log",
+                payload={
+                    "message": pipeline_log.fmt_download_detail(
+                        args.resolution, args.container
+                    )
+                },
+            )
 
             def _ydl_hook(d: dict) -> None:
                 if d.get("status") == "downloading":
                     downloaded = d.get("downloaded_bytes", 0) or 0
                     total_b = d.get("total_bytes") or d.get("total_bytes_estimate") or 0
                     if total_b > 0:
-                        emit("progress_update", payload={"current": min(downloaded / total_b, 1.0)})
+                        emit(
+                            "progress_update",
+                            payload={"current": min(downloaded / total_b, 1.0)},
+                        )
                     line = fmt_ydl_progress(d)
                     if line:
                         emit("log", payload={"message": line, "mutable": True})
@@ -129,22 +141,34 @@ def _make_process_item(args: VideoArgs) -> Callable:
             try:
                 match effective_op:
                     case "convert":
-                        emit("log", payload={"message": pipeline_log.fmt_convert_detail(
-                            args.vcodec, args.out_container
-                        )})
+                        emit(
+                            "log",
+                            payload={
+                                "message": pipeline_log.fmt_convert_detail(
+                                    args.vcodec, args.out_container
+                                )
+                            },
+                        )
                         out_path = convert_video(
-                            src, VIDEO_PROCESSED_DIR,
+                            src,
+                            VIDEO_PROCESSED_DIR,
                             container=args.out_container,
                             vcodec=args.vcodec,
                             progress_cb=_progress_cb,
                         )
 
                     case "trim":
-                        emit("log", payload={"message": pipeline_log.fmt_trim_detail(
-                            args.trim_start, args.trim_end, args.trim_reenc
-                        )})
+                        emit(
+                            "log",
+                            payload={
+                                "message": pipeline_log.fmt_trim_detail(
+                                    args.trim_start, args.trim_end, args.trim_reenc
+                                )
+                            },
+                        )
                         out_path = trim_video(
-                            src, VIDEO_PROCESSED_DIR,
+                            src,
+                            VIDEO_PROCESSED_DIR,
                             start=args.trim_start,
                             end=args.trim_end,
                             reenc=args.trim_reenc,
@@ -152,22 +176,34 @@ def _make_process_item(args: VideoArgs) -> Callable:
                         )
 
                     case "compress":
-                        emit("log", payload={"message": pipeline_log.fmt_compress_detail(
-                            args.crf, args.preset
-                        )})
+                        emit(
+                            "log",
+                            payload={
+                                "message": pipeline_log.fmt_compress_detail(
+                                    args.crf, args.preset
+                                )
+                            },
+                        )
                         out_path = compress_video(
-                            src, VIDEO_PROCESSED_DIR,
+                            src,
+                            VIDEO_PROCESSED_DIR,
                             crf=args.crf,
                             preset=args.preset,
                             progress_cb=_progress_cb,
                         )
 
                     case "resize":
-                        emit("log", payload={"message": pipeline_log.fmt_resize_detail(
-                            args.resize_width, args.resize_height
-                        )})
+                        emit(
+                            "log",
+                            payload={
+                                "message": pipeline_log.fmt_resize_detail(
+                                    args.resize_width, args.resize_height
+                                )
+                            },
+                        )
                         out_path = resize_video(
-                            src, VIDEO_PROCESSED_DIR,
+                            src,
+                            VIDEO_PROCESSED_DIR,
                             width=args.resize_width,
                             height=args.resize_height,
                             progress_cb=_progress_cb,
@@ -180,23 +216,59 @@ def _make_process_item(args: VideoArgs) -> Callable:
                                 "[i] Video-only .webm streams (e.g. f313.webm) contain no audio. "
                                 "Use the merged full file instead."
                             )
-                        emit("log", payload={"message": pipeline_log.fmt_extract_audio_detail(
-                            args.audio_fmt
-                        )})
+                        emit(
+                            "log",
+                            payload={
+                                "message": pipeline_log.fmt_extract_audio_detail(
+                                    args.audio_fmt
+                                )
+                            },
+                        )
                         out_path = extract_audio_from_video(
-                            src, VIDEO_PROCESSED_DIR,
+                            src,
+                            VIDEO_PROCESSED_DIR,
                             audio_fmt=args.audio_fmt,
                             progress_cb=_progress_cb,
                         )
 
                     case "thumbnail":
-                        emit("log", payload={"message": pipeline_log.fmt_thumbnail_detail(
-                            args.thumb_time, args.thumb_fmt
-                        )})
+                        emit(
+                            "log",
+                            payload={
+                                "message": pipeline_log.fmt_thumbnail_detail(
+                                    args.thumb_time, args.thumb_fmt
+                                )
+                            },
+                        )
                         out_path = make_thumbnail(
-                            src, VIDEO_PROCESSED_DIR,
+                            src,
+                            VIDEO_PROCESSED_DIR,
                             time=args.thumb_time,
                             fmt=args.thumb_fmt,
+                        )
+
+                    case "subtitle":
+                        if not args.subtitle_path:
+                            raise ValueError(
+                                f"No subtitle file selected for: {item_name}"
+                            )
+                        sub_path = Path(args.subtitle_path)
+                        if not sub_path.exists():
+                            raise ValueError(f"Subtitle file not found: {sub_path}")
+                        emit(
+                            "log",
+                            payload={
+                                "message": pipeline_log.fmt_subtitle_detail(
+                                    sub_path.name, args.subtitle_mode
+                                )
+                            },
+                        )
+                        out_path = add_subtitles(
+                            src,
+                            sub_path,
+                            VIDEO_PROCESSED_DIR,
+                            mode=args.subtitle_mode,
+                            progress_cb=_progress_cb,
                         )
 
                     case _:
@@ -216,16 +288,20 @@ def _make_process_item(args: VideoArgs) -> Callable:
         elapsed = time() - t0
         src_size = (
             Path(item.value).stat().st_size
-            if item.kind == "local" and Path(item.value).exists() else 0
+            if item.kind == "local" and Path(item.value).exists()
+            else 0
         )
-        emit("video_op_done", payload={
-            "output_path":    str(out_path),
-            "elapsed":        f"{elapsed:.1f}s",
-            "item_idx":       idx,
-            "total":          total,
-            "src_size_bytes": src_size,
-            "out_size_bytes": out_path.stat().st_size,
-        })
+        emit(
+            "video_op_done",
+            payload={
+                "output_path": str(out_path),
+                "elapsed": f"{elapsed:.1f}s",
+                "item_idx": idx,
+                "total": total,
+                "src_size_bytes": src_size,
+                "out_size_bytes": out_path.stat().st_size,
+            },
+        )
         return str(out_path)
 
     return _process_item

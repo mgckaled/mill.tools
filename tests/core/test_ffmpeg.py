@@ -1,4 +1,5 @@
 """Unit tests for src/core/ffmpeg.run_ffmpeg (subprocess mocked)."""
+
 import pytest
 
 
@@ -115,6 +116,34 @@ def test_run_ffmpeg_malformed_out_time_us_silenced(tmp_path, mocker):
     # ValueError from int("INVALID") must be silenced — no exception propagates
     run_ffmpeg(["ffmpeg"], out, total_secs=10.0, progress_cb=ratios.append)
     assert ratios == []
+
+
+@pytest.mark.unit
+def test_run_ffmpeg_passes_cwd_to_popen(tmp_path, mocker):
+    from src.core.ffmpeg import run_ffmpeg
+
+    out = tmp_path / "out.mp4"
+    out.write_bytes(b"video")
+    mock_proc = _mock_popen(mocker, returncode=0)
+    popen = mocker.patch("subprocess.Popen", return_value=mock_proc)
+
+    run_ffmpeg(["ffmpeg"], out, cwd=tmp_path)
+
+    assert popen.call_args.kwargs["cwd"] == str(tmp_path)
+
+
+@pytest.mark.unit
+def test_run_ffmpeg_cwd_none_passes_none_to_popen(tmp_path, mocker):
+    from src.core.ffmpeg import run_ffmpeg
+
+    out = tmp_path / "out.mp4"
+    out.write_bytes(b"video")
+    mock_proc = _mock_popen(mocker, returncode=0)
+    popen = mocker.patch("subprocess.Popen", return_value=mock_proc)
+
+    run_ffmpeg(["ffmpeg"], out)
+
+    assert popen.call_args.kwargs["cwd"] is None
 
 
 @pytest.mark.unit

@@ -12,7 +12,9 @@ Usage:
     uv run main.py video resize FILE [--width 1280] [--height 720]
     uv run main.py video extract-audio FILE [--fmt mp3]
     uv run main.py video thumbnail FILE [--time 00:00:01] [--fmt jpg]
+    uv run main.py video subtitle FILE --subs subs.srt [--mode soft|hard]
 """
+
 from __future__ import annotations
 
 import argparse
@@ -31,58 +33,134 @@ def add_video_parser(subparsers: argparse._SubParsersAction) -> None:
     # ── download ──────────────────────────────────────────────────────────────
     dl = video_sub.add_parser("download", help="Download video from URL via yt-dlp")
     dl.add_argument("url", help="YouTube/yt-dlp URL")
-    dl.add_argument("--quality", default="1080", metavar="HEIGHT", help="Max resolution height (default 1080)")
-    dl.add_argument("--container", default="mp4", help="Output container format (default mp4)")
-    dl.add_argument("--no-meta", action="store_true", dest="no_meta", help="Skip embedding metadata")
+    dl.add_argument(
+        "--quality",
+        default="1080",
+        metavar="HEIGHT",
+        help="Max resolution height (default 1080)",
+    )
+    dl.add_argument(
+        "--container", default="mp4", help="Output container format (default mp4)"
+    )
+    dl.add_argument(
+        "--no-meta", action="store_true", dest="no_meta", help="Skip embedding metadata"
+    )
 
     # ── convert ───────────────────────────────────────────────────────────────
     cv = video_sub.add_parser("convert", help="Convert video codec or container")
     cv.add_argument("file", help="Local video file")
-    cv.add_argument("--codec", default="copy", help="Video codec: copy, h264, hevc (default copy)")
+    cv.add_argument(
+        "--codec", default="copy", help="Video codec: copy, h264, hevc (default copy)"
+    )
     cv.add_argument("--container", default="mp4", help="Output container (default mp4)")
 
     # ── trim ──────────────────────────────────────────────────────────────────
     tr = video_sub.add_parser("trim", help="Trim video to a time range")
     tr.add_argument("file", help="Local video file")
-    tr.add_argument("--start", required=True, dest="trim_start", metavar="TIME",
-                    help="Start time e.g. '0:30', '00:01:00'")
-    tr.add_argument("--end", default="", dest="trim_end", metavar="TIME",
-                    help="End time (omit to cut to end)")
-    tr.add_argument("--reenc", action="store_true", dest="trim_reenc",
-                    help="Re-encode instead of stream-copy (accurate but slower)")
+    tr.add_argument(
+        "--start",
+        required=True,
+        dest="trim_start",
+        metavar="TIME",
+        help="Start time e.g. '0:30', '00:01:00'",
+    )
+    tr.add_argument(
+        "--end",
+        default="",
+        dest="trim_end",
+        metavar="TIME",
+        help="End time (omit to cut to end)",
+    )
+    tr.add_argument(
+        "--reenc",
+        action="store_true",
+        dest="trim_reenc",
+        help="Re-encode instead of stream-copy (accurate but slower)",
+    )
 
     # ── compress ──────────────────────────────────────────────────────────────
     cp = video_sub.add_parser("compress", help="Compress video with H.264 (CPU, CRF)")
     cp.add_argument("file", help="Local video file")
-    cp.add_argument("--crf", type=int, default=23, help="CRF value 18–28; lower=better quality (default 23)")
-    cp.add_argument("--preset", default="medium",
-                    choices=["ultrafast", "superfast", "veryfast", "faster",
-                             "fast", "medium", "slow", "slower", "veryslow"],
-                    help="x264 preset (default medium)")
+    cp.add_argument(
+        "--crf",
+        type=int,
+        default=23,
+        help="CRF value 18–28; lower=better quality (default 23)",
+    )
+    cp.add_argument(
+        "--preset",
+        default="medium",
+        choices=[
+            "ultrafast",
+            "superfast",
+            "veryfast",
+            "faster",
+            "fast",
+            "medium",
+            "slow",
+            "slower",
+            "veryslow",
+        ],
+        help="x264 preset (default medium)",
+    )
 
     # ── resize ────────────────────────────────────────────────────────────────
     rs = video_sub.add_parser("resize", help="Resize video (aspect ratio preserved)")
     rs.add_argument("file", help="Local video file")
-    rs.add_argument("--width", type=int, default=0, help="Target width px (0 = derive from height)")
-    rs.add_argument("--height", type=int, default=0, help="Target height px (0 = derive from width)")
+    rs.add_argument(
+        "--width", type=int, default=0, help="Target width px (0 = derive from height)"
+    )
+    rs.add_argument(
+        "--height", type=int, default=0, help="Target height px (0 = derive from width)"
+    )
 
     # ── extract-audio ─────────────────────────────────────────────────────────
     ea = video_sub.add_parser("extract-audio", help="Extract audio track from video")
     ea.add_argument("file", help="Local video file")
-    ea.add_argument("--fmt", default="mp3",
-                    choices=["mp3", "m4a", "wav", "ogg", "opus"],
-                    help="Output audio format (default mp3)")
+    ea.add_argument(
+        "--fmt",
+        default="mp3",
+        choices=["mp3", "m4a", "wav", "ogg", "opus"],
+        help="Output audio format (default mp3)",
+    )
 
     # ── thumbnail ─────────────────────────────────────────────────────────────
     th = video_sub.add_parser("thumbnail", help="Extract a frame as an image")
     th.add_argument("file", help="Local video file")
-    th.add_argument("--time", default="00:00:01", metavar="TIME",
-                    help="Timestamp to capture e.g. '00:00:05' (default 00:00:01)")
-    th.add_argument("--fmt", default="jpg", choices=["jpg", "png"],
-                    help="Output image format (default jpg)")
+    th.add_argument(
+        "--time",
+        default="00:00:01",
+        metavar="TIME",
+        help="Timestamp to capture e.g. '00:00:05' (default 00:00:01)",
+    )
+    th.add_argument(
+        "--fmt",
+        default="jpg",
+        choices=["jpg", "png"],
+        help="Output image format (default jpg)",
+    )
+
+    # ── subtitle ──────────────────────────────────────────────────────────────
+    sb = video_sub.add_parser("subtitle", help="Mux or burn a subtitle into a video")
+    sb.add_argument("file", help="Local video file")
+    sb.add_argument(
+        "--subs",
+        required=True,
+        dest="subs",
+        metavar="PATH",
+        help="Subtitle file (.srt/.vtt) to attach",
+    )
+    sb.add_argument(
+        "--mode",
+        default="soft",
+        choices=["soft", "hard"],
+        help="soft = mux (no re-encode, default); hard = burn-in (libx264)",
+    )
 
     video_p.add_argument(
-        "--verbose", action="store_true", help="Enable debug logging",
+        "--verbose",
+        action="store_true",
+        help="Enable debug logging",
     )
     video_p.set_defaults(func=run_video_cli)
 
@@ -101,14 +179,18 @@ def run_video_cli(ns: argparse.Namespace) -> None:
 
     check_dependencies()
 
+    from pathlib import Path
+
     op = ns.video_op
 
     # Resolve input: URL → kind="url", local file → kind="local"
     if op == "download":
         item = InputItem(kind="url", value=ns.url)
     else:
-        from pathlib import Path
         item = InputItem(kind="local", value=str(Path(ns.file).resolve()))
+
+    subs = getattr(ns, "subs", None)
+    subtitle_path = Path(subs).resolve() if subs else None
 
     args = VideoArgs(
         items=[item],
@@ -135,6 +217,9 @@ def run_video_cli(ns: argparse.Namespace) -> None:
         # thumbnail
         thumb_time=getattr(ns, "time", "00:00:01"),
         thumb_fmt=getattr(ns, "fmt", "jpg"),
+        # subtitle
+        subtitle_path=subtitle_path,
+        subtitle_mode=getattr(ns, "mode", "soft"),
     )
 
     bus = CLIEventBus()

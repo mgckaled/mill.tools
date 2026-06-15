@@ -5,6 +5,7 @@ args.py: Shared argument types for the video pipeline.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from pathlib import Path
 
 from src.core.io_types import InputItem
 
@@ -44,3 +45,7 @@ class VideoArgs:
     # Thumbnail
     thumb_time: str = "00:00:01"
     thumb_fmt: str = "jpg"
+
+    # Subtitle (soft mux / hard burn-in)
+    subtitle_path: Path | None = None
+    subtitle_mode: str = "soft"

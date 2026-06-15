@@ -1,4 +1,5 @@
 """Tests for CLI video subcommand argument parsing."""
+
 import argparse
 
 import pytest
@@ -25,7 +26,9 @@ def test_video_download_defaults():
 
 @pytest.mark.unit
 def test_video_download_custom_quality():
-    ns = _parse("download", "https://youtu.be/abc", "--quality", "720", "--container", "mkv")
+    ns = _parse(
+        "download", "https://youtu.be/abc", "--quality", "720", "--container", "mkv"
+    )
     assert ns.quality == "720"
     assert ns.container == "mkv"
 
@@ -82,6 +85,27 @@ def test_video_thumbnail_defaults():
 
 
 @pytest.mark.unit
+def test_video_subtitle_defaults():
+    ns = _parse("subtitle", "video.mp4", "--subs", "subs.srt")
+    assert ns.video_op == "subtitle"
+    assert ns.file == "video.mp4"
+    assert ns.subs == "subs.srt"
+    assert ns.mode == "soft"
+
+
+@pytest.mark.unit
+def test_video_subtitle_hard_mode():
+    ns = _parse("subtitle", "video.mp4", "--subs", "subs.vtt", "--mode", "hard")
+    assert ns.mode == "hard"
+
+
+@pytest.mark.unit
+def test_video_subtitle_requires_subs():
+    with pytest.raises(SystemExit):
+        _parse("subtitle", "video.mp4")
+
+
+@pytest.mark.unit
 def test_video_func_is_callable():
     ns = _parse("download", "https://youtu.be/abc")
     assert callable(ns.func)
@@ -119,3 +143,25 @@ def test_run_video_cli_extract_audio_normalises_op_name(mocker, tmp_path):
     args = mock_pipeline.call_args.args[0]
     assert args.operation == "extract_audio"
     assert args.audio_fmt == "wav"
+
+
+@pytest.mark.unit
+def test_run_video_cli_subtitle_dispatches(mocker, tmp_path):
+    """video subtitle FILE --subs PATH --mode hard → VideoArgs com subtitle_*."""
+    mocker.patch("src.utils.check_dependencies")
+    mock_pipeline = mocker.patch(
+        "src.gui.modules.video.worker.run_video_pipeline",
+        return_value=True,
+    )
+    movie = tmp_path / "movie.mp4"
+    movie.write_bytes(b"")
+    subs = tmp_path / "subs.srt"
+    subs.write_text("1\n", encoding="utf-8")
+    ns = _parse("subtitle", str(movie), "--subs", str(subs), "--mode", "hard")
+    ns.func(ns)
+    args = mock_pipeline.call_args.args[0]
+    assert args.operation == "subtitle"
+    assert args.items[0].kind == "local"
+    assert args.subtitle_mode == "hard"
+    assert args.subtitle_path is not None
+    assert args.subtitle_path.name == "subs.srt"

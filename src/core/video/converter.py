@@ -1,4 +1,5 @@
 """Video operations via ffmpeg: convert, trim, compress, resize, thumbnail, extract_audio."""
+
 from __future__ import annotations
 
 import subprocess
@@ -14,7 +15,7 @@ VCODEC_MAP = {
     "copy": ["-c:v", "copy"],
     "h264": ["-c:v", "libx264", "-preset", "medium"],
     "h265": ["-c:v", "libx265", "-preset", "medium"],
-    "vp9":  ["-c:v", "libvpx-vp9"],
+    "vp9": ["-c:v", "libvpx-vp9"],
 }
 CONTAINER_EXT = {"mp4": "mp4", "mkv": "mkv", "webm": "webm", "avi": "avi"}
 
@@ -88,10 +89,23 @@ def compress_video(
     out_dir.mkdir(parents=True, exist_ok=True)
     out_path = out_dir / f"{sanitize_filename(src.stem)}_compressed.mp4"
     cmd = [
-        "ffmpeg", "-y", "-i", str(src),
-        "-c:v", "libx264", "-crf", str(crf), "-preset", preset,
-        "-c:a", "aac", "-b:a", "128k",
-        "-progress", "pipe:1", "-nostats",
+        "ffmpeg",
+        "-y",
+        "-i",
+        str(src),
+        "-c:v",
+        "libx264",
+        "-crf",
+        str(crf),
+        "-preset",
+        preset,
+        "-c:a",
+        "aac",
+        "-b:a",
+        "128k",
+        "-progress",
+        "pipe:1",
+        "-nostats",
         str(out_path),
     ]
     total_secs = get_video_info(src).duration if progress_cb else None
@@ -114,11 +128,21 @@ def resize_video(
     w = width if width else -2
     h = height if height else -2
     cmd = [
-        "ffmpeg", "-y", "-i", str(src),
-        "-vf", f"scale={w}:{h}",
-        "-c:v", "libx264", "-crf", "23",
-        "-c:a", "copy",
-        "-progress", "pipe:1", "-nostats",
+        "ffmpeg",
+        "-y",
+        "-i",
+        str(src),
+        "-vf",
+        f"scale={w}:{h}",
+        "-c:v",
+        "libx264",
+        "-crf",
+        "23",
+        "-c:a",
+        "copy",
+        "-progress",
+        "pipe:1",
+        "-nostats",
         str(out_path),
     ]
     total_secs = get_video_info(src).duration if progress_cb else None
@@ -133,6 +157,7 @@ def extract_audio_from_video(
 ) -> Path:
     """Extrai faixa de áudio do vídeo (bridge para src/core/audio/converter.py)."""
     from src.core.audio.converter import extract_audio
+
     return extract_audio(src, out_dir, fmt=audio_fmt, progress_cb=progress_cb)
 
 
@@ -146,13 +171,96 @@ def make_thumbnail(
     out_dir.mkdir(parents=True, exist_ok=True)
     out_path = out_dir / f"{sanitize_filename(src.stem)}_thumb.{fmt}"
     cmd = [
-        "ffmpeg", "-y",
-        "-ss", time,
-        "-i", str(src),
-        "-vframes", "1",
+        "ffmpeg",
+        "-y",
+        "-ss",
+        time,
+        "-i",
+        str(src),
+        "-vframes",
+        "1",
         str(out_path),
     ]
     r = subprocess.run(cmd, capture_output=True)
     if r.returncode != 0 or not out_path.exists():
         raise RuntimeError(f"Thumbnail falhou para {src.name}")
     return out_path
+
+
+def add_subtitles(
+    src: Path,
+    subtitle_path: Path,
+    out_dir: Path,
+    mode: str = "soft",
+    progress_cb: Callable[[float], None] | None = None,
+) -> Path:
+    """Mux (soft) or burn-in (hard) a subtitle file into a video via ffmpeg.
+
+    Args:
+        src: Source video file.
+        subtitle_path: Subtitle file (.srt/.vtt) to attach.
+        out_dir: Destination directory; the output is written as
+            "<stem>_subbed.mp4".
+        mode: "soft" mux (default) stream-copies video/audio and adds a
+            selectable mov_text subtitle track — no re-encode, fast and light.
+            "hard" burn-in renders the subtitle into the picture with libx264
+            (CPU re-encode, permanent — for Shorts/Reels).
+        progress_cb: Optional callback receiving the ffmpeg progress ratio.
+
+    Returns:
+        Path to the generated video.
+
+    Note:
+        The burn-in path runs ffmpeg with cwd set to the subtitle's parent
+        directory and references it by basename. This sidesteps the Windows
+        drive-letter colon (e.g. C:) which the `subtitles` filter parser would
+        otherwise treat as an argument separator.
+    """
+    out_dir.mkdir(parents=True, exist_ok=True)
+    out_path = out_dir / f"{sanitize_filename(src.stem)}_subbed.mp4"
+
+    if mode == "hard":
+        cmd = [
+            "ffmpeg",
+            "-y",
+            "-i",
+            str(src),
+            "-vf",
+            f"subtitles={subtitle_path.name}",
+            "-c:v",
+            "libx264",
+            "-crf",
+            "23",
+            "-preset",
+            "medium",
+            "-c:a",
+            "copy",
+            "-progress",
+            "pipe:1",
+            "-nostats",
+            str(out_path),
+        ]
+        cwd = subtitle_path.parent
+    else:  # soft mux — no re-encode
+        cmd = [
+            "ffmpeg",
+            "-y",
+            "-i",
+            str(src),
+            "-i",
+            str(subtitle_path),
+            "-c",
+            "copy",
+            "-c:s",
+            "mov_text",
+            "-progress",
+            "pipe:1",
+            "-nostats",
+            str(out_path),
+        ]
+        cwd = None
+
+    total_secs = get_video_info(src).duration if progress_cb else None
+    return run_ffmpeg(
+        cmd, out_path, total_secs=total_secs, progress_cb=progress_cb, cwd=cwd
+    )

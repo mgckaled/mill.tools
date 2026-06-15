@@ -1,5 +1,5 @@
 [project]
-name = "mill-tools"
+name = "mill.tools"
 version = "0.1.0"
 description = "Multiferramenta pessoal para processamento de áudio, vídeo e transcrição."
 readme = "README.md"
@@ -38,6 +38,15 @@ dev = [
     "pytest-xdist>=3.8.0",
     "ruff>=0.15.14",
 ]
+
+[tool.ruff.lint]
+# Keep every autofix EXCEPT auto-removal of unused imports (F401). The
+# PostToolUse editor hook runs `ruff check --fix`; multi-step edits add an
+# import in one step and its first usage in the next, so auto-removal would
+# strip the still-needed import in between. Unused imports are still *reported*
+# (just removed deliberately, never silently). See .claude/hooks/ruff_fix.py.
+fixable = ["ALL"]
+unfixable = ["F401", "F841"]
 
 [tool.pytest.ini_options]
 minversion = "8.0"

@@ -1,7 +1,9 @@
 """Formulário de entrada do módulo Vídeo."""
+
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
+from pathlib import Path
 from typing import Callable
 
 import flet as ft
@@ -23,34 +25,46 @@ from src.gui.theme.tokens import Space, Type
 _ALLOWED_EXTS = ["mp4", "mkv", "webm", "avi", "mov"]
 
 _OP_ICONS: list[tuple[str, str, str]] = [
-    ("download",      ft.Icons.DOWNLOAD_OUTLINED,      "Baixar"),
-    ("convert",       ft.Icons.COMPARE_ARROWS,          "Converter"),
-    ("trim",          ft.Icons.CONTENT_CUT,              "Recortar"),
-    ("compress",      ft.Icons.COMPRESS,                 "Comprimir"),
-    ("resize",        ft.Icons.OPEN_IN_FULL,             "Redimensionar"),
-    ("extract_audio", ft.Icons.AUDIO_FILE_OUTLINED,     "Extrair áudio"),
-    ("thumbnail",     ft.Icons.IMAGE_OUTLINED,           "Thumbnail"),
+    ("download", ft.Icons.DOWNLOAD_OUTLINED, "Baixar"),
+    ("convert", ft.Icons.COMPARE_ARROWS, "Converter"),
+    ("trim", ft.Icons.CONTENT_CUT, "Recortar"),
+    ("compress", ft.Icons.COMPRESS, "Comprimir"),
+    ("resize", ft.Icons.OPEN_IN_FULL, "Redimensionar"),
+    ("extract_audio", ft.Icons.AUDIO_FILE_OUTLINED, "Extrair áudio"),
+    ("thumbnail", ft.Icons.IMAGE_OUTLINED, "Thumbnail"),
+    ("subtitle", ft.Icons.SUBTITLES_OUTLINED, "Legenda"),
 ]
 
 _RES_OPTIONS = ["best", "2160", "1080", "720", "480", "360"]
-_RES_LABELS  = {"best": "Melhor", "2160": "4K", "1080": "1080p", "720": "720p", "480": "480p", "360": "360p"}
+_RES_LABELS = {
+    "best": "Melhor",
+    "2160": "4K",
+    "1080": "1080p",
+    "720": "720p",
+    "480": "480p",
+    "360": "360p",
+}
 
 _CONTAINER_OPTIONS = ["mp4", "mkv", "webm"]
-_CONTAINER_LABELS  = {"mp4": "MP4", "mkv": "MKV", "webm": "WebM"}
+_CONTAINER_LABELS = {"mp4": "MP4", "mkv": "MKV", "webm": "WebM"}
 
 _CODEC_OPTIONS = ["copy", "h264", "h265", "vp9"]
-_CODEC_LABELS  = {"copy": "Copy", "h264": "H.264", "h265": "H.265", "vp9": "VP9"}
+_CODEC_LABELS = {"copy": "Copy", "h264": "H.264", "h265": "H.265", "vp9": "VP9"}
 
 _OUT_CONTAINER_OPTIONS = ["mp4", "mkv", "webm", "avi"]
-_OUT_CONTAINER_LABELS  = {"mp4": "MP4", "mkv": "MKV", "webm": "WebM", "avi": "AVI"}
+_OUT_CONTAINER_LABELS = {"mp4": "MP4", "mkv": "MKV", "webm": "WebM", "avi": "AVI"}
 
 _PRESET_OPTIONS = ["ultrafast", "fast", "medium", "slow"]
 
 _AUDIO_FMT_OPTIONS = ["mp3", "m4a", "wav"]
-_AUDIO_FMT_LABELS  = {"mp3": "MP3", "m4a": "M4A", "wav": "WAV"}
+_AUDIO_FMT_LABELS = {"mp3": "MP3", "m4a": "M4A", "wav": "WAV"}
 
 _THUMB_FMT_OPTIONS = ["jpg", "png"]
-_THUMB_FMT_LABELS  = {"jpg": "JPG", "png": "PNG"}
+_THUMB_FMT_LABELS = {"jpg": "JPG", "png": "PNG"}
+
+_SUBTITLE_MODE_OPTIONS = ["soft", "hard"]
+_SUBTITLE_MODE_LABELS = {"soft": "Embutir", "hard": "Queimar"}
+_SUBTITLE_EXTS = ["srt", "vtt"]
 
 
 @dataclass
@@ -63,6 +77,7 @@ class VideoFormPanel:
 
 
 # ─── build_video_form ─────────────────────────────────────────────────────────
+
 
 def build_video_form(
     page: ft.Page,
@@ -82,6 +97,7 @@ def build_video_form(
     _text_fields: list[ft.TextField] = []
     _switches_extra: list[ft.Switch] = []
     _sliders_extra: list[ft.Slider] = []
+    _buttons_extra: list[ft.Control] = []
 
     # ── InputSource ───────────────────────────────────────────────────────────
 
@@ -146,17 +162,31 @@ def build_video_form(
         bc = ft.Colors.PRIMARY if active else ft.Colors.OUTLINE_VARIANT
         side = ft.BorderSide(bw, bc)
         ic = ft.Icon(icon_name, size=24, color=color)
-        tx = ft.Text(label, size=Type.small.size, text_align=ft.TextAlign.CENTER, color=color, max_lines=2)
+        tx = ft.Text(
+            label,
+            size=Type.small.size,
+            text_align=ft.TextAlign.CENTER,
+            color=color,
+            max_lines=2,
+        )
         _op_card_icon_refs[op_id] = ic
         _op_card_text_refs[op_id] = tx
         ctr = ft.Container(
-            content=ft.Column([ic, tx], horizontal_alignment=ft.CrossAxisAlignment.CENTER, spacing=6, tight=True),
-            height=70, padding=8, border_radius=8,
+            content=ft.Column(
+                [ic, tx],
+                horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+                spacing=6,
+                tight=True,
+            ),
+            height=70,
+            padding=8,
+            border_radius=8,
             expand=True,
             bgcolor=ft.Colors.SURFACE,
             border=ft.Border(left=side, right=side, top=side, bottom=side),
             shadow=ft.BoxShadow(
-                blur_radius=8, spread_radius=0,
+                blur_radius=8,
+                spread_radius=0,
                 offset=ft.Offset(0, 3),
                 color=ft.Colors.with_opacity(0.4, ft.Colors.BLACK),
             ),
@@ -178,7 +208,7 @@ def build_video_form(
     op_grid = ft.Column(
         spacing=6,
         controls=[
-            ft.Row(controls=_op_card_list[i:i + _OP_COLS], spacing=6)
+            ft.Row(controls=_op_card_list[i : i + _OP_COLS], spacing=6)
             for i in range(0, len(_op_card_list), _OP_COLS)
         ],
     )
@@ -205,12 +235,14 @@ def build_video_form(
     )
     _sel_disable_fns.append(_set_res_disabled)
 
-    dl_container_grid, _get_dl_container, _set_dl_container_disabled = segmented_selector(
-        _CONTAINER_OPTIONS,
-        cfg.get("last_video_container", "mp4"),
-        page,
-        columns=3,
-        labels=_CONTAINER_LABELS,
+    dl_container_grid, _get_dl_container, _set_dl_container_disabled = (
+        segmented_selector(
+            _CONTAINER_OPTIONS,
+            cfg.get("last_video_container", "mp4"),
+            page,
+            columns=3,
+            labels=_CONTAINER_LABELS,
+        )
     )
     _sel_disable_fns.append(_set_dl_container_disabled)
 
@@ -224,10 +256,15 @@ def build_video_form(
 
     _download_block_content = ft.Column(
         controls=[
-            section("Resolução máxima", res_grid, help_key="video.resolution", page=page),
+            section(
+                "Resolução máxima", res_grid, help_key="video.resolution", page=page
+            ),
             section("Container", dl_container_grid),
             ft.Row(
-                [embed_switch, help_icon_for("video.embed_meta", page) or ft.Container()],
+                [
+                    embed_switch,
+                    help_icon_for("video.embed_meta", page) or ft.Container(),
+                ],
                 spacing=4,
                 vertical_alignment=ft.CrossAxisAlignment.CENTER,
             ),
@@ -246,12 +283,14 @@ def build_video_form(
     )
     _sel_disable_fns.append(_set_codec_disabled)
 
-    conv_container_grid, _get_out_container, _set_conv_container_disabled = segmented_selector(
-        _OUT_CONTAINER_OPTIONS,
-        cfg.get("last_video_out_container", "mp4"),
-        page,
-        columns=4,
-        labels=_OUT_CONTAINER_LABELS,
+    conv_container_grid, _get_out_container, _set_conv_container_disabled = (
+        segmented_selector(
+            _OUT_CONTAINER_OPTIONS,
+            cfg.get("last_video_out_container", "mp4"),
+            page,
+            columns=4,
+            labels=_OUT_CONTAINER_LABELS,
+        )
     )
     _sel_disable_fns.append(_set_conv_container_disabled)
 
@@ -368,7 +407,9 @@ def build_video_form(
     _compress_block_content = ft.Column(
         controls=[
             _crf_col,
-            section("Preset de encoding", preset_grid, help_key="video.preset", page=page),
+            section(
+                "Preset de encoding", preset_grid, help_key="video.preset", page=page
+            ),
         ],
         spacing=Space.md,
     )
@@ -459,6 +500,70 @@ def build_video_form(
         spacing=Space.md,
     )
 
+    # ── Bloco: Subtitle ────────────────────────────────────────────────────────
+
+    _subtitle_path: list[Path | None] = [None]
+
+    subtitle_path_text = ft.Text(
+        "Nenhuma legenda selecionada",
+        size=Type.small.size,
+        color=ft.Colors.ON_SURFACE_VARIANT,
+        overflow=ft.TextOverflow.ELLIPSIS,
+        expand=True,
+    )
+
+    subtitle_picker = ft.FilePicker()
+    page.services.append(subtitle_picker)
+
+    async def _pick_subtitle(_e) -> None:
+        files = await subtitle_picker.pick_files(
+            allow_multiple=False,
+            file_type=ft.FilePickerFileType.CUSTOM,
+            allowed_extensions=_SUBTITLE_EXTS,
+        )
+        if files and files[0].path:
+            _subtitle_path[0] = Path(files[0].path)
+            subtitle_path_text.value = Path(files[0].path).name
+            try:
+                if subtitle_path_text.page:
+                    subtitle_path_text.update()
+            except RuntimeError:
+                pass
+
+    subtitle_pick_btn = ft.OutlinedButton(
+        "Selecionar legenda",
+        icon=ft.Icons.FOLDER_OPEN_OUTLINED,
+        on_click=_pick_subtitle,
+        style=ft.ButtonStyle(mouse_cursor=Cursor.interactive),
+    )
+    _buttons_extra.append(subtitle_pick_btn)
+
+    sub_mode_grid, _get_subtitle_mode, _set_sub_mode_disabled = segmented_selector(
+        _SUBTITLE_MODE_OPTIONS,
+        cfg.get("last_video_subtitle_mode", "soft"),
+        page,
+        columns=2,
+        labels=_SUBTITLE_MODE_LABELS,
+    )
+    _sel_disable_fns.append(_set_sub_mode_disabled)
+
+    _subtitle_block_content = ft.Column(
+        controls=[
+            section(
+                "Arquivo de legenda (.srt / .vtt)",
+                ft.Row(
+                    [subtitle_path_text, subtitle_pick_btn],
+                    spacing=Space.sm,
+                    vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                ),
+                help_key="video.subtitle",
+                page=page,
+            ),
+            section("Modo", sub_mode_grid),
+        ],
+        spacing=Space.md,
+    )
+
     # ── Blocos condicionais ────────────────────────────────────────────────────
 
     _op_blocks: dict[str, ft.Container] = {}
@@ -474,17 +579,18 @@ def build_video_form(
 
     def _show_op_block(op: str) -> None:
         for k, blk in _op_blocks.items():
-            blk.visible = (k == op)
+            blk.visible = k == op
 
     blocks_col = ft.Column(
         controls=[
-            _make_op_block("download",      _download_block_content),
-            _make_op_block("convert",       _convert_block_content),
-            _make_op_block("trim",          _trim_block_content),
-            _make_op_block("compress",      _compress_block_content),
-            _make_op_block("resize",        _resize_block_content),
+            _make_op_block("download", _download_block_content),
+            _make_op_block("convert", _convert_block_content),
+            _make_op_block("trim", _trim_block_content),
+            _make_op_block("compress", _compress_block_content),
+            _make_op_block("resize", _resize_block_content),
             _make_op_block("extract_audio", _extract_audio_block_content),
-            _make_op_block("thumbnail",     _thumbnail_block_content),
+            _make_op_block("thumbnail", _thumbnail_block_content),
+            _make_op_block("subtitle", _subtitle_block_content),
         ],
         spacing=0,
     )
@@ -504,45 +610,54 @@ def build_video_form(
         if not items:
             return
         op = "download" if _has_url_items[0] else _get_op()
-        settings.save({
-            "last_video_operation":   _get_op(),
-            "last_video_resolution":  _get_resolution(),
-            "last_video_container":   _get_dl_container(),
-            "last_video_embed_meta":  bool(embed_switch.value),
-            "last_video_vcodec":      _get_vcodec(),
-            "last_video_out_container": _get_out_container(),
-            "last_video_crf":         crf_values[0],
-            "last_video_preset":      _get_preset(),
-            "last_video_audio_fmt":   _get_audio_fmt(),
-            "last_video_thumb_time":  thumb_time_field.value or "00:00:01",
-            "last_video_thumb_fmt":   _get_thumb_fmt(),
-        })
-        on_start(VideoArgs(
-            items=items,
-            operation=op,
-            resolution=_get_resolution(),
-            container=_get_dl_container(),
-            embed_meta=bool(embed_switch.value),
-            vcodec=_get_vcodec(),
-            out_container=_get_out_container(),
-            trim_start=trim_start_field.value or "",
-            trim_end=trim_end_field.value or "",
-            trim_reenc=bool(trim_reenc_switch.value),
-            crf=crf_values[0],
-            preset=_get_preset(),
-            resize_width=int(resize_width_field.value or 0),
-            resize_height=int(resize_height_field.value or 0),
-            audio_fmt=_get_audio_fmt(),
-            thumb_time=thumb_time_field.value or "00:00:01",
-            thumb_fmt=_get_thumb_fmt(),
-        ))
+        settings.save(
+            {
+                "last_video_operation": _get_op(),
+                "last_video_resolution": _get_resolution(),
+                "last_video_container": _get_dl_container(),
+                "last_video_embed_meta": bool(embed_switch.value),
+                "last_video_vcodec": _get_vcodec(),
+                "last_video_out_container": _get_out_container(),
+                "last_video_crf": crf_values[0],
+                "last_video_preset": _get_preset(),
+                "last_video_audio_fmt": _get_audio_fmt(),
+                "last_video_thumb_time": thumb_time_field.value or "00:00:01",
+                "last_video_thumb_fmt": _get_thumb_fmt(),
+                "last_video_subtitle_mode": _get_subtitle_mode(),
+            }
+        )
+        on_start(
+            VideoArgs(
+                items=items,
+                operation=op,
+                resolution=_get_resolution(),
+                container=_get_dl_container(),
+                embed_meta=bool(embed_switch.value),
+                vcodec=_get_vcodec(),
+                out_container=_get_out_container(),
+                trim_start=trim_start_field.value or "",
+                trim_end=trim_end_field.value or "",
+                trim_reenc=bool(trim_reenc_switch.value),
+                crf=crf_values[0],
+                preset=_get_preset(),
+                resize_width=int(resize_width_field.value or 0),
+                resize_height=int(resize_height_field.value or 0),
+                audio_fmt=_get_audio_fmt(),
+                thumb_time=thumb_time_field.value or "00:00:01",
+                thumb_fmt=_get_thumb_fmt(),
+                subtitle_path=_subtitle_path[0],
+                subtitle_mode=_get_subtitle_mode(),
+            )
+        )
 
     # ── set_running ────────────────────────────────────────────────────────────
 
     def _set_running(running: bool) -> None:
         start_btn.disabled = running or len(input_source.get_items()) == 0
         start_btn.text = "Executando..." if running else "Iniciar"
-        start_btn.icon = ft.Icons.HOURGLASS_EMPTY if running else ft.Icons.PLAY_ARROW_ROUNDED
+        start_btn.icon = (
+            ft.Icons.HOURGLASS_EMPTY if running else ft.Icons.PLAY_ARROW_ROUNDED
+        )
         input_source.set_enabled(not running)
         for fn in _sel_disable_fns:
             fn(running)
@@ -552,6 +667,8 @@ def build_video_form(
             sw.disabled = running
         for sl in _sliders_extra:
             sl.disabled = running
+        for btn in _buttons_extra:
+            btn.disabled = running
         page.update()
 
     # ── fill_from_path (bridge on_mount) ──────────────────────────────────────
@@ -572,22 +689,21 @@ def build_video_form(
                     spacing=16,
                     controls=[
                         # Entrada
-                        section("Entrada", input_source.control,
-                                help_key="video.input", page=page),
-
+                        section(
+                            "Entrada",
+                            input_source.control,
+                            help_key="video.input",
+                            page=page,
+                        ),
                         hairline(),
-
                         # Operação
-                        section("Operação", op_grid,
-                                help_key="video.operation", page=page),
-
+                        section(
+                            "Operação", op_grid, help_key="video.operation", page=page
+                        ),
                         hairline(),
-
                         # Bloco condicional
                         blocks_col,
-
                         hairline(),
-
                         # Botão Iniciar
                         ft.Row(
                             controls=[start_btn],

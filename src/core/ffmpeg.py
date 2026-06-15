@@ -1,4 +1,5 @@
 """Shared ffmpeg runner used by audio and video pipelines."""
+
 from __future__ import annotations
 
 import subprocess
@@ -14,12 +15,19 @@ def run_ffmpeg(
     total_secs: float | None = None,
     progress_cb: Callable[[float], None] | None = None,
     stderr_tail: int = 100,
+    cwd: Path | None = None,
 ) -> Path:
     """Run ffmpeg in binary mode with structured progress via -progress pipe:1.
 
     Reads out_time_us= from stdout and calls progress_cb(ratio 0.0–1.0) if
     total_secs is provided. Stderr is drained in a background thread (capped at
     stderr_tail lines) so it never blocks the stdout reader.
+
+    Args:
+        cwd: Working directory for the ffmpeg process. Used by the subtitle
+            burn-in path to reference the subtitle by basename, sidestepping the
+            Windows drive-letter colon (C:) that breaks the `subtitles` filter
+            argument parser.
 
     Raises:
         RuntimeError: ffmpeg exited with non-zero returncode; message includes
@@ -29,7 +37,12 @@ def run_ffmpeg(
     Returns:
         out_path on success.
     """
-    proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    proc = subprocess.Popen(
+        cmd,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        cwd=str(cwd) if cwd else None,
+    )
     stderr_lines: list[str] = []
 
     def _drain() -> None:

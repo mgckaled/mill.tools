@@ -1,9 +1,20 @@
 """Testes de integração — src/core/video/converter.py."""
+
 from pathlib import Path
 
 import pytest
 
 pytestmark = pytest.mark.integration
+
+
+def _write_srt(path: Path) -> Path:
+    """Write a minimal 2-cue SubRip file at path and return it."""
+    path.write_text(
+        "1\n00:00:00,000 --> 00:00:01,500\nHello world\n\n"
+        "2\n00:00:01,500 --> 00:00:03,000\nSecond line\n",
+        encoding="utf-8",
+    )
+    return path
 
 
 def test_convert_video_copy_keeps_container(sample_mp4, out_dir):
@@ -109,7 +120,9 @@ def test_convert_video_invalid_codec_falls_back_to_copy(sample_mp4, out_dir):
     """vcodec desconhecido cai no fallback ['-c:v', 'copy'] e gera arquivo válido."""
     from src.core.video.converter import convert_video
 
-    out = convert_video(sample_mp4, out_dir, container="mp4", vcodec="unknown_codec_xyz")
+    out = convert_video(
+        sample_mp4, out_dir, container="mp4", vcodec="unknown_codec_xyz"
+    )
     assert out.exists()
     assert out.suffix.lower() == ".mp4"
 
@@ -120,8 +133,54 @@ def test_convert_video_calls_progress_cb(sample_mp4, out_dir):
 
     calls: list[float] = []
     out = convert_video(
-        sample_mp4, out_dir,
-        container="mp4", vcodec="copy",
+        sample_mp4,
+        out_dir,
+        container="mp4",
+        vcodec="copy",
+        progress_cb=lambda r: calls.append(r),
+    )
+    assert out.exists()
+    assert len(calls) > 0
+    assert all(0.0 <= r <= 1.0 for r in calls)
+
+
+def test_add_subtitles_soft_mux(sample_mp4, out_dir, tmp_path):
+    """Soft mux (-c copy + mov_text) deve embutir a legenda sem reencodar."""
+    from src.core.video.converter import add_subtitles
+
+    srt = _write_srt(tmp_path / "subs.srt")
+    out = add_subtitles(sample_mp4, srt, out_dir, mode="soft")
+    assert out.exists()
+    assert out.suffix.lower() == ".mp4"
+    assert out.stat().st_size > 1000
+    assert out.name.endswith("_subbed.mp4")
+
+
+def test_add_subtitles_hard_burn(sample_mp4, out_dir, tmp_path):
+    """Hard burn-in (filtro subtitles + libx264) deve gerar vídeo válido.
+
+    Valida também o caminho cwd+basename do filtro subtitles no Windows.
+    """
+    from src.core.video.converter import add_subtitles
+
+    srt = _write_srt(tmp_path / "subs.srt")
+    out = add_subtitles(sample_mp4, srt, out_dir, mode="hard")
+    assert out.exists()
+    assert out.suffix.lower() == ".mp4"
+    assert out.stat().st_size > 1000
+
+
+def test_add_subtitles_hard_calls_progress_cb(sample_mp4, out_dir, tmp_path):
+    """Burn-in reencoda → progress_cb recebe ratios em [0,1]."""
+    from src.core.video.converter import add_subtitles
+
+    srt = _write_srt(tmp_path / "subs.srt")
+    calls: list[float] = []
+    out = add_subtitles(
+        sample_mp4,
+        srt,
+        out_dir,
+        mode="hard",
         progress_cb=lambda r: calls.append(r),
     )
     assert out.exists()
