@@ -28,6 +28,7 @@ _DEFAULTS: dict = {
     "last_export_subtitles": False,
     "theme_mode": "dark",
     "last_library_filter": "all",  # "all" | audio | video | image | transcription | document
+    "last_library_category": "all",  # "all" | source | processed
     "last_library_sort": "modified",  # "modified" | "name" | "size"
 }
 

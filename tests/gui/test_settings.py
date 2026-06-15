@@ -30,6 +30,7 @@ def test_load_includes_library_defaults():
 
     data = settings.load()
     assert data["last_library_filter"] == "all"
+    assert data["last_library_category"] == "all"
     assert data["last_library_sort"] == "modified"
 
 

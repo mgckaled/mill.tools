@@ -112,13 +112,16 @@ def filter_items(
     items: list[LibraryItem],
     *,
     kinds: set[str] | None = None,
+    categories: set[str] | None = None,
     query: str | None = None,
     since: float | None = None,
 ) -> list[LibraryItem]:
-    """Pure filter: by kind set, case-insensitive name substring, and min mtime."""
+    """Pure filter: by kind set, category set, name substring, and min mtime."""
     out = items
     if kinds:
         out = [it for it in out if it.kind in kinds]
+    if categories:
+        out = [it for it in out if it.category in categories]
     if query:
         q = query.casefold()
         out = [it for it in out if q in it.path.name.casefold()]

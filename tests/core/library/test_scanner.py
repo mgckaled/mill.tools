@@ -147,14 +147,21 @@ def test_scan_library_skips_missing_dirs_and_subdirs(library_tree):
     assert [it.path.name for it in items] == ["pic.png"]
 
 
-def _item(name: str, kind: str, *, mtime: float = 0.0, size: int = 0):
+def _item(
+    name: str,
+    kind: str,
+    *,
+    mtime: float = 0.0,
+    size: int = 0,
+    category: str = "processed",
+):
     from src.core.library.types import LibraryItem
 
     p = Path(name)
     return LibraryItem(
         path=p,
         kind=kind,
-        category="processed",
+        category=category,
         size_bytes=size,
         modified=mtime,
         stem=p.stem,
@@ -169,6 +176,18 @@ def test_filter_items_by_kind():
     items = [_item("a.mp3", "audio"), _item("b.mp4", "video"), _item("c.mp3", "audio")]
     out = filter_items(items, kinds={"audio"})
     assert [it.path.name for it in out] == ["a.mp3", "c.mp3"]
+
+
+@pytest.mark.unit
+def test_filter_items_by_category():
+    from src.core.library.scanner import filter_items
+
+    items = [
+        _item("dl.mp3", "audio", category="processed"),
+        _item("src.mp3", "audio", category="source"),
+    ]
+    out = filter_items(items, categories={"source"})
+    assert [it.path.name for it in out] == ["src.mp3"]
 
 
 @pytest.mark.unit

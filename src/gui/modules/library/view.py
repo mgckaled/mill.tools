@@ -28,6 +28,7 @@ from src.gui.modules.library.cards import ItemCard, build_item_card
 from src.gui.theme.components import (
     Cursor,
     hairline,
+    help_icon_for,
     secondary_button,
     segmented_selector,
 )
@@ -55,6 +56,15 @@ _SORT_OPTIONS = [
     ("name", "Nome (A→Z)"),
     ("size", "Tamanho (maior)"),
 ]
+
+# Category filter: source files vs derived/processed outputs. "processed"
+# groups every non-source category (processed + text/analysis/digest).
+_CATEGORY_OPTIONS = [
+    ("all", "Todas"),
+    ("source", "Origem"),
+    ("processed", "Processado"),
+]
+_PROCESSED_CATEGORIES = {"processed", "text", "analysis", "digest"}
 
 # Date-range key → seconds back from now (None = any date).
 _SINCE_DELTAS: dict[str, int | None] = {
@@ -200,6 +210,14 @@ def build_library_module(
         delta = _SINCE_DELTAS.get(date_dd.value)
         return None if delta is None else time.time() - delta
 
+    def _active_categories() -> set[str] | None:
+        value = cat_dd.value
+        if value == "source":
+            return {"source"}
+        if value == "processed":
+            return _PROCESSED_CATEGORIES
+        return None
+
     # ------------------------------------------------------------------
     # Item actions: open file, open folder, bridges to other modules
     # ------------------------------------------------------------------
@@ -269,6 +287,7 @@ def build_library_module(
             filter_items(
                 _all_items,
                 kinds=_active_kinds(),
+                categories=_active_categories(),
                 query=_query[0] or None,
                 since=_active_since(),
             ),
@@ -420,8 +439,22 @@ def build_library_module(
         focused_border_color=ft.Colors.PRIMARY,
     )
 
+    def _on_category_change(e: ft.ControlEvent) -> None:
+        settings.set("last_library_category", e.control.value)
+        _render_from_top_and_update()
+
+    cat_dd = ft.Dropdown(
+        label="Categoria",
+        value=cfg.get("last_library_category", "all"),
+        options=[ft.dropdown.Option(k, lbl) for k, lbl in _CATEGORY_OPTIONS],
+        width=160,
+        on_select=_on_category_change,
+        border_color=ft.Colors.OUTLINE,
+        focused_border_color=ft.Colors.PRIMARY,
+    )
+
     toolbar = ft.Row(
-        controls=[search_field, sort_dd, date_dd],
+        controls=[search_field, cat_dd, sort_dd, date_dd],
         spacing=Space.sm,
         vertical_alignment=ft.CrossAxisAlignment.CENTER,
     )
@@ -430,18 +463,22 @@ def build_library_module(
     # Header + layout
     # ------------------------------------------------------------------
 
+    header_controls: list[ft.Control] = [
+        ft.Icon(ft.Icons.COLLECTIONS_BOOKMARK_OUTLINED, color=ft.Colors.PRIMARY),
+        ft.Text(
+            "Biblioteca",
+            size=Type.title.size,
+            weight=ft.FontWeight.W_600,
+            color=ft.Colors.ON_SURFACE,
+        ),
+    ]
+    _help = help_icon_for("library", page)
+    if _help is not None:
+        header_controls.append(_help)
+    header_controls.extend([ft.Container(expand=True), count_label])
+
     header = ft.Row(
-        controls=[
-            ft.Icon(ft.Icons.COLLECTIONS_BOOKMARK_OUTLINED, color=ft.Colors.PRIMARY),
-            ft.Text(
-                "Biblioteca",
-                size=Type.title.size,
-                weight=ft.FontWeight.W_600,
-                color=ft.Colors.ON_SURFACE,
-            ),
-            ft.Container(expand=True),
-            count_label,
-        ],
+        controls=header_controls,
         vertical_alignment=ft.CrossAxisAlignment.CENTER,
         spacing=Space.sm,
     )

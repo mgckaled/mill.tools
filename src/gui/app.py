@@ -13,7 +13,7 @@ from src.gui.events import EventBus, PipelineEvent
 from src.gui.home import show_home
 from src.gui.splash import show_splash
 from src.gui.theme import sync_page_bgcolor
-from src.gui.theme.components import Cursor, help_icon_for
+from src.gui.theme.components import Cursor
 from src.gui.theme.tokens import Motion, Space, Type
 from src.gui.modules.audio.view import build_audio_module
 from src.gui.modules.base import Module
@@ -150,14 +150,9 @@ def build_app(page: ft.Page, initial_module: str = "transcription") -> None:
         ]
     )
 
-    _title_controls: list[ft.Control] = [wordmark, library_btn]
-    _library_help = help_icon_for("library", page)
-    if _library_help is not None:
-        _title_controls.append(_library_help)
-
     page.appbar = ft.AppBar(
         title=ft.Row(
-            controls=_title_controls,
+            controls=[wordmark, library_btn],
             spacing=Space.xs,
             vertical_alignment=ft.CrossAxisAlignment.CENTER,
         ),
