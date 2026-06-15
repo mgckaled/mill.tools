@@ -436,12 +436,19 @@ def build_document_module(
         vertical_alignment=ft.CrossAxisAlignment.STRETCH,
     )
 
+    # ── on_mount: bridge from other modules (e.g. Library → Documentos) ──────────
+
+    def _on_mount(payload: dict) -> None:
+        if "file" in payload:
+            form_panel.fill_from_path(str(payload["file"]))
+
     return Module(
         id="document",
         label="Documentos",
         icon=ft.Icons.DESCRIPTION_OUTLINED,
         selected_icon=ft.Icons.DESCRIPTION,
         control=control,
+        on_mount=_on_mount,
     )
 
 

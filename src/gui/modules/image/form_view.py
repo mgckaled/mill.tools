@@ -1,4 +1,5 @@
 """Formulário de entrada do módulo Imagens — operações de conversão e manipulação."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -24,30 +25,36 @@ from src.gui.modules.image.blocks.watermark import build_watermark_block
 from src.gui.theme.components import (
     Cursor,
     hairline,
-    help_icon_for,
     section,
-    section_label,
 )
 from src.gui.theme.tokens import Space, Type
 
 _ALLOWED_EXTS = [
-    "jpg", "jpeg", "png", "webp", "avif",
-    "tiff", "tif", "bmp", "gif", "ico",
+    "jpg",
+    "jpeg",
+    "png",
+    "webp",
+    "avif",
+    "tiff",
+    "tif",
+    "bmp",
+    "gif",
+    "ico",
 ]
 
 _OPS: list[tuple[str, str, str]] = [
-    ("convert",       ft.Icons.SWAP_HORIZ,          "Converter"),
-    ("resize",        ft.Icons.OPEN_IN_FULL,         "Redimensionar"),
-    ("crop",          ft.Icons.CROP,                 "Cortar"),
-    ("rotate",        ft.Icons.ROTATE_90_DEGREES_CW, "Girar"),
-    ("watermark",     ft.Icons.WATER_DROP_OUTLINED,  "Marca d'água"),
-    ("border",        ft.Icons.BORDER_OUTER,         "Borda"),
-    ("adjust",        ft.Icons.TUNE,                 "Ajustes"),
-    ("filter",        ft.Icons.FILTER,               "Filtros"),
-    ("favicon",       ft.Icons.GRID_VIEW,            "Favicon"),
-    ("contact_sheet", ft.Icons.DASHBOARD_OUTLINED,   "Colagem"),
-    ("remove_bg",     ft.Icons.AUTO_FIX_HIGH,         "Remover\nfundo"),
-    ("describe",      ft.Icons.DESCRIPTION_OUTLINED,  "Descrever"),
+    ("convert", ft.Icons.SWAP_HORIZ, "Converter"),
+    ("resize", ft.Icons.OPEN_IN_FULL, "Redimensionar"),
+    ("crop", ft.Icons.CROP, "Cortar"),
+    ("rotate", ft.Icons.ROTATE_90_DEGREES_CW, "Girar"),
+    ("watermark", ft.Icons.WATER_DROP_OUTLINED, "Marca d'água"),
+    ("border", ft.Icons.BORDER_OUTER, "Borda"),
+    ("adjust", ft.Icons.TUNE, "Ajustes"),
+    ("filter", ft.Icons.FILTER, "Filtros"),
+    ("favicon", ft.Icons.GRID_VIEW, "Favicon"),
+    ("contact_sheet", ft.Icons.DASHBOARD_OUTLINED, "Colagem"),
+    ("remove_bg", ft.Icons.AUTO_FIX_HIGH, "Remover\nfundo"),
+    ("describe", ft.Icons.DESCRIPTION_OUTLINED, "Descrever"),
 ]
 
 _UNAVAILABLE: dict[str, str] = {}
@@ -61,6 +68,7 @@ class ImageFormPanel:
 
     control: ft.Control
     set_running: Callable[[bool], None]
+    fill_from_path: Callable[[str], None]
 
 
 def build_image_form(
@@ -119,8 +127,11 @@ def build_image_form(
     def _make_card(op_id: str, icon_name: str, label: str) -> ft.Container:
         ic = ft.Icon(icon_name, size=24, color=ft.Colors.PRIMARY)
         tx = ft.Text(
-            label, size=Type.small.size, text_align=ft.TextAlign.CENTER,
-            color=ft.Colors.PRIMARY, max_lines=2,
+            label,
+            size=Type.small.size,
+            text_align=ft.TextAlign.CENTER,
+            color=ft.Colors.PRIMARY,
+            max_lines=2,
         )
         _card_icon_refs[op_id] = ic
         _card_text_refs[op_id] = tx
@@ -129,14 +140,18 @@ def build_image_form(
             content=ft.Column(
                 [ic, tx],
                 horizontal_alignment=ft.CrossAxisAlignment.CENTER,
-                spacing=6, tight=True,
+                spacing=6,
+                tight=True,
             ),
-            height=70, padding=8, border_radius=8,
+            height=70,
+            padding=8,
+            border_radius=8,
             expand=True,
             bgcolor=ft.Colors.SURFACE,
             border=ft.Border(left=side, right=side, top=side, bottom=side),
             shadow=ft.BoxShadow(
-                blur_radius=8, spread_radius=0,
+                blur_radius=8,
+                spread_radius=0,
                 offset=ft.Offset(0, 3),
                 color=ft.Colors.with_opacity(0.4, ft.Colors.BLACK),
             ),
@@ -150,7 +165,9 @@ def build_image_form(
             ic.color = ft.Colors.ON_SURFACE_VARIANT
             tx.color = ft.Colors.ON_SURFACE_VARIANT
             ctr.on_click = None
-        return ft.GestureDetector(mouse_cursor=Cursor.interactive, content=ctr, expand=True)
+        return ft.GestureDetector(
+            mouse_cursor=Cursor.interactive, content=ctr, expand=True
+        )
 
     _cards = [_make_card(oid, icon, lbl) for oid, icon, lbl in _OPS]
     _cols = 3
@@ -159,7 +176,7 @@ def build_image_form(
     card_grid = ft.Column(
         spacing=6,
         controls=[
-            ft.Row(controls=_cards[i:i + _cols], spacing=6)
+            ft.Row(controls=_cards[i : i + _cols], spacing=6)
             for i in range(0, len(_cards), _cols)
         ],
     )
@@ -179,18 +196,18 @@ def build_image_form(
     cs_block, cs_refs = build_contact_sheet_block(page)
     ai_refs = build_ai_blocks(page)
 
-    _param_blocks["convert"]       = ft.Column(visible=False, spacing=0)
-    _param_blocks["resize"]        = resize_block
-    _param_blocks["crop"]          = crop_block
-    _param_blocks["rotate"]        = rotate_block
-    _param_blocks["watermark"]     = watermark_block
-    _param_blocks["border"]        = border_block
-    _param_blocks["adjust"]        = adjust_block
-    _param_blocks["filter"]        = filter_block
-    _param_blocks["favicon"]       = favicon_block
+    _param_blocks["convert"] = ft.Column(visible=False, spacing=0)
+    _param_blocks["resize"] = resize_block
+    _param_blocks["crop"] = crop_block
+    _param_blocks["rotate"] = rotate_block
+    _param_blocks["watermark"] = watermark_block
+    _param_blocks["border"] = border_block
+    _param_blocks["adjust"] = adjust_block
+    _param_blocks["filter"] = filter_block
+    _param_blocks["favicon"] = favicon_block
     _param_blocks["contact_sheet"] = cs_block
-    _param_blocks["remove_bg"]     = ai_refs.rembg_block
-    _param_blocks["describe"]      = ai_refs.describe_block
+    _param_blocks["remove_bg"] = ai_refs.rembg_block
+    _param_blocks["describe"] = ai_refs.describe_block
 
     # ── Format section ────────────────────────────────────────────────────────
 
@@ -274,7 +291,9 @@ def build_image_form(
             # remove_bg
             rembg_model=ai_refs.get_rembg_model() if op == "remove_bg" else "u2net",
             # describe
-            describe_model=ai_refs.get_desc_model() if op == "describe" else "moondream-custom",
+            describe_model=ai_refs.get_desc_model()
+            if op == "describe"
+            else "moondream-custom",
             describe_prompt=ai_refs.get_desc_prompt() if op == "describe" else "",
         )
         on_start(args)
@@ -295,6 +314,11 @@ def build_image_form(
         ai_refs.set_desc_disabled(running)
         page.update()
 
+    # ── fill_from_path (bridge on_mount) ──────────────────────────────────────
+
+    def _fill_from_path(path: str) -> None:
+        input_source.add_item(InputItem(kind="local", value=path))
+
     # ── Layout ────────────────────────────────────────────────────────────────
 
     params_container = ft.Column(
@@ -312,8 +336,12 @@ def build_image_form(
                 content=ft.Column(
                     spacing=16,
                     controls=[
-                        section("Entrada", input_source.control,
-                                help_key="image.input", page=page),
+                        section(
+                            "Entrada",
+                            input_source.control,
+                            help_key="image.input",
+                            page=page,
+                        ),
                         hairline(),
                         section("Operação", card_grid),
                         hairline(),
@@ -331,4 +359,8 @@ def build_image_form(
         ],
     )
 
-    return ImageFormPanel(control=control, set_running=_set_running)
+    return ImageFormPanel(
+        control=control,
+        set_running=_set_running,
+        fill_from_path=_fill_from_path,
+    )

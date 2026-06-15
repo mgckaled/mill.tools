@@ -64,6 +64,7 @@ class DocumentFormPanel:
 
     control: ft.Control
     set_running: Callable[[bool], None]
+    fill_from_path: Callable[[str], None]
 
 
 def build_document_form(
@@ -280,6 +281,11 @@ def build_document_form(
         except RuntimeError:
             pass
 
+    # ── fill_from_path (bridge on_mount) ─────────────────────────────────────────
+
+    def _fill_from_path(path: str) -> None:
+        input_source.add_item(InputItem(kind="local", value=path))
+
     # ── Layout ─────────────────────────────────────────────────────────────────
 
     params_stack = ft.Stack(
@@ -318,4 +324,8 @@ def build_document_form(
         ],
     )
 
-    return DocumentFormPanel(control=form_col, set_running=_set_running)
+    return DocumentFormPanel(
+        control=form_col,
+        set_running=_set_running,
+        fill_from_path=_fill_from_path,
+    )

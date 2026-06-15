@@ -53,6 +53,14 @@ CATEGORY_LABEL: dict[str, str] = {
 
 _MEDIA_H = 120
 
+# 1×1 px transparent PNG — ft.Image requires a src in Flet 0.85; this is the
+# placeholder until the thumbnail thread swaps in a real preview.
+_BLANK_PNG = (
+    b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01"
+    b"\x08\x06\x00\x00\x00\x1f\x15\xc4\x89\x00\x00\x00\nIDATx\x9cc\x00\x01"
+    b"\x00\x00\x05\x00\x01\r\n-\xb4\x00\x00\x00\x00IEND\xaeB`\x82"
+)
+
 
 def _fmt_size(num_bytes: int) -> str:
     """Human-readable file size (B / KB / MB / GB)."""
@@ -107,6 +115,7 @@ def build_item_card(
     type_icon = ft.Icon(icon_name, size=44, color=accent)
     # gapless_playback avoids a flicker when the icon is replaced by a thumb.
     thumb_img = ft.Image(
+        _BLANK_PNG,
         fit=ft.BoxFit.COVER,
         expand=True,
         gapless_playback=True,
@@ -160,8 +169,18 @@ def build_item_card(
         overflow=ft.TextOverflow.ELLIPSIS,
     )
 
+    # Only the media area opens the file — this keeps the action buttons'
+    # own taps intact (no whole-card GestureDetector swallowing them).
+    media_control: ft.Control = media
+    if on_open is not None:
+        media_control = ft.GestureDetector(
+            mouse_cursor=Cursor.interactive,
+            content=media,
+            on_tap=lambda _e, _it=item: on_open(_it),
+        )
+
     body_controls: list[ft.Control] = [
-        media,
+        media_control,
         name_text,
         ft.Row(
             controls=[badge, ft.Container(expand=True)],
@@ -201,14 +220,4 @@ def build_item_card(
         except RuntimeError:
             pass
 
-    if on_open is not None:
-        # Clickable body via GestureDetector — never ink=True (quirk).
-        control: ft.Control = ft.GestureDetector(
-            mouse_cursor=Cursor.interactive,
-            content=card_inner,
-            on_tap=lambda _e, _it=item: on_open(_it),
-        )
-    else:
-        control = card_inner
-
-    return ItemCard(control=control, set_thumbnail=_set_thumbnail)
+    return ItemCard(control=card_inner, set_thumbnail=_set_thumbnail)

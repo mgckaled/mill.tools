@@ -3,6 +3,9 @@
 from __future__ import annotations
 
 import asyncio
+import logging
+import os
+import subprocess
 import threading
 import time
 from typing import TYPE_CHECKING
@@ -11,11 +14,17 @@ import flet as ft
 
 from src.core.library.scanner import filter_items, scan_library, sort_items
 from src.core.library.thumbnails import thumbnail_for
-from src.core.library.types import LibraryItem
+from src.core.library.types import (
+    KIND_AUDIO,
+    KIND_DOCUMENT,
+    KIND_IMAGE,
+    KIND_VIDEO,
+    LibraryItem,
+)
 from src.gui import settings
 from src.gui.modules.base import Module
 from src.gui.modules.library.cards import ItemCard, build_item_card
-from src.gui.theme.components import hairline, segmented_selector
+from src.gui.theme.components import Cursor, hairline, segmented_selector
 from src.gui.theme.tokens import Layout, Space, Type
 
 if TYPE_CHECKING:
@@ -56,6 +65,25 @@ _DATE_OPTIONS = [
 ]
 
 _SEARCH_DEBOUNCE_S = 0.25
+
+# Bridge targets per kind: (module_id, tooltip, icon). Sending a file back to
+# its own module means "reprocess it"; audio/video also reach Transcription.
+_BRIDGES: dict[str, list[tuple[str, str, str]]] = {
+    KIND_AUDIO: [
+        ("transcription", "Transcrever", ft.Icons.SUBTITLES_OUTLINED),
+        ("audio", "Reprocessar no Áudio", ft.Icons.GRAPHIC_EQ_OUTLINED),
+    ],
+    KIND_VIDEO: [
+        ("transcription", "Transcrever", ft.Icons.SUBTITLES_OUTLINED),
+        ("audio", "Extrair áudio", ft.Icons.GRAPHIC_EQ_OUTLINED),
+    ],
+    KIND_IMAGE: [
+        ("image", "Reprocessar nas Imagens", ft.Icons.IMAGE_OUTLINED),
+    ],
+    KIND_DOCUMENT: [
+        ("document", "Reprocessar nos Documentos", ft.Icons.DESCRIPTION_OUTLINED),
+    ],
+}
 
 
 def build_library_module(
@@ -149,6 +177,64 @@ def build_library_module(
     def _active_since() -> float | None:
         delta = _SINCE_DELTAS.get(date_dd.value)
         return None if delta is None else time.time() - delta
+
+    # ------------------------------------------------------------------
+    # Item actions: open file, open folder, bridges to other modules
+    # ------------------------------------------------------------------
+
+    def _toast(message: str) -> None:
+        page.snack_bar = ft.SnackBar(content=ft.Text(message), bgcolor=ft.Colors.ERROR)
+        page.snack_bar.open = True
+        page.update()
+
+    def _open_file(item: LibraryItem) -> None:
+        try:
+            os.startfile(str(item.path))  # Windows shell open
+        except Exception as exc:
+            logging.debug("[d] startfile failed for %s: %s", item.path, exc)
+            _toast(f"Não foi possível abrir {item.path.name}")
+
+    def _open_folder(item: LibraryItem) -> None:
+        try:
+            subprocess.run(["explorer", "/select,", str(item.path)], check=False)
+        except Exception as exc:
+            logging.debug("[d] explorer select failed for %s: %s", item.path, exc)
+
+    def _bridge_targets(item: LibraryItem) -> list[tuple[str, str, str]]:
+        # A document that isn't a PDF (e.g. extracted .txt) can't be reprocessed
+        # by the Documents module.
+        if item.kind == KIND_DOCUMENT and item.suffix != ".pdf":
+            return []
+        return _BRIDGES.get(item.kind, [])
+
+    def _icon_action(icon: str, tooltip: str, handler) -> ft.IconButton:
+        return ft.IconButton(
+            icon=icon,
+            icon_size=18,
+            tooltip=tooltip,
+            on_click=handler,
+            style=ft.ButtonStyle(mouse_cursor=Cursor.btn),
+        )
+
+    def _build_actions(item: LibraryItem) -> list[ft.Control]:
+        actions: list[ft.Control] = [
+            _icon_action(
+                ft.Icons.FOLDER_OPEN_OUTLINED,
+                "Abrir pasta",
+                lambda _e, _it=item: _open_folder(_it),
+            )
+        ]
+        for module_id, tip, icon in _bridge_targets(item):
+            actions.append(
+                _icon_action(
+                    icon,
+                    tip,
+                    lambda _e, _m=module_id, _p=str(item.path): (
+                        nav[0](_m, {"file": _p}) if nav else None
+                    ),
+                )
+            )
+        return actions
 
     # ------------------------------------------------------------------
     # Apply (in-memory) + rescan (filesystem)
@@ -265,12 +351,14 @@ def build_library_module(
         settings.set("last_library_sort", e.control.value)
         _apply_and_update()
 
+    # Flet 0.85 Dropdown uses on_select for selection changes (not on_change,
+    # which the 0.85.2 constructor rejects — verified against the installed API).
     sort_dd = ft.Dropdown(
         label="Ordenar",
         value=cfg.get("last_library_sort", "modified"),
         options=[ft.dropdown.Option(k, lbl) for k, lbl in _SORT_OPTIONS],
         width=180,
-        on_change=_on_sort_change,
+        on_select=_on_sort_change,
         border_color=ft.Colors.OUTLINE,
         focused_border_color=ft.Colors.PRIMARY,
     )
@@ -280,7 +368,7 @@ def build_library_module(
         value="all",
         options=[ft.dropdown.Option(k, lbl) for k, lbl in _DATE_OPTIONS],
         width=170,
-        on_change=lambda _e: _apply_and_update(),
+        on_select=lambda _e: _apply_and_update(),
         border_color=ft.Colors.OUTLINE,
         focused_border_color=ft.Colors.PRIMARY,
     )

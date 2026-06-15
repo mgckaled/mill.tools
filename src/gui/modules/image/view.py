@@ -1,4 +1,5 @@
 """Módulo Imagens — operações de imagem com visor Before/After."""
+
 from __future__ import annotations
 
 import subprocess
@@ -59,13 +60,15 @@ def build_image_module(
     # Imagens
     _img_single = ft.Image(_BLANK_PNG, fit=ft.BoxFit.CONTAIN, expand=True)
     _img_before = ft.Image(_BLANK_PNG, fit=ft.BoxFit.CONTAIN, expand=True)
-    _img_after  = ft.Image(_BLANK_PNG, fit=ft.BoxFit.CONTAIN, expand=True)
+    _img_after = ft.Image(_BLANK_PNG, fit=ft.BoxFit.CONTAIN, expand=True)
 
     # Placeholder
     _placeholder = ft.Container(
         content=ft.Text(
             "Selecione imagens para começar",
-            color=ft.Colors.ON_SURFACE_VARIANT, italic=True, size=Type.input.size,
+            color=ft.Colors.ON_SURFACE_VARIANT,
+            italic=True,
+            size=Type.input.size,
         ),
         alignment=ft.Alignment.CENTER,
         expand=True,
@@ -74,8 +77,10 @@ def build_image_module(
 
     # Single pane: placeholder OU imagem única
     _single_img_ctr = ft.Container(
-        content=_img_single, alignment=ft.Alignment.CENTER,
-        expand=True, visible=False,
+        content=_img_single,
+        alignment=ft.Alignment.CENTER,
+        expand=True,
+        visible=False,
     )
     _single_pane = ft.Stack(
         [_placeholder, _single_img_ctr],
@@ -86,20 +91,27 @@ def build_image_module(
     _before_col = ft.Column(
         [
             ft.Text("Antes", size=Type.tiny.size, color=ft.Colors.ON_SURFACE_VARIANT),
-            ft.Container(content=_img_before, expand=True, alignment=ft.Alignment.CENTER),
+            ft.Container(
+                content=_img_before, expand=True, alignment=ft.Alignment.CENTER
+            ),
         ],
-        expand=True, spacing=4,
+        expand=True,
+        spacing=4,
     )
     _after_col = ft.Column(
         [
             ft.Text("Depois", size=Type.tiny.size, color=ft.Colors.ON_SURFACE_VARIANT),
-            ft.Container(content=_img_after, expand=True, alignment=ft.Alignment.CENTER),
+            ft.Container(
+                content=_img_after, expand=True, alignment=ft.Alignment.CENTER
+            ),
         ],
-        expand=True, spacing=4,
+        expand=True,
+        spacing=4,
     )
     _before_after_row = ft.Row(
         [_before_col, ft.VerticalDivider(width=1), _after_col],
-        expand=True, visible=False,
+        expand=True,
+        visible=False,
     )
 
     preview_container = ft.Container(
@@ -174,6 +186,7 @@ def build_image_module(
 
     def _open_output_folder(_e) -> None:
         from src.utils import IMAGE_PROCESSED_DIR
+
         IMAGE_PROCESSED_DIR.mkdir(parents=True, exist_ok=True)
         subprocess.run(["explorer", str(IMAGE_PROCESSED_DIR)], check=False)
 
@@ -323,12 +336,19 @@ def build_image_module(
         vertical_alignment=ft.CrossAxisAlignment.STRETCH,
     )
 
+    # ------------------------------------------------------------------
+    # on_mount: bridge from other modules (e.g. Library → Imagens)
+    # ------------------------------------------------------------------
+
+    def _on_mount(payload: dict) -> None:
+        if "file" in payload:
+            form_panel.fill_from_path(str(payload["file"]))
+
     return Module(
         id="image",
         label="Imagens",
         icon=ft.Icons.IMAGE_OUTLINED,
         selected_icon=ft.Icons.IMAGE,
         control=control,
+        on_mount=_on_mount,
     )
-
-
