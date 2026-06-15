@@ -10,10 +10,11 @@ from typing import TYPE_CHECKING
 import flet as ft
 
 from src.core.library.scanner import filter_items, scan_library, sort_items
+from src.core.library.thumbnails import thumbnail_for
 from src.core.library.types import LibraryItem
 from src.gui import settings
 from src.gui.modules.base import Module
-from src.gui.modules.library.cards import build_item_card
+from src.gui.modules.library.cards import ItemCard, build_item_card
 from src.gui.theme.components import hairline, segmented_selector
 from src.gui.theme.tokens import Layout, Space, Type
 
@@ -80,6 +81,12 @@ def build_library_module(
     _all_items: list[LibraryItem] = []
     _query: list[str] = [""]
     _search_gen: list[int] = [0]
+
+    # Thumbnails are generated off the UI thread; the generation counter drops
+    # stale results from a previous scan/apply (same trick as the audio player).
+    # Cache keyed by (path, mtime) so edits invalidate automatically.
+    _thumb_gen: list[int] = [0]
+    _thumb_cache: dict[tuple[str, float], bytes] = {}
 
     # ------------------------------------------------------------------
     # Grid + count + empty state
@@ -160,12 +167,43 @@ def build_library_module(
             by=by,
             desc=(by != "name"),
         )
-        grid.controls = [build_item_card(it, page=page).control for it in items]
+        cards = [build_item_card(it, page=page) for it in items]
+        grid.controls = [c.control for c in cards]
         count_label.value = (
             f"{len(items)} arquivo" if len(items) == 1 else f"{len(items)} arquivos"
         )
         empty_state.visible = not items
         grid.visible = bool(items)
+        _spawn_thumbnail_thread(list(zip(items, cards)))
+
+    def _spawn_thumbnail_thread(pairs: list[tuple[LibraryItem, ItemCard]]) -> None:
+        """Generate thumbnails in one daemon thread, updating each card in place.
+
+        Single-threaded on purpose: pymupdf raster and ffmpeg frame grabs are
+        CPU-bound and parallelizing them would only add GPU/CPU contention.
+        """
+        _thumb_gen[0] += 1
+        gen = _thumb_gen[0]
+        if not pairs:
+            return
+
+        def _worker() -> None:
+            # Small head start so the freshly rebuilt grid is mounted before the
+            # first scoped update (set_thumbnail also guards with try/except).
+            time.sleep(0.05)
+            for item, card in pairs:
+                if gen != _thumb_gen[0]:
+                    return  # superseded by a newer scan/apply
+                key = (str(item.path), item.modified)
+                data = _thumb_cache.get(key)
+                if data is None:
+                    data = thumbnail_for(item)
+                    if data:
+                        _thumb_cache[key] = data
+                if data and gen == _thumb_gen[0]:
+                    card.set_thumbnail(data)  # scoped update, never page.update
+
+        threading.Thread(target=_worker, daemon=True).start()
 
     def _apply_and_update() -> None:
         _apply()

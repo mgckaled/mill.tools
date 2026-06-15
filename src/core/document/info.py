@@ -1,10 +1,43 @@
 """
 info.py: PDF metadata extraction.
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
+
+
+def render_first_page_png(path: Path, *, zoom: float = 1.0) -> bytes | None:
+    """Rasterize the first page of a PDF to PNG bytes (~72dpi * zoom).
+
+    Shared by the Documents viewer (before/after thumbnails) and the Library
+    thumbnail dispatch. Returns None when the file cannot be opened or has no
+    pages, so callers can fall back to a type icon instead of crashing.
+
+    Args:
+        path: Path to a PDF file.
+        zoom: Rasterization scale; 1.0 ≈ 72dpi. Use a higher value for crisper
+            previews at the cost of size/time.
+
+    Returns:
+        PNG bytes for the first page, or None on any failure.
+    """
+    try:
+        import pymupdf  # type: ignore[import-untyped]
+
+        doc = pymupdf.open(str(path))
+    except Exception:
+        return None
+    try:
+        if doc.page_count == 0:
+            return None
+        pix = doc[0].get_pixmap(matrix=pymupdf.Matrix(zoom, zoom))
+        return pix.tobytes("png")
+    except Exception:
+        return None
+    finally:
+        doc.close()
 
 
 @dataclass
@@ -15,7 +48,7 @@ class PdfInfo:
     file_size_bytes: int
     title: str
     author: str
-    has_text: bool           # False = scanned PDF (no embedded text)
+    has_text: bool  # False = scanned PDF (no embedded text)
     first_page_thumb: bytes | None  # PNG bytes at ~72dpi for preview
 
 
