@@ -1,3 +1,8 @@
+# OS / editor
+Thumbs.db
+desktop.ini
+*.swp
+
 # Python-generated files
 __pycache__/
 *.py[oc]
@@ -15,6 +20,9 @@ htmlcov/
 # Virtual environments
 .venv
 
+# Ruff cache
+.ruff_cache/
+
 # Saídas geradas — ignorar conteúdo, preservar estrutura de pastas
 output/**
 !output/
@@ -28,6 +36,8 @@ output/**
 # Claude-related files
 .claude/*
 !.claude/skills/
+!.claude/hooks/
+!.claude/settings.json
 
 # Secrets
 .env
@@ -37,4 +47,4 @@ output/**
 notes.md
 
 # implementation plans (working artifacts, not versioned)
-docs/*_PLAN.md
+docs/*.md

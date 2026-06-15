@@ -1,0 +1,33 @@
+{
+// Esconde ruido do explorer (caches, artefatos, venv).
+  "files.exclude": {
+    "**/__pycache__": true,
+    "**/*.pyc": true,
+    "**/*.pyo": true,
+    "**/.pytest_cache": true,
+    "**/.ruff_cache": true,
+    "**/.mypy_cache": true,
+    "**/.coverage": true,
+    "**/htmlcov": true,
+    "**/*.egg-info": true,
+    "**/.venv": true
+  },
+
+// Esconde ruido da busca (caches, artefatos, venv).
+  "search.exclude": {
+    "**/.venv": true,
+    "**/__pycache__": true,
+    "**/htmlcov": true,
+    "**/.pytest_cache": true,
+    "**/.ruff_cache": true,
+    "**/uv.lock": true
+  },
+
+// Evita que o VSCode fique monitorando mudanças em arquivos e pastas que não são relevantes para o desenvolvimento, melhorando a performance.
+  "files.watcherExclude": {
+    "**/.venv/**": true,
+    "**/__pycache__/**": true,
+    "**/htmlcov/**": true,
+    "**/.git/**": true
+  }
+}
