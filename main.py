@@ -60,8 +60,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument(
         "--wm",
         default="small",
-        choices=["tiny", "base", "small", "medium",
-                 "large-v3-turbo", "large-v3"],
+        choices=["tiny", "base", "small", "medium", "large-v3-turbo", "large-v3"],
         help="Whisper model size",
         dest="whisper_model",
     )
@@ -159,14 +158,15 @@ def _subtitle_formats_from_args(args: argparse.Namespace) -> tuple[str, ...]:
     return tuple(fmts)
 
 
-_NON_TRANSCRIBE_CMDS = frozenset({"audio", "video", "image", "document"})
+_NON_TRANSCRIBE_CMDS = frozenset({"audio", "video", "image", "document", "library"})
 
 
 def _dispatch_other(cmd: str) -> None:
-    """Dispatch audio / video / image subcommands to their CLI modules."""
+    """Dispatch audio / video / image / document / library subcommands."""
     from src.cli.audio import add_audio_parser
     from src.cli.document import add_document_parser
     from src.cli.image import add_image_parser
+    from src.cli.library import add_library_parser
     from src.cli.video import add_video_parser
 
     parser = argparse.ArgumentParser(
@@ -178,6 +178,7 @@ def _dispatch_other(cmd: str) -> None:
     add_video_parser(subparsers)
     add_image_parser(subparsers)
     add_document_parser(subparsers)
+    add_library_parser(subparsers)
 
     ns = parser.parse_args(sys.argv[1:])
     setup_logging(getattr(ns, "verbose", False))
@@ -233,8 +234,11 @@ def main() -> None:
                         tqdm.write("")
 
                 audio_path = _core_download_audio(
-                    value, AUDIO_SOURCE_DIR, fmt="mp3",
-                    embed_meta=False, progress_hook=_hook,
+                    value,
+                    AUDIO_SOURCE_DIR,
+                    fmt="mp3",
+                    embed_meta=False,
+                    progress_hook=_hook,
                 )
                 logging.info("[✓] Audio downloaded: %s", audio_path.name)
 
@@ -263,14 +267,25 @@ def main() -> None:
         formatted_body = None
         if args.format:
             from src.formatter import format_transcription  # lazy import
-            formatted_body = format_transcription(output_path, model_name=args.format_model)
+
+            formatted_body = format_transcription(
+                output_path, model_name=args.format_model
+            )
 
         if args.analyze:
-            from src.analyzer import analyze  # lazy import — only loads LangChain when needed
-            analyze(output_path, model_name=args.analyzer_model, transcription=formatted_body)
+            from src.analyzer import (
+                analyze,
+            )  # lazy import — only loads LangChain when needed
+
+            analyze(
+                output_path,
+                model_name=args.analyzer_model,
+                transcription=formatted_body,
+            )
 
         if args.prompt:
             from src.prompter import build_prompt_ready  # lazy import
+
             build_prompt_ready(output_path, model_name=args.prompt_model)
 
     except (RuntimeError, ValueError, FileNotFoundError) as exc:
