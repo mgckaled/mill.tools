@@ -12,11 +12,11 @@ description: Guia da CLI modular do mill.tools (subcomandos audio/video/image/do
 `main.py` despacha para subcomandos por prefixo do primeiro argumento:
 
 ```python
-_NON_TRANSCRIBE_CMDS = frozenset({"audio", "video", "image", "document"})
+_NON_TRANSCRIBE_CMDS = frozenset({"audio", "video", "image", "document", "library"})
 
 def main():
     if len(sys.argv) > 1 and sys.argv[1] in _NON_TRANSCRIBE_CMDS:
-        _dispatch_other(sys.argv[1])   # → src/cli/{audio,video,image,document}.py
+        _dispatch_other(sys.argv[1])   # → src/cli/{audio,video,image,document,library}.py
         return
     # legado: transcrição (parse_args direto)
 ```
@@ -34,7 +34,8 @@ src/cli/
 ├── audio.py          — add_audio_parser() + run_audio_cli()
 ├── video.py          — add_video_parser() + run_video_cli()    (sub-subparsers)
 ├── image.py          — add_image_parser() + run_image_cli()    (sub-subparsers)
-└── document.py       — add_document_parser() + run_document_cli()  (sub-subparsers)
+├── document.py       — add_document_parser() + run_document_cli()  (sub-subparsers)
+└── library.py        — add_library_parser() + run_library_cli()  (read-only, sem CLIEventBus)
 ```
 
 ---
@@ -180,6 +181,33 @@ Sem operação `analyze` na CLI (apenas GUI).
 
 ---
 
+## Subcomando `library`
+
+```bash
+uv run main.py library list [opções]
+```
+
+**Read-only** — lista tudo sob `output/` numa tabela. Reaproveita o core
+(`scan_library`/`filter_items`/`sort_items`); **não** usa pipeline nem
+`CLIEventBus`. Usa sub-subparser (`ns.library_op`), por ora só `list`.
+
+| Flag | Default | Descrição |
+|---|---|---|
+| `--kind` | (todos) | `audio`/`video`/`image`/`transcription`/`document` |
+| `--since` | — | Duração: `7d`, `24h`, `30m` (número puro = dias). `_parse_since` levanta `ValueError` em formato inválido |
+| `--sort` | `modified` | `modified`/`name`/`size` |
+| `--verbose` | off | Logging DEBUG |
+
+`run_library_cli` reconfigura `sys.stdout` para UTF-8/replace antes de imprimir
+(nomes de arquivo com caracteres fora do cp1252, ex.: `｜`, quebram o console
+do Windows).
+
+> Atenção: `library` foge do padrão dos demais — não há `CLIEventBus`,
+> `install_log_handler` nem `run_*_pipeline` a mockar. Nos testes, mocke
+> `src.cli.library.scan_library` e capture stdout via `capsys`.
+
+---
+
 ## Como adicionar um novo subcomando
 
 1. Criar `src/cli/novo.py` com:
@@ -236,4 +264,4 @@ def test_audio_defaults():
     assert callable(ns.func)
 ```
 
-Arquivos de teste: `tests/cli/test_audio_cli.py` (5), `test_video_cli.py` (14, inclui `subtitle`), `test_image_cli.py` (15), `test_document_cli.py` (inclui `ocr`).
+Arquivos de teste: `tests/cli/test_audio_cli.py` (5), `test_video_cli.py` (14, inclui `subtitle`), `test_image_cli.py` (15), `test_document_cli.py` (inclui `ocr`), `test_library_cli.py` (parser + `_parse_since` + runner com `scan_library` mockado e `capsys`).

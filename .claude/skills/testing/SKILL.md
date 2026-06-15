@@ -24,6 +24,7 @@ tests/
 │   ├── test_video_cli.py                   # unit — sub-subparsers + run_video_cli (dispatch)
 │   ├── test_image_cli.py                   # unit — sub-subparsers + run_image_cli (dispatch)
 │   ├── test_document_cli.py                # unit — sub-subparsers + run_document_cli (dispatch)
+│   ├── test_library_cli.py                 # unit — parser + _parse_since + run_library_cli (scan_library mockado, capsys)
 │   ├── test_transcribe_main.py             # unit — main.parse_args + _subtitle_formats_from_args
 │   └── test_bus.py                         # unit — CLIEventBus (eventos e formatação)
 ├── core/
@@ -53,6 +54,9 @@ tests/
 │       ├── test_info.py                    # unit — get_pdf_info, PdfInfo (pymupdf REAL)
 │       ├── test_ocr.py                     # unit — ocr_pdf híbrido (pytesseract mockado) + 1 integration real (Tesseract)
 │       └── test_qr.py                      # unit — generate_qr (qrcode REAL — gera PNG em disco)
+│   └── library/
+│       ├── test_scanner.py                 # unit — classify_path, scan_library (árvore falsa), filter_items (kind/category/query/since), sort_items
+│       └── test_thumbnails.py              # unit — thumbnail_for (imagem/PDF reais, fallbacks None) + 1 integration (frame de vídeo)
 └── gui/
     ├── __init__.py
     ├── test_settings.py                    # unit — src/gui/settings.py
@@ -545,12 +549,16 @@ O alvo é **≥ 90%** por módulo. Total agregado: **88%** com branch. Estado at
 | `core/audio/normalizer.py` | **100%** |
 | `core/audio/info.py` | **100%** |
 | `core/ffmpeg.py` | **100%** |
+| `core/library/types.py` | **100%** |
+| `core/library/thumbnails.py` | **100%** |
 | `analyzer.py` | 99% |
 | `cli/document.py` | 98% |
+| `core/library/scanner.py` | 98% |
 | `transcriber.py` | 97% |
 | `core/video/converter.py` | 97% (2 partial branches) |
-| `core/document/info.py` | 97% |
 | `cli/video.py` | 97% |
+| `core/document/info.py` | 94% (render_first_page_png: except interno) |
+| `cli/library.py` | ~93% |
 | `core/document/ocr.py` | 97% (2 partial branches) |
 | `core/image/downloader.py` | 96% |
 | `cli/image.py` | 94% |

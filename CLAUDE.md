@@ -36,7 +36,8 @@ src/
 │   ├── audio.py                 — subcomando `audio`: add_audio_parser(), run_audio_cli()
 │   ├── video.py                 — subcomando `video`: 8 sub-subcomandos (download/convert/trim/…/subtitle)
 │   ├── image.py                 — subcomando `image`: 12 sub-subcomandos (convert/resize/crop/…)
-│   └── document.py              — subcomando `document`: 12 sub-subcomandos (merge/split/compress/…/ocr)
+│   ├── document.py              — subcomando `document`: 12 sub-subcomandos (merge/split/compress/…/ocr)
+│   └── library.py               — subcomando `library`: `list` (tabela de tudo sob output/)
 ├── core/
 │   ├── ffmpeg.py                — run_ffmpeg(): runner binário compartilhado com progresso pipe:1 (aceita cwd=)
 │   ├── subtitles.py             — SubtitleCue + to_srt()/to_vtt()/write_subtitles() (puro)
@@ -61,13 +62,17 @@ src/
 │   │   ├── background.py        — remove_background() via rembg/ONNX (imports lazy; extra [ai-image])
 │   │   ├── describe.py          — describe_image() + save_description() via LangChain + Ollama vision
 │   │   └── info.py              — image_info() + thumbnail_bytes()
-│   └── document/
-│       ├── args.py              — DocumentArgs: 14 campos para todas as operações
-│       ├── processor.py         — 7 funções pymupdf: merge, split, compress, rotate, watermark, stamp, encrypt
-│       ├── converter.py         — pdf_to_images(), images_to_pdf(), extract_text()
-│       ├── ocr.py               — ocr_pdf() híbrido (texto nativo + Tesseract) + is_available() (extra [ocr])
-│       ├── qr.py                — generate_qr() via qrcode
-│       └── info.py              — PdfInfo + get_pdf_info() (thumbnail da 1ª página)
+│   ├── document/
+│   │   ├── args.py              — DocumentArgs: 14 campos para todas as operações
+│   │   ├── processor.py         — 7 funções pymupdf: merge, split, compress, rotate, watermark, stamp, encrypt
+│   │   ├── converter.py         — pdf_to_images(), images_to_pdf(), extract_text()
+│   │   ├── ocr.py               — ocr_pdf() híbrido (texto nativo + Tesseract) + is_available() (extra [ocr])
+│   │   ├── qr.py                — generate_qr() via qrcode
+│   │   └── info.py              — PdfInfo + get_pdf_info() + render_first_page_png() (raster 1ª página, reusado pela Biblioteca)
+│   └── library/
+│       ├── types.py             — LibraryItem (dataclass frozen/slots) + KIND_* consts
+│       ├── scanner.py           — scan_library(), classify_path(), filter_items(), sort_items() (puro, sobre output/)
+│       └── thumbnails.py        — thumbnail_for(item): dispatch por kind (imagem/PDF/vídeo) → bytes|None
 └── gui/
     ├── app.py                   — build_app(): NavigationRail + registry de módulos + navigate_to
     ├── splash.py                — show_splash(): cata-vento + fade → show_home
@@ -87,7 +92,8 @@ src/
     │   ├── audio/               — form_view.py, worker.py, view.py, pipeline_log.py
     │   ├── image/               — form_view.py, worker.py, view.py, pipeline_log.py, blocks/ (12 blocos)
     │   ├── video/               — form_view.py, worker.py, view.py, pipeline_log.py
-    │   └── document/            — form_view.py, worker.py, view.py, pipeline_log.py, blocks/ (12 blocos)
+    │   ├── document/            — form_view.py, worker.py, view.py, pipeline_log.py, blocks/ (12 blocos)
+    │   └── library/             — view.py (grade + filtros), cards.py (factory de card); read-only, sem worker
     ├── theme/
     │   ├── theme.py             — apply_theme(), sync_page_bgcolor()
     │   ├── tokens.py            — Color, Type, Space, Radius, Motion, Layout
@@ -100,9 +106,9 @@ src/
 
 ## Sistema de módulos (GUI)
 
-A GUI é dividida em módulos selecionáveis numa **NavigationRail** à esquerda. Módulos disponíveis: **Áudio**, **Vídeo**, **Imagens**, **Transcrição**, **Documentos** — todos completos. Ordem na rail: Áudio → Vídeo → Imagens → Transcrição → Documentos.
+A GUI é dividida em módulos. As 5 **ferramentas de processamento** — **Áudio**, **Vídeo**, **Imagens**, **Transcrição**, **Documentos** — ficam numa **NavigationRail** à esquerda (ordem: Áudio → Vídeo → Imagens → Transcrição → Documentos). A **Biblioteca** é um 6º módulo, mas vive **fora da rail**: como é um hub sobre as saídas de todos os módulos (não uma ferramenta par), seu ponto de entrada é um botão "Biblioteca" no **AppBar** ao lado do wordmark "mill.tools". A ⓘ de ajuda fica no cabeçalho interno do módulo (padrão de help por módulo), não no AppBar. Ela continua em `MODULES` (e no `ft.Stack`), então `navigate_to` funciona normalmente.
 
-A entrada no app é mediada pela **Home Screen** (`src/gui/home.py`): ao clicar num card (grid de 5 cards), `on_complete(module_id)` chama `build_app(initial_module=mid)`.
+A entrada no app é mediada pela **Home Screen** (`src/gui/home.py`): ao clicar num card (grid de **6 cards, 3×2**), `on_complete(module_id)` chama `build_app(initial_module=mid)`.
 
 - **Registry** (`src/gui/app.py`): `MODULES: list[Module]` é a fonte única. Adicionar um módulo = uma entrada na lista.
 - **Module** (`src/gui/modules/base.py`): dataclass com `id`, `label`, `icon`, `selected_icon`, `control`, `on_mount(payload)`, `on_unmount()`. O `control` é construído uma vez; trocar de aba **não** destrói o estado.
@@ -180,13 +186,26 @@ Manipulação de PDF e geração de QR code via pymupdf. Sem dependência de ffm
 - **Saída**: arquivos processados → `output/document/processed/`.
 - **OCR (PR5.1)** ✅: `src/core/document/ocr.py` via pytesseract (extra `[ocr]`, Tesseract no PATH ou local padrão do Windows). Fluxo híbrido: usa a camada de texto nativa quando existe; só rasteriza + OCR nas páginas escaneadas (300 DPI é o piso recomendado). Fecha o loop **PDF escaneado → OCR → texto → `analyze` (LLM)**.
 
+## Módulo Biblioteca (PR6)
+
+Hub navegável de tudo que os módulos já produziram sob `output/`. **Read-only** — sem `worker.py`/`pipeline_log.py`; as ações disparam navegação ou abertura de arquivo, não pipelines. Zero dependência nova (stdlib + Flet + geradores já presentes); torch-free.
+
+- **Core puro** (`src/core/library/`): `types.py` — `LibraryItem` (`frozen=True, slots=True`) + `KIND_*`/`ALL_KINDS`; `scanner.py` — `_library_roots()` mapeia cada dir de saída → `(kind, category)`, `classify_path()`, `scan_library()` (varredura rasa, só arquivos, mtime-desc, pula ocultos `.gitkeep`/`.DS_Store` e arquivos ilegíveis), `filter_items()` (kind/query/since), `sort_items()` (modified/name/size); `thumbnails.py` — `thumbnail_for(item)` despacha por kind (imagem→`thumbnail_bytes`, PDF→`render_first_page_png`, vídeo→frame único via ffmpeg `pipe:1`; áudio/transcrição→`None` ícone).
+- **GUI** (`src/gui/modules/library/`): `view.py` — `build_library_module(page, bus, cancel_event, pipeline_running, nav)`; tela cheia (sem split form|painel) com `ft.GridView(max_extent=220, child_aspect_ratio=0.8, cache_extent=400)`. Cabeçalho com título + ⓘ (`help_icon_for("library")`). Filtro por tipo via `segmented_selector` (6 chips); toolbar com busca por nome (`ft.TextField` + debounce via `page.run_task`), **categoria** (Todas/Origem/Processado — "Processado" agrupa processed+text+analysis+digest), ordenação e período via `ft.Dropdown` (evento `on_select`, não `on_change`). `cards.py` — `build_item_card(item, page, on_open, build_actions) → ItemCard(control, set_thumbnail)`.
+- **Cache + threads**: o scan fica em `_all_items`; filtro/busca/ordenação operam em memória (teclas não tocam o disco). Thumbnails geram numa **única thread daemon** com contador de geração (descarta scans antigos) + cache `(path, mtime)`; cada card recebe `set_thumbnail()` com **update escopado** (nunca `page.update()` — issue #6270). Paginação: `_PAGE_SIZE=120` + botão "Carregar mais".
+- **Persistência**: `last_library_filter`, `last_library_category`, `last_library_sort` em `~/.mill-tools/config.json`.
+- **Atualização**: `on_mount` re-escaneia ao entrar (pega saídas novas e deleções externas); assina o EventBus e re-escaneia ao vivo se a Biblioteca estiver visível quando um `task_done` chega.
+- **Ações por item**: **Abrir** (`os.startfile`, toast se falhar), **Abrir pasta** (`explorer /select,`), e **bridges** via `nav[0](module_id, {"file": path})` — áudio/vídeo → Transcrição + Áudio; imagem → Imagens; PDF → Documentos. Pré-requisito: `on_mount({"file": path})` + `fill_from_path` padronizados em **todos** os módulos-alvo (Áudio/Vídeo já tinham; Imagens/Documentos ganharam no PR6.4).
+- **CLI**: `uv run main.py library list [--kind] [--since 7d] [--sort]` (`src/cli/library.py`) reaproveita o core e imprime uma tabela. Sem pipeline, sem `CLIEventBus`; reconfigura stdout p/ UTF-8 (nomes com `｜` quebram o console cp1252).
+- **AppBar hub** (`src/gui/app.py`): fora da rail. `_RAIL_MODULES` = `MODULES` sem `library`; `_rail_index(module_id)` mapeia o slot da rail (`None` para library → rail deselecionada). `library_btn` é um TextButton "Biblioteca" (dourado quando ativo) no título — a ⓘ de ajuda fica no módulo, não no AppBar.
+
 ## Splash + Home Screen + spinner (branding)
 
 Fluxo completo de entrada: `show_splash` → `show_home` → `build_app(initial_module)`.
 
 - **Splash** (`src/gui/splash.py`): fade-in + scale + uma volta do cata-vento, então chama `show_home`. Cores via `Color.dark.*` — sem literais hardcoded.
-- **Home Screen** (`src/gui/home.py`): tela intermediária com 5 cards de módulo sobre o símbolo do moinho girando lentamente (opacity 0.16, 20s/volta). Ao clicar num card: fade-out 350ms EASE_IN → `build_app(initial_module=id)` com fade-in 500ms EASE_OUT. Tema salvo é aplicado em `show_home` antes de `build_app`. Cada card é `GestureDetector` + `Container` (sem `ink=True` — quirk Flet 0.85); hover muta `bgcolor` e `border` com `Motion.fast`.
-- **AppBar** (`src/gui/app.py`): wordmark "mill.tools" com spans (`ft.Colors.ON_SURFACE` / `pal_title.primary`). Botões "Home" e "Splash" em `actions` — chamam `_go_home` / `_go_splash` (bloqueados se pipeline rodando). `page.pubsub.unsubscribe_all()` no início de `build_app` evita acúmulo de subscribers em re-entradas. `page.appbar = None` antes de navegar para splash/home.
+- **Home Screen** (`src/gui/home.py`): tela intermediária com **6 cards de módulo (grade 3×2 simétrica)** sobre o símbolo do moinho girando lentamente (opacity 0.16, 20s/volta). Ao clicar num card: fade-out 350ms EASE_IN → `build_app(initial_module=id)` com fade-in 500ms EASE_OUT. Tema salvo é aplicado em `show_home` antes de `build_app`. Cada card é `GestureDetector` + `Container` (sem `ink=True` — quirk Flet 0.85); hover muta `bgcolor` e `border` com `Motion.fast`.
+- **AppBar** (`src/gui/app.py`): título = `ft.Row([wordmark, library_btn])` — wordmark "mill.tools" com spans + botão **Biblioteca** (TextButton dourado quando ativo, navega para o módulo Biblioteca). Botões "Home"/"Splash"/tema em `actions` — chamam `_go_home`/`_go_splash` (bloqueados se pipeline rodando). `page.pubsub.unsubscribe_all()` no início de `build_app` evita acúmulo de subscribers em re-entradas. `page.appbar = None` antes de navegar para splash/home.
 - **Spinner**: `ft.Image` do cata-vento, giro encadeado via `on_animation_end` (curva LINEAR). Para na vertical ao terminar.
 - **Assets** (`src/gui/assets.py`): `b64(name)` retorna bytes; `WINDOW_ICON` → `assets/icons/mill.ico`.
 
@@ -225,6 +244,11 @@ uv run main.py document encrypt doc.pdf --password "senha"
 uv run main.py document ocr scanned.pdf --lang por --dpi 300
 uv run main.py document pdf-to-images doc.pdf --fmt jpg --dpi 150
 uv run main.py document qr "https://example.com" --size 300
+
+# Biblioteca (lista tudo sob output/ — sem GUI)
+uv run main.py library list
+uv run main.py library list --kind audio
+uv run main.py library list --since 7d --sort size
 ```
 
 > Referência completa de flags CLI → skill `cli` (`.claude/skills/cli/SKILL.md`)
@@ -250,7 +274,7 @@ uv run main.py document qr "https://example.com" --size 300
 ```bash
 uv run pytest -m unit -v                                                   # unitários apenas (rápido — <5s)
 uv run pytest -m integration -v                                            # integração apenas (requer ffmpeg)
-uv run pytest -v                                                           # suíte completa (493 testes)
+uv run pytest -v                                                           # suíte completa (524 testes)
 uv run pytest -n auto                                                      # paraleliza (pytest-xdist; ganho cresce com a suíte)
 uv run pytest --cov=src --cov-report=term-missing                         # cobertura terminal
 uv run pytest --cov=src --cov-report=html                                  # cobertura HTML em htmlcov/
@@ -261,18 +285,19 @@ uv run pytest tests/caminho/test_arquivo.py -v                            # arqu
 uv run pytest -k "sanitize" -v                                            # filtrar por nome
 ```
 
-Estrutura espelha `src/`: `tests/core/audio/`, `tests/core/image/`, `tests/core/video/`, `tests/core/document/`, `tests/cli/`, `tests/gui/`. Fixtures em `tests/conftest.py`:
+Estrutura espelha `src/`: `tests/core/audio/`, `tests/core/image/`, `tests/core/video/`, `tests/core/document/`, `tests/core/library/`, `tests/cli/`, `tests/gui/`. Fixtures em `tests/conftest.py`:
 
 - **Function-scoped**: `jpg_image`, `png_image`, `out_dir`
 - **Session-scoped**: `sample_wav`, `sample_mp3`, `sample_mp4`, `sample_wav_stereo`, `session_jpg`, `sample_pdf`, `sample_pdf_with_images` (PDFs gerados via `pytest.importorskip("pymupdf")`)
 
 Cobertura por arquivo (recortes principais):
 
-- **CLI**: `tests/cli/test_*_cli.py` cobrem parser **e** runner (`run_*_cli`) — mocks de `src.gui.modules.<m>.worker.run_*_pipeline` validam que `Namespace → XxxArgs` está correto. `tests/cli/test_bus.py` valida o `CLIEventBus`.
+- **CLI**: `tests/cli/test_*_cli.py` cobrem parser **e** runner (`run_*_cli`) — mocks de `src.gui.modules.<m>.worker.run_*_pipeline` validam que `Namespace → XxxArgs` está correto. `tests/cli/test_bus.py` valida o `CLIEventBus`. `test_library_cli.py` cobre parser + runner (read-only — mocka `scan_library`, sem pipeline; valida `_parse_since` e a tabela).
 - **Core áudio**: `test_normalizer_parser.py`/`test_normalizer_unit.py` (unit, subprocess mockado); `test_converter.py`, `test_denoiser.py`, `test_info.py`, `test_normalizer_integration.py`, `test_pipeline_e2e.py` (integration).
 - **Core imagem**: `test_transform.py`, `test_converter.py`, `test_info.py` (unit, PIL puro); `test_downloader.py` (unit, urllib mockado).
 - **Core vídeo**: `test_info.py` e `test_converter.py` (ambos integration — `test_converter.py` cobre as 7 funções ffmpeg, incluindo `add_subtitles` soft/hard).
-- **Core document**: `test_processor.py`, `test_converter.py`, `test_info.py`, `test_qr.py` — unit, usam pymupdf/qrcode **reais** via fixtures de sessão. `test_ocr.py` — unit (mocka pytesseract para o fluxo híbrido) + 1 integration real com Tesseract (skip se ausente).
+- **Core document**: `test_processor.py`, `test_converter.py`, `test_info.py`, `test_qr.py` — unit, usam pymupdf/qrcode **reais** via fixtures de sessão. `test_ocr.py` — unit (mocka pytesseract para o fluxo híbrido) + 1 integration real com Tesseract (skip se ausente). `test_info.py` cobre também `render_first_page_png` (raster real + zero-page mockado).
+- **Core library**: `test_scanner.py` — unit puro (`classify_path`, `scan_library` com árvore falsa via `monkeypatch` dos roots, skip de ocultos e ilegíveis, `filter_items`/`sort_items`). `test_thumbnails.py` — unit (imagem/PDF reais → bytes; áudio/transcrição/corrompidos → None) + 1 integration de frame de vídeo. Scanner/thumbnails ≥ 98%.
 - **GUI**: `tests/gui/modules/<audio|image|video|document>/test_pipeline_log.py` — `resolve_messages`/`resolve_stage_label` + `fmt_*` builders para os 4 módulos.
 - **LLM pipeline** (`tests/test_formatter.py`, `test_analyzer.py`, `test_prompter.py`): mockam LangChain via `GenericFakeChatModel` de `langchain_core.language_models.fake_chat_models` (Runnable real — `prompt | llm` funciona naturalmente sem fighting com MagicMock `__or__`).
 
@@ -280,8 +305,8 @@ Cobertura agregada do projeto: **88%** (com branch coverage).
 
 Cobertura por módulo (último run, com branch):
 
-- **100%**: `formatter.py`, `prompter.py`, `llm_utils.py`, `cli/audio.py`, `cli/transcription.py`, `core/ffmpeg.py`, `core/audio/normalizer.py`, `core/audio/info.py`, `core/video/converter.py`, `core/document/info.py`, e todos os `args.py`/`__init__.py`.
-- **≥ 90%**: `analyzer.py` 99%, `cli/document.py` 98%, `cli/video.py` 97%, `core/image/downloader.py` 96%, `cli/image.py` 94%, `core/audio/converter.py` 93%, `core/document/converter.py` 91%, `core/image/transform.py` 91%, `core/document/processor.py` 91%, `core/document/qr.py` 90%.
+- **100%**: `formatter.py`, `prompter.py`, `llm_utils.py`, `cli/audio.py`, `cli/transcription.py`, `core/ffmpeg.py`, `core/audio/normalizer.py`, `core/audio/info.py`, `core/video/converter.py`, `core/library/types.py`, `core/library/thumbnails.py`, e todos os `args.py`/`__init__.py`.
+- **≥ 90%**: `analyzer.py` 99%, `cli/document.py` 98%, `core/library/scanner.py` 98%, `cli/video.py` 97%, `core/image/downloader.py` 96%, `cli/image.py` 94%, `core/document/info.py` 94%, `cli/library.py` ~93%, `core/audio/converter.py` 93%, `core/document/converter.py` 91%, `core/image/transform.py` 91%, `core/document/processor.py` 91%, `core/document/qr.py` 90%.
 - **80-89%**: `cli/bus.py` 82%, `utils.py` 82%, `llm_factory.py` 81%, `core/audio/denoiser.py` 80%.
 - **Lacunas conscientes**: `audio/downloader.py` 14%, `video/downloader.py` 12% (yt-dlp não mockado); `image/background.py` 32%, `image/describe.py` 23% (extras opcionais `[ai-image]`); `transcriber.py` 31% (Whisper — só `_resolve_device` testado).
 
@@ -337,6 +362,7 @@ Iniciada com `uv run gui.py`. Flutter desktop no Windows.
 | `page.update()` em cascata | causa `IndexError` no `object_patch` — um update por evento |
 | `ink=True` em Container clicável | absorve eventos de ponteiro, anula cursor do `GestureDetector` externo — nunca usar; colocar handler em `GestureDetector.on_tap` |
 | `ft.Slider` programático | setar `.value` + `update()` **não** dispara `on_change` no Python; usar `on_change_end` para seek |
+| `ft.Dropdown` evento de seleção | **não** aceita `on_change` no construtor (0.85.2) — o evento é `on_select`; campos válidos: `on_select`, `on_text_change` |
 | `control.page` antes do mount | lança `RuntimeError` — proteger com `try/except RuntimeError` |
 | FilePicker | `page.services.append(picker)` + `await picker.pick_files(...)` |
 | `Container(box_shadow=...)` | usar `Container(shadow=ft.BoxShadow(...))` — sem prefixo `box_` |
@@ -408,5 +434,6 @@ Flet (DirectX) e Whisper (CUDA) disputam a MX150. Uso simultâneo pode causar BS
 - **PR5** ✅ — Módulo Documentos: 13 operações GUI / 12 CLI (merge, split, compress, rotate, watermark, stamp, encrypt, extract, ocr, pdf_to_images, images_to_pdf, qr, analyze). Core pymupdf + qrcode. 28 testes unit adicionados.
 - **PR5.1** ✅ — OCR: `ocr_pdf()` híbrido via pytesseract (extra `[ocr]`), Tesseract no PATH ou local padrão do Windows; card habilita/desabilita conforme disponibilidade. Fecha PDF escaneado → OCR → `analyze`.
 - **Tier 0** ✅ — Legendas SRT/VTT na Transcrição (A+B), legenda no vídeo mux/burn (C), OCR (D). Ver `docs/STATUS_TIER0.md`.
+- **PR6** ✅ — Módulo Biblioteca (Output Library): índice tipado de `output/` (core puro), grade GUI com filtro/busca/ordenação/período, thumbnails lazy, ações (abrir/abrir pasta) e bridges para outros módulos, paginação + auto-refresh, CLI `library list`. Hub no AppBar (fora da rail). Fundação para PR7 (IA sobre o corpus) e PR8 (receitas). Ver `docs/ROADMAP_PR6_BIBLIOTECA.md`.
 - **PR3.1-B** — IA de áudio com torch (extra `[ai-audio]`): DeepFilterNet (denoise neural); Demucs (separação de stems) a avaliar.
 - **Futuro** — melhorias no Módulo Imagens (batch rename, upscale); arrastar arquivos do SO fora de escopo (não nativo no Flet).
