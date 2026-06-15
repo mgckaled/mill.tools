@@ -592,7 +592,7 @@ mill-tools/
 
 ## Testes
 
-A suíte cobre `src/core/`, `src/cli/`, os `pipeline_log` da GUI e o pipeline LLM (`analyzer`/`formatter`/`prompter`) em duas camadas, totalizando **524 testes** (0 falhas) e **88% de cobertura** (com branch).
+A suíte cobre `src/core/`, `src/cli/`, os `pipeline_log` da GUI e o pipeline LLM (`analyzer`/`formatter`/`prompter`) em duas camadas, totalizando **525 testes** (0 falhas) e **88% de cobertura** (com branch).
 
 | Camada | Marcador | Requer | O que cobre |
 |---|---|---|---|

@@ -274,7 +274,7 @@ uv run main.py library list --since 7d --sort size
 ```bash
 uv run pytest -m unit -v                                                   # unitários apenas (rápido — <5s)
 uv run pytest -m integration -v                                            # integração apenas (requer ffmpeg)
-uv run pytest -v                                                           # suíte completa (524 testes)
+uv run pytest -v                                                           # suíte completa (525 testes)
 uv run pytest -n auto                                                      # paraleliza (pytest-xdist; ganho cresce com a suíte)
 uv run pytest --cov=src --cov-report=term-missing                         # cobertura terminal
 uv run pytest --cov=src --cov-report=html                                  # cobertura HTML em htmlcov/
