@@ -1,4 +1,5 @@
 """Home screen do mill.tools — fundo animado + 4 cards de módulo."""
+
 from __future__ import annotations
 
 import asyncio
@@ -74,6 +75,18 @@ _MODULE_CARDS: list[dict] = [
             "Extraia texto, converta páginas em imagens e gere QR codes",
         ],
     },
+    {
+        "id": "library",
+        "title": "Biblioteca",
+        "icon": ft.Icons.COLLECTIONS_BOOKMARK_OUTLINED,
+        "accent": Color.dark.primary,
+        "desc": "Tudo que você já gerou, num só lugar",
+        "features": [
+            "Navegue e busque todas as saídas dos módulos",
+            "Filtre por tipo e data; reabra arquivos e pastas",
+            "Reenvie qualquer saída para outro módulo num clique",
+        ],
+    },
 ]
 
 
@@ -91,7 +104,8 @@ def _on_card_hover(
     is_hover = e.data == "true"
     pal = _palette(page)
     ctr.bgcolor = (
-        ft.Colors.with_opacity(0.88, pal.surface_hover) if is_hover
+        ft.Colors.with_opacity(0.88, pal.surface_hover)
+        if is_hover
         else ft.Colors.with_opacity(0.75, pal.surface)
     )
     side = ft.BorderSide(1.5, ft.Colors.with_opacity(0.6, accent))
@@ -143,7 +157,9 @@ def _make_card(
             bottom=ft.BorderSide(1.5, pal.outline_variant),
         ),
         bgcolor=ft.Colors.with_opacity(0.75, pal.surface),
-        padding=ft.Padding(left=Space.xl, right=Space.xl, top=Space.xl, bottom=Space.xl),
+        padding=ft.Padding(
+            left=Space.xl, right=Space.xl, top=Space.xl, bottom=Space.xl
+        ),
         shadow=ft.BoxShadow(
             blur_radius=12,
             spread_radius=0,
@@ -213,7 +229,8 @@ def show_home(page: ft.Page, on_complete: Callable[[str], None]) -> None:
     """Exibe a home screen; chama on_complete(module_id) ao navegar."""
     cfg = _settings.load()
     page.theme_mode = (
-        ft.ThemeMode.DARK if cfg.get("theme_mode", "dark") == "dark"
+        ft.ThemeMode.DARK
+        if cfg.get("theme_mode", "dark") == "dark"
         else ft.ThemeMode.LIGHT
     )
     sync_page_bgcolor(page)
@@ -292,23 +309,11 @@ def show_home(page: ft.Page, on_complete: Callable[[str], None]) -> None:
     # ── cards ────────────────────────────────────────────────────────────────────
     cards = [_make_card(data, _on_tap, page) for data in _MODULE_CARDS]
 
-    # Bottom 2 cards use expand=2 so that with expand=1 spacers the math is
-    # 1+2+2+1 = 6 total, giving each card 2/6 = 1/3 — same as the top row.
-    cards[3].expand = 2
-    cards[4].expand = 2
-
+    # Six modules fill a symmetric 3×2 grid — no expand/spacer hack needed.
     cards_grid = ft.Column(
         controls=[
             ft.Row(controls=[cards[0], cards[1], cards[2]], spacing=Space.xl),
-            ft.Row(
-                controls=[
-                    ft.Container(expand=1),
-                    cards[3],
-                    cards[4],
-                    ft.Container(expand=1),
-                ],
-                spacing=Space.xl,
-            ),
+            ft.Row(controls=[cards[3], cards[4], cards[5]], spacing=Space.xl),
         ],
         spacing=Space.xl,
         horizontal_alignment=ft.CrossAxisAlignment.CENTER,
