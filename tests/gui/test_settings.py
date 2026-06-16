@@ -32,6 +32,7 @@ def test_load_includes_library_defaults():
     assert data["last_library_filter"] == "all"
     assert data["last_library_category"] == "all"
     assert data["last_library_sort"] == "modified"
+    assert data["last_library_view"] == "grid"
 
 
 @pytest.mark.unit

@@ -24,7 +24,12 @@ from src.core.library.types import (
 from src.gui import settings
 from src.gui.events import PipelineEvent
 from src.gui.modules.base import Module
-from src.gui.modules.library.cards import ItemCard, build_item_card
+from src.gui.modules.library.cards import (
+    ItemCard,
+    build_item_card,
+    build_item_row,
+    build_list_header,
+)
 from src.gui.theme.components import (
     Cursor,
     hairline,
@@ -131,6 +136,9 @@ def build_library_module(
     _query: list[str] = [""]
     _search_gen: list[int] = [0]
 
+    # Display mode: "grid" (cards + thumbnails) or "list" (compact table rows).
+    _view_mode: list[str] = [cfg.get("last_library_view", "grid")]
+
     # Thumbnails are generated off the UI thread; the generation counter drops
     # stale results from a previous scan/apply (same trick as the audio player).
     # Cache keyed by (path, mtime) so edits invalidate automatically.
@@ -188,7 +196,22 @@ def build_library_module(
         visible=False,
     )
 
-    grid_area = ft.Stack([grid, empty_state], expand=True)
+    # List/table view — a fixed column header above a lazily rendered ListView.
+    list_header = build_list_header()
+    list_body = ft.ListView(
+        expand=True,
+        spacing=0,
+        cache_extent=600,
+        padding=ft.Padding(left=0, right=Space.xs, top=0, bottom=Space.md),
+    )
+    list_container = ft.Column(
+        controls=[list_header, list_body],
+        expand=True,
+        spacing=0,
+        visible=False,
+    )
+
+    grid_area = ft.Stack([grid, list_container, empty_state], expand=True)
 
     # "Load more" — on_click wired after _on_load_more is defined.
     load_more_btn = secondary_button("Carregar mais", icon=ft.Icons.EXPAND_MORE)
@@ -295,13 +318,6 @@ def build_library_module(
             desc=(by != "name"),
         )
         visible = items[: _shown[0]]
-        cards = [
-            build_item_card(
-                it, page=page, on_open=_open_file, build_actions=_build_actions
-            )
-            for it in visible
-        ]
-        grid.controls = [c.control for c in cards]
         count_label.value = (
             f"{len(items)} arquivo" if len(items) == 1 else f"{len(items)} arquivos"
         )
@@ -309,6 +325,29 @@ def build_library_module(
         load_more_btn.visible = remaining > 0
         load_more_btn.text = f"Carregar mais ({remaining})"
         empty_state.visible = not items
+
+        if _view_mode[0] == "list":
+            # Bump the thumbnail generation so any in-flight grid work is dropped
+            # (list rows use plain type icons — no thumbnails to generate).
+            _thumb_gen[0] += 1
+            list_body.controls = [
+                build_item_row(
+                    it, page=page, on_open=_open_file, build_actions=_build_actions
+                )
+                for it in visible
+            ]
+            list_container.visible = bool(visible)
+            grid.visible = False
+            return
+
+        cards = [
+            build_item_card(
+                it, page=page, on_open=_open_file, build_actions=_build_actions
+            )
+            for it in visible
+        ]
+        grid.controls = [c.control for c in cards]
+        list_container.visible = False
         grid.visible = bool(visible)
         _spawn_thumbnail_thread(list(zip(visible, cards)))
 
@@ -460,6 +499,52 @@ def build_library_module(
     )
 
     # ------------------------------------------------------------------
+    # View-mode toggle (grid | list)
+    # ------------------------------------------------------------------
+
+    grid_btn = ft.IconButton(
+        icon=ft.Icons.GRID_VIEW_OUTLINED,
+        icon_size=18,
+        tooltip="Grade",
+        style=ft.ButtonStyle(mouse_cursor=Cursor.btn),
+    )
+    list_btn = ft.IconButton(
+        icon=ft.Icons.VIEW_LIST_OUTLINED,
+        icon_size=18,
+        tooltip="Lista",
+        style=ft.ButtonStyle(mouse_cursor=Cursor.btn),
+    )
+
+    def _sync_view_buttons() -> None:
+        active = _view_mode[0]
+        grid_btn.icon = (
+            ft.Icons.GRID_VIEW if active == "grid" else ft.Icons.GRID_VIEW_OUTLINED
+        )
+        grid_btn.icon_color = (
+            ft.Colors.PRIMARY if active == "grid" else ft.Colors.ON_SURFACE_VARIANT
+        )
+        list_btn.icon = (
+            ft.Icons.VIEW_LIST if active == "list" else ft.Icons.VIEW_LIST_OUTLINED
+        )
+        list_btn.icon_color = (
+            ft.Colors.PRIMARY if active == "list" else ft.Colors.ON_SURFACE_VARIANT
+        )
+
+    def _set_view(mode: str) -> None:
+        if mode == _view_mode[0]:
+            return
+        _view_mode[0] = mode
+        settings.set("last_library_view", mode)
+        _sync_view_buttons()
+        _render_from_top_and_update()
+
+    grid_btn.on_click = lambda _e: _set_view("grid")
+    list_btn.on_click = lambda _e: _set_view("list")
+    _sync_view_buttons()
+
+    view_toggle = ft.Row(controls=[grid_btn, list_btn], spacing=0)
+
+    # ------------------------------------------------------------------
     # Header + layout
     # ------------------------------------------------------------------
 
@@ -475,7 +560,7 @@ def build_library_module(
     _help = help_icon_for("library", page)
     if _help is not None:
         header_controls.append(_help)
-    header_controls.extend([ft.Container(expand=True), count_label])
+    header_controls.extend([ft.Container(expand=True), view_toggle, count_label])
 
     header = ft.Row(
         controls=header_controls,

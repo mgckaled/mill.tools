@@ -221,3 +221,192 @@ def build_item_card(
             pass
 
     return ItemCard(control=card_inner, set_thumbnail=_set_thumbnail)
+
+
+# ── List (table) view ─────────────────────────────────────────────────────
+
+# Column widths shared by the header and every row so the cells line up. The
+# name column flexes (expand=True); the rest are fixed so values stay aligned.
+_LIST_ICON_W = 30
+_LIST_CAT_W = 116
+_LIST_SIZE_W = 84
+_LIST_DATE_W = 140
+_LIST_ACTIONS_W = 128
+
+
+def _hcell(
+    label: str, *, width: int | None = None, expand: bool = False
+) -> ft.Container:
+    """One header cell (column title), aligned with the row cells below it."""
+    return ft.Container(
+        content=ft.Text(
+            label,
+            size=Type.small.size,
+            weight=ft.FontWeight.W_600,
+            color=ft.Colors.ON_SURFACE_VARIANT,
+            no_wrap=True,
+            overflow=ft.TextOverflow.ELLIPSIS,
+        ),
+        width=width,
+        expand=expand,
+    )
+
+
+def build_list_header() -> ft.Control:
+    """Column-title row for the Library list/table view (mirrors build_item_row)."""
+    cells = [
+        ft.Container(width=_LIST_ICON_W),  # leading icon column (no title)
+        _hcell("Nome", expand=True),
+        _hcell("Categoria", width=_LIST_CAT_W),
+        _hcell("Tamanho", width=_LIST_SIZE_W),
+        _hcell("Data", width=_LIST_DATE_W),
+        _hcell("Ações", width=_LIST_ACTIONS_W),
+    ]
+    return ft.Container(
+        content=ft.Row(
+            cells, spacing=Space.sm, vertical_alignment=ft.CrossAxisAlignment.CENTER
+        ),
+        padding=ft.Padding(
+            left=Space.sm, right=Space.sm, top=Space.xs, bottom=Space.xs
+        ),
+        border=ft.Border(bottom=ft.BorderSide(1, ft.Colors.OUTLINE_VARIANT)),
+    )
+
+
+def build_item_row(
+    item: LibraryItem,
+    *,
+    page: ft.Page,
+    on_open: Callable[[LibraryItem], None] | None = None,
+    build_actions: Callable[[LibraryItem], list[ft.Control]] | None = None,
+) -> ft.Control:
+    """Build one table row for a Library item (list view).
+
+    The layout mirrors `build_list_header` so the columns line up. The cells
+    (icon, name, category, size, date) open the file on click; the trailing
+    actions stay independently tappable (they sit outside the click area).
+    Truncated text exposes its full value through a tooltip.
+
+    Args:
+        item: The item to render.
+        page: Flet page (kept for signature symmetry with build_item_card).
+        on_open: Optional callback when the row body is clicked.
+        build_actions: Optional factory returning action controls (bridges).
+    """
+    accent = KIND_ACCENT.get(item.kind, ft.Colors.PRIMARY)
+    icon_name = KIND_ICON.get(item.kind, ft.Icons.INSERT_DRIVE_FILE_OUTLINED)
+
+    leading = ft.Container(
+        content=ft.Icon(icon_name, size=18, color=accent),
+        width=_LIST_ICON_W,
+        alignment=ft.Alignment.CENTER,
+    )
+    name_cell = ft.Text(
+        item.path.name,
+        size=Type.input.size,
+        weight=ft.FontWeight.W_500,
+        color=ft.Colors.ON_SURFACE,
+        no_wrap=True,
+        overflow=ft.TextOverflow.ELLIPSIS,
+        tooltip=item.path.name,
+        expand=True,
+    )
+    cat_label = CATEGORY_LABEL.get(item.category, item.category)
+    cat_cell = ft.Container(
+        content=ft.Container(
+            content=ft.Text(
+                cat_label,
+                size=Type.small.size,
+                color=accent,
+                weight=ft.FontWeight.W_600,
+                no_wrap=True,
+            ),
+            bgcolor=ft.Colors.with_opacity(0.12, accent),
+            border_radius=Radius.pill,
+            padding=ft.Padding(left=Space.xs, right=Space.xs, top=1, bottom=1),
+        ),
+        width=_LIST_CAT_W,
+        alignment=ft.Alignment.CENTER_LEFT,
+    )
+    size_str = _fmt_size(item.size_bytes)
+    size_cell = ft.Container(
+        content=ft.Text(
+            size_str,
+            size=Type.small.size,
+            color=ft.Colors.ON_SURFACE_VARIANT,
+            no_wrap=True,
+            overflow=ft.TextOverflow.ELLIPSIS,
+            tooltip=size_str,
+        ),
+        width=_LIST_SIZE_W,
+        alignment=ft.Alignment.CENTER_LEFT,
+    )
+    date_str = _fmt_date(item.modified)
+    date_cell = ft.Container(
+        content=ft.Text(
+            date_str,
+            size=Type.small.size,
+            color=ft.Colors.ON_SURFACE_VARIANT,
+            no_wrap=True,
+            overflow=ft.TextOverflow.ELLIPSIS,
+            tooltip=date_str,
+        ),
+        width=_LIST_DATE_W,
+        alignment=ft.Alignment.CENTER_LEFT,
+    )
+
+    cells = ft.Container(
+        content=ft.Row(
+            controls=[leading, name_cell, cat_cell, size_cell, date_cell],
+            spacing=Space.sm,
+            vertical_alignment=ft.CrossAxisAlignment.CENTER,
+        ),
+    )
+
+    # Only the cells open the file; the actions stay tappable because they are
+    # siblings of the click area, never descendants of its GestureDetector.
+    clickable: ft.Control
+    if on_open is not None:
+        clickable = ft.GestureDetector(
+            mouse_cursor=Cursor.interactive,
+            content=cells,
+            on_tap=lambda _e, _it=item: on_open(_it),
+            expand=True,
+        )
+    else:
+        cells.expand = True
+        clickable = cells
+
+    actions = build_actions(item) if build_actions is not None else []
+    actions_cell = ft.Container(
+        content=ft.Row(
+            controls=actions,
+            spacing=Space.xxs,
+            alignment=ft.MainAxisAlignment.END,
+        ),
+        width=_LIST_ACTIONS_W,
+        alignment=ft.Alignment.CENTER_RIGHT,
+    )
+
+    row_container = ft.Container(
+        content=ft.Row(
+            controls=[clickable, actions_cell],
+            spacing=Space.sm,
+            vertical_alignment=ft.CrossAxisAlignment.CENTER,
+        ),
+        padding=ft.Padding(
+            left=Space.sm, right=Space.sm, top=Space.xs, bottom=Space.xs
+        ),
+        border=ft.Border(bottom=ft.BorderSide(1, ft.Colors.OUTLINE_VARIANT)),
+        border_radius=Radius.sm,
+    )
+
+    def _on_hover(e: ft.HoverEvent) -> None:
+        row_container.bgcolor = Color.dark.surface_hover if e.data == "true" else None
+        try:
+            row_container.update()
+        except RuntimeError:
+            pass
+
+    row_container.on_hover = _on_hover
+    return row_container

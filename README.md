@@ -31,7 +31,7 @@ A ferramenta é organizada em **módulos independentes**, cada um especializado 
 
 - 📄 **Manipular documentos PDF** — 12 operações: juntar, dividir, comprimir, girar, aplicar marca d'água ou carimbo (PAGO/RASCUNHO/CONFIDENCIAL), criptografar com AES-256, extrair texto, rasterizar páginas em imagens, montar PDF a partir de imagens, gerar QR codes e analisar conteúdo com IA. 100% local via pymupdf.
 
-- 📚 **Reunir tudo num só lugar** — a Biblioteca indexa automaticamente tudo que você já gerou (áudios, vídeos, imagens, transcrições e documentos) numa grade visual com miniaturas. Filtre por tipo e data, busque por nome, reabra um arquivo ou sua pasta, e reenvie qualquer saída para outro módulo num clique — por exemplo, mandar um áudio baixado direto para a Transcrição.
+- 📚 **Reunir tudo num só lugar** — a Biblioteca indexa automaticamente tudo que você já gerou (áudios, vídeos, imagens, transcrições e documentos), numa grade visual com miniaturas ou numa lista compacta em tabela. Filtre por tipo e data, busque por nome, reabra um arquivo ou sua pasta, e reenvie qualquer saída para outro módulo num clique — por exemplo, mandar um áudio baixado direto para a Transcrição.
 
 - 🔀 **Escolher onde a IA roda** — por padrão, todos os modelos de linguagem funcionam 100% offline via [Ollama](https://ollama.com) (nenhum dado sai do computador). Para quem prefere, o [Google Gemini](https://ai.google.dev/) gratuito está disponível como alternativa na nuvem — basta escolher o modelo na interface.
 
@@ -44,7 +44,7 @@ A ferramenta é organizada em **módulos independentes**, cada um especializado 
 | **Imagens** | ✅ Disponível | 12 operações: manipulação, conversão, remoção de fundo e descrição por IA vision |
 | **Vídeo** | ✅ Disponível | 7 operações: download, conversão, corte, compressão, redimensionamento, extração de áudio e thumbnail |
 | **Documentos** | ✅ Disponível | 12 operações PDF: merge, split, compress, rotate, watermark, stamp, encrypt, extract, pdf-to-images, images-to-pdf, QR e análise por IA |
-| **Biblioteca** | ✅ Disponível | Hub navegável de todas as saídas: grade com thumbnails, filtro por tipo, busca, ordenação e período; abrir arquivo/pasta e reenviar para outro módulo num clique |
+| **Biblioteca** | ✅ Disponível | Hub navegável de todas as saídas: grade com thumbnails ou lista em tabela, filtro por tipo, busca, ordenação e período; abrir arquivo/pasta e reenviar para outro módulo num clique |
 
 ### Destaques técnicos
 
@@ -378,7 +378,9 @@ A Biblioteca é o hub que reúne tudo que os outros módulos já produziram em `
 
 | Recurso | O que faz |
 |---|---|
+| **Dois modos de exibição** | Alterne entre **grade** (cards com miniatura) e **lista** (tabela compacta com colunas Nome / Categoria / Tamanho / Data / Ações) pelo toggle no cabeçalho. |
 | **Grade com thumbnails** | Cards com miniatura sob demanda: imagem (Pillow), 1ª página de PDF (pymupdf) ou frame de vídeo (ffmpeg). Áudio e texto usam ícone do tipo. |
+| **Lista em tabela** | Linhas compactas com ícone de tipo; clique na linha abre o arquivo, a última coluna traz as ações; nomes longos truncam e mostram o valor completo ao parar o mouse (tooltip). |
 | **Filtrar por tipo** | Chips Todos / Áudio / Vídeo / Imagens / Transcrição / Documentos. |
 | **Filtrar por categoria** | Todas / Origem (downloads) / Processado (saídas geradas). |
 | **Buscar e ordenar** | Busca por nome (com debounce) + ordenação por data, nome ou tamanho. |
@@ -386,7 +388,7 @@ A Biblioteca é o hub que reúne tudo que os outros módulos já produziram em `
 | **Abrir** | Abre o arquivo no programa padrão do sistema ou revela sua pasta no explorador. |
 | **Reenviar para outro módulo** | Bridges num clique: áudio/vídeo → Transcrição ou Áudio; imagem → Imagens; PDF → Documentos. |
 
-A lista é recarregada ao abrir a Biblioteca e quando um pipeline termina. A grade exibe até 120 itens por vez, com botão "Carregar mais". Preferências de filtro e ordenação são lembradas entre sessões. Há paridade na CLI via `uv run main.py library list`.
+A lista é recarregada ao abrir a Biblioteca e quando um pipeline termina. Cada modo exibe até 120 itens por vez, com botão "Carregar mais". Preferências de filtro, ordenação e modo de exibição são lembradas entre sessões. Há paridade na CLI via `uv run main.py library list`.
 
 ---
 
