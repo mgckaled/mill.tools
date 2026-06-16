@@ -13,13 +13,30 @@ from pathlib import Path
 
 import flet as ft
 
-from src.gui.theme.tokens import Space, Type
+from src.gui.theme.tokens import Radius, Space, Type
 
 # File types the in-app viewer renders. Everything else opens externally.
 VIEWER_EXTS = {".md", ".txt"}
 
 # Guard against rendering a pathologically large file in the modal.
 _MAX_CHARS = 400_000
+
+# Readable blockquote styling on the dark theme — Flet's default renders a light
+# bluish background that makes "> quote" text unreadable. Subtle overlay + a
+# left accent bar + explicit (light) text color instead.
+_MD_STYLE = ft.MarkdownStyleSheet(
+    blockquote_text_style=ft.TextStyle(color=ft.Colors.ON_SURFACE),
+    blockquote_padding=ft.Padding(
+        left=Space.sm, right=Space.sm, top=Space.xs, bottom=Space.xs
+    ),
+    blockquote_decoration=ft.BoxDecoration(
+        bgcolor=ft.Colors.with_opacity(0.06, ft.Colors.ON_SURFACE),
+        border_radius=Radius.sm,
+        border=ft.Border(
+            left=ft.BorderSide(3, ft.Colors.with_opacity(0.6, ft.Colors.PRIMARY))
+        ),
+    ),
+)
 
 
 def is_viewable(path: Path) -> bool:
@@ -44,6 +61,7 @@ def open_file_viewer(page: ft.Page, path: Path) -> None:
         expand=True,
         code_theme=ft.MarkdownCodeTheme.ATOM_ONE_DARK,
         extension_set=ft.MarkdownExtensionSet.GITHUB_WEB,
+        md_style_sheet=_MD_STYLE,
     )
 
     def _copy(_e: ft.ControlEvent) -> None:
