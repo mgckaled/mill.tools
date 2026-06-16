@@ -142,8 +142,8 @@ def run_pipeline(
                     "pipeline",
                     {
                         "message": (
-                            "Selecione ao menos uma análise (Formatação, Análise ou "
-                            "Prompt-ready) para um arquivo de texto."
+                            "Select at least one analysis (Formatação, Análise or "
+                            "Prompt-ready) for a text file."
                         )
                     },
                 )
@@ -158,7 +158,7 @@ def run_pipeline(
                 "log",
                 "pipeline",
                 {
-                    "message": f"[i] Texto carregado: {_local.name} — pulando transcrição",
+                    "message": f"[i] Text loaded: {_local.name} — skipping transcription",
                     "level": "info",
                 },
             )
