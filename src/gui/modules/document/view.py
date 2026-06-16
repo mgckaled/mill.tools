@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING
 import flet as ft
 
 from src.core.document.args import DocumentArgs
+from src.core.document.info import render_first_page_png
 from src.gui.events import PipelineEvent
 from src.gui.modules.base import Module
 from src.gui.modules.document.form_view import DocumentFormPanel, build_document_form
@@ -39,20 +40,6 @@ _BLANK_PNG = (
 # Viewer mode classification
 _VISUAL_OPS = {"rotate", "watermark", "stamp"}
 _STRUCTURAL_OPS = {"merge", "split", "compress", "encrypt"}
-
-
-def _rasterize_first_page(path: Path) -> bytes | None:
-    """Rasterize first page at ~72dpi → PNG bytes for preview."""
-    try:
-        import pymupdf  # type: ignore[import-untyped]
-
-        doc = pymupdf.open(str(path))
-        pix = doc[0].get_pixmap(matrix=pymupdf.Matrix(1.0, 1.0))
-        data = pix.tobytes("png")
-        doc.close()
-        return data
-    except Exception:
-        return None
 
 
 def build_document_module(
@@ -338,7 +325,7 @@ def build_document_module(
                 # Mode 1: before/after thumbnails
                 in_thumb = _last_input_thumb[0]
                 out_thumb = (
-                    _rasterize_first_page(Path(output_path)) if output_path else None
+                    render_first_page_png(Path(output_path)) if output_path else None
                 )
                 if in_thumb and out_thumb:
                     _show_mode1(in_thumb, out_thumb)
@@ -376,7 +363,7 @@ def build_document_module(
 
             elif op == "images_to_pdf" and output_path:
                 # Mode 3: first page rasterized
-                out_thumb = _rasterize_first_page(Path(output_path))
+                out_thumb = render_first_page_png(Path(output_path))
                 if out_thumb:
                     _show_mode3_image(out_thumb)
                 else:
@@ -424,7 +411,7 @@ def build_document_module(
 
         # Capture first-page thumb for visual ops before-after
         if args.operation in _VISUAL_OPS and args.input_paths:
-            _last_input_thumb[0] = _rasterize_first_page(args.input_paths[0])
+            _last_input_thumb[0] = render_first_page_png(args.input_paths[0])
 
         form_panel.set_running(True)
         page.update()
@@ -449,12 +436,19 @@ def build_document_module(
         vertical_alignment=ft.CrossAxisAlignment.STRETCH,
     )
 
+    # ── on_mount: bridge from other modules (e.g. Library → Documentos) ──────────
+
+    def _on_mount(payload: dict) -> None:
+        if "file" in payload:
+            form_panel.fill_from_path(str(payload["file"]))
+
     return Module(
         id="document",
         label="Documentos",
         icon=ft.Icons.DESCRIPTION_OUTLINED,
         selected_icon=ft.Icons.DESCRIPTION,
         control=control,
+        on_mount=_on_mount,
     )
 
 

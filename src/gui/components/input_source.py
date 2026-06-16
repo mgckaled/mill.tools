@@ -22,6 +22,7 @@ class InputSource:
     clear: Callable[[], None]
     set_enabled: Callable[[bool], None]
     add_item: Callable[[InputItem], None]
+    set_allowed_extensions: Callable[[list[str]], None]
 
 
 def build_input_source(
@@ -29,6 +30,7 @@ def build_input_source(
     allowed_extensions: list[str],
     on_change: Callable[[list[InputItem]], None] | None = None,
     url_hint: str | None = None,
+    allow_multiple: bool = True,
 ) -> InputSource:
     """Constrói o componente InputSource.
 
@@ -39,8 +41,14 @@ def build_input_source(
         page: Página Flet (necessário para FilePicker no overlay).
         allowed_extensions: Extensões permitidas no FilePicker (sem ponto).
         on_change: Chamado com lista atualizada a cada add/remove.
+        url_hint: Texto-fantasma do campo de URL.
+        allow_multiple: Permite selecionar múltiplos arquivos no picker.
     """
     items: list[InputItem] = []
+    # Mutable so callers can reconfigure the picker per context (the Documents
+    # module narrows extensions per operation). Flet's pick_files() takes
+    # allowed_extensions per call, so we just read this list on each open.
+    allowed_exts: list[str] = list(allowed_extensions)
 
     # ── widgets ──────────────────────────────────────────────────────────────
 
@@ -83,10 +91,24 @@ def build_input_source(
         if on_change:
             on_change(list(items))
 
+    def _icon_for(item: InputItem) -> str:
+        if item.kind != "local":
+            return ft.Icons.LINK
+        suffix = Path(item.value).suffix.lower()
+        if suffix in {".txt", ".md"}:
+            return ft.Icons.TEXT_SNIPPET_OUTLINED
+        if suffix in {".pdf"}:
+            return ft.Icons.PICTURE_AS_PDF_OUTLINED
+        if suffix in {".mp4", ".mkv", ".webm", ".avi", ".mov"}:
+            return ft.Icons.VIDEO_FILE_OUTLINED
+        if suffix in {".jpg", ".jpeg", ".png", ".webp", ".tiff", ".bmp", ".gif"}:
+            return ft.Icons.IMAGE_OUTLINED
+        return ft.Icons.AUDIO_FILE_OUTLINED
+
     def _make_item_row(item: InputItem) -> ft.Row:
         is_local = item.kind == "local"
         label = Path(item.value).name if is_local else item.value
-        icon = ft.Icons.AUDIO_FILE_OUTLINED if is_local else ft.Icons.LINK
+        icon = _icon_for(item)
 
         def _remove(_e) -> None:
             if item in items:
@@ -127,8 +149,12 @@ def build_input_source(
         items.append(item)
         items_col.controls.append(_make_item_row(item))
         _notify()
-        if items_border.page:
+        # .page raises RuntimeError before the control is mounted (Flet 0.85);
+        # add_item may be called from a bridge on_mount, so guard the update.
+        try:
             items_border.update()
+        except RuntimeError:
+            pass
 
     def _add_url() -> None:
         raw = (url_field.value or "").strip()
@@ -151,9 +177,9 @@ def build_input_source(
 
     async def _on_pick_click(_e) -> None:
         files = await file_picker.pick_files(
-            allow_multiple=True,
+            allow_multiple=allow_multiple,
             file_type=ft.FilePickerFileType.CUSTOM,
-            allowed_extensions=allowed_extensions,
+            allowed_extensions=list(allowed_exts),
         )
         if files:
             for f in files:
@@ -204,10 +230,15 @@ def build_input_source(
                     if isinstance(child, ft.IconButton):
                         child.disabled = not enabled
 
+    def _set_allowed_extensions(exts: list[str]) -> None:
+        """Replace the picker's allowed extensions (read on the next pick_files)."""
+        allowed_exts[:] = exts
+
     return InputSource(
         control=control,
         get_items=_get_items,
         clear=_clear,
         set_enabled=_set_enabled,
         add_item=_add_item,
+        set_allowed_extensions=_set_allowed_extensions,
     )

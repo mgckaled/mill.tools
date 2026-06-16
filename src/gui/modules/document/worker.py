@@ -494,34 +494,56 @@ def _run_analyze(
     emit: Callable,
     cancel_event: threading.Event,
 ) -> bool:
-    """Extract text then run the analyzer — reuses src/analyzer.py."""
-    from src.core.document.converter import extract_text
-    from src.core.document.info import get_pdf_info
+    """Analyze a document or text file — reuses src/analyzer.py.
 
+    PDFs are rasterized to text first; a .txt/.md is analyzed as-is (the
+    analyzer reads any text file, with or without a metadata header).
+    """
     path = args.input_paths[0]
     t0 = time()
-    info = get_pdf_info(path)
-    emit(
-        "document_op_start",
-        payload={
-            "operation": "analyze",
-            "item_name": path.name,
-            "item_idx": 1,
-            "total": 1,
-            "page_count": info.page_count,
-        },
-    )
-    emit("log", payload={"message": f"[i] {path.name} · {info.page_count} páginas"})
-    emit("log", payload={"message": "[*] Extraindo texto do documento…"})
-    txt_path, word_count = extract_text(path, DOCUMENT_PROCESSED_DIR)
-    emit("log", payload={"message": f"[»] ~{word_count} palavras extraídas"})
+    is_text = path.suffix.lower() in {".txt", ".md"}
+
+    if is_text:
+        emit(
+            "document_op_start",
+            payload={
+                "operation": "analyze",
+                "item_name": path.name,
+                "item_idx": 1,
+                "total": 1,
+                "page_count": 0,
+            },
+        )
+        emit("log", payload={"message": f"[i] {path.name} · arquivo de texto"})
+        txt_path = path
+        word_count = len(path.read_text(encoding="utf-8", errors="replace").split())
+    else:
+        from src.core.document.converter import extract_text
+        from src.core.document.info import get_pdf_info
+
+        info = get_pdf_info(path)
+        emit(
+            "document_op_start",
+            payload={
+                "operation": "analyze",
+                "item_name": path.name,
+                "item_idx": 1,
+                "total": 1,
+                "page_count": info.page_count,
+            },
+        )
+        emit("log", payload={"message": f"[i] {path.name} · {info.page_count} páginas"})
+        emit("log", payload={"message": "[*] Extraindo texto do documento…"})
+        txt_path, word_count = extract_text(path, DOCUMENT_PROCESSED_DIR)
+
+    emit("log", payload={"message": f"[»] ~{word_count} palavras"})
     emit("log", payload={"message": f"[*] Carregando modelo {args.analyze_model}…"})
     from src.analyzer import analyze  # lazy import
 
-    analyze(txt_path, model_name=args.analyze_model)
+    # analyze() writes to transcriptions/analysis/ and returns the .md path —
+    # use it directly (do not guess a path under output/document/).
+    analysis_path = analyze(txt_path, model_name=args.analyze_model)
     elapsed = f"{time() - t0:.1f}s"
-    stem = path.stem
-    analysis_path = DOCUMENT_PROCESSED_DIR / f"{stem}_analysis.md"
     emit(
         "document_op_done",
         payload={

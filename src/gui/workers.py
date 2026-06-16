@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import re
+import shutil
 import threading
 from dataclasses import dataclass
 from pathlib import Path
@@ -13,6 +14,7 @@ from typing import TYPE_CHECKING
 from src import analyzer, formatter, prompter, transcriber
 from src.core.audio.downloader import download_audio as _core_download_audio
 from src.core.audio.converter import AUDIO_EXTENSIONS as _AUDIO_EXTS
+from src.core.audio.converter import VIDEO_EXTENSIONS as _VIDEO_EXTS
 from src.core.metadata import fetch_metadata
 from src.gui.events import LogEventHandler
 from src.utils import (
@@ -26,6 +28,11 @@ if TYPE_CHECKING:
     from src.gui.events import EventBus
 
 _ANSI_ESC = re.compile(r"\x1b\[[0-9;]*m")
+
+# Local text files (.txt/.md) skip download + Whisper and feed the LLM steps
+# directly. faster-whisper decodes audio AND video containers via PyAV, so both
+# media families go through transcription.
+_TEXT_EXTS = {".txt", ".md"}
 
 
 @dataclass
@@ -101,8 +108,15 @@ def run_pipeline(
     original_level = root_logger.level
     # INFO prevents flooding from third-party libs (faster_whisper, ctranslate2, langchain)
     root_logger.setLevel(logging.INFO)
-    for _noisy in ("httpx", "httpcore", "faster_whisper", "huggingface_hub",
-                   "langchain", "langchain_core", "ctranslate2"):
+    for _noisy in (
+        "httpx",
+        "httpcore",
+        "faster_whisper",
+        "huggingface_hub",
+        "langchain",
+        "langchain_core",
+        "ctranslate2",
+    ):
         logging.getLogger(_noisy).setLevel(logging.WARNING)
 
     result = PipelineResult()
@@ -115,101 +129,158 @@ def run_pipeline(
 
         _input = args.url.strip()
         _local = Path(_input)
+        _is_local = _local.is_file()
+        _is_text = _is_local and _local.suffix.lower() in _TEXT_EXTS
 
-        # --- local file (bridge from the Audio module) ---
-        if _local.is_file():
-            if _local.suffix.lower() not in _AUDIO_EXTS:
-                emit("task_error", "pipeline", {
-                    "message": f"Unsupported format for transcription: {_local.suffix}"
-                })
-                return result
-            audio_path = _local
-            meta = {"title": _local.stem, "duration": 0}
-            emit("audio_cached", "download", {"audio_path": str(audio_path)})
-
-        else:
-            # --- URL: fetch metadata and download ---
-            if cancel_event.is_set():
-                return result
-
-            emit("metadata_start", "download", {"url": _input})
-            meta = fetch_metadata(_input)
-            emit("metadata_done", "download", {
-                "title": meta.get("title", ""),
-                "channel": meta.get("uploader", ""),
-                "duration": meta.get("duration", 0),
-            })
-
-            if cancel_event.is_set():
-                return result
-
-            AUDIO_SOURCE_DIR.mkdir(parents=True, exist_ok=True)
-            _title_slug = sanitize_filename(meta.get("title", "download"))
-            audio_path = AUDIO_SOURCE_DIR / f"{_title_slug}.mp3"
-
-            if audio_path.exists():
-                emit("audio_cached", "download", {"audio_path": str(audio_path)})
-            else:
-                emit("download_start", "download", {"url": _input})
-
-                def _dl_hook(d: dict) -> None:
-                    if d.get("status") == "downloading":
-                        pct = _ANSI_ESC.sub("", d.get("_percent_str", "")).strip()
-                        if pct:
-                            emit("log", "download", {
-                                "message": f"[↓] {pct}",
-                                "level": "info",
-                                "mutable": True,
-                            })
-
-                audio_path = _core_download_audio(
-                    _input, AUDIO_SOURCE_DIR, fmt="mp3",
-                    embed_meta=False, progress_hook=_dl_hook,
-                )
-                emit("download_done", "download", {"audio_path": str(audio_path)})
-
-        if cancel_event.is_set():
-            return result
-
-        # --- transcription ---
         TRANSCRIPTIONS_TEXT_DIR.mkdir(parents=True, exist_ok=True)
-        output_path = TRANSCRIPTIONS_TEXT_DIR / f"transcription_{audio_path.stem}.txt"
 
-        pipeline_start = time()
-        if output_path.exists() and not args.reprocess:
-            emit("log", "transcribe", {
-                "message": f"[»] Reusing existing transcription: {output_path.name}",
-                "level": "info",
-            })
-        else:
-            transcriber.transcribe(
-                audio_path=audio_path,
-                output_path=output_path,
-                meta=meta,
-                url=_input,
-                model_size=args.whisper_model,
-                language=None if args.language == "auto" else args.language,
-                threads=args.threads,
-                beam_size=args.beam_size,
-                on_event=on_event,
-                force_overwrite=True,
-                subtitle_formats=("srt", "vtt") if args.export_subtitles else (),
+        if _is_text:
+            # --- text file: skip download + Whisper, run only the LLM steps ---
+            if not (args.use_format or args.use_analyze or args.use_prompt):
+                emit(
+                    "task_error",
+                    "pipeline",
+                    {
+                        "message": (
+                            "Select at least one analysis (Formatação, Análise or "
+                            "Prompt-ready) for a text file."
+                        )
+                    },
+                )
+                return result
+            # Work on a copy under transcriptions/text/ so the user's source file
+            # is never modified in place (the formatter rewrites its input_path).
+            output_path = TRANSCRIPTIONS_TEXT_DIR / f"{_local.stem}.txt"
+            if output_path.resolve() != _local.resolve():
+                shutil.copyfile(_local, output_path)
+            result.raw_path = output_path
+            emit(
+                "log",
+                "pipeline",
+                {
+                    "message": f"[i] Text loaded: {_local.name} — skipping transcription",
+                    "level": "info",
+                },
             )
-        result.raw_path = output_path
-        _subs = _capture.get("subtitle_paths")
-        if _subs:
-            result.subtitle_paths = [Path(p) for p in _subs]
+        else:
+            # --- media: local audio/video or remote URL → transcription ---
+            if _is_local:
+                if _local.suffix.lower() not in (_AUDIO_EXTS | _VIDEO_EXTS):
+                    emit(
+                        "task_error",
+                        "pipeline",
+                        {
+                            "message": f"Unsupported format for transcription: {_local.suffix}"
+                        },
+                    )
+                    return result
+                audio_path = _local
+                meta = {"title": _local.stem, "duration": 0}
+                emit("audio_cached", "download", {"audio_path": str(audio_path)})
 
-        # --- transcription summary ---
-        elapsed_transcribe = time() - pipeline_start
-        flagged_count = _capture.get("flagged_count", 0)
-        emit("transcribe_summary", "pipeline", {
-            "title": meta.get("title", "n/a"),
-            "duration": meta.get("duration", 0),
-            "output_path": str(output_path),
-            "elapsed": elapsed_transcribe,
-            "flagged_count": flagged_count,
-        })
+            else:
+                # --- URL: fetch metadata and download ---
+                if cancel_event.is_set():
+                    return result
+
+                emit("metadata_start", "download", {"url": _input})
+                meta = fetch_metadata(_input)
+                emit(
+                    "metadata_done",
+                    "download",
+                    {
+                        "title": meta.get("title", ""),
+                        "channel": meta.get("uploader", ""),
+                        "duration": meta.get("duration", 0),
+                    },
+                )
+
+                if cancel_event.is_set():
+                    return result
+
+                AUDIO_SOURCE_DIR.mkdir(parents=True, exist_ok=True)
+                _title_slug = sanitize_filename(meta.get("title", "download"))
+                audio_path = AUDIO_SOURCE_DIR / f"{_title_slug}.mp3"
+
+                if audio_path.exists():
+                    emit("audio_cached", "download", {"audio_path": str(audio_path)})
+                else:
+                    emit("download_start", "download", {"url": _input})
+
+                    def _dl_hook(d: dict) -> None:
+                        if d.get("status") == "downloading":
+                            pct = _ANSI_ESC.sub("", d.get("_percent_str", "")).strip()
+                            if pct:
+                                emit(
+                                    "log",
+                                    "download",
+                                    {
+                                        "message": f"[↓] {pct}",
+                                        "level": "info",
+                                        "mutable": True,
+                                    },
+                                )
+
+                    audio_path = _core_download_audio(
+                        _input,
+                        AUDIO_SOURCE_DIR,
+                        fmt="mp3",
+                        embed_meta=False,
+                        progress_hook=_dl_hook,
+                    )
+                    emit("download_done", "download", {"audio_path": str(audio_path)})
+
+            if cancel_event.is_set():
+                return result
+
+            # --- transcription ---
+            output_path = (
+                TRANSCRIPTIONS_TEXT_DIR / f"transcription_{audio_path.stem}.txt"
+            )
+
+            pipeline_start = time()
+            if output_path.exists() and not args.reprocess:
+                emit(
+                    "log",
+                    "transcribe",
+                    {
+                        "message": f"[»] Reusing existing transcription: {output_path.name}",
+                        "level": "info",
+                    },
+                )
+            else:
+                transcriber.transcribe(
+                    audio_path=audio_path,
+                    output_path=output_path,
+                    meta=meta,
+                    url=_input,
+                    model_size=args.whisper_model,
+                    language=None if args.language == "auto" else args.language,
+                    threads=args.threads,
+                    beam_size=args.beam_size,
+                    on_event=on_event,
+                    force_overwrite=True,
+                    subtitle_formats=("srt", "vtt") if args.export_subtitles else (),
+                )
+            result.raw_path = output_path
+            _subs = _capture.get("subtitle_paths")
+            if _subs:
+                result.subtitle_paths = [Path(p) for p in _subs]
+
+            # --- transcription summary ---
+            elapsed_transcribe = time() - pipeline_start
+            flagged_count = _capture.get("flagged_count", 0)
+            emit(
+                "transcribe_summary",
+                "pipeline",
+                {
+                    "title": meta.get("title", "n/a"),
+                    "duration": meta.get("duration", 0),
+                    "output_path": str(output_path),
+                    "elapsed": elapsed_transcribe,
+                    "flagged_count": flagged_count,
+                },
+            )
 
         if cancel_event.is_set():
             return result
@@ -247,9 +318,13 @@ def run_pipeline(
 
         _done_payload = {
             "raw_path": str(result.raw_path) if result.raw_path else None,
-            "analysis_path": str(result.analysis_path) if result.analysis_path else None,
+            "analysis_path": str(result.analysis_path)
+            if result.analysis_path
+            else None,
             "prompt_path": str(result.prompt_path) if result.prompt_path else None,
-            "subtitle_paths": [str(p) for p in result.subtitle_paths] if result.subtitle_paths else None,
+            "subtitle_paths": [str(p) for p in result.subtitle_paths]
+            if result.subtitle_paths
+            else None,
         }
         result.completed = True
         emit("task_done", "pipeline", _done_payload)
@@ -288,6 +363,7 @@ def start_pipeline(
     Returns:
         Started daemon thread.
     """
+
     def _run() -> None:
         result = run_pipeline(args, bus, cancel_event)
         # Cancellation: no completed and no error → early return via cancel_event

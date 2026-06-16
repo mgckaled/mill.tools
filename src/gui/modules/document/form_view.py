@@ -64,6 +64,7 @@ class DocumentFormPanel:
 
     control: ft.Control
     set_running: Callable[[bool], None]
+    fill_from_path: Callable[[str], None]
 
 
 def build_document_form(
@@ -125,10 +126,22 @@ def build_document_form(
         page.update()
 
     def _update_input_source(op_id: str) -> None:
-        """Reconfigure InputSource allowed extensions and multiple flag."""
-        # images_to_pdf only accepts image files; qr needs no file
-        # This is a best-effort visual cue; actual validation is in the worker.
-        pass  # InputSource does not expose a runtime reconfigure — handled at build time
+        """Narrow the picker's allowed extensions to the selected operation.
+
+        Flet's pick_files() takes allowed_extensions per call, so InputSource
+        reads this list on each open (see set_allowed_extensions). 'analyze'
+        also accepts text files (.txt/.md) so an extracted/described text can be
+        analyzed directly, without a PDF.
+        """
+        if op_id == "analyze":
+            exts = ["pdf", "txt", "md"]
+        elif op_id in _IMAGE_INPUT_OPS:
+            exts = _ALLOWED_IMG_EXTS
+        elif op_id in _NO_FILE_OPS:
+            exts = []
+        else:
+            exts = _ALLOWED_EXTS
+        input_source.set_allowed_extensions(exts)
 
     def _make_card(op_id: str, icon_name: str, label: str) -> ft.GestureDetector:
         ic = ft.Icon(icon_name, size=22, color=ft.Colors.PRIMARY)
@@ -280,6 +293,11 @@ def build_document_form(
         except RuntimeError:
             pass
 
+    # ── fill_from_path (bridge on_mount) ─────────────────────────────────────────
+
+    def _fill_from_path(path: str) -> None:
+        input_source.add_item(InputItem(kind="local", value=path))
+
     # ── Layout ─────────────────────────────────────────────────────────────────
 
     params_stack = ft.Stack(
@@ -318,4 +336,8 @@ def build_document_form(
         ],
     )
 
-    return DocumentFormPanel(control=form_col, set_running=_set_running)
+    return DocumentFormPanel(
+        control=form_col,
+        set_running=_set_running,
+        fill_from_path=_fill_from_path,
+    )

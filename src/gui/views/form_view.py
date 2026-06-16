@@ -11,17 +11,30 @@ from typing import Callable
 
 import flet as ft
 
+from src.core.audio.converter import AUDIO_EXTENSIONS, VIDEO_EXTENSIONS
+from src.core.io_types import InputItem
 from src.gui import settings
+from src.gui.components.input_source import build_input_source
 from src.gui.theme.components import Cursor, hairline, section, section_label
-from src.gui.theme.tokens import Type
+from src.gui.theme.tokens import Space, Type
 from src.gui.workers import PipelineArgs
+
+# Local file types the Transcription module accepts (without leading dot).
+# Audio/video are transcribed; .txt/.md skip Whisper and run only the LLM steps.
+_TRANSCRIBE_EXTS = sorted(
+    {e.lstrip(".") for e in (AUDIO_EXTENSIONS | VIDEO_EXTENSIONS)} | {"txt", "md"}
+)
+_TEXT_SUFFIXES = {".txt", ".md"}
 
 
 @dataclass
 class FormPanel:
     """Controle do formulário com método de controle de estado de execução."""
+
     control: ft.Control
     set_running: Callable[[bool], None]
+    fill_from_path: Callable[[str], None]
+
 
 # ---------------------------------------------------------------------------
 # Helpers para .env
@@ -44,9 +57,13 @@ def _write_api_key(value: str) -> None:
     """Escreve ou atualiza GOOGLE_API_KEY no arquivo .env."""
     if not value:
         return
-    lines = _ENV_FILE.read_text(encoding="utf-8").splitlines() if _ENV_FILE.exists() else []
+    lines = (
+        _ENV_FILE.read_text(encoding="utf-8").splitlines() if _ENV_FILE.exists() else []
+    )
     key_line = f"GOOGLE_API_KEY={value}"
-    updated = [key_line if line.startswith("GOOGLE_API_KEY=") else line for line in lines]
+    updated = [
+        key_line if line.startswith("GOOGLE_API_KEY=") else line for line in lines
+    ]
     if not any(line.startswith("GOOGLE_API_KEY=") for line in lines):
         updated.append(key_line)
     _ENV_FILE.write_text("\n".join(updated) + "\n", encoding="utf-8")
@@ -57,7 +74,9 @@ def _write_api_key(value: str) -> None:
 # ---------------------------------------------------------------------------
 
 
-def build_form_view(page: ft.Page, on_start: Callable[[PipelineArgs], None]) -> FormPanel:
+def build_form_view(
+    page: ft.Page, on_start: Callable[[PipelineArgs], None]
+) -> FormPanel:
     """Retorna um FormPanel com o controle raiz e método set_running.
 
     Args:
@@ -67,30 +86,51 @@ def build_form_view(page: ft.Page, on_start: Callable[[PipelineArgs], None]) -> 
     cfg = settings.load()
 
     # ------------------------------------------------------------------
-    # URL
+    # Entrada (URL ou arquivo local: áudio / vídeo / texto)
     # ------------------------------------------------------------------
-    url_error = ft.Text("", color=ft.Colors.ERROR, size=12, visible=False)
 
-    url_field = ft.TextField(
-        label="URL do YouTube",
-        hint_text="https://www.youtube.com/watch?v=...",
-        expand=True,
-        border_color=ft.Colors.OUTLINE,
-        focused_border_color=ft.Colors.PRIMARY,
-    )
+    def _is_text_input(its: list[InputItem]) -> bool:
+        """True when the (single) input is a local .txt/.md — skips Whisper."""
+        if not its:
+            return False
+        it = its[0]
+        return it.kind == "local" and Path(it.value).suffix.lower() in _TEXT_SUFFIXES
 
-    def _validate_url(value: str) -> bool:
-        return "youtube.com" in value or "youtu.be" in value
-
-    def _on_url_change(e: ft.ControlEvent) -> None:
-        value = url_field.value or ""
-        is_valid = _validate_url(value) if value else False
-        url_error.visible = bool(value) and not is_valid
-        url_error.value = "URL inválida — deve conter youtube.com ou youtu.be" if url_error.visible else ""
-        start_btn.disabled = not (value and is_valid)
+    def _on_items_change(its: list[InputItem]) -> None:
+        # Enable Start when there is an input; adapt the form to the input kind:
+        # a text file hides the transcription controls (Whisper/beam/subtitles).
+        start_btn.disabled = len(its) == 0
+        is_text = _is_text_input(its)
+        transcribe_section.visible = not is_text
+        text_notice.visible = is_text
         page.update()
 
-    url_field.on_change = _on_url_change
+    input_source = build_input_source(
+        page,
+        allowed_extensions=_TRANSCRIBE_EXTS,
+        on_change=_on_items_change,
+        url_hint="URL (YouTube, SoundCloud…) ou selecione um arquivo",
+        allow_multiple=False,
+    )
+
+    text_notice = ft.Container(
+        content=ft.Row(
+            controls=[
+                ft.Icon(ft.Icons.INFO_OUTLINE, size=16, color=ft.Colors.PRIMARY),
+                ft.Text(
+                    "Arquivo de texto detectado — a transcrição será pulada; "
+                    "escolha as análises abaixo.",
+                    size=Type.input.size,
+                    color=ft.Colors.ON_SURFACE_VARIANT,
+                    italic=True,
+                    expand=True,
+                ),
+            ],
+            spacing=Space.xs,
+            vertical_alignment=ft.CrossAxisAlignment.CENTER,
+        ),
+        visible=False,
+    )
 
     # ------------------------------------------------------------------
     # Whisper model
@@ -280,12 +320,15 @@ def build_form_view(page: ft.Page, on_start: Callable[[PipelineArgs], None]) -> 
     )
 
     def _on_start_click(e: ft.ControlEvent) -> None:
-        url = (url_field.value or "").strip()
-        if not url or not _validate_url(url):
+        items = input_source.get_items()
+        if not items:
             return
+        # url carries either a remote URL or a local file path; the worker
+        # decides what to do by inspecting the path (file vs URL, extension).
+        source_value = items[0].value
 
         args = PipelineArgs(
-            url=url,
+            url=source_value,
             whisper_model=whisper_dropdown.value or "small",
             language=language_dropdown.value or "auto",
             beam_size=int(beam_slider.value),
@@ -299,20 +342,22 @@ def build_form_view(page: ft.Page, on_start: Callable[[PipelineArgs], None]) -> 
             export_subtitles=export_subtitles_switch.value,
         )
 
-        settings.save({
-            "last_whisper_model": args.whisper_model,
-            "last_language": args.language,
-            "last_beam_size": args.beam_size,
-            "last_format_model": args.format_model,
-            "last_analyzer_model": args.analyzer_model,
-            "last_prompt_model": args.prompt_model,
-            "last_use_format": args.use_format,
-            "last_use_analyze": args.use_analyze,
-            "last_use_prompt": args.use_prompt,
-            "last_reprocess": args.reprocess,
-            "last_export_subtitles": args.export_subtitles,
-            "theme_mode": cfg.get("theme_mode", "dark"),
-        })
+        settings.save(
+            {
+                "last_whisper_model": args.whisper_model,
+                "last_language": args.language,
+                "last_beam_size": args.beam_size,
+                "last_format_model": args.format_model,
+                "last_analyzer_model": args.analyzer_model,
+                "last_prompt_model": args.prompt_model,
+                "last_use_format": args.use_format,
+                "last_use_analyze": args.use_analyze,
+                "last_use_prompt": args.use_prompt,
+                "last_reprocess": args.reprocess,
+                "last_export_subtitles": args.export_subtitles,
+                "theme_mode": cfg.get("theme_mode", "dark"),
+            }
+        )
 
         on_start(args)
 
@@ -321,12 +366,34 @@ def build_form_view(page: ft.Page, on_start: Callable[[PipelineArgs], None]) -> 
     def _set_running(running: bool) -> None:
         start_btn.disabled = running
         start_btn.text = "Executando..." if running else "Iniciar"
-        start_btn.icon = ft.Icons.HOURGLASS_EMPTY if running else ft.Icons.PLAY_ARROW_ROUNDED
+        start_btn.icon = (
+            ft.Icons.HOURGLASS_EMPTY if running else ft.Icons.PLAY_ARROW_ROUNDED
+        )
         page.update()
 
     # ------------------------------------------------------------------
-    # Layout helpers
+    # Transcription-only controls — hidden when the input is a text file
     # ------------------------------------------------------------------
+    transcribe_section = ft.Column(
+        spacing=16,
+        controls=[
+            section(
+                "Transcrição",
+                help_key="transcription.whisper_model",
+                page=page,
+            ),
+            ft.Row(controls=[whisper_dropdown, language_dropdown], spacing=12),
+            ft.Column(
+                spacing=4,
+                controls=[beam_label, ft.Row(controls=[beam_slider])],
+            ),
+            reprocess_switch,
+            hairline(),
+            section("Legendas", help_key="transcription.subtitles", page=page),
+            export_subtitles_switch,
+            hairline(),
+        ],
+    )
 
     # ------------------------------------------------------------------
     # Root control
@@ -340,65 +407,40 @@ def build_form_view(page: ft.Page, on_start: Callable[[PipelineArgs], None]) -> 
                 content=ft.Column(
                     spacing=16,
                     controls=[
-                        # --- URL ---
-                        section_label("Vídeo"),
-                        ft.Row(
-                            controls=[url_field],
-                            vertical_alignment=ft.CrossAxisAlignment.START,
-                        ),
-                        url_error,
-
+                        # --- Entrada ---
+                        section_label("Entrada"),
+                        input_source.control,
+                        text_notice,
                         hairline(),
-
-                        # --- Transcrição ---
-                        section("Transcrição",
-                                help_key="transcription.whisper_model", page=page),
-                        ft.Row(
-                            controls=[whisper_dropdown, language_dropdown],
-                            spacing=12,
-                        ),
-                        ft.Column(
-                            spacing=4,
-                            controls=[
-                                beam_label,
-                                ft.Row(controls=[beam_slider]),
-                            ],
-                        ),
-                        reprocess_switch,
-
-                        hairline(),
-
+                        # --- Transcrição + Legendas (ocultas para texto) ---
+                        transcribe_section,
                         # --- Formatação ---
-                        section("Formatação de parágrafos",
-                                help_key="transcription.format", page=page),
+                        section(
+                            "Formatação de parágrafos",
+                            help_key="transcription.format",
+                            page=page,
+                        ),
                         use_format_switch,
                         ft.Row(controls=[format_model_field]),
-
                         hairline(),
-
                         # --- Análise ---
-                        section("Análise estruturada",
-                                help_key="transcription.analyze", page=page),
+                        section(
+                            "Análise estruturada",
+                            help_key="transcription.analyze",
+                            page=page,
+                        ),
                         use_analyze_switch,
                         ft.Row(controls=[analyzer_model_field]),
-
                         hairline(),
-
                         # --- Prompt-ready ---
-                        section("Condensação prompt-ready",
-                                help_key="transcription.prompt", page=page),
+                        section(
+                            "Condensação prompt-ready",
+                            help_key="transcription.prompt",
+                            page=page,
+                        ),
                         use_prompt_switch,
                         ft.Row(controls=[prompt_model_field]),
-
                         hairline(),
-
-                        # --- Subtitles ---
-                        section("Legendas",
-                                help_key="transcription.subtitles", page=page),
-                        export_subtitles_switch,
-
-                        hairline(),
-
                         # --- API Key ---
                         section_label("Credenciais"),
                         ft.Row(controls=[api_key_field]),
@@ -408,9 +450,7 @@ def build_form_view(page: ft.Page, on_start: Callable[[PipelineArgs], None]) -> 
                             color=ft.Colors.ON_SURFACE_VARIANT,
                             italic=True,
                         ),
-
                         hairline(),
-
                         # --- Botão ---
                         ft.Row(
                             controls=[start_btn],
@@ -421,4 +461,14 @@ def build_form_view(page: ft.Page, on_start: Callable[[PipelineArgs], None]) -> 
             ),
         ],
     )
-    return FormPanel(control=root, set_running=_set_running)
+
+    def _fill_from_path(path: str) -> None:
+        """Bridge entry point — add a local file as the (single) input item."""
+        input_source.clear()
+        input_source.add_item(InputItem(kind="local", value=path))
+
+    return FormPanel(
+        control=root,
+        set_running=_set_running,
+        fill_from_path=_fill_from_path,
+    )

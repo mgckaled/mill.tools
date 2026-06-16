@@ -78,10 +78,14 @@ def build_transcription_module(
     def _key_chip(label: str) -> ft.Container:
         return ft.Container(
             content=ft.Text(
-                label, size=Type.small.size, font_family=Type.FONT_MONO,
+                label,
+                size=Type.small.size,
+                font_family=Type.FONT_MONO,
                 color=ft.Colors.ON_SURFACE_VARIANT,
             ),
-            padding=ft.Padding(left=Space.xs, right=Space.xs, top=Space.xxs, bottom=Space.xxs),
+            padding=ft.Padding(
+                left=Space.xs, right=Space.xs, top=Space.xxs, bottom=Space.xxs
+            ),
             border=ft.Border(
                 left=ft.BorderSide(1, ft.Colors.OUTLINE_VARIANT),
                 right=ft.BorderSide(1, ft.Colors.OUTLINE_VARIANT),
@@ -97,10 +101,16 @@ def build_transcription_module(
                 _key_chip("Ctrl"),
                 ft.Text("+", size=Type.small.size, color=ft.Colors.ON_SURFACE_VARIANT),
                 _key_chip("Enter"),
-                ft.Text(" Iniciar", size=Type.small.size, color=ft.Colors.ON_SURFACE_VARIANT),
+                ft.Text(
+                    " Iniciar", size=Type.small.size, color=ft.Colors.ON_SURFACE_VARIANT
+                ),
                 ft.Container(width=Space.sm),
                 _key_chip("Esc"),
-                ft.Text(" Cancelar", size=Type.small.size, color=ft.Colors.ON_SURFACE_VARIANT),
+                ft.Text(
+                    " Cancelar",
+                    size=Type.small.size,
+                    color=ft.Colors.ON_SURFACE_VARIANT,
+                ),
             ],
             spacing=3,
             vertical_alignment=ft.CrossAxisAlignment.CENTER,
@@ -143,34 +153,9 @@ def build_transcription_module(
     # ------------------------------------------------------------------
 
     def _on_mount(payload: dict) -> None:
+        # Bridge from Audio/Video/Library: preload the local file as the input.
         if "file" in payload:
-            _fill_url(str(payload["file"]))
-
-    def _fill_url(path: str) -> None:
-        """Preenche o campo URL do formulário com um caminho local (bridge Áudio → Transcrição)."""
-        # Acessa url_field via walk na árvore do form_panel
-        _walk_fill(form_panel.control, path)
-
-    def _walk_fill(ctrl: ft.Control, path: str) -> bool:
-        """Walk na árvore do form_panel procurando o TextField de URL."""
-        if isinstance(ctrl, ft.TextField) and (
-            "youtube" in (ctrl.hint_text or "").lower()
-            or "url" in (ctrl.hint_text or "").lower()
-        ):
-            ctrl.value = path
-            if ctrl.page:
-                ctrl.update()
-            return True
-        for attr in ("controls", "content", "actions"):
-            child = getattr(ctrl, attr, None)
-            if isinstance(child, list):
-                for c in child:
-                    if c and _walk_fill(c, path):
-                        return True
-            elif child is not None:
-                if _walk_fill(child, path):
-                    return True
-        return False
+            form_panel.fill_from_path(str(payload["file"]))
 
     return Module(
         id="transcription",

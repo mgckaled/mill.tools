@@ -31,17 +31,20 @@ A ferramenta é organizada em **módulos independentes**, cada um especializado 
 
 - 📄 **Manipular documentos PDF** — 12 operações: juntar, dividir, comprimir, girar, aplicar marca d'água ou carimbo (PAGO/RASCUNHO/CONFIDENCIAL), criptografar com AES-256, extrair texto, rasterizar páginas em imagens, montar PDF a partir de imagens, gerar QR codes e analisar conteúdo com IA. 100% local via pymupdf.
 
+- 📚 **Reunir tudo num só lugar** — a Biblioteca indexa automaticamente tudo que você já gerou (áudios, vídeos, imagens, transcrições e documentos), numa grade visual com miniaturas ou numa lista compacta em tabela. Filtre por tipo e data, busque por nome, reabra um arquivo ou sua pasta, e reenvie qualquer saída para outro módulo num clique — por exemplo, mandar um áudio baixado direto para a Transcrição.
+
 - 🔀 **Escolher onde a IA roda** — por padrão, todos os modelos de linguagem funcionam 100% offline via [Ollama](https://ollama.com) (nenhum dado sai do computador). Para quem prefere, o [Google Gemini](https://ai.google.dev/) gratuito está disponível como alternativa na nuvem — basta escolher o modelo na interface.
 
 ### Módulos
 
 | Módulo | Status | Descrição |
 |---|---|---|
-| **Transcrição** | ✅ Disponível | Whisper local com pós-processamento por IA: parágrafos, análise estruturada e resumo |
+| **Transcrição** | ✅ Disponível | Aceita URL, áudio/vídeo local ou arquivo de texto. Whisper local + pós-processamento por IA: parágrafos, análise estruturada e resumo. Um `.txt`/`.md` pula a transcrição e vai direto para a IA |
 | **Áudio** | ✅ Disponível | Download, conversão e extração de faixas em fila; pós-processamento: denoise spectral + normalize loudnorm (EBU R128) |
 | **Imagens** | ✅ Disponível | 12 operações: manipulação, conversão, remoção de fundo e descrição por IA vision |
 | **Vídeo** | ✅ Disponível | 7 operações: download, conversão, corte, compressão, redimensionamento, extração de áudio e thumbnail |
 | **Documentos** | ✅ Disponível | 12 operações PDF: merge, split, compress, rotate, watermark, stamp, encrypt, extract, pdf-to-images, images-to-pdf, QR e análise por IA |
+| **Biblioteca** | ✅ Disponível | Hub navegável de todas as saídas: grade com thumbnails ou lista em tabela, filtro por tipo, busca, ordenação e período; abrir arquivo/pasta e reenviar para outro módulo num clique |
 
 ### Destaques técnicos
 
@@ -121,7 +124,7 @@ O `.env` é carregado automaticamente quando `--fm`, `--am` ou `--pm` recebe um 
 uv run gui.py
 ```
 
-Abre maximizado com uma splash screen animada, seguida de uma **Home Screen** com 5 cards de módulo — clique em qualquer card para entrar diretamente no módulo escolhido. O AppBar exibe a wordmark "mill.tools" e botões "Home" e "Splash" para navegar de volta a qualquer momento.
+Abre maximizado com uma splash screen animada, seguida de uma **Home Screen** com 6 cards de módulo (grade 3×2) — clique em qualquer card para entrar diretamente no módulo escolhido. O AppBar exibe a wordmark "mill.tools", o botão **Biblioteca** (o hub de saídas) e os botões "Home" e "Splash" para navegar de volta a qualquer momento.
 
 Cada módulo tem layout split: formulário à esquerda, painel de acompanhamento (log em tempo real + barra de progresso + spinner) à direita. Durante um pipeline em execução a troca de módulo é bloqueada — os logs e a barra de progresso são preservados mesmo ao navegar entre módulos.
 
@@ -133,6 +136,12 @@ uv run main.py <YOUTUBE_URL>
 
 # + formatação e análise
 uv run main.py <YOUTUBE_URL> --format --analyze
+
+# áudio/vídeo local (vídeo é decodificado via PyAV — sem extração separada)
+uv run main.py transcribe video.mp4 --format
+
+# arquivo de texto: pula o Whisper e roda só a IA
+uv run main.py transcribe notas.txt --analyze
 
 # análise standalone (sobre transcrição existente)
 uv run -m src output/transcriptions/text/transcricao_ovabeV.txt
@@ -195,6 +204,17 @@ uv run main.py document ocr scanned.pdf --lang por --dpi 300
 uv run main.py document pdf-to-images doc.pdf --fmt jpg --dpi 150
 uv run main.py document images-to-pdf *.jpg --name "album"
 uv run main.py document qr "https://example.com" --size 300 --fmt png
+```
+
+### CLI — Biblioteca
+
+```bash
+# lista tudo que está em output/ como tabela
+uv run main.py library list
+
+# filtra por tipo, período e ordenação
+uv run main.py library list --kind audio
+uv run main.py library list --since 7d --sort size
 ```
 
 ### Referência de flags
@@ -316,7 +336,7 @@ Todos os arquivos processados em `processed/`. Nomes de saída incluem sufixo da
 | **PDF → Imagens** | PDF | Rasteriza cada página em JPG ou PNG. DPI configurável: 72 / 96 / 150 / 300 |
 | **Imagens → PDF** | imagens | Combina N imagens JPEG/PNG em um único PDF, uma por página |
 | **QR Code** | texto/URL | Gera QR code em PNG ou JPG. Tamanho aproximado em pixels configurável |
-| **Analisar** | PDF | Extrai texto e envia para análise LLM (local via Ollama ou Google Gemini). Apenas na GUI |
+| **Analisar** | PDF ou texto | PDF: extrai o texto e envia para análise LLM (local via Ollama ou Google Gemini). `.txt`/`.md`: analisa direto, sem extração. Apenas na GUI |
 
 ---
 
@@ -355,6 +375,26 @@ Encoding 100% CPU — sem NVENC (decisão definitiva). Preset e CRF configuráve
 | **Descrever** | Envia a imagem a um modelo Ollama vision e salva a descrição como `.txt`. Modelos: moondream-custom (padrão), llava:7b, minicpm-v. |
 
 O visor **Before/After** mostra a imagem original e o resultado lado a lado. Para "Descrever" (saída texto), o visor permanece em single-pane com a imagem de entrada.
+
+---
+
+## Módulo Biblioteca
+
+A Biblioteca é o hub que reúne tudo que os outros módulos já produziram em `output/`. Diferente das ferramentas de processamento, ela vive **no AppBar** (ao lado do wordmark), não na NavigationRail — e abre uma tela cheia com uma grade de cards.
+
+| Recurso | O que faz |
+|---|---|
+| **Dois modos de exibição** | Alterne entre **grade** (cards com miniatura) e **lista** (tabela compacta com colunas Nome / Categoria / Tamanho / Data / Ações) pelo toggle no cabeçalho. |
+| **Grade com thumbnails** | Cards com miniatura sob demanda: imagem (Pillow), 1ª página de PDF (pymupdf) ou frame de vídeo (ffmpeg). Áudio e texto usam ícone do tipo. |
+| **Lista em tabela** | Linhas compactas com ícone de tipo; clique na linha abre o arquivo, a última coluna traz as ações; nomes longos truncam e mostram o valor completo ao parar o mouse (tooltip). |
+| **Filtrar por tipo** | Chips Todos / Áudio / Vídeo / Imagens / Transcrição / Documentos. |
+| **Filtrar por categoria** | Todas / Origem (downloads) / Processado (saídas geradas). |
+| **Buscar e ordenar** | Busca por nome (com debounce) + ordenação por data, nome ou tamanho. |
+| **Filtrar por período** | Qualquer data / últimas 24h / 7 dias / 30 dias. |
+| **Abrir** | Texto (`.md`/`.txt`) abre num **visor in-app** com Markdown renderizado — ler um resultado já processado sem reprocessar nem sair do app; outros tipos abrem no programa padrão do sistema. Também é possível revelar a pasta no explorador. |
+| **Reenviar para outro módulo** | Bridges num clique: áudio/vídeo → Transcrição ou Áudio; imagem → Imagens; PDF → Documentos; texto (`.txt`/`.md`) → "Analisar na Transcrição". |
+
+A lista é recarregada ao abrir a Biblioteca e quando um pipeline termina. Cada modo exibe até 120 itens por vez, com botão "Carregar mais". Preferências de filtro, ordenação e modo de exibição são lembradas entre sessões. Há paridade na CLI via `uv run main.py library list`.
 
 ---
 
@@ -497,6 +537,7 @@ O arquivo `src/gui/help_content.py` centraliza todo o conteúdo de ajuda, separa
 | `document.dpi` | Resolução de rasterização em DPI | ✅ Qualidade vs tamanho |
 | `document.qr_size` | Tamanho em pixels do QR code gerado | — |
 | `document.analyze_model` | LLM local (Ollama) ou Gemini para análise do texto extraído | — |
+| `library` | O que a Biblioteca reúne e como navegá-la | ✅ Filtros, ações, bridges e CLI |
 
 Para adicionar ajuda a um novo controle: inserir a chave em `HELP_SHORT` (e opcionalmente `HELP_LONG`) e passar `help_key=` para a fábrica correspondente.
 
@@ -514,19 +555,20 @@ mill-tools/
 │   │   ├── audio/       — downloader, converter, denoiser, normalizer, info (lógica pura, sem Flet)
 │   │   ├── video/       — downloader (yt-dlp), converter (ffmpeg), info (ffprobe)
 │   │   ├── image/       — downloader, converter, transform, info (Pillow; lógica pura, sem Flet)
-│   │   └── document/    — processor (pymupdf), converter, qr, info (PdfInfo)
+│   │   ├── document/    — processor (pymupdf), converter, qr, info (PdfInfo + render_first_page_png)
+│   │   └── library/     — types (LibraryItem), scanner (output/ → índice), thumbnails (dispatch por kind)
 │   └── gui/
-│       ├── app.py       — NavigationRail + registry de módulos + navigate_to + AppBar
+│       ├── app.py       — NavigationRail (5 tools) + Biblioteca no AppBar + registry + navigate_to
 │       ├── splash.py    — animação de entrada (moinho + fade)
-│       ├── home.py      — Home Screen: 5 cards de módulo + moinho animado ao fundo
+│       ├── home.py      — Home Screen: 6 cards de módulo (3×2) + moinho animado ao fundo
 │       ├── assets.py    — helpers de imagem (b64, WINDOW_ICON)
 │       ├── events.py    — EventBus, PipelineEvent (com module_id)
 │       ├── settings.py  — persistência em ~/.mill-tools/config.json
 │       ├── workers.py   — pipeline de Transcrição (thread daemon)
 │       ├── help_content.py — registro central de tooltips e modais (HELP_SHORT/LONG)
 │       ├── components/  — input_source.py (URL + FilePicker, allow_multiple, url_hint)
-│       ├── modules/     — base.py + transcription/ · audio/ · video/ · image/ · document/
-│       │                  (cada módulo: form_view, worker, view, pipeline_log)
+│       ├── modules/     — base.py + transcription/ · audio/ · video/ · image/ · document/ · library/
+│       │                  (processamento: form_view, worker, view, pipeline_log; library: view + cards, read-only)
 │       ├── theme/       — Design System
 │       │   ├── tokens.py    — Color, Type, Space, Radius, Motion, Layout
 │       │   ├── theme.py     — build_theme() + apply_theme()
@@ -537,10 +579,11 @@ mill-tools/
 │   └── icons/           — mill.ico, mill-512.png
 ├── ollama/              — Modelfiles
 ├── docs/                — planos de implementação
-└── output/
+└── output/             — origem do índice da Biblioteca
     ├── audio/           — source/ (downloads) · processed/ (conversões)
     ├── image/           — source/ (downloads de URL) · processed/ (processadas)
-    ├── video/
+    ├── video/           — source/ · processed/
+    ├── document/        — processed/
     └── transcriptions/  — text/ · analysis/ · digest/
 ```
 
@@ -557,7 +600,7 @@ mill-tools/
 
 ## Testes
 
-A suíte cobre `src/core/`, `src/cli/`, os `pipeline_log` da GUI e o pipeline LLM (`analyzer`/`formatter`/`prompter`) em duas camadas, totalizando **414 testes** (0 falhas) e **84% de cobertura** (com branch).
+A suíte cobre `src/core/`, `src/cli/`, os `pipeline_log` da GUI e o pipeline LLM (`analyzer`/`formatter`/`prompter`) em duas camadas, totalizando **537 testes** (0 falhas) e **88% de cobertura** (com branch).
 
 | Camada | Marcador | Requer | O que cobre |
 |---|---|---|---|
@@ -594,5 +637,6 @@ Plugins ativos: `pytest-randomly` (ordem aleatória — `--randomly-seed=N` para
 - **PR3.1-B** — IA de áudio com torch (extra `[ai-audio]`): DeepFilterNet (denoise neural); Demucs (separação de stems) a avaliar.
 - **PR4** ✅ — Módulo Vídeo: 7 operações (download, convert, trim, compress, resize, extract_audio, thumbnail). CPU-only, fila sequencial, bridge → Transcrição/Áudio.
 - **PR5** ✅ — Módulo Documentos: 12 operações PDF/QR (merge, split, compress, rotate, watermark, stamp, encrypt, extract, pdf-to-images, images-to-pdf, qr, analyze). Core pymupdf, 100% local.
-- **PR5.1** — OCR: análise de PDFs escaneados via pytesseract (extra `[ocr]`, requer Tesseract no PATH).
-- **Futuro** — melhorias no Módulo Imagens (batch rename, upscale).
+- **PR5.1** ✅ — OCR: análise de PDFs escaneados via pytesseract (extra `[ocr]`, requer Tesseract no PATH).
+- **PR6** ✅ — Módulo Biblioteca: índice navegável de `output/` (core puro), grade com thumbnails, filtro/busca/ordenação/período, abrir arquivo/pasta, bridges para outros módulos, paginação + auto-refresh e CLI `library list`. Hub no AppBar. Fundação para IA sobre o corpus e receitas encadeadas.
+- **Futuro** — melhorias no Módulo Imagens (batch rename, upscale); IA sobre a Biblioteca (busca semântica, conversar com arquivos).
