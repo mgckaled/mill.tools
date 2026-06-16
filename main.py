@@ -7,7 +7,8 @@ Usage:
     uv run main.py transcribe <URL> --format --analyze         # full transcription pipeline
     uv run main.py transcribe <URL> --srt                      # also export .srt subtitle file
     uv run main.py transcribe <URL> --subtitles                # exports .srt + .vtt
-    uv run main.py transcribe /path/to/audio.mp3               # local file
+    uv run main.py transcribe /path/to/audio.mp3               # local audio/video file
+    uv run main.py transcribe /path/to/notes.txt --analyze     # text file → skips Whisper
     uv run main.py transcribe <URL> --am gemini-2.5-flash      # analysis via Gemini
     uv run -m src output/transcriptions/text/<file>.txt        # standalone analysis
 
@@ -20,6 +21,7 @@ Usage:
 import argparse
 import logging
 import re
+import shutil
 import sys
 from pathlib import Path
 
@@ -211,58 +213,71 @@ def main() -> None:
 
         TRANSCRIPTIONS_TEXT_DIR.mkdir(parents=True, exist_ok=True)
 
-        if kind == "file":
-            audio_path = Path(value)
-            meta: dict = {"title": audio_path.stem, "duration": 0}
+        is_text = kind == "local" and Path(value).suffix.lower() in {".txt", ".md"}
+
+        if is_text:
+            # Text file: skip download + transcription, run only the LLM steps.
+            # Work on a copy so the source is never rewritten by --format.
+            src_txt = Path(value)
+            output_stem = build_output_stem({"title": src_txt.stem}, args.output_name)
+            output_path = TRANSCRIPTIONS_TEXT_DIR / f"{output_stem}.txt"
+            if output_path.resolve() != src_txt.resolve():
+                shutil.copyfile(src_txt, output_path)
+            logging.info("[i] Text input — skipping transcription: %s", src_txt.name)
         else:
-            meta = fetch_metadata(value)
-            _stem = build_output_stem(meta)
-            audio_path = AUDIO_SOURCE_DIR / f"{_stem}.mp3"
-            AUDIO_SOURCE_DIR.mkdir(parents=True, exist_ok=True)
+            if kind == "local":
+                # Local audio or video (faster-whisper decodes video via PyAV).
+                audio_path = Path(value)
+                meta: dict = {"title": audio_path.stem, "duration": 0}
+            else:
+                meta = fetch_metadata(value)
+                _stem = build_output_stem(meta)
+                audio_path = AUDIO_SOURCE_DIR / f"{_stem}.mp3"
+                AUDIO_SOURCE_DIR.mkdir(parents=True, exist_ok=True)
 
-            if not audio_path.exists():
-                logging.info("[↓] Downloading audio from: %s", value)
+                if not audio_path.exists():
+                    logging.info("[↓] Downloading audio from: %s", value)
 
-                def _hook(d: dict) -> None:
-                    if d.get("status") == "downloading":
-                        pct = _ANSI_ESC.sub("", d.get("_percent_str", "")).strip()
-                        speed = _ANSI_ESC.sub("", d.get("_speed_str", "")).strip()
-                        eta = _ANSI_ESC.sub("", d.get("_eta_str", "")).strip()
-                        if pct:
-                            tqdm.write(f"\r  ↓ {pct} — {speed}  ETA {eta}", end="")
-                    elif d.get("status") == "finished":
-                        tqdm.write("")
+                    def _hook(d: dict) -> None:
+                        if d.get("status") == "downloading":
+                            pct = _ANSI_ESC.sub("", d.get("_percent_str", "")).strip()
+                            speed = _ANSI_ESC.sub("", d.get("_speed_str", "")).strip()
+                            eta = _ANSI_ESC.sub("", d.get("_eta_str", "")).strip()
+                            if pct:
+                                tqdm.write(f"\r  ↓ {pct} — {speed}  ETA {eta}", end="")
+                        elif d.get("status") == "finished":
+                            tqdm.write("")
 
-                audio_path = _core_download_audio(
-                    value,
-                    AUDIO_SOURCE_DIR,
-                    fmt="mp3",
-                    embed_meta=False,
-                    progress_hook=_hook,
-                )
-                logging.info("[✓] Audio downloaded: %s", audio_path.name)
+                    audio_path = _core_download_audio(
+                        value,
+                        AUDIO_SOURCE_DIR,
+                        fmt="mp3",
+                        embed_meta=False,
+                        progress_hook=_hook,
+                    )
+                    logging.info("[✓] Audio downloaded: %s", audio_path.name)
 
-        output_stem = build_output_stem(meta, args.output_name)
-        output_path = TRANSCRIPTIONS_TEXT_DIR / f"{output_stem}.txt"
+            output_stem = build_output_stem(meta, args.output_name)
+            output_path = TRANSCRIPTIONS_TEXT_DIR / f"{output_stem}.txt"
 
-        logging.debug("Audio path: %s", audio_path)
-        logging.debug("Output path: %s", output_path)
+            logging.debug("Audio path: %s", audio_path)
+            logging.debug("Output path: %s", output_path)
 
-        elapsed = transcribe(
-            audio_path,
-            output_path,
-            meta,
-            value,
-            args.whisper_model,
-            args.language,
-            args.threads,
-            args.beam_size,
-            subtitle_formats=_subtitle_formats_from_args(args),
-        )
+            elapsed = transcribe(
+                audio_path,
+                output_path,
+                meta,
+                value,
+                args.whisper_model,
+                args.language,
+                args.threads,
+                args.beam_size,
+                subtitle_formats=_subtitle_formats_from_args(args),
+            )
 
-        if elapsed is not None:
-            logging.info("[✓] Transcription saved to: %s", output_path)
-            print_summary(meta, output_path, elapsed)
+            if elapsed is not None:
+                logging.info("[✓] Transcription saved to: %s", output_path)
+                print_summary(meta, output_path, elapsed)
 
         formatted_body = None
         if args.format:
