@@ -391,7 +391,7 @@ A Biblioteca é o hub que reúne tudo que os outros módulos já produziram em `
 | **Filtrar por categoria** | Todas / Origem (downloads) / Processado (saídas geradas). |
 | **Buscar e ordenar** | Busca por nome (com debounce) + ordenação por data, nome ou tamanho. |
 | **Filtrar por período** | Qualquer data / últimas 24h / 7 dias / 30 dias. |
-| **Abrir** | Abre o arquivo no programa padrão do sistema ou revela sua pasta no explorador. |
+| **Abrir** | Texto (`.md`/`.txt`) abre num **visor in-app** com Markdown renderizado — ler um resultado já processado sem reprocessar nem sair do app; outros tipos abrem no programa padrão do sistema. Também é possível revelar a pasta no explorador. |
 | **Reenviar para outro módulo** | Bridges num clique: áudio/vídeo → Transcrição ou Áudio; imagem → Imagens; PDF → Documentos; texto (`.txt`/`.md`) → "Analisar na Transcrição". |
 
 A lista é recarregada ao abrir a Biblioteca e quando um pipeline termina. Cada modo exibe até 120 itens por vez, com botão "Carregar mais". Preferências de filtro, ordenação e modo de exibição são lembradas entre sessões. Há paridade na CLI via `uv run main.py library list`.
@@ -600,7 +600,7 @@ mill-tools/
 
 ## Testes
 
-A suíte cobre `src/core/`, `src/cli/`, os `pipeline_log` da GUI e o pipeline LLM (`analyzer`/`formatter`/`prompter`) em duas camadas, totalizando **528 testes** (0 falhas) e **88% de cobertura** (com branch).
+A suíte cobre `src/core/`, `src/cli/`, os `pipeline_log` da GUI e o pipeline LLM (`analyzer`/`formatter`/`prompter`) em duas camadas, totalizando **537 testes** (0 falhas) e **88% de cobertura** (com branch).
 
 | Camada | Marcador | Requer | O que cobre |
 |---|---|---|---|

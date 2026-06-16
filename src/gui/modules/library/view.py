@@ -30,6 +30,7 @@ from src.gui.modules.library.cards import (
     build_item_row,
     build_list_header,
 )
+from src.gui.views.file_viewer import is_viewable, open_file_viewer
 from src.gui.theme.components import (
     Cursor,
     hairline,
@@ -254,6 +255,12 @@ def build_library_module(
         page.update()
 
     def _open_file(item: LibraryItem) -> None:
+        # Text outputs (.md/.txt) open in the in-app viewer (rendered Markdown) so
+        # a processed result can be read without re-running anything; other kinds
+        # open in the system default app.
+        if is_viewable(item.path):
+            open_file_viewer(page, item.path)
+            return
         try:
             os.startfile(str(item.path))  # Windows shell open
         except Exception as exc:

@@ -101,7 +101,8 @@ src/
     └── views/
         ├── form_view.py         — formulário de Transcrição → FormPanel
         ├── progress_view.py     — ProgressPanel (logs/barra/spinner), filtro por owner_id; dispatcha para pipeline_log de cada módulo
-        └── result_view.py       — resultados em abas (Transcrição/Análise/Digest); ações "Abrir pasta"/"Abrir arquivo" seguem a aba ativa (tab_paths)
+        ├── result_view.py       — resultados em abas (Transcrição/Análise/Digest); ações "Abrir pasta"/"Abrir arquivo" seguem a aba ativa (tab_paths)
+        └── file_viewer.py       — visor in-app (modal) de `.md`/`.txt` via `page.show_dialog`; usado pela Biblioteca p/ ler resultados já processados sem reprocessar
 ```
 
 ## Sistema de módulos (GUI)
@@ -203,7 +204,7 @@ Hub navegável de tudo que os módulos já produziram sob `output/`. **Read-only
 - **Cache + threads**: o scan fica em `_all_items`; filtro/busca/ordenação operam em memória (teclas não tocam o disco). Thumbnails geram numa **única thread daemon** com contador de geração (descarta scans antigos) + cache `(path, mtime)`; cada card recebe `set_thumbnail()` com **update escopado** (nunca `page.update()` — issue #6270). Paginação: `_PAGE_SIZE=120` + botão "Carregar mais".
 - **Persistência**: `last_library_filter`, `last_library_category`, `last_library_sort`, `last_library_view` (grid|list) em `~/.mill-tools/config.json`.
 - **Atualização**: `on_mount` re-escaneia ao entrar (pega saídas novas e deleções externas); assina o EventBus e re-escaneia ao vivo se a Biblioteca estiver visível quando um `task_done` chega.
-- **Ações por item**: **Abrir** (`os.startfile`, toast se falhar), **Abrir pasta** (`explorer /select,`), e **bridges** via `nav[0](module_id, {"file": path})` — áudio/vídeo → Transcrição + Áudio; imagem → Imagens; PDF → Documentos. Pré-requisito: `on_mount({"file": path})` + `fill_from_path` padronizados em **todos** os módulos-alvo (Áudio/Vídeo já tinham; Imagens/Documentos ganharam no PR6.4).
+- **Ações por item**: **Abrir** — texto (`.txt`/`.md`) abre no **visor in-app** (`views/file_viewer.py`, modal com Markdown renderizado; lê resultado já processado sem reprocessar), demais tipos via `os.startfile` (toast se falhar); **Abrir pasta** (`explorer /select,`); e **bridges** via `nav[0](module_id, {"file": path})` — áudio/vídeo → Transcrição + Áudio; imagem → Imagens; PDF → Documentos; texto → "Analisar na Transcrição". Pré-requisito: `on_mount({"file": path})` + `fill_from_path` padronizados em **todos** os módulos-alvo (Áudio/Vídeo já tinham; Imagens/Documentos ganharam no PR6.4).
 - **CLI**: `uv run main.py library list [--kind] [--since 7d] [--sort]` (`src/cli/library.py`) reaproveita o core e imprime uma tabela. Sem pipeline, sem `CLIEventBus`; reconfigura stdout p/ UTF-8 (nomes com `｜` quebram o console cp1252).
 - **AppBar hub** (`src/gui/app.py`): fora da rail. `_RAIL_MODULES` = `MODULES` sem `library`; `_rail_index(module_id)` mapeia o slot da rail (`None` para library → rail deselecionada). `library_btn` é um TextButton "Biblioteca" (dourado quando ativo) no título — a ⓘ de ajuda fica no módulo, não no AppBar.
 
@@ -284,7 +285,7 @@ uv run main.py library list --since 7d --sort size
 ```bash
 uv run pytest -m unit -v                                                   # unitários apenas (rápido — <5s)
 uv run pytest -m integration -v                                            # integração apenas (requer ffmpeg)
-uv run pytest -v                                                           # suíte completa (528 testes)
+uv run pytest -v                                                           # suíte completa (537 testes)
 uv run pytest -n auto                                                      # paraleliza (pytest-xdist; ganho cresce com a suíte)
 uv run pytest --cov=src --cov-report=term-missing                         # cobertura terminal
 uv run pytest --cov=src --cov-report=html                                  # cobertura HTML em htmlcov/
