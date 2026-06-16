@@ -639,4 +639,5 @@ Plugins ativos: `pytest-randomly` (ordem aleatória — `--randomly-seed=N` para
 - **PR5** ✅ — Módulo Documentos: 12 operações PDF/QR (merge, split, compress, rotate, watermark, stamp, encrypt, extract, pdf-to-images, images-to-pdf, qr, analyze). Core pymupdf, 100% local.
 - **PR5.1** ✅ — OCR: análise de PDFs escaneados via pytesseract (extra `[ocr]`, requer Tesseract no PATH).
 - **PR6** ✅ — Módulo Biblioteca: índice navegável de `output/` (core puro), grade com thumbnails, filtro/busca/ordenação/período, abrir arquivo/pasta, bridges para outros módulos, paginação + auto-refresh e CLI `library list`. Hub no AppBar. Fundação para IA sobre o corpus e receitas encadeadas.
+- **PR6.6** ✅ — Biblioteca: modo lista/tabela + visor in-app de `.md`/`.txt` (ler resultado processado sem reprocessar). Entrada flexível de análise: Transcrição aceita URL + áudio/vídeo local + texto (`.txt`/`.md` pula o Whisper); Documentos→Analisar aceita texto; CLI `transcribe` aceita texto/vídeo local; bridge `.txt` → "Analisar na Transcrição".
 - **Futuro** — melhorias no Módulo Imagens (batch rename, upscale); IA sobre a Biblioteca (busca semântica, conversar com arquivos).
