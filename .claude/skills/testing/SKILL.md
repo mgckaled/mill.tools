@@ -60,11 +60,14 @@ tests/
 └── gui/
     ├── __init__.py
     ├── test_settings.py                    # unit — src/gui/settings.py
+    ├── test_workers_text.py                # unit — run_pipeline ramo texto (guarda sem análise + analyzer na cópia; LLM mockado)
+    ├── test_file_viewer.py                 # unit — is_viewable (gating do visor in-app .md/.txt)
     └── modules/
         ├── audio/test_pipeline_log.py      # unit — resolve_*, fmt_* (download/convert/extract/denoise/normalize)
         ├── image/test_pipeline_log.py      # unit — resolve_*, fmt_* (13 operações)
         ├── video/test_pipeline_log.py      # unit — resolve_*, fmt_* (8 operações, inclui subtitle)
-        └── document/test_pipeline_log.py   # unit — resolve_messages, resolve_stage_label, fmt_* builders (13 operações, inclui ocr)
+        ├── document/test_pipeline_log.py   # unit — resolve_messages, resolve_stage_label, fmt_* builders (13 operações, inclui ocr)
+        └── document/test_worker_analyze.py # unit — _run_analyze ramo .txt (mock analyzer.analyze; pula get_pdf_info)
 ```
 
 > **Nota sobre `unit` no módulo document**: ao contrário do que a tabela
@@ -398,6 +401,32 @@ chamar `.invoke()` mais vezes que o número de mensagens fornecidas. Isso é
 `TRANSCRIPTIONS_ANALYSIS_DIR` via `monkeypatch.setattr(mod, "ATTR", tmp_path)`
 no nível do módulo — esses atributos são lidos só dentro de `analyze()` /
 `build_prompt_ready()`, então um fixture autouse não é necessário.
+
+### Worker da GUI (`run_pipeline` / `_run_*`) — bus falso + dependências mockadas
+
+Os workers (`src/gui/workers.py`, `src/gui/modules/<m>/worker.py`) **não dependem
+do Flet** — emitem por `bus.emit(type, stage, payload, module_id=...)`. Teste com
+um bus falso que captura `(type, payload)` e mocke as dependências pesadas:
+
+```python
+class _Bus:
+    def __init__(self): self.events = []
+    def emit(self, type, stage, payload, module_id=None):
+        self.events.append((type, payload))
+```
+
+- **Transcrição** (`run_pipeline`): mocke `workers.check_dependencies` e a função
+  LLM no namespace do worker (`workers.analyzer.analyze`); redirecione
+  `workers.TRANSCRIPTIONS_TEXT_DIR` p/ `tmp_path` (o ramo texto **copia** o arquivo
+  para lá, preservando o original). Asserte em `[t for t, _ in bus.events]` —
+  ex.: `.txt` sem nenhuma análise → `task_error`; com `use_analyze` → `task_done`
+  e `analyze` chamado num caminho ≠ do arquivo de origem.
+- **Documentos** (`_run_analyze` etc.): chame o handler direto com um `emit` que
+  acumula numa lista; o worker importa `analyze` **lazy** → mocke
+  `src.analyzer.analyze`. Para fixar o ramo `.txt`, faça `get_pdf_info` levantar
+  via `pytest.fail` e confirme que não foi chamado (`page_count == 0` no
+  `document_op_start`). Ver `tests/gui/test_workers_text.py` e
+  `tests/gui/modules/document/test_worker_analyze.py`.
 
 ### Mock de `WhisperModel` (faster-whisper) — para testar `transcriber.transcribe`
 
