@@ -149,8 +149,12 @@ def build_input_source(
         items.append(item)
         items_col.controls.append(_make_item_row(item))
         _notify()
-        if items_border.page:
+        # .page raises RuntimeError before the control is mounted (Flet 0.85);
+        # add_item may be called from a bridge on_mount, so guard the update.
+        try:
             items_border.update()
+        except RuntimeError:
+            pass
 
     def _add_url() -> None:
         raw = (url_field.value or "").strip()
