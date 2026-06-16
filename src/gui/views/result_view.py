@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import subprocess
 from pathlib import Path
 from typing import Callable
@@ -17,10 +18,24 @@ def _read(path: Path | None) -> str:
     return Path(path).read_text(encoding="utf-8")
 
 
+def _path_exists(path: Path | None) -> bool:
+    return path is not None and Path(path).exists()
+
+
 def _open_folder(path: Path | None) -> None:
     if path is None:
         return
     subprocess.Popen(["explorer", str(Path(path).parent)])
+
+
+def _open_file(path: Path | None) -> None:
+    """Open a file in the system default application (Windows shell)."""
+    if not _path_exists(path):
+        return
+    try:
+        os.startfile(str(Path(path)))  # Windows shell open
+    except OSError:
+        pass
 
 
 def _pick_srt(subtitle_paths: list[Path] | None) -> Path | None:
@@ -58,9 +73,17 @@ def build_result_view(
 
     tab_labels = ["Transcrição", "Análise", "Prompt-ready"]
     tab_contents = [raw_content, analysis_content, prompt_content]
+    # Backing file per tab (parallel to tab_labels) — used by the "Abrir arquivo"
+    # shortcut to open the active tab's file in the system default app.
+    tab_paths: list[Path | None] = [
+        Path(raw_path) if raw_path else None,
+        Path(analysis_path) if analysis_path else None,
+        Path(prompt_path) if prompt_path else None,
+    ]
     if srt_content is not None:
         tab_labels.append("Legendas")
         tab_contents.append(srt_content)
+        tab_paths.append(srt_path)
     selected: list[int] = [0]
 
     # --- painéis de conteúdo ---
@@ -92,7 +115,7 @@ def build_result_view(
 
     panels = [_make_panel(c) for c in tab_contents]
     for i, p in enumerate(panels):
-        p.visible = (i == 0)
+        p.visible = i == 0
 
     content_stack = ft.Column(
         controls=panels,
@@ -107,7 +130,9 @@ def build_result_view(
             label,
             style=ft.ButtonStyle(
                 color={
-                    ft.ControlState.DEFAULT: ft.Colors.PRIMARY if idx == 0 else ft.Colors.ON_SURFACE_VARIANT,
+                    ft.ControlState.DEFAULT: ft.Colors.PRIMARY
+                    if idx == 0
+                    else ft.Colors.ON_SURFACE_VARIANT,
                 },
             ),
             on_click=lambda _, i=idx: _switch(i),
@@ -120,9 +145,13 @@ def build_result_view(
             panel.visible = active
             btn.style = ft.ButtonStyle(
                 color={
-                    ft.ControlState.DEFAULT: ft.Colors.PRIMARY if active else ft.Colors.ON_SURFACE_VARIANT,
+                    ft.ControlState.DEFAULT: ft.Colors.PRIMARY
+                    if active
+                    else ft.Colors.ON_SURFACE_VARIANT,
                 },
             )
+        # The "Abrir arquivo" shortcut only makes sense for a generated file.
+        open_file_btn.disabled = not _path_exists(tab_paths[idx])
         page.update()
 
     tab_buttons.extend(_make_tab_btn(label, i) for i, label in enumerate(tab_labels))
@@ -138,16 +167,40 @@ def build_result_view(
     # --- ações ---
     def on_copy(_: ft.ControlEvent) -> None:
         page.set_clipboard(tab_contents[selected[0]])
-        page.open(ft.SnackBar(
-            content=ft.Text("Conteúdo copiado para a área de transferência."),
-            duration=2000,
-        ))
+        page.open(
+            ft.SnackBar(
+                content=ft.Text("Conteúdo copiado para a área de transferência."),
+                duration=2000,
+            )
+        )
+
+    def _current_path() -> Path | None:
+        idx = selected[0]
+        return tab_paths[idx] if 0 <= idx < len(tab_paths) else None
+
+    def _open_current_folder(_: ft.ControlEvent) -> None:
+        _open_folder(_current_path() or (Path(raw_path) if raw_path else None))
+
+    def _open_current_file(_: ft.ControlEvent) -> None:
+        _open_file(_current_path())
+
+    open_file_btn = ft.IconButton(
+        ft.Icons.OPEN_IN_NEW,
+        tooltip="Abrir arquivo da aba atual",
+        on_click=_open_current_file,
+        disabled=not _path_exists(tab_paths[0]),
+    )
 
     action_controls: list[ft.Control] = [
-        ft.IconButton(ft.Icons.FOLDER_OPEN, tooltip="Abrir pasta",
-                      on_click=lambda _: _open_folder(raw_path)),
-        ft.IconButton(ft.Icons.COPY, tooltip="Copiar conteúdo da aba",
-                      on_click=on_copy),
+        ft.IconButton(
+            ft.Icons.FOLDER_OPEN,
+            tooltip="Abrir pasta da aba atual",
+            on_click=_open_current_folder,
+        ),
+        open_file_btn,
+        ft.IconButton(
+            ft.Icons.COPY, tooltip="Copiar conteúdo da aba", on_click=on_copy
+        ),
     ]
     if srt_path is not None:
         action_controls.append(

@@ -101,7 +101,7 @@ src/
     └── views/
         ├── form_view.py         — formulário de Transcrição → FormPanel
         ├── progress_view.py     — ProgressPanel (logs/barra/spinner), filtro por owner_id; dispatcha para pipeline_log de cada módulo
-        └── result_view.py       — resultados em abas (Transcrição/Análise/Digest)
+        └── result_view.py       — resultados em abas (Transcrição/Análise/Digest); ações "Abrir pasta"/"Abrir arquivo" seguem a aba ativa (tab_paths)
 ```
 
 ## Sistema de módulos (GUI)
