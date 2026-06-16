@@ -82,6 +82,12 @@ kind, value = resolve_input("/path/to/file.mp3")      # → ("local", "/path/…
 
 Usado por todos os CLI runners para popular `InputItem(kind, value)`.
 
+> **`transcribe` (legado) ramifica pelo sufixo do arquivo local** (`main.py`):
+> `.txt`/`.md` → pula download+Whisper, copia para `transcriptions/text/` e roda
+> só `--format`/`--analyze`/`--prompt`; áudio/vídeo local → transcreve (vídeo é
+> decodificado via PyAV); URL → metadata + download. O ramo local checa
+> `kind == "local"` (não `"file"`).
+
 ---
 
 ## Subcomando `audio`

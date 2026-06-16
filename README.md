@@ -39,7 +39,7 @@ A ferramenta é organizada em **módulos independentes**, cada um especializado 
 
 | Módulo | Status | Descrição |
 |---|---|---|
-| **Transcrição** | ✅ Disponível | Whisper local com pós-processamento por IA: parágrafos, análise estruturada e resumo |
+| **Transcrição** | ✅ Disponível | Aceita URL, áudio/vídeo local ou arquivo de texto. Whisper local + pós-processamento por IA: parágrafos, análise estruturada e resumo. Um `.txt`/`.md` pula a transcrição e vai direto para a IA |
 | **Áudio** | ✅ Disponível | Download, conversão e extração de faixas em fila; pós-processamento: denoise spectral + normalize loudnorm (EBU R128) |
 | **Imagens** | ✅ Disponível | 12 operações: manipulação, conversão, remoção de fundo e descrição por IA vision |
 | **Vídeo** | ✅ Disponível | 7 operações: download, conversão, corte, compressão, redimensionamento, extração de áudio e thumbnail |
@@ -136,6 +136,12 @@ uv run main.py <YOUTUBE_URL>
 
 # + formatação e análise
 uv run main.py <YOUTUBE_URL> --format --analyze
+
+# áudio/vídeo local (vídeo é decodificado via PyAV — sem extração separada)
+uv run main.py transcribe video.mp4 --format
+
+# arquivo de texto: pula o Whisper e roda só a IA
+uv run main.py transcribe notas.txt --analyze
 
 # análise standalone (sobre transcrição existente)
 uv run -m src output/transcriptions/text/transcricao_ovabeV.txt
@@ -330,7 +336,7 @@ Todos os arquivos processados em `processed/`. Nomes de saída incluem sufixo da
 | **PDF → Imagens** | PDF | Rasteriza cada página em JPG ou PNG. DPI configurável: 72 / 96 / 150 / 300 |
 | **Imagens → PDF** | imagens | Combina N imagens JPEG/PNG em um único PDF, uma por página |
 | **QR Code** | texto/URL | Gera QR code em PNG ou JPG. Tamanho aproximado em pixels configurável |
-| **Analisar** | PDF | Extrai texto e envia para análise LLM (local via Ollama ou Google Gemini). Apenas na GUI |
+| **Analisar** | PDF ou texto | PDF: extrai o texto e envia para análise LLM (local via Ollama ou Google Gemini). `.txt`/`.md`: analisa direto, sem extração. Apenas na GUI |
 
 ---
 
@@ -386,7 +392,7 @@ A Biblioteca é o hub que reúne tudo que os outros módulos já produziram em `
 | **Buscar e ordenar** | Busca por nome (com debounce) + ordenação por data, nome ou tamanho. |
 | **Filtrar por período** | Qualquer data / últimas 24h / 7 dias / 30 dias. |
 | **Abrir** | Abre o arquivo no programa padrão do sistema ou revela sua pasta no explorador. |
-| **Reenviar para outro módulo** | Bridges num clique: áudio/vídeo → Transcrição ou Áudio; imagem → Imagens; PDF → Documentos. |
+| **Reenviar para outro módulo** | Bridges num clique: áudio/vídeo → Transcrição ou Áudio; imagem → Imagens; PDF → Documentos; texto (`.txt`/`.md`) → "Analisar na Transcrição". |
 
 A lista é recarregada ao abrir a Biblioteca e quando um pipeline termina. Cada modo exibe até 120 itens por vez, com botão "Carregar mais". Preferências de filtro, ordenação e modo de exibição são lembradas entre sessões. Há paridade na CLI via `uv run main.py library list`.
 
@@ -594,7 +600,7 @@ mill-tools/
 
 ## Testes
 
-A suíte cobre `src/core/`, `src/cli/`, os `pipeline_log` da GUI e o pipeline LLM (`analyzer`/`formatter`/`prompter`) em duas camadas, totalizando **525 testes** (0 falhas) e **88% de cobertura** (com branch).
+A suíte cobre `src/core/`, `src/cli/`, os `pipeline_log` da GUI e o pipeline LLM (`analyzer`/`formatter`/`prompter`) em duas camadas, totalizando **528 testes** (0 falhas) e **88% de cobertura** (com branch).
 
 | Camada | Marcador | Requer | O que cobre |
 |---|---|---|---|

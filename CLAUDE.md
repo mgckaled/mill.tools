@@ -113,9 +113,17 @@ A entrada no app é mediada pela **Home Screen** (`src/gui/home.py`): ao clicar 
 - **Registry** (`src/gui/app.py`): `MODULES: list[Module]` é a fonte única. Adicionar um módulo = uma entrada na lista.
 - **Module** (`src/gui/modules/base.py`): dataclass com `id`, `label`, `icon`, `selected_icon`, `control`, `on_mount(payload)`, `on_unmount()`. O `control` é construído uma vez; trocar de aba **não** destrói o estado.
 - **navigate_to(module_id, payload)**: alterna **visibilidade** dos controles num `ft.Stack` (não reatribui `content` — evita o `object_patch` IndexError do Flet 0.85). **Bloqueia a troca** enquanto `pipeline_running[0]` for `True`.
-- **Bridge Áudio → Transcrição**: `navigate_to("transcription", {"file": path})` — o `on_mount` preenche o campo URL percorrendo a árvore de controles.
+- **Bridge Áudio/Vídeo/Biblioteca → Transcrição**: `navigate_to("transcription", {"file": path})` — o `on_mount` chama `form_panel.fill_from_path(path)`, que adiciona o arquivo como item único no `InputSource`.
 - **Bridge Vídeo → Transcrição/Áudio**: resultado de `extract_audio` exibe botões "Transcrever" e "Processar no Áudio".
 - **Escopo de eventos por módulo**: cada `ProgressPanel` recebe um `owner_id` e ignora eventos cujo `module_id` não casa.
+
+## Módulo Transcrição
+
+Transcrição (Whisper) + pipeline de IA (Formatação / Análise / Prompt-ready). Usa o `InputSource` padrão dos demais módulos (URL + seletor de arquivo, **entrada única**), aceitando **URL** (YouTube/SoundCloud…), **áudio/vídeo local** e **texto** (`.txt`/`.md`).
+
+- **Formulário adaptativo** (`src/gui/views/form_view.py`): `_on_items_change` detecta o tipo da entrada. Texto → esconde a seção de transcrição (modelo Whisper, idioma, beam, legendas) atrás de um aviso "texto detectado" e mantém só Formatação/Análise/Prompt-ready; mídia/URL → mostra tudo. `FormPanel.fill_from_path(path)` é o ponto de entrada das bridges.
+- **Worker** (`src/gui/workers.py`): `run_pipeline` ramifica a entrada. **Texto** → copia o arquivo para `output/transcriptions/text/` (nunca edita o original, pois o `formatter` reescreve o `input_path` no lugar), pula download+Whisper e roda só as etapas de IA; **guarda**: exige ao menos uma análise para arquivo de texto. **Áudio/vídeo local** → transcreve (faster-whisper decodifica vídeo via PyAV, sem extração separada). **URL** → metadata + download + transcrição. As etapas `format/analyze/prompt` são compartilhadas pelos dois caminhos.
+- **Modelos**: ver "Modelos disponíveis na GUI". As 3 funções (`formatter`/`analyzer`/`prompter`) leem de um `input_path` e toleram `.txt` sem header.
 
 ## Módulo Áudio
 
@@ -172,7 +180,7 @@ Conversão, manipulação e operações de IA com visor Before/After integrado.
 
 Manipulação de PDF e geração de QR code via pymupdf. Sem dependência de ffmpeg.
 
-- **Operações GUI** (13, selecionadas via card grid 3 colunas): `merge` (N PDFs → 1), `split` (por intervalo de páginas), `compress` (reimprimir imagens embutidas), `rotate` (ângulo configurável por página), `watermark` (texto diagonal semitransparente), `stamp` (carimbo em destaque — PAGO/RASCUNHO/CONFIDENCIAL), `encrypt` (AES-256), `extract` (texto → .txt), `ocr` (PDF escaneado → texto via Tesseract), `pdf_to_images` (rasterizar páginas; DPI 72–300), `images_to_pdf` (N imagens → PDF), `analyze` (conteúdo do PDF via LLM, após extract_text), `qr` (gerar QR code PNG/JPG).
+- **Operações GUI** (13, selecionadas via card grid 3 colunas): `merge` (N PDFs → 1), `split` (por intervalo de páginas), `compress` (reimprimir imagens embutidas), `rotate` (ângulo configurável por página), `watermark` (texto diagonal semitransparente), `stamp` (carimbo em destaque — PAGO/RASCUNHO/CONFIDENCIAL), `encrypt` (AES-256), `extract` (texto → .txt), `ocr` (PDF escaneado → texto via Tesseract), `pdf_to_images` (rasterizar páginas; DPI 72–300), `images_to_pdf` (N imagens → PDF), `analyze` (conteúdo via LLM — PDF passa por extract_text; `.txt`/`.md` é analisado direto), `qr` (gerar QR code PNG/JPG).
 - **Operações CLI** (12 sub-subcomandos): os mesmos exceto `analyze` (só-GUI). Inclui `ocr` (determinístico, sem LLM).
 - **Core** (`src/core/document/`):
   - `processor.py` — 7 funções pymupdf: merge_pdfs, split_pdf, compress_pdf, rotate_pdf, watermark_pdf, stamp_pdf, encrypt_pdf.
@@ -214,9 +222,11 @@ Fluxo completo de entrada: `show_splash` → `show_home` → `build_app(initial_
 ```bash
 uv run gui.py                                         # GUI desktop
 
-# Transcrição (legado + subcomando explícito)
+# Transcrição (legado + subcomando explícito) — aceita URL, áudio/vídeo local ou .txt/.md
 uv run main.py <YOUTUBE_URL>                          # básico
 uv run main.py transcribe <URL> --format --analyze    # pipeline completo
+uv run main.py transcribe video.mp4                   # vídeo local (áudio decodificado via PyAV)
+uv run main.py transcribe notas.txt --analyze         # texto local → pula Whisper, só IA
 uv run main.py transcribe <URL> --am gemini-2.5-flash # análise via Gemini
 uv run -m src output/transcriptions/text/<file>.txt   # análise standalone
 
@@ -274,7 +284,7 @@ uv run main.py library list --since 7d --sort size
 ```bash
 uv run pytest -m unit -v                                                   # unitários apenas (rápido — <5s)
 uv run pytest -m integration -v                                            # integração apenas (requer ffmpeg)
-uv run pytest -v                                                           # suíte completa (525 testes)
+uv run pytest -v                                                           # suíte completa (528 testes)
 uv run pytest -n auto                                                      # paraleliza (pytest-xdist; ganho cresce com a suíte)
 uv run pytest --cov=src --cov-report=term-missing                         # cobertura terminal
 uv run pytest --cov=src --cov-report=html                                  # cobertura HTML em htmlcov/
