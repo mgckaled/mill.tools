@@ -44,6 +44,9 @@ if TYPE_CHECKING:
 
 _MODULE_ID = "library"
 
+# Text outputs route to the Transcription module (Formatação/Análise/Prompt-ready).
+_TEXT_EXTS = {".txt", ".md"}
+
 # Filter chips: value → PT-BR label (visible). "all" clears the kind filter.
 _FILTER_OPTIONS = ["all", "audio", "video", "image", "transcription", "document"]
 _FILTER_LABELS = {
@@ -264,8 +267,17 @@ def build_library_module(
             logging.debug("[d] explorer select failed for %s: %s", item.path, exc)
 
     def _bridge_targets(item: LibraryItem) -> list[tuple[str, str, str]]:
-        # A document that isn't a PDF (e.g. extracted .txt) can't be reprocessed
-        # by the Documents module.
+        # Any text output (PDF extraction, image description, transcript) goes to
+        # the Transcription module, which runs Formatação/Análise/Prompt-ready.
+        if item.suffix in _TEXT_EXTS:
+            return [
+                (
+                    "transcription",
+                    "Analisar na Transcrição",
+                    ft.Icons.AUTO_AWESOME_OUTLINED,
+                )
+            ]
+        # A document that isn't a PDF can't be reprocessed by the Documents module.
         if item.kind == KIND_DOCUMENT and item.suffix != ".pdf":
             return []
         return _BRIDGES.get(item.kind, [])
