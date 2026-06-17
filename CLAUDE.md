@@ -87,7 +87,7 @@ src/
 └── gui/
     ├── app.py                   — build_app(): NavigationRail + registry de módulos + navigate_to
     ├── splash.py                — show_splash(): cata-vento + fade → show_home
-    ├── home.py                  — show_home(): 7 cards de módulo (grade 4+3) + moinho animado → build_app(initial_module)
+    ├── home.py                  — show_home(): 5 ferramentas (grade 3+2) + 2 hubs destacados (Biblioteca/IA) + moinho animado → build_app(initial_module)
     ├── assets.py                — b64() (bytes p/ ft.Image), WINDOW_ICON
     ├── events.py                — EventBus, PipelineEvent (com module_id), LogEventHandler
     ├── settings.py              — persistência em ~/.mill-tools/config.json
@@ -121,7 +121,7 @@ src/
 
 A GUI é dividida em módulos. As 5 **ferramentas de processamento** — **Áudio**, **Vídeo**, **Imagens**, **Transcrição**, **Documentos** — ficam numa **NavigationRail** à esquerda (ordem: Áudio → Vídeo → Imagens → Transcrição → Documentos). **Biblioteca** (6º módulo) e **IA** (7º módulo) são **hubs**: vivem **fora da rail** porque operam sobre as saídas de todos os módulos (não são ferramentas par). Seus pontos de entrada são botões "Biblioteca" e "IA" no **AppBar** ao lado do wordmark "mill.tools" (dourados quando ativos). A ⓘ de ajuda fica no cabeçalho interno do módulo (padrão de help por módulo), não no AppBar. Ambos continuam em `MODULES` (e no `ft.Stack`), então `navigate_to` funciona normalmente; `_RAIL_MODULES` exclui os dois `_HUB_IDS`.
 
-A entrada no app é mediada pela **Home Screen** (`src/gui/home.py`): ao clicar num card (grid de **7 cards, 4+3** — a fileira de 3 é centralizada com spacers `expand` para casar a largura de 1/4), `on_complete(module_id)` chama `build_app(initial_module=mid)`.
+A entrada no app é mediada pela **Home Screen** (`src/gui/home.py`): duas zonas rotuladas — **5 ferramentas** (cards verticais, grade **3+2**) e **2 hubs** (Biblioteca/IA, cards **horizontais mais largos** com borda dourada e selo "HUB"). O CTA "Abrir módulo" não se repete por card: há uma **dica única** no canto inferior direito ("clique num card para abrir"). Ao clicar num card, `on_complete(module_id)` chama `build_app(initial_module=mid)`.
 
 - **Registry** (`src/gui/app.py`): `MODULES: list[Module]` é a fonte única. Adicionar um módulo = uma entrada na lista.
 - **Module** (`src/gui/modules/base.py`): dataclass com `id`, `label`, `icon`, `selected_icon`, `control`, `on_mount(payload)`, `on_unmount()`. O `control` é construído uma vez; trocar de aba **não** destrói o estado.
@@ -237,7 +237,7 @@ RAG local sobre o corpus da Biblioteca: indexa o texto que você já produziu, r
 Fluxo completo de entrada: `show_splash` → `show_home` → `build_app(initial_module)`.
 
 - **Splash** (`src/gui/splash.py`): fade-in + scale + uma volta do cata-vento, então chama `show_home`. Cores via `Color.dark.*` — sem literais hardcoded.
-- **Home Screen** (`src/gui/home.py`): tela intermediária com **7 cards de módulo (grade 4+3, fileira de 3 centralizada por spacers `expand`)** sobre o símbolo do moinho girando lentamente (opacity 0.16, 20s/volta). Ao clicar num card: fade-out 350ms EASE_IN → `build_app(initial_module=id)` com fade-in 500ms EASE_OUT. Tema salvo é aplicado em `show_home` antes de `build_app`. Cada card é `GestureDetector` + `Container` (sem `ink=True` — quirk Flet 0.85); hover muta `bgcolor` e `border` com `Motion.fast`.
+- **Home Screen** (`src/gui/home.py`): tela intermediária com **5 ferramentas (grade 3+2) + 2 hubs destacados (Biblioteca/IA)** sobre o símbolo do moinho girando lentamente (opacity 0.16, 20s/volta). O wordmark é alinhado ao topo (não centralizado) para ganhar espaço. Hubs são `_make_hub_card` (horizontal: chip de ícone à esquerda + conteúdo, borda dourada `Color.PRIMARY`, selo "HUB"); ferramentas são `_make_card` (vertical, sem CTA). Dica única no canto inferior direito. Ao clicar num card: fade-out 350ms EASE_IN → `build_app(initial_module=id)` com fade-in 500ms EASE_OUT. Tema salvo é aplicado em `show_home` antes de `build_app`. Cada card é `GestureDetector` + `Container` (sem `ink=True` — quirk Flet 0.85); hover muta `bgcolor` e `border` com `Motion.fast` (hubs descansam com borda dourada).
 - **AppBar** (`src/gui/app.py`): título = `ft.Row([wordmark, library_btn])` — wordmark "mill.tools" com spans + botão **Biblioteca** (TextButton dourado quando ativo, navega para o módulo Biblioteca). Botões "Home"/"Splash"/tema em `actions` — chamam `_go_home`/`_go_splash` (bloqueados se pipeline rodando). `page.pubsub.unsubscribe_all()` no início de `build_app` evita acúmulo de subscribers em re-entradas. `page.appbar = None` antes de navegar para splash/home.
 - **Spinner**: `ft.Image` do cata-vento, giro encadeado via `on_animation_end` (curva LINEAR). Para na vertical ao terminar.
 - **Assets** (`src/gui/assets.py`): `b64(name)` retorna bytes; `WINDOW_ICON` → `assets/icons/mill.ico`.

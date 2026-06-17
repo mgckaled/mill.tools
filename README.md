@@ -137,7 +137,7 @@ O `.env` é carregado automaticamente quando `--fm`, `--am` ou `--pm` recebe um 
 uv run gui.py
 ```
 
-Abre maximizado com uma splash screen animada, seguida de uma **Home Screen** com 7 cards de módulo (grade 4+3) — clique em qualquer card para entrar diretamente no módulo escolhido. O AppBar exibe a wordmark "mill.tools", os botões **Biblioteca** e **IA** (os hubs sobre as saídas) e os botões "Home" e "Splash" para navegar de volta a qualquer momento.
+Abre maximizado com uma splash screen animada, seguida de uma **Home Screen** com duas zonas — 5 ferramentas (grade 3+2) e 2 hubs em destaque (Biblioteca e IA) — clique em qualquer card para entrar diretamente no módulo escolhido. O AppBar exibe a wordmark "mill.tools", os botões **Biblioteca** e **IA** (os hubs sobre as saídas) e os botões "Home" e "Splash" para navegar de volta a qualquer momento.
 
 Cada módulo tem layout split: formulário à esquerda, painel de acompanhamento (log em tempo real + barra de progresso + spinner) à direita. Durante um pipeline em execução a troca de módulo é bloqueada — os logs e a barra de progresso são preservados mesmo ao navegar entre módulos.
 

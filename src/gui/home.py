@@ -1,4 +1,4 @@
-"""Home screen do mill.tools — fundo animado + 4 cards de módulo."""
+"""Home screen do mill.tools — fundo animado + 5 ferramentas + 2 hubs (Biblioteca/IA)."""
 
 from __future__ import annotations
 
@@ -12,9 +12,17 @@ from src.gui import settings as _settings
 from src.gui.assets import b64
 from src.gui.theme import sync_page_bgcolor
 from src.gui.theme.components import Cursor
-from src.gui.theme.tokens import Color, Motion, Radius, Space, Type
+from src.gui.theme.tokens import Color, IconSize, Motion, Radius, Space, Type
 
-_MODULE_CARDS: list[dict] = [
+# Layout constants local to the home screen (not shared design tokens).
+_TOOL_CARD_H = 210
+_HUB_CARD_H = 156
+_HUB_ICON_CHIP = 56
+_CARD_ICON_SIZE = 40
+_GRID_WIDTH = 1280
+
+# The 5 processing tools — vertical cards, three per row (3 + 2).
+_TOOL_CARDS: list[dict] = [
     {
         "id": "audio",
         "title": "Áudio",
@@ -72,9 +80,14 @@ _MODULE_CARDS: list[dict] = [
         "features": [
             "Una, divida, comprima e gire PDFs com precisão",
             "Aplique marcas d'água, carimbos e criptografia AES-256",
-            "Extraia texto, converta páginas em imagens e gere QR codes",
+            "Extraia texto, converta páginas e gere QR codes",
         ],
     },
+]
+
+# The 2 hubs — wider, horizontal cards with a gold accent + "HUB" badge. They
+# operate over every tool's output, so they get their own highlighted section.
+_HUB_CARDS: list[dict] = [
     {
         "id": "library",
         "title": "Biblioteca",
@@ -82,9 +95,8 @@ _MODULE_CARDS: list[dict] = [
         "accent": Color.dark.primary,
         "desc": "Tudo que você já gerou, num só lugar",
         "features": [
-            "Navegue e busque todas as saídas dos módulos",
-            "Filtre por tipo e data; reabra arquivos e pastas",
-            "Reenvie qualquer saída para outro módulo num clique",
+            "Navegue, filtre e busque todas as suas saídas",
+            "Reabra um arquivo ou reenvie para outro módulo",
         ],
     },
     {
@@ -92,11 +104,10 @@ _MODULE_CARDS: list[dict] = [
         "title": "IA",
         "icon": ft.Icons.AUTO_AWESOME_OUTLINED,
         "accent": Color.log.step,
-        "desc": "Converse com o seu próprio acervo — RAG 100% local",
+        "desc": "Converse com o seu próprio acervo — RAG 100 % local",
         "features": [
-            "Pergunte sobre transcrições, PDFs e descrições de imagem",
-            "Respostas ancoradas no seu conteúdo, citando as fontes",
-            "Embeddings locais; Gemini opcional só na resposta",
+            "Pergunte sobre transcrições, PDFs e imagens",
+            "Respostas citando as fontes do seu conteúdo",
         ],
     },
 ]
@@ -107,28 +118,69 @@ def _palette(page: ft.Page):
     return Color.dark if page.theme_mode != ft.ThemeMode.LIGHT else Color.light
 
 
+def _border(side: ft.BorderSide) -> ft.Border:
+    """Borda uniforme nos quatro lados."""
+    return ft.Border(left=side, right=side, top=side, bottom=side)
+
+
 def _on_card_hover(
     e: ft.HoverEvent,
     ctr: ft.Container,
     accent: str,
     page: ft.Page,
+    *,
+    hub: bool = False,
 ) -> None:
+    """Realça bg + borda no hover. Hubs descansam com borda dourada (não outline)."""
     is_hover = e.data == "true"
     pal = _palette(page)
+    rest_bg = 0.80 if hub else 0.75
     ctr.bgcolor = (
-        ft.Colors.with_opacity(0.88, pal.surface_hover)
+        ft.Colors.with_opacity(0.90 if hub else 0.88, pal.surface_hover)
         if is_hover
-        else ft.Colors.with_opacity(0.75, pal.surface)
+        else ft.Colors.with_opacity(rest_bg, pal.surface)
     )
-    side = ft.BorderSide(1.5, ft.Colors.with_opacity(0.6, accent))
-    outline = ft.BorderSide(1.5, pal.outline_variant)
-    ctr.border = ft.Border(
-        left=side if is_hover else outline,
-        right=side if is_hover else outline,
-        top=side if is_hover else outline,
-        bottom=side if is_hover else outline,
+    hover_side = ft.BorderSide(1.5, ft.Colors.with_opacity(0.6, accent))
+    rest_side = (
+        ft.BorderSide(1.5, ft.Colors.with_opacity(0.45, ft.Colors.PRIMARY))
+        if hub
+        else ft.BorderSide(1.5, pal.outline_variant)
     )
+    ctr.border = _border(hover_side if is_hover else rest_side)
     ctr.update()
+
+
+def _feature_row(text: str) -> ft.Row:
+    """Linha de feature: marcador + texto, partilhada por ferramentas e hubs."""
+    return ft.Row(
+        controls=[
+            ft.Icon(ft.Icons.CIRCLE, size=5, color=ft.Colors.ON_SURFACE_VARIANT),
+            ft.Text(
+                text,
+                size=Type.caption.size,
+                color=ft.Colors.ON_SURFACE_VARIANT,
+                expand=True,
+                no_wrap=False,
+            ),
+        ],
+        spacing=Space.xs,
+        vertical_alignment=ft.CrossAxisAlignment.CENTER,
+    )
+
+
+def _section_label(text: str) -> ft.Control:
+    """Rótulo de seção — pequeno, maiúsculo, muted, alinhado à esquerda."""
+    return ft.Row(
+        controls=[
+            ft.Text(
+                text,
+                size=Type.small.size,
+                weight=ft.FontWeight.W_600,
+                color=ft.Colors.ON_SURFACE_VARIANT,
+            )
+        ],
+        alignment=ft.MainAxisAlignment.START,
+    )
 
 
 def _make_card(
@@ -136,38 +188,15 @@ def _make_card(
     on_tap: Callable[[str], None],
     page: ft.Page,
 ) -> ft.GestureDetector:
-    """Constrói o GestureDetector wrapping o card Container."""
+    """Card vertical de ferramenta (sem CTA — a dica fica no canto da tela)."""
     accent = data["accent"]
     pal = _palette(page)
 
-    feature_rows = [
-        ft.Row(
-            controls=[
-                ft.Icon(ft.Icons.CIRCLE, size=5, color=ft.Colors.ON_SURFACE_VARIANT),
-                ft.Text(
-                    f,
-                    size=Type.caption.size,
-                    color=ft.Colors.ON_SURFACE_VARIANT,
-                    expand=True,
-                    no_wrap=False,
-                ),
-            ],
-            spacing=Space.xs,
-            vertical_alignment=ft.CrossAxisAlignment.CENTER,
-        )
-        for f in data["features"]
-    ]
-
     ctr = ft.Container(
-        height=260,
+        height=_TOOL_CARD_H,
         expand=True,
         border_radius=Radius.lg,
-        border=ft.Border(
-            left=ft.BorderSide(1.5, pal.outline_variant),
-            right=ft.BorderSide(1.5, pal.outline_variant),
-            top=ft.BorderSide(1.5, pal.outline_variant),
-            bottom=ft.BorderSide(1.5, pal.outline_variant),
-        ),
+        border=_border(ft.BorderSide(1.5, pal.outline_variant)),
         bgcolor=ft.Colors.with_opacity(0.75, pal.surface),
         padding=ft.Padding(
             left=Space.xl, right=Space.xl, top=Space.xl, bottom=Space.xl
@@ -183,7 +212,7 @@ def _make_card(
             controls=[
                 ft.Row(
                     controls=[
-                        ft.Icon(data["icon"], size=40, color=accent),
+                        ft.Icon(data["icon"], size=_CARD_ICON_SIZE, color=accent),
                         ft.Column(
                             controls=[
                                 ft.Text(
@@ -207,20 +236,8 @@ def _make_card(
                     vertical_alignment=ft.CrossAxisAlignment.CENTER,
                 ),
                 ft.Container(height=Space.sm),
-                ft.Column(controls=feature_rows, spacing=4),
-                ft.Container(expand=True),
-                ft.Row(
-                    controls=[
-                        ft.Text(
-                            "Abrir módulo",
-                            size=Type.caption.size,
-                            color=accent,
-                            weight=ft.FontWeight.W_600,
-                        ),
-                        ft.Icon(ft.Icons.ARROW_FORWARD, size=14, color=accent),
-                    ],
-                    spacing=4,
-                    vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                ft.Column(
+                    controls=[_feature_row(f) for f in data["features"]], spacing=4
                 ),
             ],
             spacing=0,
@@ -228,6 +245,103 @@ def _make_card(
         ),
     )
     ctr.on_hover = lambda e: _on_card_hover(e, ctr, accent, page)
+
+    return ft.GestureDetector(
+        mouse_cursor=Cursor.interactive,
+        content=ctr,
+        on_tap=lambda _: on_tap(data["id"]),
+        expand=True,
+    )
+
+
+def _make_hub_card(
+    data: dict,
+    on_tap: Callable[[str], None],
+    page: ft.Page,
+) -> ft.GestureDetector:
+    """Card horizontal de hub — ícone em chip à esquerda, conteúdo à direita.
+
+    Mais largo, com borda dourada e selo "HUB" para destacá-lo das ferramentas.
+    """
+    accent = data["accent"]
+    pal = _palette(page)
+
+    icon_chip = ft.Container(
+        width=_HUB_ICON_CHIP,
+        height=_HUB_ICON_CHIP,
+        border_radius=Radius.md,
+        bgcolor=ft.Colors.with_opacity(0.14, accent),
+        alignment=ft.Alignment.CENTER,
+        content=ft.Icon(data["icon"], size=IconSize.xl, color=accent),
+    )
+
+    hub_badge = ft.Container(
+        bgcolor=ft.Colors.with_opacity(0.16, ft.Colors.PRIMARY),
+        border_radius=Radius.pill,
+        padding=ft.Padding(
+            left=Space.xs, right=Space.xs, top=Space.xxs, bottom=Space.xxs
+        ),
+        content=ft.Text(
+            "HUB",
+            size=Type.tiny.size,
+            weight=ft.FontWeight.W_600,
+            color=ft.Colors.PRIMARY,
+        ),
+    )
+
+    info = ft.Column(
+        controls=[
+            ft.Row(
+                controls=[
+                    ft.Text(
+                        data["title"],
+                        size=Type.heading.size,
+                        weight=ft.FontWeight.W_600,
+                        color=ft.Colors.ON_SURFACE,
+                    ),
+                    ft.Container(expand=True),
+                    hub_badge,
+                ],
+                vertical_alignment=ft.CrossAxisAlignment.CENTER,
+            ),
+            ft.Text(
+                data["desc"],
+                size=Type.caption.size,
+                color=ft.Colors.ON_SURFACE_VARIANT,
+                no_wrap=False,
+            ),
+            ft.Container(height=Space.xxs),
+            ft.Column(controls=[_feature_row(f) for f in data["features"]], spacing=4),
+        ],
+        spacing=Space.xxs,
+        expand=True,
+    )
+
+    ctr = ft.Container(
+        height=_HUB_CARD_H,
+        expand=True,
+        border_radius=Radius.lg,
+        border=_border(
+            ft.BorderSide(1.5, ft.Colors.with_opacity(0.45, ft.Colors.PRIMARY))
+        ),
+        bgcolor=ft.Colors.with_opacity(0.80, pal.surface),
+        padding=ft.Padding(
+            left=Space.lg, right=Space.lg, top=Space.lg, bottom=Space.lg
+        ),
+        shadow=ft.BoxShadow(
+            blur_radius=14,
+            spread_radius=0,
+            offset=ft.Offset(0, 5),
+            color=ft.Colors.with_opacity(0.24, ft.Colors.BLACK),
+        ),
+        animate=ft.Animation(Motion.fast, ft.AnimationCurve.EASE_IN_OUT),
+        content=ft.Row(
+            controls=[icon_chip, info],
+            spacing=Space.md,
+            vertical_alignment=ft.CrossAxisAlignment.START,
+        ),
+    )
+    ctr.on_hover = lambda e: _on_card_hover(e, ctr, accent, page, hub=True)
 
     return ft.GestureDetector(
         mouse_cursor=Cursor.interactive,
@@ -319,52 +433,92 @@ def show_home(page: ft.Page, on_complete: Callable[[str], None]) -> None:
     )
 
     # ── cards ────────────────────────────────────────────────────────────────────
-    cards = [_make_card(data, _on_tap, page) for data in _MODULE_CARDS]
+    tool_cards = [_make_card(data, _on_tap, page) for data in _TOOL_CARDS]
+    hub_cards = [_make_hub_card(data, _on_tap, page) for data in _HUB_CARDS]
 
-    # Seven modules: a 4 + 3 grid. The first row's four cards each take 1/4 of the
-    # width (expand=1). The second row centers its three cards at the same width
-    # by flanking them with half-width spacers (flex 1 | 2·3 | 1 → each card = 2/8
-    # = 1/4), reusing the expand trick instead of hardcoding widths.
-    def _flex(card: ft.GestureDetector, weight: int) -> ft.Container:
-        return ft.Container(content=card, expand=weight)
+    def _flex(ctrl: ft.Control, weight: int) -> ft.Container:
+        return ft.Container(content=ctrl, expand=weight)
 
-    cards_grid = ft.Column(
+    # Tools: 3 + 2. The second row centers its two cards at the same 1/3 width
+    # via half-width spacers (flex 1 | 2·2 | 1 → each card = 2/6 = 1/3).
+    tools_grid = ft.Column(
         controls=[
             ft.Row(
-                controls=[cards[0], cards[1], cards[2], cards[3]],
+                controls=[tool_cards[0], tool_cards[1], tool_cards[2]],
                 spacing=Space.xl,
             ),
             ft.Row(
                 controls=[
                     ft.Container(expand=1),
-                    _flex(cards[4], 2),
-                    _flex(cards[5], 2),
-                    _flex(cards[6], 2),
+                    _flex(tool_cards[3], 2),
+                    _flex(tool_cards[4], 2),
                     ft.Container(expand=1),
                 ],
                 spacing=Space.xl,
             ),
         ],
-        spacing=Space.xl,
-        horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+        spacing=Space.lg,
+        horizontal_alignment=ft.CrossAxisAlignment.STRETCH,
+    )
+
+    # Hubs: 2 wide cards, each ~1/2 width.
+    hubs_grid = ft.Row(controls=[hub_cards[0], hub_cards[1]], spacing=Space.xl)
+
+    cards_grid = ft.Column(
+        controls=[
+            _section_label("FERRAMENTAS"),
+            tools_grid,
+            ft.Container(height=Space.sm),
+            _section_label("ACERVO & INTELIGÊNCIA"),
+            hubs_grid,
+        ],
+        spacing=Space.sm,
+        horizontal_alignment=ft.CrossAxisAlignment.STRETCH,
     )
 
     cards_wrapper = ft.Container(
         content=cards_grid,
-        width=1680,
+        width=_GRID_WIDTH,
         padding=ft.Padding(left=Space.xl, right=Space.xl, top=0, bottom=0),
     )
 
-    # ── foreground ───────────────────────────────────────────────────────────────
+    # ── foreground: wordmark raised toward the top + cards ──────────────────────
     fg_layer = ft.Column(
         controls=[
+            ft.Container(
+                height=Space.xxl
+            ),  # breathing room (wordmark raised vs. center)
             header,
-            ft.Container(height=Space.xl),
+            ft.Container(height=Space.lg),
             cards_wrapper,
         ],
-        alignment=ft.MainAxisAlignment.CENTER,
+        alignment=ft.MainAxisAlignment.START,
         horizontal_alignment=ft.CrossAxisAlignment.CENTER,
         expand=True,
+    )
+
+    # ── single open hint, bottom-right corner (replaces the 7 repeated CTAs) ────
+    hint = ft.Container(
+        expand=True,
+        alignment=ft.Alignment.BOTTOM_RIGHT,
+        padding=ft.Padding(left=0, right=Space.xl, top=0, bottom=Space.lg),
+        content=ft.Row(
+            controls=[
+                ft.Icon(
+                    ft.Icons.TOUCH_APP_OUTLINED,
+                    size=IconSize.sm,
+                    color=ft.Colors.ON_SURFACE_VARIANT,
+                ),
+                ft.Text(
+                    "clique num card para abrir",
+                    size=Type.small.size,
+                    italic=True,
+                    color=ft.Colors.ON_SURFACE_VARIANT,
+                ),
+            ],
+            spacing=Space.xxs,
+            vertical_alignment=ft.CrossAxisAlignment.CENTER,
+        ),
     )
 
     # ── root com Stack ───────────────────────────────────────────────────────────
@@ -373,7 +527,7 @@ def show_home(page: ft.Page, on_complete: Callable[[str], None]) -> None:
         opacity=0,
         animate_opacity=ft.Animation(Motion.slow, ft.AnimationCurve.EASE_OUT),
         content=ft.Stack(
-            controls=[bg_layer, fg_layer],
+            controls=[bg_layer, fg_layer, hint],
             expand=True,
             clip_behavior=ft.ClipBehavior.ANTI_ALIAS,
         ),
