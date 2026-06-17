@@ -54,9 +54,17 @@ tests/
 │       ├── test_info.py                    # unit — get_pdf_info, PdfInfo (pymupdf REAL)
 │       ├── test_ocr.py                     # unit — ocr_pdf híbrido (pytesseract mockado) + 1 integration real (Tesseract)
 │       └── test_qr.py                      # unit — generate_qr (qrcode REAL — gera PNG em disco)
-│   └── library/
-│       ├── test_scanner.py                 # unit — classify_path, scan_library (árvore falsa), filter_items (kind/category/query/since), sort_items
-│       └── test_thumbnails.py              # unit — thumbnail_for (imagem/PDF reais, fallbacks None) + 1 integration (frame de vídeo)
+│   ├── library/
+│   │   ├── test_scanner.py                 # unit — classify_path, scan_library (árvore falsa), filter_items (kind/category/query/since), sort_items
+│   │   └── test_thumbnails.py              # unit — thumbnail_for (imagem/PDF reais, fallbacks None) + 1 integration (frame de vídeo)
+│   └── rag/                                # RAG local — tudo unit, sem Ollama (embed_fn injetado; LLM via GenericFakeChatModel)
+│       ├── test_store.py                   # unit — cosseno determinístico, drop_source, persist/load (npz/json)
+│       ├── test_retriever.py               # unit — top-k + filtro de escopo (1 doc / kind / corpus); embed_query_fn mockado
+│       ├── test_embedder.py                # unit — is_available (langchain_ollama falso via sys.modules), _check_dim, shape float32
+│       ├── test_indexer.py                 # unit — chunking, header strip, filtro kind/sufixo, skip/reembed por mtime, reconciliação, progresso
+│       ├── test_chat.py                    # unit — build_context numerado [n] + dedupe de fontes; answer via GenericFakeChatModel
+│       ├── test_templates.py               # unit — defaults + merge prompts.json + proteção contra shadowing de default
+│       └── test_batch.py                   # unit — distinct_sources (dedupe/kind), run_batch (1 answer/doc, progresso)
 └── gui/
     ├── __init__.py
     ├── test_settings.py                    # unit — src/gui/settings.py
@@ -67,7 +75,8 @@ tests/
         ├── image/test_pipeline_log.py      # unit — resolve_*, fmt_* (13 operações)
         ├── video/test_pipeline_log.py      # unit — resolve_*, fmt_* (8 operações, inclui subtitle)
         ├── document/test_pipeline_log.py   # unit — resolve_messages, resolve_stage_label, fmt_* builders (13 operações, inclui ocr)
-        └── document/test_worker_analyze.py # unit — _run_analyze ramo .txt (mock analyzer.analyze; pula get_pdf_info)
+        ├── document/test_worker_analyze.py # unit — _run_analyze ramo .txt (mock analyzer.analyze; pula get_pdf_info)
+        └── ai/                             # unit — worker (index/answer via bus falso + core mockado) + pipeline_log (resolve_status/fmt_*)
 ```
 
 > **Nota sobre `unit` no módulo document**: ao contrário do que a tabela
@@ -427,6 +436,38 @@ class _Bus:
   via `pytest.fail` e confirme que não foi chamado (`page_count == 0` no
   `document_op_start`). Ver `tests/gui/test_workers_text.py` e
   `tests/gui/modules/document/test_worker_analyze.py`.
+- **IA** (`run_ai_index`/`run_ai_answer`): mesmo bus falso (assinatura
+  `emit(type, stage, payload=None, module_id="")`). Passe `install_log_handler=False`
+  p/ não tocar o root logger. Monkeypatch `src.core.rag.indexer.index_dir` p/
+  `tmp_path` (o `from ... import index_dir` é function-local → patchar o atributo
+  do módulo resolve). Mocke `src.core.rag.embedder.is_available`/`embed_texts`/
+  `embed_query` e `src.core.rag.chat.make_llm` (via `GenericFakeChatModel`).
+  Asserte os `bus.types()` (`progress_start`/`index_done`/`answer_done`/`task_done`
+  vs `task_error`). Cancelamento: `cancel_event.set()` antes → `progress_cb` levanta
+  `_Cancelled` → `task_error` "cancelada". Ver `tests/gui/modules/ai/test_worker.py`.
+
+### Core RAG (`src/core/rag/`) — `embed_fn` injetado, sem Ollama
+
+O core do RAG é unit-testável **sem rede**: indexer/retriever/batch recebem
+`embed_fn`/`embed_query_fn` injetados, e `chat.answer` usa `make_llm` (mocável
+via `GenericFakeChatModel`). Padrões:
+
+- **`embedder.is_available`/`embed_texts`**: o `langchain_ollama` é importado
+  **lazy** dentro das funções → substitua o módulo inteiro via
+  `mocker.patch.dict(sys.modules, {"langchain_ollama": _fake_module})` (um
+  `MagicMock` com `.OllamaEmbeddings`). Cubra o ramo "pacote ausente" com
+  `mocker.patch.dict(sys.modules, {"langchain_ollama": None})`.
+- **`store`**: use vetores estreitos (dim 3–8) e `np.eye`/vetores ortogonais —
+  vetor idêntico → score ≈ 1.0, ortogonal → ≈ 0. `persist`/`load` round-trip em
+  `tmp_path`. Serialização usa `dataclasses.asdict` (slots não têm `__dict__`).
+- **`indexer.build_index`**: crie `LibraryItem`s sintéticos apontando p/ `.txt`
+  reais em `tmp_path`; controle o `mtime` pelo **campo `modified`** do item (não
+  pelo mtime do arquivo). `embed_fn` falso retorna `np.ones((n, W))` e conta
+  chamadas — assim você verifica skip incremental (mesmo `(path, mtime)` → 0
+  chamadas novas), reembedding (mtime muda) e reconciliação (item sai da lista).
+  `split_text` roda de verdade (barato).
+- **`index_dir()`**: `monkeypatch.setattr(Path, "home", classmethod(lambda cls: tmp_path))`
+  ou patch direto do atributo do módulo nos callers.
 
 ### Mock de `WhisperModel` (faster-whisper) — para testar `transcriber.transcribe`
 
@@ -580,7 +621,16 @@ O alvo é **≥ 90%** por módulo. Total agregado: **88%** com branch. Estado at
 | `core/ffmpeg.py` | **100%** |
 | `core/library/types.py` | **100%** |
 | `core/library/thumbnails.py` | **100%** |
+| `core/rag/types.py` | **100%** |
+| `core/rag/embedder.py` | **100%** |
+| `core/rag/retriever.py` | **100%** |
+| `core/rag/indexer.py` | **100%** |
+| `core/rag/chat.py` | **100%** |
+| `core/rag/batch.py` | **100%** |
 | `analyzer.py` | 99% |
+| `cli/ai.py` | 98% |
+| `core/rag/store.py` | 98% |
+| `core/rag/templates.py` | 98% |
 | `cli/document.py` | 98% |
 | `core/library/scanner.py` | 98% |
 | `transcriber.py` | 97% |

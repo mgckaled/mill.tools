@@ -33,6 +33,8 @@ A ferramenta é organizada em **módulos independentes**, cada um especializado 
 
 - 📚 **Reunir tudo num só lugar** — a Biblioteca indexa automaticamente tudo que você já gerou (áudios, vídeos, imagens, transcrições e documentos), numa grade visual com miniaturas ou numa lista compacta em tabela. Filtre por tipo e data, busque por nome, reabra um arquivo ou sua pasta, e reenvie qualquer saída para outro módulo num clique — por exemplo, mandar um áudio baixado direto para a Transcrição.
 
+- 🤖 **Conversar com o seu próprio acervo** — o módulo IA indexa o texto que você já produziu (transcrições, análises, texto de PDF, descrições de imagem) e responde perguntas em linguagem natural **citando as fontes** — uma busca semântica privada sobre o seu conteúdo. Os embeddings rodam 100% local; o Gemini é opcional apenas no passo de resposta.
+
 - 🔀 **Escolher onde a IA roda** — por padrão, todos os modelos de linguagem funcionam 100% offline via [Ollama](https://ollama.com) (nenhum dado sai do computador). Para quem prefere, o [Google Gemini](https://ai.google.dev/) gratuito está disponível como alternativa na nuvem — basta escolher o modelo na interface.
 
 ### Módulos
@@ -45,6 +47,7 @@ A ferramenta é organizada em **módulos independentes**, cada um especializado 
 | **Vídeo** | ✅ Disponível | 7 operações: download, conversão, corte, compressão, redimensionamento, extração de áudio e thumbnail |
 | **Documentos** | ✅ Disponível | 12 operações PDF: merge, split, compress, rotate, watermark, stamp, encrypt, extract, pdf-to-images, images-to-pdf, QR e análise por IA |
 | **Biblioteca** | ✅ Disponível | Hub navegável de todas as saídas: grade com thumbnails ou lista em tabela, filtro por tipo, busca, ordenação e período; abrir arquivo/pasta e reenviar para outro módulo num clique |
+| **IA** | ✅ Disponível | RAG local sobre o seu acervo: pergunte ao corpus inteiro ou a um documento e receba respostas citando as fontes. Embeddings locais (Ollama); Gemini opcional na resposta. Prompt library + templates; modo batch na CLI |
 
 ### Destaques técnicos
 
@@ -124,7 +127,7 @@ O `.env` é carregado automaticamente quando `--fm`, `--am` ou `--pm` recebe um 
 uv run gui.py
 ```
 
-Abre maximizado com uma splash screen animada, seguida de uma **Home Screen** com 6 cards de módulo (grade 3×2) — clique em qualquer card para entrar diretamente no módulo escolhido. O AppBar exibe a wordmark "mill.tools", o botão **Biblioteca** (o hub de saídas) e os botões "Home" e "Splash" para navegar de volta a qualquer momento.
+Abre maximizado com uma splash screen animada, seguida de uma **Home Screen** com 7 cards de módulo (grade 4+3) — clique em qualquer card para entrar diretamente no módulo escolhido. O AppBar exibe a wordmark "mill.tools", os botões **Biblioteca** e **IA** (os hubs sobre as saídas) e os botões "Home" e "Splash" para navegar de volta a qualquer momento.
 
 Cada módulo tem layout split: formulário à esquerda, painel de acompanhamento (log em tempo real + barra de progresso + spinner) à direita. Durante um pipeline em execução a troca de módulo é bloqueada — os logs e a barra de progresso são preservados mesmo ao navegar entre módulos.
 
@@ -215,6 +218,23 @@ uv run main.py library list
 # filtra por tipo, período e ordenação
 uv run main.py library list --kind audio
 uv run main.py library list --since 7d --sort size
+```
+
+### CLI — IA (RAG local sobre o corpus)
+
+```bash
+# (re)indexa o acervo — exige: ollama pull nomic-embed-text
+uv run main.py ai index
+
+# pergunta ao acervo inteiro (a resposta cita as fontes)
+uv run main.py ai "o que eu disse sobre faster-whisper?"
+
+# restringe a um documento específico, ou aplica um prompt a cada documento
+uv run main.py ai "resuma em 3 frases" --scope output/transcriptions/text/aula.txt
+uv run main.py ai "liste as ações" --batch --kind transcription
+
+# resposta via Gemini (opt-in; só os trechos recuperados vão à nuvem)
+uv run main.py ai "..." --model gemini-2.5-flash --k 8
 ```
 
 ### Referência de flags
@@ -398,6 +418,28 @@ A lista é recarregada ao abrir a Biblioteca e quando um pipeline termina. Cada 
 
 ---
 
+## Módulo IA
+
+O módulo **IA** transforma o seu acervo numa base de conhecimento conversável — **RAG (Retrieval-Augmented Generation) 100% local**. Como a Biblioteca, é um hub: vive no AppBar (botão **IA**), não na NavigationRail.
+
+Como funciona, em três passos:
+
+1. **Indexar** — o conteúdo textual que você já gerou (transcrições, análises, digests, texto extraído/OCR de PDF e descrições de imagem) é dividido em trechos e convertido em vetores de embedding pelo Ollama (`nomic-embed-text`). A indexação é **incremental**: só reembute o que mudou desde a última vez.
+2. **Recuperar** — para a sua pergunta, os trechos mais semelhantes são encontrados por similaridade (busca cosseno sobre os vetores).
+3. **Responder** — um LLM redige a resposta usando **apenas** os trechos recuperados e **cita as fontes** `[n]`; cada fonte vira um card clicável que abre o arquivo no visor.
+
+| Recurso | O que faz |
+|---|---|
+| **Escopo** | Pergunte ao acervo inteiro, a um tipo (Transcrições / Documentos / Imagens) ou a um único documento (via "Conversar sobre" na Biblioteca). |
+| **Modelo da resposta** | `qwen7b-custom` (local) ou `gemini-2.5-flash` (nuvem, opt-in, com aviso de privacidade). |
+| **Fontes citadas** | Cada resposta lista os documentos usados; clicar abre o texto no visor in-app ou o arquivo no sistema. |
+| **Status do índice** | Mostra documentos · chunks · horário da última atualização, com botão **Reindexar**. |
+| **Prompt library + templates** | Chips de atalho — Resumir, Pontos-chave, Reescrever formal, Traduzir — e templates estruturados — Ata de reunião, E-mail, Resumo executivo — que preenchem a pergunta. |
+
+**Privacidade:** os embeddings são **sempre locais**. Se você escolher um modelo Gemini, apenas os trechos recuperados são enviados à nuvem no passo de resposta. Pré-requisito: `ollama pull nomic-embed-text`. Há paridade na CLI via `uv run main.py ai`.
+
+---
+
 ## Modelos
 
 ### Whisper
@@ -558,7 +600,7 @@ mill-tools/
 │   │   ├── document/    — processor (pymupdf), converter, qr, info (PdfInfo + render_first_page_png)
 │   │   └── library/     — types (LibraryItem), scanner (output/ → índice), thumbnails (dispatch por kind)
 │   └── gui/
-│       ├── app.py       — NavigationRail (5 tools) + Biblioteca no AppBar + registry + navigate_to
+│       ├── app.py       — NavigationRail (5 tools) + Biblioteca/IA no AppBar + registry + navigate_to
 │       ├── splash.py    — animação de entrada (moinho + fade)
 │       ├── home.py      — Home Screen: 6 cards de módulo (3×2) + moinho animado ao fundo
 │       ├── assets.py    — helpers de imagem (b64, WINDOW_ICON)
@@ -600,7 +642,7 @@ mill-tools/
 
 ## Testes
 
-A suíte cobre `src/core/`, `src/cli/`, os `pipeline_log` da GUI e o pipeline LLM (`analyzer`/`formatter`/`prompter`) em duas camadas, totalizando **537 testes** (0 falhas) e **88% de cobertura** (com branch).
+A suíte cobre `src/core/` (incluindo o RAG local), `src/cli/`, os `pipeline_log` e workers da GUI e o pipeline LLM (`analyzer`/`formatter`/`prompter`) em duas camadas, totalizando **581 testes unitários** (0 falhas); o core do RAG fica em ≥ 98%.
 
 | Camada | Marcador | Requer | O que cobre |
 |---|---|---|---|
@@ -640,4 +682,5 @@ Plugins ativos: `pytest-randomly` (ordem aleatória — `--randomly-seed=N` para
 - **PR5.1** ✅ — OCR: análise de PDFs escaneados via pytesseract (extra `[ocr]`, requer Tesseract no PATH).
 - **PR6** ✅ — Módulo Biblioteca: índice navegável de `output/` (core puro), grade com thumbnails, filtro/busca/ordenação/período, abrir arquivo/pasta, bridges para outros módulos, paginação + auto-refresh e CLI `library list`. Hub no AppBar. Fundação para IA sobre o corpus e receitas encadeadas.
 - **PR6.6** ✅ — Biblioteca: modo lista/tabela + visor in-app de `.md`/`.txt` (ler resultado processado sem reprocessar). Entrada flexível de análise: Transcrição aceita URL + áudio/vídeo local + texto (`.txt`/`.md` pula o Whisper); Documentos→Analisar aceita texto; CLI `transcribe` aceita texto/vídeo local; bridge `.txt` → "Analisar na Transcrição".
-- **Futuro** — melhorias no Módulo Imagens (batch rename, upscale); IA sobre a Biblioteca (busca semântica, conversar com arquivos).
+- **PR7** ✅ — Módulo IA (RAG local sobre o corpus): indexação semântica do conteúdo textual (embeddings Ollama `nomic-embed-text`, vector store numpy, incremental por mtime), busca cosseno e resposta com citação de fontes; módulo GUI (hub no AppBar, resposta em Markdown, status/reindexar, prompt library + templates) e CLI `ai index`/`ai "pergunta"`/`--batch`. Embeddings sempre locais; Gemini só opt-in na resposta. Torch-free, só `numpy` de dependência nova.
+- **Futuro** — melhorias no Módulo Imagens (batch rename, upscale); streaming da resposta da IA; IA de áudio com torch (DeepFilterNet/Demucs) num extra opcional.

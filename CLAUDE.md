@@ -14,7 +14,8 @@ Multiferramenta pessoal extensível para processamento de áudio, vídeo, imagen
 - **pymupdf>=1.24** — engine PDF: merge, split, compress, rotate, watermark, stamp, encrypt, rasterização e extração de texto
 - **qrcode>=7.4** — geração de QR codes (PNG/JPG)
 - **rembg[cpu]** + **onnxruntime** (extra `[ai-image]`) — remoção de fundo CPU/ONNX
-- **LangChain** + **Ollama** (local) / **Google Gemini** (nuvem) — formatação, análise, condensação e descrição de imagens (vision)
+- **LangChain** + **Ollama** (local) / **Google Gemini** (nuvem) — formatação, análise, condensação e descrição de imagens (vision); **RAG local** sobre o corpus (módulo IA) via `OllamaEmbeddings` (`nomic-embed-text`, 768-dim, torch-free)
+- **numpy>=1.26** — vector store do RAG (matriz cosseno em `.npz`); já presente via stack de áudio, declarado explícito
 - **Flet 0.85** — GUI desktop (Flutter no Windows); constraint em `pyproject.toml`: `flet>=0.28`, versão instalada e testada: 0.85.2
 - **tqdm** — barra de progresso (CLI)
 
@@ -37,7 +38,8 @@ src/
 │   ├── video.py                 — subcomando `video`: 8 sub-subcomandos (download/convert/trim/…/subtitle)
 │   ├── image.py                 — subcomando `image`: 12 sub-subcomandos (convert/resize/crop/…)
 │   ├── document.py              — subcomando `document`: 12 sub-subcomandos (merge/split/compress/…/ocr)
-│   └── library.py               — subcomando `library`: `list` (tabela de tudo sob output/)
+│   ├── library.py               — subcomando `library`: `list` (tabela de tudo sob output/)
+│   └── ai.py                    — subcomando `ai`: index / pergunta / --batch (RAG local sobre o corpus)
 ├── core/
 │   ├── ffmpeg.py                — run_ffmpeg(): runner binário compartilhado com progresso pipe:1 (aceita cwd=)
 │   ├── subtitles.py             — SubtitleCue + to_srt()/to_vtt()/write_subtitles() (puro)
@@ -69,14 +71,23 @@ src/
 │   │   ├── ocr.py               — ocr_pdf() híbrido (texto nativo + Tesseract) + is_available() (extra [ocr])
 │   │   ├── qr.py                — generate_qr() via qrcode
 │   │   └── info.py              — PdfInfo + get_pdf_info() + render_first_page_png() (raster 1ª página, reusado pela Biblioteca)
-│   └── library/
-│       ├── types.py             — LibraryItem (dataclass frozen/slots) + KIND_* consts
-│       ├── scanner.py           — scan_library(), classify_path(), filter_items(), sort_items() (puro, sobre output/)
-│       └── thumbnails.py        — thumbnail_for(item): dispatch por kind (imagem/PDF/vídeo) → bytes|None
+│   ├── library/
+│   │   ├── types.py             — LibraryItem (dataclass frozen/slots) + KIND_* consts
+│   │   ├── scanner.py           — scan_library(), classify_path(), filter_items(), sort_items() (puro, sobre output/)
+│   │   └── thumbnails.py        — thumbnail_for(item): dispatch por kind (imagem/PDF/vídeo) → bytes|None
+│   └── rag/                     — core do RAG local (puro; única rede isolada em embedder.py)
+│       ├── types.py             — ChunkMeta, RetrievedChunk, AnswerResult (frozen/slots)
+│       ├── embedder.py          — embed_texts()/embed_query() via OllamaEmbeddings; is_available(); _check_dim
+│       ├── store.py             — VectorStore: matriz numpy + meta; add/drop_source/search (cosseno)/persist/load
+│       ├── indexer.py           — build_index() incremental por (path, mtime) + reconciliação; index_dir()
+│       ├── retriever.py         — retrieve(query, store, embed_query_fn, k, scope) → top-k
+│       ├── chat.py              — answer(): contexto numerado [n] + prompt|make_llm → AnswerResult
+│       ├── templates.py         — prompt library + templates (ata/e-mail/resumo); ~/.mill-tools/prompts.json
+│       └── batch.py             — distinct_sources(), run_batch(): um prompt sobre N documentos
 └── gui/
     ├── app.py                   — build_app(): NavigationRail + registry de módulos + navigate_to
     ├── splash.py                — show_splash(): cata-vento + fade → show_home
-    ├── home.py                  — show_home(): 5 cards de módulo + moinho animado → build_app(initial_module)
+    ├── home.py                  — show_home(): 7 cards de módulo (grade 4+3) + moinho animado → build_app(initial_module)
     ├── assets.py                — b64() (bytes p/ ft.Image), WINDOW_ICON
     ├── events.py                — EventBus, PipelineEvent (com module_id), LogEventHandler
     ├── settings.py              — persistência em ~/.mill-tools/config.json
@@ -93,7 +104,8 @@ src/
     │   ├── image/               — form_view.py, worker.py, view.py, pipeline_log.py, blocks/ (12 blocos)
     │   ├── video/               — form_view.py, worker.py, view.py, pipeline_log.py
     │   ├── document/            — form_view.py, worker.py, view.py, pipeline_log.py, blocks/ (12 blocos)
-    │   └── library/             — view.py (grade + filtros), cards.py (factory de card); read-only, sem worker
+    │   ├── library/             — view.py (grade + filtros), cards.py (factory de card); read-only, sem worker
+    │   └── ai/                  — form_view.py (escopo/modelo/chips), worker.py (index/answer), view.py (resposta Markdown + fontes), pipeline_log.py
     ├── theme/
     │   ├── theme.py             — apply_theme(), sync_page_bgcolor()
     │   ├── tokens.py            — Color, Type, Space, Radius, Motion, Layout
@@ -107,16 +119,17 @@ src/
 
 ## Sistema de módulos (GUI)
 
-A GUI é dividida em módulos. As 5 **ferramentas de processamento** — **Áudio**, **Vídeo**, **Imagens**, **Transcrição**, **Documentos** — ficam numa **NavigationRail** à esquerda (ordem: Áudio → Vídeo → Imagens → Transcrição → Documentos). A **Biblioteca** é um 6º módulo, mas vive **fora da rail**: como é um hub sobre as saídas de todos os módulos (não uma ferramenta par), seu ponto de entrada é um botão "Biblioteca" no **AppBar** ao lado do wordmark "mill.tools". A ⓘ de ajuda fica no cabeçalho interno do módulo (padrão de help por módulo), não no AppBar. Ela continua em `MODULES` (e no `ft.Stack`), então `navigate_to` funciona normalmente.
+A GUI é dividida em módulos. As 5 **ferramentas de processamento** — **Áudio**, **Vídeo**, **Imagens**, **Transcrição**, **Documentos** — ficam numa **NavigationRail** à esquerda (ordem: Áudio → Vídeo → Imagens → Transcrição → Documentos). **Biblioteca** (6º módulo) e **IA** (7º módulo) são **hubs**: vivem **fora da rail** porque operam sobre as saídas de todos os módulos (não são ferramentas par). Seus pontos de entrada são botões "Biblioteca" e "IA" no **AppBar** ao lado do wordmark "mill.tools" (dourados quando ativos). A ⓘ de ajuda fica no cabeçalho interno do módulo (padrão de help por módulo), não no AppBar. Ambos continuam em `MODULES` (e no `ft.Stack`), então `navigate_to` funciona normalmente; `_RAIL_MODULES` exclui os dois `_HUB_IDS`.
 
-A entrada no app é mediada pela **Home Screen** (`src/gui/home.py`): ao clicar num card (grid de **6 cards, 3×2**), `on_complete(module_id)` chama `build_app(initial_module=mid)`.
+A entrada no app é mediada pela **Home Screen** (`src/gui/home.py`): ao clicar num card (grid de **7 cards, 4+3** — a fileira de 3 é centralizada com spacers `expand` para casar a largura de 1/4), `on_complete(module_id)` chama `build_app(initial_module=mid)`.
 
 - **Registry** (`src/gui/app.py`): `MODULES: list[Module]` é a fonte única. Adicionar um módulo = uma entrada na lista.
 - **Module** (`src/gui/modules/base.py`): dataclass com `id`, `label`, `icon`, `selected_icon`, `control`, `on_mount(payload)`, `on_unmount()`. O `control` é construído uma vez; trocar de aba **não** destrói o estado.
 - **navigate_to(module_id, payload)**: alterna **visibilidade** dos controles num `ft.Stack` (não reatribui `content` — evita o `object_patch` IndexError do Flet 0.85). **Bloqueia a troca** enquanto `pipeline_running[0]` for `True`.
 - **Bridge Áudio/Vídeo/Biblioteca → Transcrição**: `navigate_to("transcription", {"file": path})` — o `on_mount` chama `form_panel.fill_from_path(path)`, que adiciona o arquivo como item único no `InputSource`.
 - **Bridge Vídeo → Transcrição/Áudio**: resultado de `extract_audio` exibe botões "Transcrever" e "Processar no Áudio".
-- **Escopo de eventos por módulo**: cada `ProgressPanel` recebe um `owner_id` e ignora eventos cujo `module_id` não casa.
+- **Bridge Biblioteca → IA** ("Conversar sobre"): `navigate_to("ai", {"file": path})` — o `on_mount` chama `form.bind_document(path)`, fixando o escopo "Este documento".
+- **Escopo de eventos por módulo**: cada `ProgressPanel` recebe um `owner_id` e ignora eventos cujo `module_id` não casa. O módulo IA é auto-contido (assina seus próprios eventos `module_id="ai"`), não usa `ProgressPanel`.
 
 ## Módulo Transcrição
 
@@ -206,14 +219,25 @@ Hub navegável de tudo que os módulos já produziram sob `output/`. **Read-only
 - **Atualização**: `on_mount` re-escaneia ao entrar (pega saídas novas e deleções externas); assina o EventBus e re-escaneia ao vivo se a Biblioteca estiver visível quando um `task_done` chega.
 - **Ações por item**: **Abrir** — texto (`.txt`/`.md`) abre no **visor in-app** (`views/file_viewer.py`, modal com Markdown renderizado; lê resultado já processado sem reprocessar), demais tipos via `os.startfile` (toast se falhar); **Abrir pasta** (`explorer /select,`); e **bridges** via `nav[0](module_id, {"file": path})` — áudio/vídeo → Transcrição + Áudio; imagem → Imagens; PDF → Documentos; texto → "Analisar na Transcrição". Pré-requisito: `on_mount({"file": path})` + `fill_from_path` padronizados em **todos** os módulos-alvo (Áudio/Vídeo já tinham; Imagens/Documentos ganharam no PR6.4).
 - **CLI**: `uv run main.py library list [--kind] [--since 7d] [--sort]` (`src/cli/library.py`) reaproveita o core e imprime uma tabela. Sem pipeline, sem `CLIEventBus`; reconfigura stdout p/ UTF-8 (nomes com `｜` quebram o console cp1252).
-- **AppBar hub** (`src/gui/app.py`): fora da rail. `_RAIL_MODULES` = `MODULES` sem `library`; `_rail_index(module_id)` mapeia o slot da rail (`None` para library → rail deselecionada). `library_btn` é um TextButton "Biblioteca" (dourado quando ativo) no título — a ⓘ de ajuda fica no módulo, não no AppBar.
+- **AppBar hub** (`src/gui/app.py`): fora da rail. `_RAIL_MODULES` = `MODULES` sem os `_HUB_IDS` (`library`, `ai`); `_rail_index(module_id)` mapeia o slot da rail (`None` para os hubs → rail deselecionada). `library_btn`/`ai_btn` são TextButtons (dourados quando ativos) no título, via `_hub_btn_style(active)` — a ⓘ de ajuda fica no módulo, não no AppBar.
+
+## Módulo IA (PR7)
+
+RAG local sobre o corpus da Biblioteca: indexa o texto que você já produziu, recupera os trechos relevantes para uma pergunta e responde com um LLM **citando as fontes**. **100% local** nos embeddings (Ollama); Gemini só opcional no passo de resposta. Torch-free, **sem dependência pesada nova** (só `numpy` explícito). Reaproveita `make_llm`, `split_text`, `EventBus` e `scan_library` — não cria um segundo "jeito de falar com LLM".
+
+- **Core puro** (`src/core/rag/`): `embedder.py` é a **única rede** (isolada, injetável como `embed_fn`); o resto opera sobre callables e é unit-testável sem Ollama. `VectorStore` é uma matriz numpy `(N, D)` com busca cosseno + persistência `.npz`/`.json` em `~/.mill-tools/rag/` (serialização via `dataclasses.asdict` — slots não têm `__dict__`). `build_index()` é **incremental** por `(path, mtime)`: pula inalterados, reembeda alterados, reconcilia removidos; indexa as **kinds textuais** (`transcription`/`document` + descrições de imagem `.txt`), tira o cabeçalho de transcrição e chunka via `split_text` (1200/150). `chat.answer()` monta contexto numerado `[n]` sob prompt estrito ("responda só pelo contexto + cite; senão diga que não achou"). `templates.py` = prompt library (defaults + `~/.mill-tools/prompts.json`); `batch.py` aplica um prompt a N documentos.
+- **GUI** (`src/gui/modules/ai/`): hub no AppBar, split form|painel. `form_view.py` — escopo (`segmented_selector` Tudo/Transcrições/Documentos/Imagens + chip de documento fixado pela bridge), modelo da resposta (`qwen7b-custom`/`gemini-2.5-flash`, com aviso de privacidade Gemini) e **chips de prompt** (`load_templates()`) que preenchem a pergunta. `worker.py` — `run_ai_index`/`run_ai_answer` em thread daemon emitindo por `EventBus` (`module_id="ai"`); cancelamento aborta a indexação pelo `progress_cb`. `view.py` — **auto-contido** (assina seus eventos, não usa `ProgressPanel`): status do índice ("N docs · M chunks · atualizado HH:MM") com **Reindexar**, barra + spinner, e sessão rolável de turnos Q&A — a resposta é `ft.Markdown` (mesma stylesheet do visor) e cada fonte vira `output_card` que abre no visor in-app (texto) ou no SO. O status é calculado **fora da thread de UI** porque `embedder.is_available()` faz ping no Ollama.
+- **Persistência**: `last_ai_model`, `last_ai_scope`, `last_embed_model` em `config.json`; índice em `~/.mill-tools/rag/`; prompt library em `~/.mill-tools/prompts.json`.
+- **CLI** (`src/cli/ai.py`): `ai index` (re)indexa; `ai "pergunta"` responde; `--scope <path|kind>` restringe; `--model`/`--k`; `--reindex`; `--batch [--kind]` aplica a pergunta como instrução a cada documento. Reaproveita o mesmo core; embeddings sempre locais.
+- **Gate de disponibilidade**: `embedder.is_available()` (langchain-ollama importável + `nomic-embed-text` respondendo) bloqueia ambos os fluxos com a dica `ollama pull nomic-embed-text`.
+- **Quirk Ollama #10176**: configs que devolvem 8192 dims em vez de 768 → `_check_dim()` emite warning.
 
 ## Splash + Home Screen + spinner (branding)
 
 Fluxo completo de entrada: `show_splash` → `show_home` → `build_app(initial_module)`.
 
 - **Splash** (`src/gui/splash.py`): fade-in + scale + uma volta do cata-vento, então chama `show_home`. Cores via `Color.dark.*` — sem literais hardcoded.
-- **Home Screen** (`src/gui/home.py`): tela intermediária com **6 cards de módulo (grade 3×2 simétrica)** sobre o símbolo do moinho girando lentamente (opacity 0.16, 20s/volta). Ao clicar num card: fade-out 350ms EASE_IN → `build_app(initial_module=id)` com fade-in 500ms EASE_OUT. Tema salvo é aplicado em `show_home` antes de `build_app`. Cada card é `GestureDetector` + `Container` (sem `ink=True` — quirk Flet 0.85); hover muta `bgcolor` e `border` com `Motion.fast`.
+- **Home Screen** (`src/gui/home.py`): tela intermediária com **7 cards de módulo (grade 4+3, fileira de 3 centralizada por spacers `expand`)** sobre o símbolo do moinho girando lentamente (opacity 0.16, 20s/volta). Ao clicar num card: fade-out 350ms EASE_IN → `build_app(initial_module=id)` com fade-in 500ms EASE_OUT. Tema salvo é aplicado em `show_home` antes de `build_app`. Cada card é `GestureDetector` + `Container` (sem `ink=True` — quirk Flet 0.85); hover muta `bgcolor` e `border` com `Motion.fast`.
 - **AppBar** (`src/gui/app.py`): título = `ft.Row([wordmark, library_btn])` — wordmark "mill.tools" com spans + botão **Biblioteca** (TextButton dourado quando ativo, navega para o módulo Biblioteca). Botões "Home"/"Splash"/tema em `actions` — chamam `_go_home`/`_go_splash` (bloqueados se pipeline rodando). `page.pubsub.unsubscribe_all()` no início de `build_app` evita acúmulo de subscribers em re-entradas. `page.appbar = None` antes de navegar para splash/home.
 - **Spinner**: `ft.Image` do cata-vento, giro encadeado via `on_animation_end` (curva LINEAR). Para na vertical ao terminar.
 - **Assets** (`src/gui/assets.py`): `b64(name)` retorna bytes; `WINDOW_ICON` → `assets/icons/mill.ico`.
@@ -260,6 +284,13 @@ uv run main.py document qr "https://example.com" --size 300
 uv run main.py library list
 uv run main.py library list --kind audio
 uv run main.py library list --since 7d --sort size
+
+# IA / RAG local sobre o corpus (embeddings sempre locais; Gemini só na resposta)
+uv run main.py ai index                                      # (re)indexa o corpus
+uv run main.py ai "o que eu disse sobre faster-whisper?"     # pergunta ao acervo
+uv run main.py ai "resuma" --scope output/transcriptions/text/x.txt  # um documento
+uv run main.py ai "liste as ações" --batch --kind transcription      # batch por documento
+uv run main.py ai "..." --model gemini-2.5-flash --k 8
 ```
 
 > Referência completa de flags CLI → skill `cli` (`.claude/skills/cli/SKILL.md`)
@@ -285,7 +316,7 @@ uv run main.py library list --since 7d --sort size
 ```bash
 uv run pytest -m unit -v                                                   # unitários apenas (rápido — <5s)
 uv run pytest -m integration -v                                            # integração apenas (requer ffmpeg)
-uv run pytest -v                                                           # suíte completa (537 testes)
+uv run pytest -v                                                           # suíte completa (581 unit)
 uv run pytest -n auto                                                      # paraleliza (pytest-xdist; ganho cresce com a suíte)
 uv run pytest --cov=src --cov-report=term-missing                         # cobertura terminal
 uv run pytest --cov=src --cov-report=html                                  # cobertura HTML em htmlcov/
@@ -296,7 +327,7 @@ uv run pytest tests/caminho/test_arquivo.py -v                            # arqu
 uv run pytest -k "sanitize" -v                                            # filtrar por nome
 ```
 
-Estrutura espelha `src/`: `tests/core/audio/`, `tests/core/image/`, `tests/core/video/`, `tests/core/document/`, `tests/core/library/`, `tests/cli/`, `tests/gui/`. Fixtures em `tests/conftest.py`:
+Estrutura espelha `src/`: `tests/core/audio/`, `tests/core/image/`, `tests/core/video/`, `tests/core/document/`, `tests/core/library/`, `tests/core/rag/`, `tests/cli/`, `tests/gui/`. Fixtures em `tests/conftest.py`:
 
 - **Function-scoped**: `jpg_image`, `png_image`, `out_dir`
 - **Session-scoped**: `sample_wav`, `sample_mp3`, `sample_mp4`, `sample_wav_stereo`, `session_jpg`, `sample_pdf`, `sample_pdf_with_images` (PDFs gerados via `pytest.importorskip("pymupdf")`)
@@ -309,15 +340,16 @@ Cobertura por arquivo (recortes principais):
 - **Core vídeo**: `test_info.py` e `test_converter.py` (ambos integration — `test_converter.py` cobre as 7 funções ffmpeg, incluindo `add_subtitles` soft/hard).
 - **Core document**: `test_processor.py`, `test_converter.py`, `test_info.py`, `test_qr.py` — unit, usam pymupdf/qrcode **reais** via fixtures de sessão. `test_ocr.py` — unit (mocka pytesseract para o fluxo híbrido) + 1 integration real com Tesseract (skip se ausente). `test_info.py` cobre também `render_first_page_png` (raster real + zero-page mockado).
 - **Core library**: `test_scanner.py` — unit puro (`classify_path`, `scan_library` com árvore falsa via `monkeypatch` dos roots, skip de ocultos e ilegíveis, `filter_items`/`sort_items`). `test_thumbnails.py` — unit (imagem/PDF reais → bytes; áudio/transcrição/corrompidos → None) + 1 integration de frame de vídeo. Scanner/thumbnails ≥ 98%.
-- **GUI**: `tests/gui/modules/<audio|image|video|document>/test_pipeline_log.py` — `resolve_messages`/`resolve_stage_label` + `fmt_*` builders para os 4 módulos.
+- **Core RAG** (`tests/core/rag/`): tudo unit, sem Ollama — `embed_fn`/`embed_query_fn` injetados e LLM via `GenericFakeChatModel`. `test_store.py` (cosseno determinístico, `drop_source`, persist/load), `test_retriever.py` (top-k + filtro de escopo), `test_embedder.py` (ramos de `is_available`/dim, `langchain_ollama` falso via `sys.modules`), `test_indexer.py` (chunking, header strip, filtro kind/sufixo, skip incremental/reembed por mtime, reconciliação, progresso), `test_chat.py` (contexto numerado + dedupe de fontes), `test_templates.py` (defaults + merge de `prompts.json` + proteção contra shadowing), `test_batch.py` (distinct/dedupe, kind, um answer por documento). Core ≥ 98% (`batch`/`chat`/`embedder`/`indexer`/`retriever`/`types` 100%).
+- **GUI**: `tests/gui/modules/<audio|image|video|document>/test_pipeline_log.py` — `resolve_messages`/`resolve_stage_label` + `fmt_*` builders. `tests/gui/modules/ai/` — `test_worker.py` (index/answer via bus falso + core mockado; ramos indisponível/vazio/cancelado) e `test_pipeline_log.py` (`resolve_status` + `fmt_*`). Workers não dependem de Flet, então são testáveis fora da cobertura.
 - **LLM pipeline** (`tests/test_formatter.py`, `test_analyzer.py`, `test_prompter.py`): mockam LangChain via `GenericFakeChatModel` de `langchain_core.language_models.fake_chat_models` (Runnable real — `prompt | llm` funciona naturalmente sem fighting com MagicMock `__or__`).
 
 Cobertura agregada do projeto: **88%** (com branch coverage).
 
 Cobertura por módulo (último run, com branch):
 
-- **100%**: `formatter.py`, `prompter.py`, `llm_utils.py`, `cli/audio.py`, `cli/transcription.py`, `core/ffmpeg.py`, `core/audio/normalizer.py`, `core/audio/info.py`, `core/video/converter.py`, `core/library/types.py`, `core/library/thumbnails.py`, e todos os `args.py`/`__init__.py`.
-- **≥ 90%**: `analyzer.py` 99%, `cli/document.py` 98%, `core/library/scanner.py` 98%, `cli/video.py` 97%, `core/image/downloader.py` 96%, `cli/image.py` 94%, `core/document/info.py` 94%, `cli/library.py` ~93%, `core/audio/converter.py` 93%, `core/document/converter.py` 91%, `core/image/transform.py` 91%, `core/document/processor.py` 91%, `core/document/qr.py` 90%.
+- **100%**: `formatter.py`, `prompter.py`, `llm_utils.py`, `cli/audio.py`, `cli/transcription.py`, `core/ffmpeg.py`, `core/audio/normalizer.py`, `core/audio/info.py`, `core/video/converter.py`, `core/library/types.py`, `core/library/thumbnails.py`, `core/rag/{types,embedder,retriever,indexer,chat,batch}.py`, e todos os `args.py`/`__init__.py`.
+- **≥ 90%**: `analyzer.py` 99%, `cli/document.py` 98%, `cli/ai.py` 98%, `core/rag/store.py` 98%, `core/rag/templates.py` 98%, `core/library/scanner.py` 98%, `cli/video.py` 97%, `core/image/downloader.py` 96%, `cli/image.py` 94%, `core/document/info.py` 94%, `cli/library.py` ~93%, `core/audio/converter.py` 93%, `core/document/converter.py` 91%, `core/image/transform.py` 91%, `core/document/processor.py` 91%, `core/document/qr.py` 90%.
 - **80-89%**: `cli/bus.py` 82%, `utils.py` 82%, `llm_factory.py` 81%, `core/audio/denoiser.py` 80%.
 - **Lacunas conscientes**: `audio/downloader.py` 14%, `video/downloader.py` 12% (yt-dlp não mockado); `image/background.py` 32%, `image/describe.py` 23% (extras opcionais `[ai-image]`); `transcriber.py` 31% (Whisper — só `_resolve_device` testado).
 
@@ -344,6 +376,7 @@ Cobertura por módulo (último run, com branch):
 - **qwen7b-custom**: Qwen 2.5 7B — `--analyze` (`ollama/Modelfile`)
 - **phi4mini-custom**: Phi-4 Mini 3.8B — `--format` (`ollama/Modelfile.phi4mini`)
 - **moondream-custom**: moondream vision — descrição de imagens (`ollama/Modelfile.vision`; `num_thread 2`, `num_gpu 0`)
+- **nomic-embed-text**: embeddings do RAG (módulo IA) — 768-dim, CPU, torch-free. Instalar com `ollama pull nomic-embed-text`; `embedder.is_available()` gateia o módulo.
 - `num_gpu` controla camadas na GPU; `num_thread` controla threads CPU
 
 ## GUI Desktop (Flet 0.85)
@@ -447,5 +480,6 @@ Flet (DirectX) e Whisper (CUDA) disputam a MX150. Uso simultâneo pode causar BS
 - **Tier 0** ✅ — Legendas SRT/VTT na Transcrição (A+B), legenda no vídeo mux/burn (C), OCR (D). Ver `docs/STATUS_TIER0.md`.
 - **PR6** ✅ — Módulo Biblioteca (Output Library): índice tipado de `output/` (core puro), grade GUI com filtro/busca/ordenação/período, thumbnails lazy, ações (abrir/abrir pasta) e bridges para outros módulos, paginação + auto-refresh, CLI `library list`. Hub no AppBar (fora da rail). Fundação para PR7 (IA sobre o corpus) e PR8 (receitas). Ver `docs/ROADMAP_PR6_BIBLIOTECA.md`.
 - **PR6.6** ✅ — Biblioteca: 2º modo de exibição (lista/tabela) + visor in-app de `.md`/`.txt` (ler resultado processado sem reprocessar). Entrada flexível de análise: Transcrição aceita URL + áudio/vídeo local + texto (`.txt`/`.md` pula o Whisper); Documentos→Analisar aceita texto; CLI `transcribe` aceita texto/vídeo local; bridge `.txt` → "Analisar na Transcrição".
+- **PR7** ✅ — Módulo IA / Conteúdo (RAG local sobre o corpus): core puro `src/core/rag/` (embeddings Ollama `nomic-embed-text`, vector store numpy, indexação incremental, retrieve cosseno, answer com citação de fontes, prompt library + templates, batch), módulo GUI (hub no AppBar, resposta Markdown com fontes clicáveis, status/reindexar) e CLI `ai index`/`ai "pergunta"`/`--batch`. Embeddings sempre locais; Gemini só opt-in na resposta. Torch-free, só `numpy` explícito de dependência. Streaming de resposta fica no v1 `invoke()` (adiável). Ver `docs/ROADMAP_PR7_IA.md`. Faseado PR7.0→7.4, um commit por fase.
 - **PR3.1-B** — IA de áudio com torch (extra `[ai-audio]`): DeepFilterNet (denoise neural); Demucs (separação de stems) a avaliar.
 - **Futuro** — melhorias no Módulo Imagens (batch rename, upscale); arrastar arquivos do SO fora de escopo (não nativo no Flet).

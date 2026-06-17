@@ -12,7 +12,7 @@ description: Guia da CLI modular do mill.tools (subcomandos audio/video/image/do
 `main.py` despacha para subcomandos por prefixo do primeiro argumento:
 
 ```python
-_NON_TRANSCRIBE_CMDS = frozenset({"audio", "video", "image", "document", "library"})
+_NON_TRANSCRIBE_CMDS = frozenset({"audio", "video", "image", "document", "library", "ai"})
 
 def main():
     if len(sys.argv) > 1 and sys.argv[1] in _NON_TRANSCRIBE_CMDS:
@@ -35,7 +35,8 @@ src/cli/
 ├── video.py          — add_video_parser() + run_video_cli()    (sub-subparsers)
 ├── image.py          — add_image_parser() + run_image_cli()    (sub-subparsers)
 ├── document.py       — add_document_parser() + run_document_cli()  (sub-subparsers)
-└── library.py        — add_library_parser() + run_library_cli()  (read-only, sem CLIEventBus)
+├── library.py        — add_library_parser() + run_library_cli()  (read-only, sem CLIEventBus)
+└── ai.py             — add_ai_parser() + run_ai_cli()  (RAG local; index / pergunta / --batch)
 ```
 
 ---
@@ -211,6 +212,43 @@ do Windows).
 > Atenção: `library` foge do padrão dos demais — não há `CLIEventBus`,
 > `install_log_handler` nem `run_*_pipeline` a mockar. Nos testes, mocke
 > `src.cli.library.scan_library` e capture stdout via `capsys`.
+
+---
+
+## Subcomando `ai`
+
+```bash
+uv run main.py ai index                                  # (re)indexa o corpus
+uv run main.py ai "pergunta?"                            # responde, citando fontes
+uv run main.py ai "resuma" --scope output/.../x.txt      # um documento
+uv run main.py ai "liste as ações" --batch --kind transcription
+uv run main.py ai "..." --model gemini-2.5-flash --k 8
+```
+
+**Um único positional** `query` (não usa sub-subparser): se for o literal
+`index` → (re)indexa e retorna; senão é a pergunta. Reaproveita o core
+(`scan_library`/`build_index`/`retrieve`/`answer`); **não** usa `CLIEventBus`
+nem `run_*_pipeline` (como `library`). Embeddings **sempre locais** (Ollama);
+Gemini só no passo de resposta. `run_ai_cli` reconfigura `sys.stdout` p/ UTF-8.
+
+| Flag | Default | Descrição |
+|---|---|---|
+| `query` (posicional) | — | Pergunta, ou o literal `index` para (re)indexar |
+| `--scope` | (acervo) | Caminho de arquivo (1 doc) **ou** kind (`transcription`/`document`/`image`). `_resolve_scope` resolve path existente → absoluto; senão trata como kind |
+| `--model` | `qwen7b-custom` | Modelo da resposta — Ollama tag ou `gemini-2.5-flash` |
+| `--embed-model` | `nomic-embed-text` | Modelo de embedding (sempre local) |
+| `--k` | `6` | Trechos recuperados |
+| `--reindex` | off | Reindexa antes de responder |
+| `--batch` | off | Aplica a pergunta como instrução a **cada** documento indexado |
+| `--kind` | — | Com `--batch`, restringe a um kind |
+
+> Nos testes (`tests/cli/test_ai_cli.py`): mocke `src.core.rag.embedder.is_available`
+> e os runners `src.cli.ai._build`/`_ask`/`_batch` para validar o dispatch;
+> para `_build`/`_ask`/`_batch` em si, monkeypatch `src.core.rag.indexer.index_dir`
+> p/ `tmp_path`, mocke `embedder.embed_texts`/`embed_query` e
+> `src.core.rag.chat.make_llm` (via `GenericFakeChatModel`). `query == "index"`
+> e os erros (índice vazio / embedder indisponível) chamam `sys.exit(1)` →
+> `pytest.raises(SystemExit)`.
 
 ---
 
