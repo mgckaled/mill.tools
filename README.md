@@ -661,7 +661,7 @@ mill-tools/
 
 ## Testes
 
-A suíte cobre `src/core/` (incluindo o RAG local), `src/cli/`, os `pipeline_log` e workers da GUI e o pipeline LLM (`analyzer`/`formatter`/`prompter`) em duas camadas, totalizando **581 testes unitários** (0 falhas); o core do RAG fica em ≥ 98%.
+A suíte cobre `src/core/` (incluindo o RAG local), `src/cli/`, os `pipeline_log` e workers da GUI e o pipeline LLM (`analyzer`/`formatter`/`prompter`) em duas camadas, totalizando **583 testes unitários** (0 falhas); o core do RAG fica em ≥ 98%.
 
 | Camada | Marcador | Requer | O que cobre |
 |---|---|---|---|
