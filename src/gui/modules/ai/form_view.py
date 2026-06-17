@@ -13,8 +13,10 @@ from typing import Callable
 
 import flet as ft
 
+from src.core.rag.templates import load_templates
 from src.gui import settings
 from src.gui.theme.components import (
+    Cursor,
     help_icon_for,
     primary_button,
     section_label,
@@ -217,6 +219,31 @@ def build_ai_form(page: ft.Page, *, on_ask: Callable[[], None]) -> AiForm:
         question.value = ""
         _safe_update(question)
 
+    # ── prompt library (chips that fill the question field) ───────────────
+    def _fill_question(instruction: str) -> None:
+        question.value = instruction
+        _safe_update(question)
+
+    def _chip(label: str, instruction: str, *, structured: bool) -> ft.Control:
+        return ft.OutlinedButton(
+            text=label,
+            icon=ft.Icons.DASHBOARD_CUSTOMIZE_OUTLINED
+            if structured
+            else ft.Icons.BOLT_OUTLINED,
+            on_click=lambda _e, _i=instruction: _fill_question(_i),
+            style=ft.ButtonStyle(mouse_cursor=Cursor.interactive),
+        )
+
+    prompt_chips = ft.Row(
+        controls=[
+            _chip(t.label, t.instruction, structured=t.category == "template")
+            for t in load_templates()
+        ],
+        wrap=True,
+        spacing=Space.xs,
+        run_spacing=Space.xs,
+    )
+
     ask_btn = primary_button(
         "Perguntar",
         icon=ft.Icons.SEND_OUTLINED,
@@ -269,6 +296,8 @@ def build_ai_form(page: ft.Page, *, on_ask: Callable[[], None]) -> AiForm:
             section_label("Resposta"),
             model_dd,
             gemini_warning,
+            section_label("Modelos de prompt"),
+            prompt_chips,
             question,
             ask_btn,
         ],
