@@ -209,6 +209,28 @@ HELP_SHORT: dict[str, str] = {
         "documentos — num só lugar. Filtre por tipo, busque por nome, reabra "
         "arquivos ou reenvie uma saída para outro módulo num clique."
     ),
+    # --- IA ---
+    "ai.scope": (
+        "Onde buscar a resposta: todo o acervo, apenas um tipo (transcrições, "
+        "documentos, descrições de imagem) ou um único documento."
+    ),
+    "ai.model": (
+        "Modelo que redige a resposta. Nomes começando com 'gemini' usam a "
+        "nuvem (requer GOOGLE_API_KEY) e recebem os trechos recuperados; "
+        "os demais rodam local no Ollama."
+    ),
+    "ai.question": (
+        "Pergunte em linguagem natural sobre o que você já processou. "
+        "A resposta usa apenas o seu acervo e cita as fontes [n]."
+    ),
+    "ai.index": (
+        "Índice semântico local do seu acervo. Reindexar embute só os arquivos "
+        "novos ou alterados (incremental, por mtime)."
+    ),
+    "ai": (
+        "Converse com o seu próprio acervo — RAG 100% local. Indexa transcrições, "
+        "textos de PDF e descrições de imagem e responde citando as fontes."
+    ),
 }
 
 #: Texto longo (opcional) — quando presente, a ⓘ vira clicável e abre um modal.
@@ -350,6 +372,24 @@ HELP_LONG: dict[str, str] = {
         "A lista é recarregada ao abrir a Biblioteca e quando um pipeline "
         "termina. Há paridade na linha de comando: "
         "uv run main.py library list."
+    ),
+    "ai": (
+        "IA / Conteúdo — converse com o seu próprio acervo (RAG local).\n\n"
+        "Como funciona:\n"
+        "• Indexa o texto que você já produziu — transcrições, análises, "
+        "digests, texto extraído/OCR de PDF e descrições de imagem — em "
+        "vetores de embedding (Ollama, nomic-embed-text, 100% local).\n"
+        "• Recupera os trechos mais relevantes para a sua pergunta (busca "
+        "semântica por similaridade).\n"
+        "• Responde com um LLM local (Ollama) ou na nuvem (Gemini, opcional), "
+        "usando apenas o contexto recuperado e citando as fontes [n].\n\n"
+        "Escopo: pergunte ao acervo inteiro, a um tipo (transcrições, "
+        "documentos, descrições de imagem) ou a um único documento.\n\n"
+        "Privacidade: os embeddings são sempre locais. Se você escolher um "
+        "modelo Gemini, apenas os trechos recuperados são enviados à nuvem no "
+        "passo de resposta.\n\n"
+        "Pré-requisito: ollama pull nomic-embed-text. "
+        'Paridade na linha de comando: uv run main.py ai "sua pergunta".'
     ),
 }
 

@@ -87,6 +87,18 @@ _MODULE_CARDS: list[dict] = [
             "Reenvie qualquer saída para outro módulo num clique",
         ],
     },
+    {
+        "id": "ai",
+        "title": "IA",
+        "icon": ft.Icons.AUTO_AWESOME_OUTLINED,
+        "accent": Color.log.step,
+        "desc": "Converse com o seu próprio acervo — RAG 100% local",
+        "features": [
+            "Pergunte sobre transcrições, PDFs e descrições de imagem",
+            "Respostas ancoradas no seu conteúdo, citando as fontes",
+            "Embeddings locais; Gemini opcional só na resposta",
+        ],
+    },
 ]
 
 
@@ -309,11 +321,29 @@ def show_home(page: ft.Page, on_complete: Callable[[str], None]) -> None:
     # ── cards ────────────────────────────────────────────────────────────────────
     cards = [_make_card(data, _on_tap, page) for data in _MODULE_CARDS]
 
-    # Six modules fill a symmetric 3×2 grid — no expand/spacer hack needed.
+    # Seven modules: a 4 + 3 grid. The first row's four cards each take 1/4 of the
+    # width (expand=1). The second row centers its three cards at the same width
+    # by flanking them with half-width spacers (flex 1 | 2·3 | 1 → each card = 2/8
+    # = 1/4), reusing the expand trick instead of hardcoding widths.
+    def _flex(card: ft.GestureDetector, weight: int) -> ft.Container:
+        return ft.Container(content=card, expand=weight)
+
     cards_grid = ft.Column(
         controls=[
-            ft.Row(controls=[cards[0], cards[1], cards[2]], spacing=Space.xl),
-            ft.Row(controls=[cards[3], cards[4], cards[5]], spacing=Space.xl),
+            ft.Row(
+                controls=[cards[0], cards[1], cards[2], cards[3]],
+                spacing=Space.xl,
+            ),
+            ft.Row(
+                controls=[
+                    ft.Container(expand=1),
+                    _flex(cards[4], 2),
+                    _flex(cards[5], 2),
+                    _flex(cards[6], 2),
+                    ft.Container(expand=1),
+                ],
+                spacing=Space.xl,
+            ),
         ],
         spacing=Space.xl,
         horizontal_alignment=ft.CrossAxisAlignment.CENTER,
@@ -321,7 +351,7 @@ def show_home(page: ft.Page, on_complete: Callable[[str], None]) -> None:
 
     cards_wrapper = ft.Container(
         content=cards_grid,
-        width=1360,
+        width=1680,
         padding=ft.Padding(left=Space.xl, right=Space.xl, top=0, bottom=0),
     )
 

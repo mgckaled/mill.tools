@@ -15,6 +15,7 @@ from src.gui.splash import show_splash
 from src.gui.theme import sync_page_bgcolor
 from src.gui.theme.components import Cursor
 from src.gui.theme.tokens import Motion, Space, Type
+from src.gui.modules.ai.view import build_ai_module
 from src.gui.modules.audio.view import build_audio_module
 from src.gui.modules.base import Module
 from src.gui.modules.document.view import build_document_module
@@ -110,10 +111,10 @@ def build_app(page: ft.Page, initial_module: str = "transcription") -> None:
         style=ft.ButtonStyle(mouse_cursor=Cursor.interactive),
     )
 
-    # Library is a hub over every module's output, not a peer tool — it lives in
-    # the AppBar next to the wordmark instead of the NavigationRail. on_click is
-    # wired after navigate_to is defined (forward reference, like nav).
-    def _library_btn_style(active: bool) -> ft.ButtonStyle:
+    # Library and AI are hubs over every module's output, not peer tools — they
+    # live in the AppBar next to the wordmark instead of the NavigationRail.
+    # on_click is wired after navigate_to is defined (forward reference, like nav).
+    def _hub_btn_style(active: bool) -> ft.ButtonStyle:
         c = ft.Colors.PRIMARY if active else ft.Colors.ON_SURFACE_VARIANT
         return ft.ButtonStyle(
             mouse_cursor=Cursor.interactive,
@@ -126,7 +127,12 @@ def build_app(page: ft.Page, initial_module: str = "transcription") -> None:
     library_btn = ft.TextButton(
         "Biblioteca",
         icon=ft.Icons.COLLECTIONS_BOOKMARK_OUTLINED,
-        style=_library_btn_style(initial_module == "library"),
+        style=_hub_btn_style(initial_module == "library"),
+    )
+    ai_btn = ft.TextButton(
+        "IA",
+        icon=ft.Icons.AUTO_AWESOME_OUTLINED,
+        style=_hub_btn_style(initial_module == "ai"),
     )
 
     wordmark = ft.Text(
@@ -152,7 +158,7 @@ def build_app(page: ft.Page, initial_module: str = "transcription") -> None:
 
     page.appbar = ft.AppBar(
         title=ft.Row(
-            controls=[wordmark, library_btn],
+            controls=[wordmark, library_btn, ai_btn],
             spacing=Space.xs,
             vertical_alignment=ft.CrossAxisAlignment.CENTER,
         ),
@@ -176,9 +182,10 @@ def build_app(page: ft.Page, initial_module: str = "transcription") -> None:
     _image = build_image_module(page, bus, cancel_event, pipeline_running)
     _document = build_document_module(page, bus, cancel_event, pipeline_running)
     _library = build_library_module(page, bus, cancel_event, pipeline_running, nav)
+    _ai = build_ai_module(page, bus, cancel_event, pipeline_running, nav)
 
-    # Library is appended last so the default initial_module ("transcription")
-    # and the opening behavior are unchanged.
+    # Library and AI are appended last so the default initial_module
+    # ("transcription") and the opening behavior are unchanged.
     MODULES: list[Module] = [
         _audio,
         _video,
@@ -186,12 +193,15 @@ def build_app(page: ft.Page, initial_module: str = "transcription") -> None:
         _transcription,
         _document,
         _library,
+        _ai,
     ]
     _DEFAULT_ID = initial_module
 
-    # The rail shows only the processing tools; Library is reached from the
-    # AppBar. It still lives in MODULES (and the Stack) so navigate_to works.
-    _RAIL_MODULES: list[Module] = [m for m in MODULES if m.id != "library"]
+    # The rail shows only the 5 processing tools; Library and AI are hubs reached
+    # from the AppBar. They still live in MODULES (and the Stack) so navigate_to
+    # works.
+    _HUB_IDS = ("library", "ai")
+    _RAIL_MODULES: list[Module] = [m for m in MODULES if m.id not in _HUB_IDS]
 
     def _rail_index(module_id: str) -> int | None:
         return next((i for i, m in enumerate(_RAIL_MODULES) if m.id == module_id), None)
@@ -220,10 +230,11 @@ def build_app(page: ft.Page, initial_module: str = "transcription") -> None:
         idx = next(i for i, m in enumerate(MODULES) if m.id == module_id)
         MODULES[current_idx[0]].on_unmount()
         current_idx[0] = idx
-        # Library has no rail destination → deselect the rail (selected_index
-        # None) and highlight the AppBar button instead.
+        # Hubs (Library/AI) have no rail destination → deselect the rail
+        # (selected_index None) and highlight the matching AppBar button instead.
         rail.selected_index = _rail_index(module_id)
-        library_btn.style = _library_btn_style(module_id == "library")
+        library_btn.style = _hub_btn_style(module_id == "library")
+        ai_btn.style = _hub_btn_style(module_id == "ai")
         for i, m in enumerate(MODULES):
             m.control.visible = i == idx
         MODULES[idx].on_mount(payload or {})
@@ -231,6 +242,7 @@ def build_app(page: ft.Page, initial_module: str = "transcription") -> None:
 
     nav.append(navigate_to)  # resolve a forward reference do módulo Áudio
     library_btn.on_click = lambda _e: navigate_to("library")
+    ai_btn.on_click = lambda _e: navigate_to("ai")
 
     def _on_rail_change(e: ft.ControlEvent) -> None:
         idx = e.control.selected_index
