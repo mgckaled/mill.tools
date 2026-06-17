@@ -32,7 +32,14 @@ _SCOPE_LABELS = {
     "document": "Documentos",
     "image": "Imagens",
 }
-_MODELS = ["qwen7b-custom", "gemini-2.5-flash"]
+# Answer models, fastest-on-CPU first: gemma3-1b (interactive) → gemma3-4b
+# (depth) → qwen7b (max quality, slow) → gemini (cloud, opt-in).
+_MODELS = [
+    "gemma3-1b-custom",
+    "gemma3-4b-custom",
+    "qwen7b-custom",
+    "gemini-2.5-flash",
+]
 
 
 @dataclass
@@ -161,7 +168,7 @@ def build_ai_form(page: ft.Page, *, on_ask: Callable[[], None]) -> AiForm:
 
     # ── answer model + Gemini privacy note ────────────────────────────────
     gemini_warning = ft.Container(
-        visible=_is_gemini(cfg.get("last_ai_model", "qwen7b-custom")),
+        visible=_is_gemini(cfg.get("last_ai_model", "gemma3-1b-custom")),
         bgcolor=ft.Colors.with_opacity(0.08, ft.Colors.PRIMARY),
         border_radius=Radius.sm,
         padding=ft.Padding(
@@ -185,14 +192,14 @@ def build_ai_form(page: ft.Page, *, on_ask: Callable[[], None]) -> AiForm:
     )
 
     def _on_model_select(e: ft.ControlEvent) -> None:
-        value = e.control.value or "qwen7b-custom"
+        value = e.control.value or "gemma3-1b-custom"
         settings.set("last_ai_model", value)
         gemini_warning.visible = _is_gemini(value)
         _safe_update(gemini_warning)
 
     model_dd = ft.Dropdown(
         label="Modelo da resposta",
-        value=cfg.get("last_ai_model", "qwen7b-custom"),
+        value=cfg.get("last_ai_model", "gemma3-1b-custom"),
         options=[ft.dropdown.Option(m) for m in _MODELS],
         on_select=_on_model_select,
         border_color=ft.Colors.OUTLINE,
@@ -200,7 +207,7 @@ def build_ai_form(page: ft.Page, *, on_ask: Callable[[], None]) -> AiForm:
     )
 
     def get_model() -> str:
-        return model_dd.value or "qwen7b-custom"
+        return model_dd.value or "gemma3-1b-custom"
 
     # ── question + ask ────────────────────────────────────────────────────
     question = ft.TextField(

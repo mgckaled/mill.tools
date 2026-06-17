@@ -31,7 +31,7 @@ _DEFAULTS: dict = {
     "last_library_category": "all",  # "all" | source | processed
     "last_library_sort": "modified",  # "modified" | "name" | "size"
     "last_library_view": "grid",  # "grid" | "list"
-    "last_ai_model": "qwen7b-custom",  # answer model — Ollama tag or Gemini name
+    "last_ai_model": "gemma3-1b-custom",  # RAG answer — fast interactive default (CPU)
     "last_ai_scope": "all",  # "all" | transcription | document | image
     "last_embed_model": "nomic-embed-custom",  # local embedding model (Ollama, num_gpu 0)
 }
