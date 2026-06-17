@@ -15,8 +15,8 @@ from src.gui.theme.components import Cursor
 from src.gui.theme.tokens import Color, IconSize, Motion, Radius, Space, Type
 
 # Layout constants local to the home screen (not shared design tokens).
-_TOOL_CARD_H = 210
-_HUB_CARD_H = 156
+_TOOL_CARD_H = 188
+_HUB_CARD_H = 142
 _HUB_ICON_CHIP = 56
 _CARD_ICON_SIZE = 40
 _GRID_WIDTH = 1280
@@ -199,7 +199,7 @@ def _make_card(
         border=_border(ft.BorderSide(1.5, pal.outline_variant)),
         bgcolor=ft.Colors.with_opacity(0.75, pal.surface),
         padding=ft.Padding(
-            left=Space.xl, right=Space.xl, top=Space.xl, bottom=Space.xl
+            left=Space.lg, right=Space.lg, top=Space.lg, bottom=Space.lg
         ),
         shadow=ft.BoxShadow(
             blur_radius=12,
@@ -457,7 +457,7 @@ def show_home(page: ft.Page, on_complete: Callable[[str], None]) -> None:
                 spacing=Space.xl,
             ),
         ],
-        spacing=Space.lg,
+        spacing=Space.md,
         horizontal_alignment=ft.CrossAxisAlignment.STRETCH,
     )
 
@@ -485,11 +485,9 @@ def show_home(page: ft.Page, on_complete: Callable[[str], None]) -> None:
     # ── foreground: wordmark raised toward the top + cards ──────────────────────
     fg_layer = ft.Column(
         controls=[
-            ft.Container(
-                height=Space.xxl
-            ),  # breathing room (wordmark raised vs. center)
+            ft.Container(height=Space.sm),  # small top margin — everything raised
             header,
-            ft.Container(height=Space.lg),
+            ft.Container(height=Space.md),
             cards_wrapper,
         ],
         alignment=ft.MainAxisAlignment.START,
@@ -497,26 +495,26 @@ def show_home(page: ft.Page, on_complete: Callable[[str], None]) -> None:
         expand=True,
     )
 
-    # ── single open hint, bottom-right corner (replaces the 7 repeated CTAs) ────
+    # ── single open hint, top-left corner ───────────────────────────────────────
+    # Positioned (top/left), NOT expand=True: a full-size overlay would sit on top
+    # of the cards in the Stack and swallow every click/hover.
     hint = ft.Container(
-        expand=True,
-        alignment=ft.Alignment.BOTTOM_RIGHT,
-        padding=ft.Padding(left=0, right=Space.xl, top=0, bottom=Space.lg),
+        top=Space.lg,
+        left=Space.xl,
         content=ft.Row(
             controls=[
                 ft.Icon(
                     ft.Icons.TOUCH_APP_OUTLINED,
-                    size=IconSize.sm,
+                    size=IconSize.md,
                     color=ft.Colors.ON_SURFACE_VARIANT,
                 ),
                 ft.Text(
-                    "clique num card para abrir",
-                    size=Type.small.size,
-                    italic=True,
+                    "Selecione um módulo para começar",
+                    size=Type.caption.size,
                     color=ft.Colors.ON_SURFACE_VARIANT,
                 ),
             ],
-            spacing=Space.xxs,
+            spacing=Space.xs,
             vertical_alignment=ft.CrossAxisAlignment.CENTER,
         ),
     )
