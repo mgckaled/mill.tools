@@ -62,6 +62,17 @@ def add_ai_parser(subparsers: argparse._SubParsersAction) -> None:
         action="store_true",
         help="Rebuild the index before answering the question",
     )
+    p.add_argument(
+        "--batch",
+        action="store_true",
+        help="Apply the question as an instruction to every indexed document",
+    )
+    p.add_argument(
+        "--kind",
+        choices=["transcription", "document", "image"],
+        default=None,
+        help="With --batch, restrict to one kind of document",
+    )
     p.add_argument("--verbose", action="store_true", help="Enable debug logging")
     p.set_defaults(func=run_ai_cli)
 
@@ -154,8 +165,43 @@ def _ask(ns: argparse.Namespace, embed_model: str) -> None:
             print(f"  [{i}] {source.name}")
 
 
+def _batch(ns: argparse.Namespace, embed_model: str) -> None:
+    """Apply the question as an instruction to every indexed document (per kind)."""
+    from src.core.rag import embedder
+    from src.core.rag.batch import distinct_sources, run_batch
+    from src.core.rag.chat import DEFAULT_MODEL
+    from src.core.rag.indexer import index_dir
+    from src.core.rag.store import VectorStore
+
+    store = VectorStore.load(index_dir(), dim=embedder.EMBED_DIM)
+    if len(store) == 0:
+        print('Índice vazio. Rode "uv run main.py ai index" primeiro.')
+        sys.exit(1)
+    if not embedder.is_available(embed_model):
+        print(f"Embedder indisponível. Rode: ollama pull {embed_model}")
+        sys.exit(1)
+
+    sources = distinct_sources(store, kind=ns.kind)
+    if not sources:
+        print("Nenhum documento corresponde ao filtro.")
+        return
+
+    _, embed_query = _embed_fns(embed_model)
+    results = run_batch(
+        ns.query,
+        store,
+        embed_query,
+        sources=sources,
+        model_name=ns.model or DEFAULT_MODEL,
+        k=ns.k,
+    )
+    for result in results:
+        print(f"\n=== {Path(result.source_path).name} ===")
+        print(result.answer.text)
+
+
 def run_ai_cli(ns: argparse.Namespace) -> None:
-    """Dispatch the `ai` subcommand: (re)index and/or answer a question."""
+    """Dispatch the `ai` subcommand: (re)index and/or answer/batch a question."""
     # Output filenames may contain non-cp1252 characters (e.g. fullwidth ｜).
     try:
         sys.stdout.reconfigure(encoding="utf-8", errors="replace")
@@ -175,4 +221,7 @@ def run_ai_cli(ns: argparse.Namespace) -> None:
         if ns.query == _INDEX_CMD:
             return
 
-    _ask(ns, embed_model)
+    if getattr(ns, "batch", False):
+        _batch(ns, embed_model)
+    else:
+        _ask(ns, embed_model)

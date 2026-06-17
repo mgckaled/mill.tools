@@ -62,6 +62,13 @@ def test_parses_options():
 
 
 @pytest.mark.unit
+def test_parses_batch_flags():
+    ns = _parse("resuma", "--batch", "--kind", "document")
+    assert ns.batch is True
+    assert ns.kind == "document"
+
+
+@pytest.mark.unit
 def test_index_query_dispatches_to_build_only(mocker):
     mocker.patch("src.core.rag.embedder.is_available", return_value=True)
     build = mocker.patch("src.cli.ai._build")
@@ -210,3 +217,92 @@ def test_ask_exits_when_embedder_unavailable(tmp_path, monkeypatch, mocker, caps
     with pytest.raises(SystemExit):
         _ask(_parse("q?"), "nomic-embed-text")
     assert "ollama pull" in capsys.readouterr().out
+
+
+@pytest.mark.unit
+def test_batch_flag_dispatches_to_batch_runner(mocker):
+    batch = mocker.patch("src.cli.ai._batch")
+    ask = mocker.patch("src.cli.ai._ask")
+
+    ns = _parse("resuma", "--batch")
+    ns.func(ns)
+
+    assert batch.called
+    assert not ask.called
+
+
+@pytest.mark.unit
+def test_batch_runner_prints_per_document(tmp_path, monkeypatch, mocker, capsys):
+    import src.core.rag.chat as chat
+    import src.core.rag.indexer as indexer
+    from src.cli.ai import _batch
+    from src.core.rag.store import VectorStore
+    from src.core.rag.types import ChunkMeta
+
+    rag_dir = tmp_path / "rag"
+    store = VectorStore(dim=768)
+    store.add(
+        np.ones((2, 768), dtype=np.float32),
+        [
+            ChunkMeta("alpha.txt", "transcription", 1.0, 0, "ctx a"),
+            ChunkMeta("beta.txt", "transcription", 1.0, 0, "ctx b"),
+        ],
+    )
+    store.persist(rag_dir)
+    monkeypatch.setattr(indexer, "index_dir", lambda: rag_dir)
+
+    mocker.patch("src.core.rag.embedder.is_available", return_value=True)
+    mocker.patch(
+        "src.core.rag.embedder.embed_query",
+        return_value=np.ones(768, dtype=np.float32),
+    )
+    mocker.patch.object(chat, "make_llm", return_value=_fake_llm("R-alpha", "R-beta"))
+
+    _batch(_parse("resuma", "--batch"), "nomic-embed-text")
+
+    out = capsys.readouterr().out
+    assert "alpha.txt" in out and "beta.txt" in out
+    assert "R-alpha" in out and "R-beta" in out
+
+
+@pytest.mark.unit
+def test_batch_runner_exits_when_index_empty(tmp_path, monkeypatch, capsys):
+    import src.core.rag.indexer as indexer
+    from src.cli.ai import _batch
+
+    monkeypatch.setattr(indexer, "index_dir", lambda: tmp_path / "empty")
+    with pytest.raises(SystemExit):
+        _batch(_parse("resuma", "--batch"), "nomic-embed-text")
+    assert "Índice vazio" in capsys.readouterr().out
+
+
+@pytest.mark.unit
+def test_batch_runner_exits_when_embedder_unavailable(
+    tmp_path, monkeypatch, mocker, capsys
+):
+    import src.core.rag.indexer as indexer
+    from src.cli.ai import _batch
+
+    rag_dir = tmp_path / "rag"
+    _persisted_store(rag_dir)
+    monkeypatch.setattr(indexer, "index_dir", lambda: rag_dir)
+    mocker.patch("src.core.rag.embedder.is_available", return_value=False)
+
+    with pytest.raises(SystemExit):
+        _batch(_parse("resuma", "--batch"), "nomic-embed-text")
+    assert "ollama pull" in capsys.readouterr().out
+
+
+@pytest.mark.unit
+def test_batch_runner_reports_no_match_for_kind(tmp_path, monkeypatch, mocker, capsys):
+    import src.core.rag.indexer as indexer
+    from src.cli.ai import _batch
+
+    rag_dir = tmp_path / "rag"
+    _persisted_store(rag_dir)  # one transcription chunk
+    monkeypatch.setattr(indexer, "index_dir", lambda: rag_dir)
+    mocker.patch("src.core.rag.embedder.is_available", return_value=True)
+
+    # No document-kind sources → graceful message, no crash.
+    _batch(_parse("resuma", "--batch", "--kind", "document"), "nomic-embed-text")
+    assert "Nenhum documento" in capsys.readouterr().out
