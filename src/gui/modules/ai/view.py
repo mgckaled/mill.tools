@@ -15,6 +15,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import subprocess
 import threading
 import time
 from pathlib import Path
@@ -29,9 +30,9 @@ from src.gui.modules.ai.pipeline_log import resolve_status
 from src.gui.modules.ai.worker import start_ai_answer, start_ai_index
 from src.gui.modules.base import Module
 from src.gui.theme.components import (
+    Cursor,
     action_button,
     hairline,
-    output_card,
     secondary_button,
     spinner,
 )
@@ -44,6 +45,20 @@ if TYPE_CHECKING:
 _MODULE_ID = "ai"
 _DEFAULT_EMBED_MODEL = "nomic-embed-custom"
 _TEXT_EXTS = {".txt", ".md"}
+
+
+def _rel_from_output(path: Path) -> str:
+    """Return the path relative to the 'output/' root (filename if not under it).
+
+    e.g. C:\\...\\output\\transcriptions\\text\\foo.txt → output/transcriptions/text/foo.txt
+    """
+    parts = path.parts
+    try:
+        i = next(k for k, p in enumerate(parts) if p == "output")
+        return "/".join(parts[i:])
+    except StopIteration:
+        return path.name
+
 
 # Readable blockquote styling on the dark theme (mirrors the in-app file viewer).
 _MD_STYLE = ft.MarkdownStyleSheet(
@@ -196,22 +211,92 @@ def build_ai_module(
             logging.debug("[d] startfile failed for %s: %s", path, exc)
             _toast(f"Não foi possível abrir {path.name}")
 
-    def _source_card(path: Path) -> ft.Control:
+    def _open_folder(path: Path) -> None:
+        try:
+            subprocess.run(["explorer", "/select,", str(path)], check=False)
+        except Exception as exc:
+            logging.debug("[d] explorer select failed for %s: %s", path, exc)
+
+    def _source_item(idx: int, path: Path) -> ft.Control:
+        """Compact cited-source row: [n] badge · filename / output-relative folder.
+
+        Replaces the heavy output_card — two tight lines instead of a card with
+        the full absolute path, to save vertical space in the answer panel. The
+        [n] badge ties the source back to the [n] markers in the answer; the row
+        opens the file, the trailing icon opens its folder.
+        """
         is_text = path.suffix.lower() in _TEXT_EXTS
         icon = (
             ft.Icons.ARTICLE_OUTLINED
             if is_text
             else ft.Icons.INSERT_DRIVE_FILE_OUTLINED
         )
-        extra = [
-            action_button(
-                "Abrir",
-                icon=ft.Icons.OPEN_IN_NEW,
-                on_click=lambda _e, _p=path: _open_source(_p),
-                accent=Color.log.info,
-            )
-        ]
-        return output_card(path, icon=icon, extra_actions=extra)
+        rel = _rel_from_output(path)  # output/transcriptions/text/foo.txt
+        folder = rel.rsplit("/", 1)[0] if "/" in rel else ""
+
+        badge = ft.Container(
+            content=ft.Text(
+                str(idx),
+                size=Type.tiny.size,
+                weight=ft.FontWeight.W_600,
+                color=ft.Colors.PRIMARY,
+            ),
+            bgcolor=ft.Colors.with_opacity(0.12, ft.Colors.PRIMARY),
+            border_radius=Radius.sm,
+            padding=ft.Padding(
+                left=Space.xs, right=Space.xs, top=Space.xxs, bottom=Space.xxs
+            ),
+            alignment=ft.Alignment.CENTER,
+        )
+        name_row = ft.Row(
+            controls=[
+                badge,
+                ft.Icon(icon, size=14, color=ft.Colors.ON_SURFACE_VARIANT),
+                ft.Text(
+                    path.name,
+                    size=Type.small.size,
+                    color=ft.Colors.ON_SURFACE,
+                    no_wrap=True,
+                    overflow=ft.TextOverflow.ELLIPSIS,
+                    expand=True,
+                    tooltip=path.name,
+                ),
+            ],
+            spacing=Space.xs,
+            vertical_alignment=ft.CrossAxisAlignment.CENTER,
+        )
+        folder_line = ft.Container(
+            padding=ft.Padding(left=Space.lg, right=0, top=0, bottom=0),
+            content=ft.Text(
+                folder,
+                size=Type.tiny.size,
+                color=ft.Colors.ON_SURFACE_VARIANT,
+                no_wrap=True,
+                overflow=ft.TextOverflow.ELLIPSIS,
+                tooltip=rel,
+            ),
+        )
+        open_area = ft.GestureDetector(
+            content=ft.Column([name_row, folder_line], spacing=0),
+            on_tap=lambda _e, _p=path: _open_source(_p),
+            mouse_cursor=Cursor.interactive,
+            expand=True,
+        )
+        folder_btn = ft.IconButton(
+            icon=ft.Icons.FOLDER_OPEN_OUTLINED,
+            icon_size=14,
+            tooltip="Abrir pasta",
+            on_click=lambda _e, _p=path: _open_folder(_p),
+            style=ft.ButtonStyle(mouse_cursor=Cursor.btn),
+        )
+        return ft.Container(
+            padding=ft.Padding(left=Space.xs, right=0, top=Space.xxs, bottom=Space.xxs),
+            content=ft.Row(
+                controls=[open_area, folder_btn],
+                spacing=0,
+                vertical_alignment=ft.CrossAxisAlignment.CENTER,
+            ),
+        )
 
     def _make_turn(query: str, text: str, sources: list[str]) -> ft.Control:
         controls: list[ft.Control] = [
@@ -252,7 +337,15 @@ def build_ai_module(
                     color=ft.Colors.ON_SURFACE_VARIANT,
                 )
             )
-            controls.extend(_source_card(Path(s)) for s in sources)
+            # Tight column so the compact source rows don't get the turn's sm gap.
+            controls.append(
+                ft.Column(
+                    controls=[
+                        _source_item(i, Path(s)) for i, s in enumerate(sources, 1)
+                    ],
+                    spacing=Space.xxs,
+                )
+            )
 
         return ft.Container(
             bgcolor=Color.dark.surface_variant,
@@ -266,6 +359,14 @@ def build_ai_module(
     def _append_turn(query: str, text: str, sources: list[str]) -> None:
         empty_state.visible = False
         session_list.controls.append(_make_turn(query, text, sources))
+        clear_btn.visible = True
+
+    def _clear_conversation(_e=None) -> None:
+        """Reset only the visual Q&A list (no model/index state is involved)."""
+        session_list.controls.clear()
+        empty_state.visible = True
+        clear_btn.visible = False
+        page.update()
 
     # ------------------------------------------------------------------
     # Event subscription (UI thread)
@@ -329,10 +430,20 @@ def build_ai_module(
     reindex_btn = secondary_button("Reindexar", icon=ft.Icons.REFRESH)
     reindex_btn.on_click = _on_reindex
 
+    # Clears only the visual session; hidden until there is at least one turn.
+    clear_btn = action_button(
+        "Limpar conversa",
+        icon=ft.Icons.DELETE_SWEEP_OUTLINED,
+        on_click=_clear_conversation,
+        accent=Color.log.muted,
+    )
+    clear_btn.visible = False
+
     status_row = ft.Row(
         controls=[
             ft.Icon(ft.Icons.STORAGE_OUTLINED, size=18, color=ft.Colors.PRIMARY),
             status_text,
+            clear_btn,
             reindex_btn,
         ],
         spacing=Space.sm,
