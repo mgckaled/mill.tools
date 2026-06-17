@@ -36,7 +36,7 @@ from src.gui.theme.components import (
     secondary_button,
     spinner,
 )
-from src.gui.theme.tokens import Color, Radius, Space, Type
+from src.gui.theme.tokens import Color, IconSize, Radius, Space, Type
 from src.gui.views.file_viewer import is_viewable, open_file_viewer
 
 if TYPE_CHECKING:
@@ -251,7 +251,7 @@ def build_ai_module(
         name_row = ft.Row(
             controls=[
                 badge,
-                ft.Icon(icon, size=14, color=ft.Colors.ON_SURFACE_VARIANT),
+                ft.Icon(icon, size=IconSize.sm, color=ft.Colors.ON_SURFACE_VARIANT),
                 ft.Text(
                     path.name,
                     size=Type.small.size,
@@ -284,7 +284,7 @@ def build_ai_module(
         )
         folder_btn = ft.IconButton(
             icon=ft.Icons.FOLDER_OPEN_OUTLINED,
-            icon_size=14,
+            icon_size=IconSize.sm,
             tooltip="Abrir pasta",
             on_click=lambda _e, _p=path: _open_folder(_p),
             style=ft.ButtonStyle(mouse_cursor=Cursor.btn),
@@ -304,7 +304,7 @@ def build_ai_module(
                 controls=[
                     ft.Icon(
                         ft.Icons.HELP_OUTLINE,
-                        size=18,
+                        size=IconSize.lg,
                         color=ft.Colors.ON_SURFACE_VARIANT,
                     ),
                     ft.Text(
@@ -441,7 +441,9 @@ def build_ai_module(
 
     status_row = ft.Row(
         controls=[
-            ft.Icon(ft.Icons.STORAGE_OUTLINED, size=18, color=ft.Colors.PRIMARY),
+            ft.Icon(
+                ft.Icons.STORAGE_OUTLINED, size=IconSize.lg, color=ft.Colors.PRIMARY
+            ),
             status_text,
             clear_btn,
             reindex_btn,
@@ -486,7 +488,7 @@ def build_ai_module(
             controls=[
                 ft.Icon(
                     ft.Icons.AUTO_AWESOME_OUTLINED,
-                    size=48,
+                    size=IconSize.hero,
                     color=ft.Colors.OUTLINE_VARIANT,
                 ),
                 ft.Text(

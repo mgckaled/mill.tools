@@ -23,7 +23,7 @@ from src.gui.theme.components import (
 
 Tokens de valor (sem Flet) — via `src.gui.theme.tokens`:
 ```python
-from src.gui.theme.tokens import Color, Type, Space, Radius, Motion, Layout
+from src.gui.theme.tokens import Color, Type, Space, Radius, IconSize, Motion, Layout
 ```
 
 Tema da página — via `src.gui.theme.theme`:
@@ -130,6 +130,9 @@ Space.lg = 18  Space.xl = 24  Space.xxl = 32  Space.xxxl = 48
 
 # Radius
 Radius.sm = 6   Radius.md = 10   Radius.lg = 14   Radius.pill = 999
+
+# IconSize — tamanhos de ícone (px) para ft.Icon(size=) / IconButton(icon_size=)
+IconSize.sm = 14   IconSize.md = 16   IconSize.lg = 18   IconSize.xl = 24   IconSize.hero = 48
 
 # Motion — durações em ms
 Motion.fast = 200   Motion.base = 300   Motion.slow = 500   Motion.spin = 900

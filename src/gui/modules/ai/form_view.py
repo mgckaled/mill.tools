@@ -23,7 +23,7 @@ from src.gui.theme.components import (
     section_label,
     segmented_selector,
 )
-from src.gui.theme.tokens import Radius, Space, Type
+from src.gui.theme.tokens import IconSize, Radius, Space, Type
 
 _SCOPE_OPTIONS = ["all", "transcription", "document", "image"]
 _SCOPE_LABELS = {
@@ -132,7 +132,9 @@ def build_ai_form(page: ft.Page, *, on_ask: Callable[[], None]) -> AiForm:
         ),
         content=ft.Row(
             controls=[
-                ft.Icon(ft.Icons.ARTICLE_OUTLINED, size=16, color=ft.Colors.PRIMARY),
+                ft.Icon(
+                    ft.Icons.ARTICLE_OUTLINED, size=IconSize.md, color=ft.Colors.PRIMARY
+                ),
                 ft.Text(
                     "Este documento:",
                     size=Type.small.size,
@@ -141,7 +143,7 @@ def build_ai_form(page: ft.Page, *, on_ask: Callable[[], None]) -> AiForm:
                 doc_name,
                 ft.IconButton(
                     icon=ft.Icons.CLOSE,
-                    icon_size=14,
+                    icon_size=IconSize.sm,
                     tooltip="Limpar — voltar ao acervo",
                     on_click=_clear_doc,
                 ),
@@ -177,7 +179,9 @@ def build_ai_form(page: ft.Page, *, on_ask: Callable[[], None]) -> AiForm:
         ),
         content=ft.Row(
             controls=[
-                ft.Icon(ft.Icons.CLOUD_OUTLINED, size=16, color=ft.Colors.PRIMARY),
+                ft.Icon(
+                    ft.Icons.CLOUD_OUTLINED, size=IconSize.md, color=ft.Colors.PRIMARY
+                ),
                 ft.Text(
                     "Com Gemini, os trechos recuperados são enviados à nuvem no "
                     "passo de resposta. Os embeddings continuam locais.",
@@ -269,7 +273,9 @@ def build_ai_form(page: ft.Page, *, on_ask: Callable[[], None]) -> AiForm:
         content=ft.Row(
             controls=[
                 ft.Icon(
-                    ft.Icons.WARNING_AMBER_OUTLINED, size=16, color=ft.Colors.ERROR
+                    ft.Icons.WARNING_AMBER_OUTLINED,
+                    size=IconSize.md,
+                    color=ft.Colors.ERROR,
                 ),
                 ft.Text(
                     f"Ollama / nomic-embed-custom indisponível. Rode: {SETUP_HINT}",

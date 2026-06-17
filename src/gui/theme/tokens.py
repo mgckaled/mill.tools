@@ -1,4 +1,5 @@
 """Design System — tokens de valor (sem dependência de Flet)."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -54,13 +55,14 @@ class Color:
 
     class log:
         """Cores semânticas do log — estáveis em ambos os temas."""
-        info = "#5B9BD5"   # [i]  azul     — informação (único uso de azul na UI)
-        step = "#4FD0E0"   # [*]  ciano    — etapa / carregando
-        work = "#F4A63C"   # [~]  dourado  — trabalhando (amarra com o spinner)
-        ok = "#5FCF80"   # [✓]  verde    — concluído
-        error = "#E5736B"   # [!]  vermelho — erro
-        muted = "#6B7C90"   # [»][d] slate  — secundário / debug
-        text = "#C0C8D0"   # (sem prefixo) — conteúdo transcrito
+
+        info = "#5B9BD5"  # [i]  azul     — informação (único uso de azul na UI)
+        step = "#4FD0E0"  # [*]  ciano    — etapa / carregando
+        work = "#F4A63C"  # [~]  dourado  — trabalhando (amarra com o spinner)
+        ok = "#5FCF80"  # [✓]  verde    — concluído
+        error = "#E5736B"  # [!]  vermelho — erro
+        muted = "#6B7C90"  # [»][d] slate  — secundário / debug
+        text = "#C0C8D0"  # (sem prefixo) — conteúdo transcrito
 
 
 class Type:
@@ -79,8 +81,8 @@ class Type:
     body_strong = _TypeSpec(16.0, 600)
     button = _TypeSpec(16.0, 600)
     caption = _TypeSpec(14.0, 400)
-    small = _TypeSpec(11.0, 400)   # labels de ícone, caminhos, badges
-    tiny = _TypeSpec(10.0, 400)    # rótulos micro ("Antes"/"Depois")
+    small = _TypeSpec(11.0, 400)  # labels de ícone, caminhos, badges
+    tiny = _TypeSpec(10.0, 400)  # rótulos micro ("Antes"/"Depois")
     input = _TypeSpec(13.0, 400)
     mono = _TypeSpec(13, 300, "JetBrains Mono")
 
@@ -105,6 +107,16 @@ class Radius:
     md = 10
     lg = 14
     pill = 999
+
+
+class IconSize:
+    """Tamanhos de ícone (px) — para ft.Icon(size=) e IconButton(icon_size=)."""
+
+    sm = 14  # ícones de ação em linhas/cards densos
+    md = 16  # ícones pequenos inline (chips, avisos)
+    lg = 18  # ícone padrão de cabeçalho / status
+    xl = 24  # ícones de destaque
+    hero = 48  # ícones grandes (empty-state)
 
 
 class Motion:
