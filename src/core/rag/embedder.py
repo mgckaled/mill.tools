@@ -12,15 +12,23 @@ import logging
 
 import numpy as np
 
-DEFAULT_EMBED_MODEL = "nomic-embed-text"  # 768-dim, torch-free, CPU-friendly
+# CPU-pinned custom build of nomic-embed-text (num_gpu 0), matching the project's
+# *-custom convention so embedding never contends for the MX150 with Whisper/Flet.
+DEFAULT_EMBED_MODEL = "nomic-embed-custom"  # 768-dim, torch-free, CPU-only
 EMBED_DIM = 768
+
+# Shown when is_available() is False: how to provision the embed model.
+SETUP_HINT = (
+    "ollama pull nomic-embed-text && "
+    "ollama create nomic-embed-custom -f ollama/Modelfile.nomic"
+)
 
 
 def is_available(model: str = DEFAULT_EMBED_MODEL) -> bool:
     """Return True if langchain-ollama is importable and the embed model answers.
 
-    Used to gate the GUI/CLI: when False, the caller shows a hint to run
-    ``ollama pull nomic-embed-text`` instead of failing mid-pipeline.
+    Used to gate the GUI/CLI: when False, the caller shows ``SETUP_HINT``
+    instead of failing mid-pipeline.
     """
     try:
         from langchain_ollama import OllamaEmbeddings

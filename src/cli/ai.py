@@ -48,7 +48,7 @@ def add_ai_parser(subparsers: argparse._SubParsersAction) -> None:
         "--embed-model",
         default=None,
         dest="embed_model",
-        help="Embedding model (default nomic-embed-text)",
+        help="Embedding model (default nomic-embed-custom)",
     )
     p.add_argument(
         "--k",
@@ -145,7 +145,7 @@ def _ask(ns: argparse.Namespace, embed_model: str) -> None:
         print('Índice vazio. Rode "uv run main.py ai index" primeiro.')
         sys.exit(1)
     if not embedder.is_available(embed_model):
-        print(f"Embedder indisponível. Rode: ollama pull {embed_model}")
+        print(f"Embedder indisponível. Rode: {embedder.SETUP_HINT}")
         sys.exit(1)
 
     _, embed_query = _embed_fns(embed_model)
@@ -178,7 +178,7 @@ def _batch(ns: argparse.Namespace, embed_model: str) -> None:
         print('Índice vazio. Rode "uv run main.py ai index" primeiro.')
         sys.exit(1)
     if not embedder.is_available(embed_model):
-        print(f"Embedder indisponível. Rode: ollama pull {embed_model}")
+        print(f"Embedder indisponível. Rode: {embedder.SETUP_HINT}")
         sys.exit(1)
 
     sources = distinct_sources(store, kind=ns.kind)
@@ -214,7 +214,7 @@ def run_ai_cli(ns: argparse.Namespace) -> None:
 
     if ns.query == _INDEX_CMD or ns.reindex:
         if not embedder.is_available(embed_model):
-            print(f"Embedder indisponível. Rode: ollama pull {embed_model}")
+            print(f"Embedder indisponível. Rode: {embedder.SETUP_HINT}")
             sys.exit(1)
         logging.info("[*] Building index (embed model: %s)...", embed_model)
         _build(embed_model)

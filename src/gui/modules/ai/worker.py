@@ -53,7 +53,7 @@ def run_ai_index(
                 emit(
                     "task_error",
                     payload={
-                        "message": f"Embedder indisponível. Rode: ollama pull {embed_model}"
+                        "message": f"Embedder indisponível. Rode: {embedder.SETUP_HINT}"
                     },
                 )
                 return False
@@ -149,7 +149,7 @@ def run_ai_answer(
                 emit(
                     "task_error",
                     payload={
-                        "message": f"Embedder indisponível. Rode: ollama pull {embed_model}"
+                        "message": f"Embedder indisponível. Rode: {embedder.SETUP_HINT}"
                     },
                 )
                 return False

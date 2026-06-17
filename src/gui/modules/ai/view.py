@@ -42,7 +42,7 @@ if TYPE_CHECKING:
     from src.gui.events import EventBus
 
 _MODULE_ID = "ai"
-_DEFAULT_EMBED_MODEL = "nomic-embed-text"
+_DEFAULT_EMBED_MODEL = "nomic-embed-custom"
 _TEXT_EXTS = {".txt", ".md"}
 
 # Readable blockquote styling on the dark theme (mirrors the in-app file viewer).
@@ -171,8 +171,7 @@ def build_ai_module(
             form.set_available(available)
             if not available:
                 status_text.value = (
-                    "Ollama / nomic-embed-text indisponível — "
-                    "rode: ollama pull nomic-embed-text"
+                    f"Ollama / {embed_model} indisponível — rode: {embedder.SETUP_HINT}"
                 )
             reindex_btn.disabled = (not available) or pipeline_running[0]
             try:

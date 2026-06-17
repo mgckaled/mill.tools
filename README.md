@@ -98,6 +98,10 @@ ollama create phi4mini-custom -f ollama/Modelfile.phi4mini
 # descrição de imagens (módulo Imagens → Descrever)
 ollama pull moondream
 ollama create moondream-custom -f ollama/Modelfile.vision
+
+# embeddings do módulo IA (RAG local) — CPU-only (num_gpu 0)
+ollama pull nomic-embed-text
+ollama create nomic-embed-custom -f ollama/Modelfile.nomic
 ```
 
 ### Extras opcionais
@@ -223,7 +227,7 @@ uv run main.py library list --since 7d --sort size
 ### CLI — IA (RAG local sobre o corpus)
 
 ```bash
-# (re)indexa o acervo — exige: ollama pull nomic-embed-text
+# (re)indexa o acervo — exige o modelo de embedding (ver "Módulo IA" abaixo)
 uv run main.py ai index
 
 # pergunta ao acervo inteiro (a resposta cita as fontes)
@@ -436,7 +440,16 @@ Como funciona, em três passos:
 | **Status do índice** | Mostra documentos · chunks · horário da última atualização, com botão **Reindexar**. |
 | **Prompt library + templates** | Chips de atalho — Resumir, Pontos-chave, Reescrever formal, Traduzir — e templates estruturados — Ata de reunião, E-mail, Resumo executivo — que preenchem a pergunta. |
 
-**Privacidade:** os embeddings são **sempre locais**. Se você escolher um modelo Gemini, apenas os trechos recuperados são enviados à nuvem no passo de resposta. Pré-requisito: `ollama pull nomic-embed-text`. Há paridade na CLI via `uv run main.py ai`.
+**Privacidade:** os embeddings são **sempre locais**. Se você escolher um modelo Gemini, apenas os trechos recuperados são enviados à nuvem no passo de resposta.
+
+**Pré-requisito** — o modelo de embedding `nomic-embed-custom` (build CPU-only de `nomic-embed-text`, para não disputar a GPU com o Whisper):
+
+```bash
+ollama pull nomic-embed-text
+ollama create nomic-embed-custom -f ollama/Modelfile.nomic
+```
+
+Há paridade na CLI via `uv run main.py ai`.
 
 ---
 

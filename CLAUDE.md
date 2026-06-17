@@ -14,7 +14,7 @@ Multiferramenta pessoal extensível para processamento de áudio, vídeo, imagen
 - **pymupdf>=1.24** — engine PDF: merge, split, compress, rotate, watermark, stamp, encrypt, rasterização e extração de texto
 - **qrcode>=7.4** — geração de QR codes (PNG/JPG)
 - **rembg[cpu]** + **onnxruntime** (extra `[ai-image]`) — remoção de fundo CPU/ONNX
-- **LangChain** + **Ollama** (local) / **Google Gemini** (nuvem) — formatação, análise, condensação e descrição de imagens (vision); **RAG local** sobre o corpus (módulo IA) via `OllamaEmbeddings` (`nomic-embed-text`, 768-dim, torch-free)
+- **LangChain** + **Ollama** (local) / **Google Gemini** (nuvem) — formatação, análise, condensação e descrição de imagens (vision); **RAG local** sobre o corpus (módulo IA) via `OllamaEmbeddings` (`nomic-embed-custom`, CPU-only, 768-dim, torch-free)
 - **numpy>=1.26** — vector store do RAG (matriz cosseno em `.npz`); já presente via stack de áudio, declarado explícito
 - **Flet 0.85** — GUI desktop (Flutter no Windows); constraint em `pyproject.toml`: `flet>=0.28`, versão instalada e testada: 0.85.2
 - **tqdm** — barra de progresso (CLI)
@@ -229,7 +229,7 @@ RAG local sobre o corpus da Biblioteca: indexa o texto que você já produziu, r
 - **GUI** (`src/gui/modules/ai/`): hub no AppBar, split form|painel. `form_view.py` — escopo (`segmented_selector` Tudo/Transcrições/Documentos/Imagens + chip de documento fixado pela bridge), modelo da resposta (`qwen7b-custom`/`gemini-2.5-flash`, com aviso de privacidade Gemini) e **chips de prompt** (`load_templates()`) que preenchem a pergunta. `worker.py` — `run_ai_index`/`run_ai_answer` em thread daemon emitindo por `EventBus` (`module_id="ai"`); cancelamento aborta a indexação pelo `progress_cb`. `view.py` — **auto-contido** (assina seus eventos, não usa `ProgressPanel`): status do índice ("N docs · M chunks · atualizado HH:MM") com **Reindexar**, barra + spinner, e sessão rolável de turnos Q&A — a resposta é `ft.Markdown` (mesma stylesheet do visor) e cada fonte vira `output_card` que abre no visor in-app (texto) ou no SO. O status é calculado **fora da thread de UI** porque `embedder.is_available()` faz ping no Ollama.
 - **Persistência**: `last_ai_model`, `last_ai_scope`, `last_embed_model` em `config.json`; índice em `~/.mill-tools/rag/`; prompt library em `~/.mill-tools/prompts.json`.
 - **CLI** (`src/cli/ai.py`): `ai index` (re)indexa; `ai "pergunta"` responde; `--scope <path|kind>` restringe; `--model`/`--k`; `--reindex`; `--batch [--kind]` aplica a pergunta como instrução a cada documento. Reaproveita o mesmo core; embeddings sempre locais.
-- **Gate de disponibilidade**: `embedder.is_available()` (langchain-ollama importável + `nomic-embed-text` respondendo) bloqueia ambos os fluxos com a dica `ollama pull nomic-embed-text`.
+- **Gate de disponibilidade**: `embedder.is_available()` (langchain-ollama importável + `nomic-embed-custom` respondendo) bloqueia ambos os fluxos com a dica `embedder.SETUP_HINT` (`ollama pull nomic-embed-text && ollama create nomic-embed-custom -f ollama/Modelfile.nomic`). Modelo CPU-pinned (`num_gpu 0`) p/ não disputar a MX150 com Whisper/Flet — mesma decisão do `moondream-custom`.
 - **Quirk Ollama #10176**: configs que devolvem 8192 dims em vez de 768 → `_check_dim()` emite warning.
 
 ## Splash + Home Screen + spinner (branding)
@@ -376,7 +376,7 @@ Cobertura por módulo (último run, com branch):
 - **qwen7b-custom**: Qwen 2.5 7B — `--analyze` (`ollama/Modelfile`)
 - **phi4mini-custom**: Phi-4 Mini 3.8B — `--format` (`ollama/Modelfile.phi4mini`)
 - **moondream-custom**: moondream vision — descrição de imagens (`ollama/Modelfile.vision`; `num_thread 2`, `num_gpu 0`)
-- **nomic-embed-text**: embeddings do RAG (módulo IA) — 768-dim, CPU, torch-free. Instalar com `ollama pull nomic-embed-text`; `embedder.is_available()` gateia o módulo.
+- **nomic-embed-custom**: embeddings do RAG (módulo IA) — 768-dim, **CPU (`num_gpu 0`)**, torch-free (`ollama/Modelfile.nomic`, base `nomic-embed-text`). Setup: `ollama pull nomic-embed-text && ollama create nomic-embed-custom -f ollama/Modelfile.nomic`. `embedder.is_available()` gateia o módulo (constante `SETUP_HINT` centraliza a dica).
 - `num_gpu` controla camadas na GPU; `num_thread` controla threads CPU
 
 ## GUI Desktop (Flet 0.85)

@@ -13,6 +13,7 @@ from typing import Callable
 
 import flet as ft
 
+from src.core.rag.embedder import SETUP_HINT
 from src.core.rag.templates import load_templates
 from src.gui import settings
 from src.gui.theme.components import (
@@ -263,8 +264,7 @@ def build_ai_form(page: ft.Page, *, on_ask: Callable[[], None]) -> AiForm:
                     ft.Icons.WARNING_AMBER_OUTLINED, size=16, color=ft.Colors.ERROR
                 ),
                 ft.Text(
-                    "Ollama / nomic-embed-text indisponível. "
-                    "Rode: ollama pull nomic-embed-text",
+                    f"Ollama / nomic-embed-custom indisponível. Rode: {SETUP_HINT}",
                     size=Type.small.size,
                     color=ft.Colors.ON_SURFACE_VARIANT,
                     expand=True,

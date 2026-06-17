@@ -378,7 +378,7 @@ HELP_LONG: dict[str, str] = {
         "Como funciona:\n"
         "• Indexa o texto que você já produziu — transcrições, análises, "
         "digests, texto extraído/OCR de PDF e descrições de imagem — em "
-        "vetores de embedding (Ollama, nomic-embed-text, 100% local).\n"
+        "vetores de embedding (Ollama, nomic-embed-custom, 100% local, CPU).\n"
         "• Recupera os trechos mais relevantes para a sua pergunta (busca "
         "semântica por similaridade).\n"
         "• Responde com um LLM local (Ollama) ou na nuvem (Gemini, opcional), "
@@ -388,7 +388,8 @@ HELP_LONG: dict[str, str] = {
         "Privacidade: os embeddings são sempre locais. Se você escolher um "
         "modelo Gemini, apenas os trechos recuperados são enviados à nuvem no "
         "passo de resposta.\n\n"
-        "Pré-requisito: ollama pull nomic-embed-text. "
+        "Pré-requisito: ollama pull nomic-embed-text && "
+        "ollama create nomic-embed-custom -f ollama/Modelfile.nomic. "
         'Paridade na linha de comando: uv run main.py ai "sua pergunta".'
     ),
 }

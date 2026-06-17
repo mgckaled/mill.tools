@@ -236,7 +236,7 @@ Gemini só no passo de resposta. `run_ai_cli` reconfigura `sys.stdout` p/ UTF-8.
 | `query` (posicional) | — | Pergunta, ou o literal `index` para (re)indexar |
 | `--scope` | (acervo) | Caminho de arquivo (1 doc) **ou** kind (`transcription`/`document`/`image`). `_resolve_scope` resolve path existente → absoluto; senão trata como kind |
 | `--model` | `qwen7b-custom` | Modelo da resposta — Ollama tag ou `gemini-2.5-flash` |
-| `--embed-model` | `nomic-embed-text` | Modelo de embedding (sempre local) |
+| `--embed-model` | `nomic-embed-custom` | Modelo de embedding (sempre local, CPU `num_gpu 0`; ver `ollama/Modelfile.nomic`) |
 | `--k` | `6` | Trechos recuperados |
 | `--reindex` | off | Reindexa antes de responder |
 | `--batch` | off | Aplica a pergunta como instrução a **cada** documento indexado |
