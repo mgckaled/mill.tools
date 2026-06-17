@@ -9,6 +9,7 @@ keeps the rest of the core testable without a running Ollama.
 from __future__ import annotations
 
 import logging
+from typing import Callable
 
 import numpy as np
 
@@ -17,11 +18,27 @@ import numpy as np
 DEFAULT_EMBED_MODEL = "nomic-embed-custom"  # 768-dim, torch-free, CPU-only
 EMBED_DIM = 768
 
+# Embedding requests are split into sub-batches so a long document never sends
+# one huge /api/embed request. That caps the Ollama runner's memory spike — a
+# frequent cause of the embedding runner being killed on low-RAM machines — and
+# lets callers report progress per batch.
+EMBED_BATCH_SIZE = 16
+# Bounded httpx read timeout for the Ollama client: fail with a clear error
+# instead of hanging indefinitely when a runner stalls.
+EMBED_TIMEOUT = 300.0
+
 # Shown when is_available() is False: how to provision the embed model.
 SETUP_HINT = (
     "ollama pull nomic-embed-text && "
     "ollama create nomic-embed-custom -f ollama/Modelfile.nomic"
 )
+
+
+def _embeddings(model: str):
+    """Build an OllamaEmbeddings client with a bounded request timeout."""
+    from langchain_ollama import OllamaEmbeddings
+
+    return OllamaEmbeddings(model=model, client_kwargs={"timeout": EMBED_TIMEOUT})
 
 
 def is_available(model: str = DEFAULT_EMBED_MODEL) -> bool:
@@ -31,11 +48,11 @@ def is_available(model: str = DEFAULT_EMBED_MODEL) -> bool:
     instead of failing mid-pipeline.
     """
     try:
-        from langchain_ollama import OllamaEmbeddings
+        from langchain_ollama import OllamaEmbeddings  # noqa: F401
     except ImportError:
         return False
     try:
-        OllamaEmbeddings(model=model).embed_query("ping")
+        _embeddings(model).embed_query("ping")
         return True
     except Exception as exc:  # Ollama down or model not pulled
         logging.debug("[d] Embedder unavailable: %s", exc)
@@ -57,19 +74,37 @@ def _check_dim(arr: np.ndarray) -> None:
         )
 
 
-def embed_texts(texts: list[str], model: str = DEFAULT_EMBED_MODEL) -> np.ndarray:
-    """Return an (N, EMBED_DIM) float32 matrix for the given texts."""
-    from langchain_ollama import OllamaEmbeddings
+def embed_texts(
+    texts: list[str],
+    model: str = DEFAULT_EMBED_MODEL,
+    *,
+    batch_size: int = EMBED_BATCH_SIZE,
+    progress_cb: Callable[[int, int], None] | None = None,
+) -> np.ndarray:
+    """Return an (N, EMBED_DIM) float32 matrix, embedding in sub-batches.
 
-    vecs = OllamaEmbeddings(model=model).embed_documents(texts)
-    arr = np.asarray(vecs, dtype=np.float32)
+    Sub-batching keeps each request small so a long document cannot spike the
+    Ollama runner's memory; a single OllamaEmbeddings client is reused across
+    batches so the model stays loaded. ``progress_cb(done, total)`` fires after
+    each batch.
+    """
+    if not texts:
+        return np.empty((0, EMBED_DIM), dtype=np.float32)
+
+    client = _embeddings(model)
+    out: list[list[float]] = []
+    total = len(texts)
+    for start in range(0, total, batch_size):
+        out.extend(client.embed_documents(texts[start : start + batch_size]))
+        if progress_cb:
+            progress_cb(min(start + batch_size, total), total)
+
+    arr = np.asarray(out, dtype=np.float32)
     _check_dim(arr)
     return arr
 
 
 def embed_query(text: str, model: str = DEFAULT_EMBED_MODEL) -> np.ndarray:
     """Return a (EMBED_DIM,) float32 vector for a single query."""
-    from langchain_ollama import OllamaEmbeddings
-
-    vec = OllamaEmbeddings(model=model).embed_query(text)
+    vec = _embeddings(model).embed_query(text)
     return np.asarray(vec, dtype=np.float32)
