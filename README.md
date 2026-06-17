@@ -441,7 +441,7 @@ Como funciona, em três passos:
 | Recurso | O que faz |
 |---|---|
 | **Escopo** | Pergunte ao acervo inteiro, a um tipo (Transcrições / Documentos / Imagens) ou a um único documento (via "Conversar sobre" na Biblioteca). |
-| **Modelo da resposta** | `gemma3-1b-custom` (rápido, padrão) ou `gemma3-4b-custom`/`qwen7b-custom` (mais qualidade, mais lentos), todos locais; ou `gemini-2.5-flash` (nuvem, opt-in, com aviso de privacidade). |
+| **Modelo da resposta** | `gemma3-4b-custom` (padrão — melhor síntese/citação) ou `gemma3-1b-custom` (mais rápido, menos RAM, mais fraco) / `qwen7b-custom`, todos locais; ou `gemini-2.5-flash` (nuvem, opt-in, com aviso de privacidade). |
 | **Fontes citadas** | Cada resposta lista os documentos usados; clicar abre o texto no visor in-app ou o arquivo no sistema. |
 | **Status do índice** | Mostra documentos · chunks · horário da última atualização, com botão **Reindexar**. |
 | **Prompt library + templates** | Chips de atalho — Resumir, Pontos-chave, Reescrever formal, Traduzir — e templates estruturados — Ata de reunião, E-mail, Resumo executivo — que preenchem a pergunta. |
