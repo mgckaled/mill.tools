@@ -227,7 +227,7 @@ def build_ai_form(page: ft.Page, *, on_ask: Callable[[], None]) -> AiForm:
 
     def _chip(label: str, instruction: str, *, structured: bool) -> ft.Control:
         return ft.OutlinedButton(
-            text=label,
+            label,  # label is positional in Flet 0.85 (no `text=` kwarg)
             icon=ft.Icons.DASHBOARD_CUSTOMIZE_OUTLINED
             if structured
             else ft.Icons.BOLT_OUTLINED,
