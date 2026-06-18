@@ -93,9 +93,24 @@ def build_recipes_module(
             return
 
         from src.core.recipes.inputs import kind_for
+        from src.gui.modules._pipeline_runner import item_label
 
+        # Batch: one independent run per input. Otherwise a single run consuming
+        # all inputs (so merge/images_to_pdf get the whole list).
         try:
-            initial_kind = kind_for(items[0].kind, items[0].value)
+            if form.get_batch():
+                runs = [
+                    ([it.value], kind_for(it.kind, it.value), item_label(it))
+                    for it in items
+                ]
+            else:
+                runs = [
+                    (
+                        [it.value for it in items],
+                        kind_for(items[0].kind, items[0].value),
+                        item_label(items[0]),
+                    )
+                ]
         except ValueError as exc:
             _toast(str(exc))
             return
@@ -115,8 +130,8 @@ def build_recipes_module(
             bus,
             cancel_event,
             recipe=recipe,
-            initial_inputs=[it.value for it in items],
-            initial_kind=initial_kind,
+            runs=runs,
+            clean_intermediates=form.get_clean(),
         )
 
     def _on_cancel(_e=None) -> None:

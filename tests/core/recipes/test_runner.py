@@ -201,6 +201,147 @@ def test_invalid_recipe_emits_task_error_without_running(mocker, tmp_path):
 
 
 @pytest.mark.unit
+def test_emit_terminal_false_suppresses_lifecycle_events(mocker, tmp_path):
+    """In a batch entry (emit_terminal=False) no progress_start/task_done fire."""
+    from src.core.recipes import runner
+    from src.core.recipes.registry import STEP_REGISTRY
+
+    mocker.patch.dict(
+        STEP_REGISTRY,
+        {"t.s1": _spec(lambda i, p, c: [tmp_path / "a"], {"url"}, "audio")},
+    )
+
+    events = []
+    out = runner.execute_recipe(
+        _recipe("t.s1"),
+        ["http://x"],
+        initial_kind="url",
+        emit=lambda t, p: events.append(t),
+        cancel_is_set=lambda: False,
+        emit_terminal=False,
+    )
+
+    assert out == [tmp_path / "a"]
+    types = set(events)
+    assert "progress_start" not in types
+    assert "task_done" not in types
+    assert "step_start" in types  # step events still flow
+
+
+@pytest.mark.unit
+def test_emit_terminal_false_logs_failure_instead_of_task_error(mocker, tmp_path):
+    from src.core.recipes import runner
+    from src.core.recipes.registry import STEP_REGISTRY
+
+    # Invalid: initial_kind 'url' but the only step accepts 'audio'.
+    mocker.patch.dict(
+        STEP_REGISTRY,
+        {"t.s1": _spec(lambda i, p, c: [tmp_path / "a"], {"audio"}, "text")},
+    )
+
+    events = []
+    out = runner.execute_recipe(
+        _recipe("t.s1"),
+        ["http://x"],
+        initial_kind="url",
+        emit=lambda t, p: events.append((t, p)),
+        cancel_is_set=lambda: False,
+        emit_terminal=False,
+    )
+
+    assert out == []
+    types = [t for t, _ in events]
+    assert "task_error" not in types
+    assert any(t == "log" and "inválida" in p.get("message", "") for t, p in events)
+
+
+@pytest.mark.unit
+def test_execute_recipe_batch_runs_each_entry_and_aggregates(mocker, tmp_path):
+    from src.core.recipes import runner
+    from src.core.recipes.registry import STEP_REGISTRY
+
+    seen = []
+    mocker.patch.dict(
+        STEP_REGISTRY,
+        {
+            "t.s1": _spec(
+                lambda i, p, c: seen.append(i[0]) or [tmp_path / i[0]],
+                {"audio"},
+                "text",
+            )
+        },
+    )
+
+    events = []
+    out = runner.execute_recipe_batch(
+        _recipe("t.s1"),
+        [(["a"], "audio", "a"), (["b"], "audio", "b")],
+        emit=lambda t, p: events.append((t, p)),
+        cancel_is_set=lambda: False,
+    )
+
+    assert seen == ["a", "b"]
+    assert out == [tmp_path / "a", tmp_path / "b"]
+    types = [t for t, _ in events]
+    assert types[0] == "progress_start"
+    assert types.count("queue_progress") == 2
+    assert types[-1] == "task_done"
+    done = [p for t, p in events if t == "task_done"][0]
+    assert done["failed_count"] == 0
+
+
+@pytest.mark.unit
+def test_execute_recipe_batch_counts_failures_without_aborting(mocker, tmp_path):
+    from src.core.recipes import runner
+    from src.core.recipes.registry import STEP_REGISTRY
+
+    def _maybe_fail(inputs, params, ctx):
+        if inputs[0] == "bad":
+            raise RuntimeError("boom")
+        return [tmp_path / inputs[0]]
+
+    mocker.patch.dict(STEP_REGISTRY, {"t.s1": _spec(_maybe_fail, {"audio"}, "text")})
+
+    events = []
+    out = runner.execute_recipe_batch(
+        _recipe("t.s1"),
+        [(["bad"], "audio", "bad"), (["ok"], "audio", "ok")],
+        emit=lambda t, p: events.append((t, p)),
+        cancel_is_set=lambda: False,
+    )
+
+    assert out == [tmp_path / "ok"]  # the good entry still ran
+    done = [p for t, p in events if t == "task_done"][0]
+    assert done["failed_count"] == 1
+
+
+@pytest.mark.unit
+def test_execute_recipe_batch_cancel_between_entries(mocker, tmp_path):
+    from src.core.recipes import runner
+    from src.core.recipes.registry import STEP_REGISTRY
+
+    mocker.patch.dict(
+        STEP_REGISTRY,
+        {"t.s1": _spec(lambda i, p, c: [tmp_path / "a"], {"audio"}, "text")},
+    )
+    state = {"n": 0}
+
+    def cancel():
+        state["n"] += 1
+        return state["n"] >= 2
+
+    events = []
+    runner.execute_recipe_batch(
+        _recipe("t.s1"),
+        [(["a"], "audio", "a"), (["b"], "audio", "b")],
+        emit=lambda t, p: events.append((t, p)),
+        cancel_is_set=cancel,
+    )
+
+    assert any(t == "task_error" and "Cancelado" in p["message"] for t, p in events)
+
+
+@pytest.mark.unit
 def test_multi_input_step_reads_history_from_context(mocker, tmp_path):
     """A later step can reach an earlier step's outputs via ctx.outputs_by_op."""
     from src.core.recipes import runner

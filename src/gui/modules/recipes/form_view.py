@@ -17,6 +17,7 @@ from src.core.recipes import store
 from src.core.recipes.presets import PRESETS
 from src.core.recipes.registry import STEP_REGISTRY
 from src.core.recipes.types import Recipe, RecipeStep
+from src.gui import settings
 from src.gui.components.input_source import build_input_source
 from src.gui.theme.components import (
     Cursor,
@@ -24,6 +25,7 @@ from src.gui.theme.components import (
     primary_button,
     secondary_button,
     section_label,
+    switch_row,
 )
 from src.gui.theme.tokens import Color, IconSize, Radius, Space, Type
 
@@ -74,6 +76,8 @@ class RecipesForm:
     control: ft.Control
     get_recipe: Callable[[], "Recipe | None"]
     get_inputs: Callable[[], "list[InputItem]"]
+    get_batch: Callable[[], bool]
+    get_clean: Callable[[], bool]
     set_running: Callable[[bool], None]
     refresh: Callable[[], None]
 
@@ -181,6 +185,17 @@ def build_recipes_form(
         no_wrap=False,
     )
 
+    cfg = settings.load()
+    batch_switch = switch_row(
+        "Aplicar a cada arquivo (lote)", value=False, label_size=Type.input.size
+    )
+    clean_switch = switch_row(
+        "Limpar intermediários ao fim",
+        value=bool(cfg.get("recipe_clean_intermediates", False)),
+        on_change=lambda e: settings.set("recipe_clean_intermediates", e.control.value),
+        label_size=Type.input.size,
+    )
+
     run_btn = primary_button(
         "Rodar receita", icon=ft.Icons.PLAY_ARROW_ROUNDED, on_click=lambda _e: on_run()
     )
@@ -274,6 +289,8 @@ def build_recipes_form(
             section_label("Entrada"),
             input_source.control,
             expected_hint,
+            batch_switch,
+            clean_switch,
             run_btn,
         ],
         spacing=Space.md,
@@ -488,6 +505,8 @@ def build_recipes_form(
         control=control,
         get_recipe=lambda: selected[0],
         get_inputs=input_source.get_items,
+        get_batch=lambda: bool(batch_switch.value),
+        get_clean=lambda: bool(clean_switch.value),
         set_running=set_running,
         refresh=refresh,
     )

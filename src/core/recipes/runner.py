@@ -19,6 +19,14 @@ from src.core.recipes.validate import validate_recipe
 logger = logging.getLogger(__name__)
 
 
+def _fail(emit, emit_terminal: bool, message: str) -> None:
+    """Report a terminal failure: task_error when standalone, log line in a batch."""
+    if emit_terminal:
+        emit("task_error", {"message": message})
+    else:
+        emit("log", {"message": f"[!] {message}"})
+
+
 def execute_recipe(
     recipe: Recipe,
     initial_inputs: list,
@@ -26,6 +34,7 @@ def execute_recipe(
     initial_kind: str,
     emit,
     cancel_is_set,
+    emit_terminal: bool = True,
 ) -> list[Path]:
     """Run every step in order, feeding outputs forward. Returns final outputs.
 
@@ -39,6 +48,10 @@ def execute_recipe(
         initial_kind: Logical kind of ``initial_inputs`` (url/audio/video/pdf/...).
         emit: ``emit(type, payload)`` — forwards to an EventBus/CLIEventBus.
         cancel_is_set: ``() -> bool`` — checked between steps.
+        emit_terminal: When True (standalone run) emit progress_start/task_done/
+            task_error. When False (one entry of a batch) skip those — the batch
+            wrapper owns the lifecycle — and report failures as a log line so a
+            per-item failure does not look like the whole batch aborting.
 
     Returns:
         The final step's output paths, or ``[]`` on invalid/failed/cancelled runs.
@@ -48,19 +61,20 @@ def execute_recipe(
     # turns that (and kind mismatches) into a clean "recipe invalid" message.
     errors = validate_recipe(recipe, initial_kind)
     if errors:
-        emit("task_error", {"message": "Receita inválida: " + "; ".join(errors)})
+        _fail(emit, emit_terminal, "Receita inválida: " + "; ".join(errors))
         return []
 
     total = len(recipe.steps)
     emit("recipe_start", {"name": recipe.name, "total_steps": total})
-    emit("progress_start", {})
+    if emit_terminal:
+        emit("progress_start", {})
 
     current: list = list(initial_inputs)
     outputs_by_op: dict[str, list[Path]] = {}
 
     for idx, step in enumerate(recipe.steps, 1):
         if cancel_is_set():
-            emit("task_error", {"message": "Cancelado pelo usuário."})
+            _fail(emit, emit_terminal, "Cancelado pelo usuário.")
             return []
 
         spec = STEP_REGISTRY[step.op]  # safe: validate_recipe ran above
@@ -79,7 +93,7 @@ def execute_recipe(
         except Exception as exc:  # noqa: BLE001 — any core failure aborts the chain
             logger.warning("[!] Step '%s' failed: %s", step.op, exc)
             emit("step_error", {"op": step.op, "idx": idx, "message": str(exc)})
-            emit("task_error", {"message": f"Falha no passo '{spec.label}': {exc}"})
+            _fail(emit, emit_terminal, f"Falha no passo '{spec.label}': {exc}")
             return []
 
         outputs_by_op[step.op] = [Path(p) for p in current]
@@ -94,5 +108,62 @@ def execute_recipe(
         )
 
     final = [Path(p) for p in current]
-    emit("task_done", {"output_paths": [str(p) for p in final]})
+    if emit_terminal:
+        emit("task_done", {"output_paths": [str(p) for p in final]})
     return final
+
+
+def execute_recipe_batch(
+    recipe: Recipe,
+    runs: list,
+    *,
+    emit,
+    cancel_is_set,
+) -> list[Path]:
+    """Run ``recipe`` once per entry in ``runs``, aggregating the final outputs.
+
+    Mirrors ``run_queue_pipeline``: emits a single ``progress_start`` up front,
+    a ``queue_progress`` per entry, and one terminal ``task_done`` at the end.
+    Each per-entry run is ``emit_terminal=False`` so an individual failure logs a
+    line and is counted, without aborting the whole batch.
+
+    Args:
+        recipe: The recipe to apply to every entry.
+        runs: List of ``(initial_inputs, initial_kind, label)`` tuples.
+        emit: ``emit(type, payload)`` forwarder.
+        cancel_is_set: ``() -> bool`` — checked between entries.
+
+    Returns:
+        Every final output path across all successful entries.
+    """
+    total = len(runs)
+    emit("progress_start", {})
+    all_outputs: list[Path] = []
+    failed = 0
+
+    for idx, (inputs, kind, label) in enumerate(runs, 1):
+        if cancel_is_set():
+            emit("task_error", {"message": "Cancelado pelo usuário."})
+            return all_outputs
+        emit(
+            "queue_progress",
+            {"current_item": idx, "total_items": total, "item_name": label},
+        )
+        outputs = execute_recipe(
+            recipe,
+            inputs,
+            initial_kind=kind,
+            emit=emit,
+            cancel_is_set=cancel_is_set,
+            emit_terminal=False,
+        )
+        if outputs:
+            all_outputs.extend(outputs)
+        else:
+            failed += 1
+
+    emit(
+        "task_done",
+        {"output_paths": [str(p) for p in all_outputs], "failed_count": failed},
+    )
+    return all_outputs

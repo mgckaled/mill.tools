@@ -40,6 +40,7 @@ def test_core_operations_are_registered():
         "transcription.analyze",
         "document.ocr",
         "video.subtitle",
+        "ai.answer",
     ):
         assert key in STEP_REGISTRY
 
@@ -234,6 +235,60 @@ def test_subtitle_adapter_recovers_video_and_srt_from_context(mocker, tmp_path):
     assert mock.call_args.args[0] == video  # original video, not the chain's text
     assert mock.call_args.args[1] == srt  # subtitle recovered from history
     assert out == [tmp_path / "out.mp4"]
+
+
+@pytest.mark.unit
+def test_ai_answer_adapter_writes_markdown_with_sources(mocker, tmp_path, monkeypatch):
+    import src.core.recipes.registry as reg
+    import src.utils as utils
+    from src.core.rag.types import AnswerResult
+    from src.core.recipes.types import StepContext
+
+    monkeypatch.setattr(utils, "TRANSCRIPTIONS_ANALYSIS_DIR", tmp_path / "analysis")
+    mocker.patch("src.core.rag.embedder.is_available", return_value=True)
+    mocker.patch("src.core.library.scanner.scan_library", return_value=[])
+    mocker.patch("src.core.rag.indexer.build_index", return_value=None)
+    mocker.patch("src.core.rag.store.VectorStore.load", return_value=mocker.MagicMock())
+    mocker.patch("src.core.rag.retriever.retrieve", return_value=[])
+    mocker.patch(
+        "src.core.rag.chat.answer",
+        return_value=AnswerResult(text="resposta gerada", sources=[Path("foo.txt")]),
+    )
+
+    src = tmp_path / "doc.txt"
+    src.write_text("conteúdo", encoding="utf-8")
+    ctx = StepContext(
+        emit=lambda *a: None,
+        cancel_is_set=lambda: False,
+        initial_inputs=[src],
+        outputs_by_op={},
+    )
+
+    out = reg._ai_answer([src], {"query": "resuma"}, ctx)
+
+    assert out == [tmp_path / "analysis" / "doc_ia.md"]
+    text = out[0].read_text(encoding="utf-8")
+    assert "resposta gerada" in text
+    assert "foo.txt" in text
+
+
+@pytest.mark.unit
+def test_ai_answer_adapter_raises_when_embedder_unavailable(mocker, tmp_path):
+    import src.core.recipes.registry as reg
+    from src.core.recipes.types import StepContext
+
+    mocker.patch("src.core.rag.embedder.is_available", return_value=False)
+    src = tmp_path / "doc.txt"
+    src.write_text("x", encoding="utf-8")
+    ctx = StepContext(
+        emit=lambda *a: None,
+        cancel_is_set=lambda: False,
+        initial_inputs=[src],
+        outputs_by_op={},
+    )
+
+    with pytest.raises(RuntimeError, match="indisponível"):
+        reg._ai_answer([src], {}, ctx)
 
 
 @pytest.mark.unit

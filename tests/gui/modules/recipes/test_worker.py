@@ -1,8 +1,8 @@
-"""Unit tests for run_recipe_pipeline — forwards runner events to a fake bus.
+"""Unit tests for run_recipe_pipeline — single run, batch, and clean-intermediates.
 
-execute_recipe is mocked (the runner core is tested separately); here we only
-verify the worker forwards events under module_id="recipes" and adds the
-human-readable log lines for the step boundaries.
+execute_recipe / execute_recipe_batch are mocked (the runner core is tested
+separately); here we verify the worker forwards events under module_id="recipes",
+adds step log lines, and cleans intermediate files when asked.
 """
 
 import threading
@@ -24,18 +24,21 @@ def _recipe():
     return Recipe("R", [RecipeStep("audio.download")])
 
 
-def _fake_execute(recipe, initial_inputs, *, initial_kind, emit, cancel_is_set):
+def _fake_execute(
+    recipe, initial_inputs, *, initial_kind, emit, cancel_is_set, emit_terminal=True
+):
     emit("recipe_start", {"name": "R", "total_steps": 2})
     emit("step_start", {"op": "a", "label": "Baixar", "idx": 1, "total": 2})
     emit("step_done", {"op": "a", "idx": 1, "total": 2, "outputs": ["x.mp3"]})
-    emit("task_done", {"output_paths": ["y.md"]})
+    if emit_terminal:
+        emit("task_done", {"output_paths": ["y.md"]})
     from pathlib import Path
 
     return [Path("y.md")]
 
 
 @pytest.mark.unit
-def test_run_recipe_pipeline_forwards_events_and_logs(mocker):
+def test_single_run_forwards_events_and_logs(mocker):
     from src.gui.modules.recipes.worker import run_recipe_pipeline
 
     mocker.patch("src.core.recipes.runner.execute_recipe", side_effect=_fake_execute)
@@ -45,18 +48,14 @@ def test_run_recipe_pipeline_forwards_events_and_logs(mocker):
         bus,
         threading.Event(),
         recipe=_recipe(),
-        initial_inputs=["https://x"],
-        initial_kind="url",
+        runs=[(["https://x"], "url", "x")],
         install_log_handler=False,
     )
 
     assert ok is True
     types = [t for t, _, _ in bus.events]
-    assert "recipe_start" in types
-    assert "step_start" in types
-    assert "task_done" in types
+    assert "recipe_start" in types and "step_start" in types and "task_done" in types
     assert all(mid == "recipes" for _, _, mid in bus.events)
-
     logs = [p["message"] for t, p, _ in bus.events if t == "log"]
     assert any("Receita: R" in m for m in logs)
     assert any("Passo 1/2: Baixar" in m for m in logs)
@@ -64,7 +63,69 @@ def test_run_recipe_pipeline_forwards_events_and_logs(mocker):
 
 
 @pytest.mark.unit
-def test_run_recipe_pipeline_returns_false_when_no_output(mocker):
+def test_batch_uses_execute_recipe_batch(mocker):
+    from src.gui.modules.recipes import worker
+
+    called = {}
+
+    def _fake_batch(recipe, runs, *, emit, cancel_is_set):
+        called["n"] = len(runs)
+        emit("task_done", {"output_paths": ["a.md", "b.md"]})
+        from pathlib import Path
+
+        return [Path("a.md"), Path("b.md")]
+
+    mocker.patch(
+        "src.core.recipes.runner.execute_recipe_batch", side_effect=_fake_batch
+    )
+    bus = _Bus()
+
+    ok = worker.run_recipe_pipeline(
+        bus,
+        threading.Event(),
+        recipe=_recipe(),
+        runs=[(["a.mp3"], "audio", "a"), (["b.mp3"], "audio", "b")],
+        install_log_handler=False,
+    )
+
+    assert ok is True
+    assert called["n"] == 2
+
+
+@pytest.mark.unit
+def test_clean_intermediates_removes_non_final(mocker, tmp_path):
+    from src.gui.modules.recipes.worker import run_recipe_pipeline
+
+    inter = tmp_path / "inter.mp3"
+    inter.write_bytes(b"x")
+    final = tmp_path / "final.md"
+    final.write_text("ok", encoding="utf-8")
+
+    def _exec(
+        recipe, initial_inputs, *, initial_kind, emit, cancel_is_set, emit_terminal=True
+    ):
+        emit("step_done", {"op": "a", "idx": 1, "total": 2, "outputs": [str(inter)]})
+        emit("step_done", {"op": "b", "idx": 2, "total": 2, "outputs": [str(final)]})
+        emit("task_done", {"output_paths": [str(final)]})
+        return [final]
+
+    mocker.patch("src.core.recipes.runner.execute_recipe", side_effect=_exec)
+
+    run_recipe_pipeline(
+        bus=_Bus(),
+        cancel_event=threading.Event(),
+        recipe=_recipe(),
+        runs=[(["https://x"], "url", "x")],
+        clean_intermediates=True,
+        install_log_handler=False,
+    )
+
+    assert not inter.exists()  # intermediate removed
+    assert final.exists()  # final kept
+
+
+@pytest.mark.unit
+def test_returns_false_when_no_output(mocker):
     from src.gui.modules.recipes.worker import run_recipe_pipeline
 
     mocker.patch("src.core.recipes.runner.execute_recipe", return_value=[])
@@ -74,8 +135,7 @@ def test_run_recipe_pipeline_returns_false_when_no_output(mocker):
         bus,
         threading.Event(),
         recipe=_recipe(),
-        initial_inputs=["https://x"],
-        initial_kind="url",
+        runs=[(["https://x"], "url", "x")],
         install_log_handler=False,
     )
 
@@ -83,7 +143,7 @@ def test_run_recipe_pipeline_returns_false_when_no_output(mocker):
 
 
 @pytest.mark.unit
-def test_run_recipe_pipeline_handles_unexpected_exception(mocker):
+def test_handles_unexpected_exception(mocker):
     from src.gui.modules.recipes.worker import run_recipe_pipeline
 
     mocker.patch(
@@ -95,8 +155,7 @@ def test_run_recipe_pipeline_handles_unexpected_exception(mocker):
         bus,
         threading.Event(),
         recipe=_recipe(),
-        initial_inputs=["https://x"],
-        initial_kind="url",
+        runs=[(["https://x"], "url", "x")],
         install_log_handler=False,
     )
 
