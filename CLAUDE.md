@@ -39,7 +39,8 @@ src/
 │   ├── image.py                 — subcomando `image`: 12 sub-subcomandos (convert/resize/crop/…)
 │   ├── document.py              — subcomando `document`: 12 sub-subcomandos (merge/split/compress/…/ocr)
 │   ├── library.py               — subcomando `library`: `list` (tabela de tudo sob output/)
-│   └── ai.py                    — subcomando `ai`: index / pergunta / --batch (RAG local sobre o corpus)
+│   ├── ai.py                    — subcomando `ai`: index / pergunta / --batch (RAG local sobre o corpus)
+│   └── recipes.py               — subcomando `recipe`: list / run "<nome>" <URL_OR_FILE> (cadeias entre módulos)
 ├── core/
 │   ├── ffmpeg.py                — run_ffmpeg(): runner binário compartilhado com progresso pipe:1 (aceita cwd=)
 │   ├── subtitles.py             — SubtitleCue + to_srt()/to_vtt()/write_subtitles() (puro)
@@ -83,11 +84,19 @@ src/
 │       ├── retriever.py         — retrieve(query, store, embed_query_fn, k, scope) → top-k
 │       ├── chat.py              — answer(): contexto numerado [n] + prompt|make_llm → AnswerResult
 │       ├── templates.py         — prompt library + templates (ata/e-mail/resumo); ~/.mill-tools/prompts.json
-│       └── batch.py             — distinct_sources(), run_batch(): um prompt sobre N documentos
+│       ├── batch.py             — distinct_sources(), run_batch(): um prompt sobre N documentos
+│       └── recipes/             — core de Receitas (puro; cadeias lineares entre módulos)
+│           ├── types.py         — Recipe, RecipeStep, StepContext, StepSpec + KIND_* (kinds lógicos)
+│           ├── registry.py      — STEP_REGISTRY "module.op" → StepSpec(adapter, accepts, produces, label); adaptadores finos sobre o core dos 5 módulos + ai.answer
+│           ├── runner.py        — execute_recipe() (encadeia output→input; emit_terminal) + execute_recipe_batch() (lote)
+│           ├── validate.py      — validate_recipe(): coerência accepts/produces + ops desconhecidas
+│           ├── inputs.py        — kind_for(): resolve_input ("url"/"local") → kind lógico por extensão
+│           ├── presets.py       — PRESETS: 5 receitas embutidas (showcase cross-módulo)
+│           └── store.py         — load/save/delete em ~/.mill-tools/recipes.json
 └── gui/
     ├── app.py                   — build_app(): NavigationRail + registry de módulos + navigate_to
     ├── splash.py                — show_splash(): cata-vento + fade → show_home
-    ├── home.py                  — show_home(): 5 ferramentas (grade 3+2) + 2 hubs destacados (Biblioteca/IA) + moinho animado → build_app(initial_module)
+    ├── home.py                  — show_home(): 5 ferramentas (grade 3+2) + 3 hubs destacados (Biblioteca/IA/Receitas) + moinho animado → build_app(initial_module)
     ├── assets.py                — b64() (bytes p/ ft.Image), WINDOW_ICON
     ├── events.py                — EventBus, PipelineEvent (com module_id), LogEventHandler
     ├── settings.py              — persistência em ~/.mill-tools/config.json
@@ -105,7 +114,8 @@ src/
     │   ├── video/               — form_view.py, worker.py, view.py, pipeline_log.py
     │   ├── document/            — form_view.py, worker.py, view.py, pipeline_log.py, blocks/ (12 blocos)
     │   ├── library/             — view.py (grade + filtros), cards.py (factory de card); read-only, sem worker
-    │   └── ai/                  — form_view.py (escopo/modelo/chips), worker.py (index/answer), view.py (resposta Markdown + fontes), pipeline_log.py
+    │   ├── ai/                  — form_view.py (escopo/modelo/chips), worker.py (index/answer), view.py (resposta Markdown + fontes), pipeline_log.py
+    │   └── recipes/             — form_view.py (lista + construtor), worker.py (execute_recipe em thread), view.py (passo-a-passo + resultados), pipeline_log.py
     ├── theme/
     │   ├── theme.py             — apply_theme(), sync_page_bgcolor()
     │   ├── tokens.py            — Color, Type, Space, Radius, Motion, Layout
@@ -119,9 +129,9 @@ src/
 
 ## Sistema de módulos (GUI)
 
-A GUI é dividida em módulos. As 5 **ferramentas de processamento** — **Áudio**, **Vídeo**, **Imagens**, **Transcrição**, **Documentos** — ficam numa **NavigationRail** à esquerda (ordem: Áudio → Vídeo → Imagens → Transcrição → Documentos). **Biblioteca** (6º módulo) e **IA** (7º módulo) são **hubs**: vivem **fora da rail** porque operam sobre as saídas de todos os módulos (não são ferramentas par). Seus pontos de entrada são botões "Biblioteca" e "IA" no **AppBar** ao lado do wordmark "mill.tools" (dourados quando ativos). A ⓘ de ajuda fica no cabeçalho interno do módulo (padrão de help por módulo), não no AppBar. Ambos continuam em `MODULES` (e no `ft.Stack`), então `navigate_to` funciona normalmente; `_RAIL_MODULES` exclui os dois `_HUB_IDS`.
+A GUI é dividida em módulos. As 5 **ferramentas de processamento** — **Áudio**, **Vídeo**, **Imagens**, **Transcrição**, **Documentos** — ficam numa **NavigationRail** à esquerda (ordem: Áudio → Vídeo → Imagens → Transcrição → Documentos). **Biblioteca** (6º), **IA** (7º) e **Receitas** (8º) são **hubs**: vivem **fora da rail** porque operam sobre as saídas de todos os módulos (não são ferramentas par). Seus pontos de entrada são botões "Biblioteca", "IA" e "Receitas" no **AppBar** ao lado do wordmark "mill.tools" (dourados quando ativos). A ⓘ de ajuda fica no cabeçalho interno do módulo (padrão de help por módulo), não no AppBar. Os três continuam em `MODULES` (e no `ft.Stack`), então `navigate_to` funciona normalmente; `_RAIL_MODULES` exclui os três `_HUB_IDS` (`library`, `ai`, `recipes`).
 
-A entrada no app é mediada pela **Home Screen** (`src/gui/home.py`): duas zonas rotuladas — **5 ferramentas** (cards verticais, grade **3+2**) e **2 hubs** (Biblioteca/IA, cards **horizontais mais largos** com borda dourada e selo "HUB"). O CTA "Abrir módulo" não se repete por card: há uma **dica única** no canto superior esquerdo ("Selecione um módulo para começar") — posicionada via `top`/`left` no `Stack` (nunca `expand=True`, que cobriria a tela e engoliria os cliques). Ao clicar num card, `on_complete(module_id)` chama `build_app(initial_module=mid)`.
+A entrada no app é mediada pela **Home Screen** (`src/gui/home.py`): duas zonas rotuladas — **5 ferramentas** (cards verticais, grade **3+2**) e **3 hubs** (Biblioteca/IA/Receitas, cards **horizontais mais largos** com borda dourada e selo "HUB"). O CTA "Abrir módulo" não se repete por card: há uma **dica única** no canto superior esquerdo ("Selecione um módulo para começar") — posicionada via `top`/`left` no `Stack` (nunca `expand=True`, que cobriria a tela e engoliria os cliques). Ao clicar num card, `on_complete(module_id)` chama `build_app(initial_module=mid)`.
 
 - **Registry** (`src/gui/app.py`): `MODULES: list[Module]` é a fonte única. Adicionar um módulo = uma entrada na lista.
 - **Module** (`src/gui/modules/base.py`): dataclass com `id`, `label`, `icon`, `selected_icon`, `control`, `on_mount(payload)`, `on_unmount()`. O `control` é construído uma vez; trocar de aba **não** destrói o estado.
@@ -219,7 +229,7 @@ Hub navegável de tudo que os módulos já produziram sob `output/`. **Read-only
 - **Atualização**: `on_mount` re-escaneia ao entrar (pega saídas novas e deleções externas); assina o EventBus e re-escaneia ao vivo se a Biblioteca estiver visível quando um `task_done` chega.
 - **Ações por item**: **Abrir** — texto (`.txt`/`.md`) abre no **visor in-app** (`views/file_viewer.py`, modal com Markdown renderizado; lê resultado já processado sem reprocessar), demais tipos via `os.startfile` (toast se falhar); **Abrir pasta** (`explorer /select,`); e **bridges** via `nav[0](module_id, {"file": path})` — áudio/vídeo → Transcrição + Áudio; imagem → Imagens; PDF → Documentos; texto → "Analisar na Transcrição". Pré-requisito: `on_mount({"file": path})` + `fill_from_path` padronizados em **todos** os módulos-alvo (Áudio/Vídeo já tinham; Imagens/Documentos ganharam no PR6.4).
 - **CLI**: `uv run main.py library list [--kind] [--since 7d] [--sort]` (`src/cli/library.py`) reaproveita o core e imprime uma tabela. Sem pipeline, sem `CLIEventBus`; reconfigura stdout p/ UTF-8 (nomes com `｜` quebram o console cp1252).
-- **AppBar hub** (`src/gui/app.py`): fora da rail. `_RAIL_MODULES` = `MODULES` sem os `_HUB_IDS` (`library`, `ai`); `_rail_index(module_id)` mapeia o slot da rail (`None` para os hubs → rail deselecionada). `library_btn`/`ai_btn` são TextButtons (dourados quando ativos) no título, via `_hub_btn_style(active)` — a ⓘ de ajuda fica no módulo, não no AppBar.
+- **AppBar hub** (`src/gui/app.py`): fora da rail. `_RAIL_MODULES` = `MODULES` sem os `_HUB_IDS` (`library`, `ai`, `recipes`); `_rail_index(module_id)` mapeia o slot da rail (`None` para os hubs → rail deselecionada). `library_btn`/`ai_btn`/`recipes_btn` são TextButtons (dourados quando ativos) no título, via `_hub_btn_style(active)` — a ⓘ de ajuda fica no módulo, não no AppBar.
 
 ## Módulo IA (PR7)
 
@@ -232,13 +242,23 @@ RAG local sobre o corpus da Biblioteca: indexa o texto que você já produziu, r
 - **Gate de disponibilidade**: `embedder.is_available()` (langchain-ollama importável + `nomic-embed-custom` respondendo) bloqueia ambos os fluxos com a dica `embedder.SETUP_HINT` (`ollama pull nomic-embed-text && ollama create nomic-embed-custom -f ollama/Modelfile.nomic`). Modelo CPU-pinned (`num_gpu 0`) p/ não disputar a MX150 com Whisper/Flet — mesma decisão do `moondream-custom`.
 - **Quirk Ollama #10176**: configs que devolvem 8192 dims em vez de 768 → `_check_dim()` emite warning.
 
+## Módulo Receitas (PR8)
+
+Automação: cadeias **lineares** nomeadas onde a saída de um passo alimenta a entrada do próximo, atravessando módulos (ex.: `URL → baixar áudio → transcrever → analisar`). Generaliza o `run_pipeline` hardcoded da Transcrição. **Sem dependência nova**, torch-free; reaproveita `EventBus`/`CLIEventBus`, `resolve_input`, `InputSource`, `make_llm`, `scan_library` e o core puro dos 5 módulos.
+
+- **Core puro** (`src/core/recipes/`): `types.py` — `Recipe`/`RecipeStep`/`StepContext`/`StepSpec` + `KIND_*` (kinds lógicos que fluem entre passos). `registry.py` — `STEP_REGISTRY: "module.op" → StepSpec(adapter, accepts, produces, label)`: **adaptadores finos** que dão assinatura uniforme `adapter(inputs, params, ctx) → list[Path]` às funções de core heterogêneas (chamam o **core puro**, nunca o worker da GUI) e gravam no **dir canônico do módulo** (`src/utils`) p/ a Biblioteca classificar por kind. A camada de adaptador é a única que conhece a assinatura exata e normaliza os 3 estilos de callback (`on_event`/`progress_hook`/`progress_cb`) para `ctx.emit`. `runner.py` — `execute_recipe()` valida antes de iterar, encadeia output→input, emite a mesma anatomia de eventos do `run_queue_pipeline`, respeita cancel entre passos e aborta no 1º erro (`emit_terminal` distingue run isolado de entrada de lote); `execute_recipe_batch()` roda a receita sobre N entradas com `queue_progress`. `validate.py` — `validate_recipe()` checa coerência `accepts`/`produces` + ops desconhecidas. `inputs.py` — `kind_for()` mapeia `resolve_input` (`url`/`local`) → kind lógico por extensão. `presets.py` — `PRESETS` (5 receitas embutidas, type-coerentes por construção). `store.py` — load/save/delete em `~/.mill-tools/recipes.json`.
+- **Casos sutis** (confirmados contra o código): `transcription.format` reescreve in-place e retorna `str` → adaptador devolve `[input_path]`; `transcription.transcribe` aceita áudio **e** vídeo (PyAV) e devolve `[txt, *legendas]`; `video.subtitle` é o único **multi-input** — recupera o vídeo de `ctx.initial_inputs` e a `.srt` de `ctx.outputs_by_op["transcription.transcribe"]`; `ai.answer` (PR7) reindexa, recupera com escopo no próprio arquivo e grava `AnswerResult.text` + Fontes num `.md` (exige `embedder.is_available()`).
+- **GUI** (`src/gui/modules/recipes/`): hub no AppBar, split form|painel, **auto-contido** (assina `module_id="recipes"`). `form_view.py` — toggle **Rodar | Construir** (abas manuais): Rodar lista receitas (presets + salvas) selecionáveis + `InputSource` + dica "entrada esperada" + switches **lote** e **limpar intermediários**; Construir é um editor de sequência (dropdown só oferece ops compatíveis com a saída do passo anterior; reordenar por **↑/↓** — `ft.ReorderableListView` existe mas é scrollable sem `shrink_wrap`, frágil aninhado; validação ao vivo desabilita Salvar em cadeia incoerente). `worker.py` — `run_recipe_pipeline(runs, clean_intermediates)` roda `execute_recipe`/`execute_recipe_batch` em thread; 1 run → execução direta, N runs → lote; `clean_intermediates` apaga saídas de passos não-finais. `view.py` — progresso passo-a-passo, log rolável, Cancelar (entre passos) e cards de resultado (`output_card`) com bridge "Abrir na Biblioteca". `pipeline_log.py` — `fmt_*` + `resolve_status`.
+- **Persistência**: `last_recipe`, `recipe_clean_intermediates` em `config.json`; receitas do usuário em `~/.mill-tools/recipes.json`.
+- **CLI** (`src/cli/recipes.py`): `recipe list` (presets + salvas, com a cadeia) e `recipe run "<nome>" <URL_OR_FILE>` (`--model` sobrescreve o Whisper dos passos de transcrição). Resolve a receita, monta `initial_inputs`+`initial_kind` via `resolve_input`+`kind_for`, cria `CLIEventBus` e chama `execute_recipe` — mesmo core da GUI.
+
 ## Splash + Home Screen + spinner (branding)
 
 Fluxo completo de entrada: `show_splash` → `show_home` → `build_app(initial_module)`.
 
 - **Splash** (`src/gui/splash.py`): fade-in + scale + uma volta do cata-vento, então chama `show_home`. Cores via `Color.dark.*` — sem literais hardcoded.
-- **Home Screen** (`src/gui/home.py`): tela intermediária com **5 ferramentas (grade 3+2) + 2 hubs destacados (Biblioteca/IA)** sobre o símbolo do moinho girando lentamente (opacity 0.16, 20s/volta). O wordmark é alinhado ao topo (não centralizado) para ganhar espaço. Hubs são `_make_hub_card` (horizontal: chip de ícone à esquerda + conteúdo, borda dourada `Color.PRIMARY`, selo "HUB"); ferramentas são `_make_card` (vertical, sem CTA). Dica única no canto superior esquerdo, posicionada por `top`/`left` no `Stack` (não `expand` — senão cobre a tela e bloqueia cliques). Ao clicar num card: fade-out 350ms EASE_IN → `build_app(initial_module=id)` com fade-in 500ms EASE_OUT. Tema salvo é aplicado em `show_home` antes de `build_app`. Cada card é `GestureDetector` + `Container` (sem `ink=True` — quirk Flet 0.85); hover muta `bgcolor` e `border` com `Motion.fast` (hubs descansam com borda dourada).
-- **AppBar** (`src/gui/app.py`): título = `ft.Row([wordmark, library_btn])` — wordmark "mill.tools" com spans + botão **Biblioteca** (TextButton dourado quando ativo, navega para o módulo Biblioteca). Botões "Home"/"Splash"/tema em `actions` — chamam `_go_home`/`_go_splash` (bloqueados se pipeline rodando). `page.pubsub.unsubscribe_all()` no início de `build_app` evita acúmulo de subscribers em re-entradas. `page.appbar = None` antes de navegar para splash/home.
+- **Home Screen** (`src/gui/home.py`): tela intermediária com **5 ferramentas (grade 3+2) + 3 hubs destacados (Biblioteca/IA/Receitas)** sobre o símbolo do moinho girando lentamente (opacity 0.16, 20s/volta). O wordmark é alinhado ao topo (não centralizado) para ganhar espaço. Hubs são `_make_hub_card` (horizontal: chip de ícone à esquerda + conteúdo, borda dourada `Color.PRIMARY`, selo "HUB"); ferramentas são `_make_card` (vertical, sem CTA). Dica única no canto superior esquerdo, posicionada por `top`/`left` no `Stack` (não `expand` — senão cobre a tela e bloqueia cliques). Ao clicar num card: fade-out 350ms EASE_IN → `build_app(initial_module=id)` com fade-in 500ms EASE_OUT. Tema salvo é aplicado em `show_home` antes de `build_app`. Cada card é `GestureDetector` + `Container` (sem `ink=True` — quirk Flet 0.85); hover muta `bgcolor` e `border` com `Motion.fast` (hubs descansam com borda dourada).
+- **AppBar** (`src/gui/app.py`): título = `ft.Row([wordmark, library_btn, ai_btn, recipes_btn])` — wordmark "mill.tools" com spans + os 3 botões-hub **Biblioteca**/**IA**/**Receitas** (TextButtons dourados quando ativos, navegam para o módulo correspondente). Botões "Home"/"Splash"/tema em `actions` — chamam `_go_home`/`_go_splash` (bloqueados se pipeline rodando). `page.pubsub.unsubscribe_all()` no início de `build_app` evita acúmulo de subscribers em re-entradas. `page.appbar = None` antes de navegar para splash/home.
 - **Spinner**: `ft.Image` do cata-vento, giro encadeado via `on_animation_end` (curva LINEAR). Para na vertical ao terminar.
 - **Assets** (`src/gui/assets.py`): `b64(name)` retorna bytes; `WINDOW_ICON` → `assets/icons/mill.ico`.
 
@@ -291,6 +311,11 @@ uv run main.py ai "o que eu disse sobre faster-whisper?"     # pergunta ao acerv
 uv run main.py ai "resuma" --scope output/transcriptions/text/x.txt  # um documento
 uv run main.py ai "liste as ações" --batch --kind transcription      # batch por documento
 uv run main.py ai "..." --model gemini-2.5-flash --k 8
+
+# Receitas / Automação (cadeias entre módulos; mesmo core da GUI)
+uv run main.py recipe list                                   # presets + receitas salvas
+uv run main.py recipe run "Limpar áudio do YouTube" <URL>    # roda por nome
+uv run main.py recipe run "YouTube → transcrição completa" <URL> --model medium
 ```
 
 > Referência completa de flags CLI → skill `cli` (`.claude/skills/cli/SKILL.md`)
@@ -316,7 +341,7 @@ uv run main.py ai "..." --model gemini-2.5-flash --k 8
 ```bash
 uv run pytest -m unit -v                                                   # unitários apenas (rápido — <5s)
 uv run pytest -m integration -v                                            # integração apenas (requer ffmpeg)
-uv run pytest -v                                                           # suíte completa (583 unit)
+uv run pytest -v                                                           # suíte completa (684 unit)
 uv run pytest -n auto                                                      # paraleliza (pytest-xdist; ganho cresce com a suíte)
 uv run pytest --cov=src --cov-report=term-missing                         # cobertura terminal
 uv run pytest --cov=src --cov-report=html                                  # cobertura HTML em htmlcov/
@@ -327,7 +352,7 @@ uv run pytest tests/caminho/test_arquivo.py -v                            # arqu
 uv run pytest -k "sanitize" -v                                            # filtrar por nome
 ```
 
-Estrutura espelha `src/`: `tests/core/audio/`, `tests/core/image/`, `tests/core/video/`, `tests/core/document/`, `tests/core/library/`, `tests/core/rag/`, `tests/cli/`, `tests/gui/`. Fixtures em `tests/conftest.py`:
+Estrutura espelha `src/`: `tests/core/audio/`, `tests/core/image/`, `tests/core/video/`, `tests/core/document/`, `tests/core/library/`, `tests/core/rag/`, `tests/core/recipes/`, `tests/cli/`, `tests/gui/`. Fixtures em `tests/conftest.py`:
 
 - **Function-scoped**: `jpg_image`, `png_image`, `out_dir`
 - **Session-scoped**: `sample_wav`, `sample_mp3`, `sample_mp4`, `sample_wav_stereo`, `session_jpg`, `sample_pdf`, `sample_pdf_with_images` (PDFs gerados via `pytest.importorskip("pymupdf")`)
@@ -341,14 +366,16 @@ Cobertura por arquivo (recortes principais):
 - **Core document**: `test_processor.py`, `test_converter.py`, `test_info.py`, `test_qr.py` — unit, usam pymupdf/qrcode **reais** via fixtures de sessão. `test_ocr.py` — unit (mocka pytesseract para o fluxo híbrido) + 1 integration real com Tesseract (skip se ausente). `test_info.py` cobre também `render_first_page_png` (raster real + zero-page mockado).
 - **Core library**: `test_scanner.py` — unit puro (`classify_path`, `scan_library` com árvore falsa via `monkeypatch` dos roots, skip de ocultos e ilegíveis, `filter_items`/`sort_items`). `test_thumbnails.py` — unit (imagem/PDF reais → bytes; áudio/transcrição/corrompidos → None) + 1 integration de frame de vídeo. Scanner/thumbnails ≥ 98%.
 - **Core RAG** (`tests/core/rag/`): tudo unit, sem Ollama — `embed_fn`/`embed_query_fn` injetados e LLM via `GenericFakeChatModel`. `test_store.py` (cosseno determinístico, `drop_source`, persist/load), `test_retriever.py` (top-k + filtro de escopo), `test_embedder.py` (ramos de `is_available`/dim, `langchain_ollama` falso via `sys.modules`), `test_indexer.py` (chunking, header strip, filtro kind/sufixo, skip incremental/reembed por mtime, reconciliação, progresso), `test_chat.py` (contexto numerado + dedupe de fontes), `test_templates.py` (defaults + merge de `prompts.json` + proteção contra shadowing), `test_batch.py` (distinct/dedupe, kind, um answer por documento). Core ≥ 98% (`batch`/`chat`/`embedder`/`indexer`/`retriever`/`types` 100%).
-- **GUI**: `tests/gui/modules/<audio|image|video|document>/test_pipeline_log.py` — `resolve_messages`/`resolve_stage_label` + `fmt_*` builders. `tests/gui/modules/ai/` — `test_worker.py` (index/answer via bus falso + core mockado; ramos indisponível/vazio/cancelado) e `test_pipeline_log.py` (`resolve_status` + `fmt_*`). Workers não dependem de Flet, então são testáveis fora da cobertura.
+- **GUI**: `tests/gui/modules/<audio|image|video|document>/test_pipeline_log.py` — `resolve_messages`/`resolve_stage_label` + `fmt_*` builders. `tests/gui/modules/ai/` — `test_worker.py` (index/answer via bus falso + core mockado; ramos indisponível/vazio/cancelado) e `test_pipeline_log.py` (`resolve_status` + `fmt_*`). `tests/gui/modules/recipes/` — `test_worker.py` (single/lote/clean/false/exceção via bus falso + `execute_recipe(_batch)` mockado) e `test_pipeline_log.py`. Workers não dependem de Flet, então são testáveis fora da cobertura.
+- **Core Receitas** (`tests/core/recipes/`): tudo unit, sem ffmpeg/Whisper/rede. `test_registry.py` (cada `StepSpec` bem-formada + cada adaptador mockado no ponto de uso fixando o contrato `list[Path]` e pegando drift de assinatura; `ai.answer` com o core RAG mockado; multi-input `video.subtitle`), `test_runner.py` (encadeamento, ordem de eventos, cancel, stop_on_error, `emit_terminal`, `execute_recipe_batch` agrega/conta falhas/cancela, histórico multi-input via `mocker.patch.dict(STEP_REGISTRY, ...)`), `test_validate.py`, `test_presets.py` (cada preset válido p/ todo kind aceito pelo 1º passo), `test_store.py` (round-trip JSON em `tmp_path`), `test_inputs.py` (extensão → kind). Core ≥ 99%. `tests/cli/test_recipe_cli.py` cobre parser + `run_recipe_cli` (`execute_recipe` mockado).
 - **LLM pipeline** (`tests/test_formatter.py`, `test_analyzer.py`, `test_prompter.py`): mockam LangChain via `GenericFakeChatModel` de `langchain_core.language_models.fake_chat_models` (Runnable real — `prompt | llm` funciona naturalmente sem fighting com MagicMock `__or__`).
 
 Cobertura agregada do projeto: **88%** (com branch coverage).
 
 Cobertura por módulo (último run, com branch):
 
-- **100%**: `formatter.py`, `prompter.py`, `llm_utils.py`, `cli/audio.py`, `cli/transcription.py`, `core/ffmpeg.py`, `core/audio/normalizer.py`, `core/audio/info.py`, `core/video/converter.py`, `core/library/types.py`, `core/library/thumbnails.py`, `core/rag/{types,embedder,retriever,indexer,chat,batch}.py`, e todos os `args.py`/`__init__.py`.
+- **100%**: `formatter.py`, `prompter.py`, `llm_utils.py`, `cli/audio.py`, `cli/transcription.py`, `core/ffmpeg.py`, `core/audio/normalizer.py`, `core/audio/info.py`, `core/video/converter.py`, `core/library/types.py`, `core/library/thumbnails.py`, `core/rag/{types,embedder,retriever,indexer,chat,batch}.py`, `core/recipes/{types,runner,validate,inputs,presets}.py`, e todos os `args.py`/`__init__.py`.
+- **≥ 95% (Receitas)**: `core/recipes/registry.py` 99%, `core/recipes/store.py` 100%, `cli/recipes.py` 97%.
 - **≥ 90%**: `analyzer.py` 99%, `cli/document.py` 98%, `cli/ai.py` 98%, `core/rag/store.py` 98%, `core/rag/templates.py` 98%, `core/library/scanner.py` 98%, `cli/video.py` 97%, `core/image/downloader.py` 96%, `cli/image.py` 94%, `core/document/info.py` 94%, `cli/library.py` ~93%, `core/audio/converter.py` 93%, `core/document/converter.py` 91%, `core/image/transform.py` 91%, `core/document/processor.py` 91%, `core/document/qr.py` 90%.
 - **80-89%**: `cli/bus.py` 82%, `utils.py` 82%, `llm_factory.py` 81%, `core/audio/denoiser.py` 80%.
 - **Lacunas conscientes**: `audio/downloader.py` 14%, `video/downloader.py` 12% (yt-dlp não mockado); `image/background.py` 32%, `image/describe.py` 23% (extras opcionais `[ai-image]`); `transcriber.py` 31% (Whisper — só `_resolve_device` testado).
@@ -418,7 +445,7 @@ Iniciada com `uv run gui.py`. Flutter desktop no Windows.
 
 ### Eventos do pipeline
 
-`PipelineEvent(type, stage, payload, module_id)`. `module_id` ∈ {`"transcription"`, `"audio"`, `"image"`, `"video"`, `"document"`, `""` (legado)}. O `ProgressPanel` ignora eventos cujo `module_id` ≠ `owner_id`.
+`PipelineEvent(type, stage, payload, module_id)`. `module_id` ∈ {`"transcription"`, `"audio"`, `"image"`, `"video"`, `"document"`, `"ai"`, `"recipes"`, `""` (legado)}. O `ProgressPanel` ignora eventos cujo `module_id` ≠ `owner_id`; os hubs IA e Receitas são auto-contidos (assinam os próprios eventos, não usam `ProgressPanel`).
 
 **Genéricos (todos os módulos):**
 
@@ -440,6 +467,8 @@ Iniciada com `uv run gui.py`. Flutter desktop no Windows.
 **Documentos (stage="document"):** `document_op_start` (`operation`, `item_name`, `item_idx`, `total`, `page_count`), `document_op_done` (`output_path`, `elapsed`, `operation`, `item_idx`, `total`, `extra_stats`), `document_op_error` (`item_name`, `message`). `operation` ∈ {`merge`, `split`, `compress`, `rotate`, `watermark`, `stamp`, `encrypt`, `extract`, `ocr`, `pdf_to_images`, `images_to_pdf`, `analyze`, `qr`}.
 
 **Transcrição (stage específico):** `metadata_start/done`, `audio_cached`, `download_start/done`, `whisper_loading/loaded`, `transcribe_started`, `language_detected` (`audio_duration`), `transcribe_segment` (`end`, `is_low_confidence`), `transcribe_summary`, `format_*`, `analyze_*`, `translation_*`, `prompt_*`.
+
+**Receitas (module_id="recipes"):** `recipe_start` (`name`, `total_steps`), `step_start` (`op`, `label`, `idx`, `total`), `step_done` (`op`, `idx`, `total`, `outputs`), `step_error` (`op`, `idx`, `message`); reusa `progress_start`/`progress_update`/`task_done`/`task_error` e, no lote, `queue_progress`. Os adaptantes de passo encaminham os eventos das funções de core (ex.: `transcribe_segment`) sob o mesmo `module_id`.
 
 ### Barra de progresso
 
@@ -483,5 +512,6 @@ Flet (DirectX) e Whisper (CUDA) disputam a MX150. Uso simultâneo pode causar BS
 - **PR6** ✅ — Módulo Biblioteca (Output Library): índice tipado de `output/` (core puro), grade GUI com filtro/busca/ordenação/período, thumbnails lazy, ações (abrir/abrir pasta) e bridges para outros módulos, paginação + auto-refresh, CLI `library list`. Hub no AppBar (fora da rail). Fundação para PR7 (IA sobre o corpus) e PR8 (receitas). Ver `docs/ROADMAP_PR6_BIBLIOTECA.md`.
 - **PR6.6** ✅ — Biblioteca: 2º modo de exibição (lista/tabela) + visor in-app de `.md`/`.txt` (ler resultado processado sem reprocessar). Entrada flexível de análise: Transcrição aceita URL + áudio/vídeo local + texto (`.txt`/`.md` pula o Whisper); Documentos→Analisar aceita texto; CLI `transcribe` aceita texto/vídeo local; bridge `.txt` → "Analisar na Transcrição".
 - **PR7** ✅ — Módulo IA / Conteúdo (RAG local sobre o corpus): core puro `src/core/rag/` (embeddings Ollama `nomic-embed-text`, vector store numpy, indexação incremental, retrieve cosseno, answer com citação de fontes, prompt library + templates, batch), módulo GUI (hub no AppBar, resposta Markdown com fontes clicáveis, status/reindexar) e CLI `ai index`/`ai "pergunta"`/`--batch`. Embeddings sempre locais; Gemini só opt-in na resposta. Torch-free, só `numpy` explícito de dependência. Streaming de resposta fica no v1 `invoke()` (adiável). Ver `docs/ROADMAP_PR7_IA.md`. Faseado PR7.0→7.4, um commit por fase.
+- **PR8** ✅ — Módulo Receitas / Automação (cadeias lineares entre módulos): core puro `src/core/recipes/` (registro de passos `module.op` com adaptadores finos sobre o core dos 5 módulos + `ai.answer`, runner sequencial com cancel/`stop_on_error`/lote, validação `accepts`/`produces`, presets embutidos, store em `~/.mill-tools/recipes.json`), módulo GUI (3º hub no AppBar: rodar presets, construtor com validação ao vivo + reordenar ↑/↓, lote, limpar intermediários) e CLI `recipe list`/`recipe run`. Sem dependência nova, torch-free. Ver `docs/ROADMAP_PR8_RECEITAS.md`. Faseado PR8.0→8.4, um commit por fase.
 - **PR3.1-B** — IA de áudio com torch (extra `[ai-audio]`): DeepFilterNet (denoise neural); Demucs (separação de stems) a avaliar.
 - **Futuro** — melhorias no Módulo Imagens (batch rename, upscale); arrastar arquivos do SO fora de escopo (não nativo no Flet).

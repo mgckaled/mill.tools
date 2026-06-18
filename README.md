@@ -35,6 +35,8 @@ A ferramenta é organizada em **módulos independentes**, cada um especializado 
 
 - 🤖 **Conversar com o seu próprio acervo** — o módulo IA indexa o texto que você já produziu (transcrições, análises, texto de PDF, descrições de imagem) e responde perguntas em linguagem natural **citando as fontes** — uma busca semântica privada sobre o seu conteúdo. Os embeddings rodam 100% local; o Gemini é opcional apenas no passo de resposta.
 
+- 🧩 **Automatizar cadeias inteiras** — o módulo Receitas encadeia os módulos numa sequência nomeada onde a saída de um passo alimenta a entrada do próximo: `YouTube → baixar áudio → transcrever → analisar` num clique. Rode os presets prontos, monte a sua receita no construtor (só oferece passos compatíveis), aplique a cada arquivo (lote) e opcionalmente limpe os intermediários.
+
 - 🔀 **Escolher onde a IA roda** — por padrão, todos os modelos de linguagem funcionam 100% offline via [Ollama](https://ollama.com) (nenhum dado sai do computador). Para quem prefere, o [Google Gemini](https://ai.google.dev/) gratuito está disponível como alternativa na nuvem — basta escolher o modelo na interface.
 
 ### Módulos
@@ -48,6 +50,7 @@ A ferramenta é organizada em **módulos independentes**, cada um especializado 
 | **Documentos** | ✅ Disponível | 12 operações PDF: merge, split, compress, rotate, watermark, stamp, encrypt, extract, pdf-to-images, images-to-pdf, QR e análise por IA |
 | **Biblioteca** | ✅ Disponível | Hub navegável de todas as saídas: grade com thumbnails ou lista em tabela, filtro por tipo, busca, ordenação e período; abrir arquivo/pasta e reenviar para outro módulo num clique |
 | **IA** | ✅ Disponível | RAG local sobre o seu acervo: pergunte ao corpus inteiro ou a um documento e receba respostas citando as fontes. Embeddings locais (Ollama); Gemini opcional na resposta. Prompt library + templates; modo batch na CLI |
+| **Receitas** | ✅ Disponível | Automação: cadeias lineares entre módulos (`URL → áudio → transcrever → analisar`). Presets prontos + construtor com validação ao vivo; lote sobre N arquivos; limpar intermediários; paridade na CLI (`recipe run`/`list`) |
 
 ### Destaques técnicos
 
@@ -137,7 +140,7 @@ O `.env` é carregado automaticamente quando `--fm`, `--am` ou `--pm` recebe um 
 uv run gui.py
 ```
 
-Abre maximizado com uma splash screen animada, seguida de uma **Home Screen** com duas zonas — 5 ferramentas (grade 3+2) e 2 hubs em destaque (Biblioteca e IA) — clique em qualquer card para entrar diretamente no módulo escolhido. O AppBar exibe a wordmark "mill.tools", os botões **Biblioteca** e **IA** (os hubs sobre as saídas) e os botões "Home" e "Splash" para navegar de volta a qualquer momento.
+Abre maximizado com uma splash screen animada, seguida de uma **Home Screen** com duas zonas — 5 ferramentas (grade 3+2) e 3 hubs em destaque (Biblioteca, IA e Receitas) — clique em qualquer card para entrar diretamente no módulo escolhido. O AppBar exibe a wordmark "mill.tools", os botões **Biblioteca**, **IA** e **Receitas** (os hubs sobre as saídas) e os botões "Home" e "Splash" para navegar de volta a qualquer momento.
 
 Cada módulo tem layout split: formulário à esquerda, painel de acompanhamento (log em tempo real + barra de progresso + spinner) à direita. Durante um pipeline em execução a troca de módulo é bloqueada — os logs e a barra de progresso são preservados mesmo ao navegar entre módulos.
 
@@ -245,6 +248,20 @@ uv run main.py ai "liste as ações" --batch --kind transcription
 
 # resposta via Gemini (opt-in; só os trechos recuperados vão à nuvem)
 uv run main.py ai "..." --model gemini-2.5-flash --k 8
+```
+
+### CLI — Receitas (cadeias entre módulos)
+
+```bash
+# lista os presets embutidos e as receitas que você salvou
+uv run main.py recipe list
+
+# roda uma receita por nome, sobre uma URL ou um arquivo local
+uv run main.py recipe run "Limpar áudio do YouTube" "https://youtu.be/..."
+uv run main.py recipe run "Transcrever e analisar (arquivo local)" aula.mp3
+
+# --model sobrescreve o modelo Whisper dos passos de transcrição
+uv run main.py recipe run "YouTube → transcrição completa" "https://youtu.be/..." --model medium
 ```
 
 ### Referência de flags

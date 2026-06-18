@@ -12,11 +12,11 @@ description: Guia da CLI modular do mill.tools (subcomandos audio/video/image/do
 `main.py` despacha para subcomandos por prefixo do primeiro argumento:
 
 ```python
-_NON_TRANSCRIBE_CMDS = frozenset({"audio", "video", "image", "document", "library", "ai"})
+_NON_TRANSCRIBE_CMDS = frozenset({"audio", "video", "image", "document", "library", "ai", "recipe"})
 
 def main():
     if len(sys.argv) > 1 and sys.argv[1] in _NON_TRANSCRIBE_CMDS:
-        _dispatch_other(sys.argv[1])   # → src/cli/{audio,video,image,document,library}.py
+        _dispatch_other(sys.argv[1])   # → src/cli/{audio,video,image,document,library,ai,recipes}.py
         return
     # legado: transcrição (parse_args direto)
 ```
@@ -36,7 +36,8 @@ src/cli/
 ├── image.py          — add_image_parser() + run_image_cli()    (sub-subparsers)
 ├── document.py       — add_document_parser() + run_document_cli()  (sub-subparsers)
 ├── library.py        — add_library_parser() + run_library_cli()  (read-only, sem CLIEventBus)
-└── ai.py             — add_ai_parser() + run_ai_cli()  (RAG local; index / pergunta / --batch)
+├── ai.py             — add_ai_parser() + run_ai_cli()  (RAG local; index / pergunta / --batch)
+└── recipes.py        — add_recipe_parser() + run_recipe_cli()  (recipe list / run; usa CLIEventBus)
 ```
 
 ---
@@ -249,6 +250,42 @@ Gemini só no passo de resposta. `run_ai_cli` reconfigura `sys.stdout` p/ UTF-8.
 > `src.core.rag.chat.make_llm` (via `GenericFakeChatModel`). `query == "index"`
 > e os erros (índice vazio / embedder indisponível) chamam `sys.exit(1)` →
 > `pytest.raises(SystemExit)`.
+
+---
+
+## Subcomando `recipe`
+
+```bash
+uv run main.py recipe list                                    # presets + receitas salvas
+uv run main.py recipe run "Limpar áudio do YouTube" <URL>     # roda por nome
+uv run main.py recipe run "YouTube → transcrição completa" <URL> --model medium
+```
+
+Usa **sub-subparsers** (`ns.recipe_op` ∈ {`list`, `run`}); `set_defaults(func=run_recipe_cli)`
+no parser `recipe` (os sub-subparsers não redefinem `func`). Diferente de
+`library`/`ai`: Receitas **tem** um runner real (`execute_recipe`), então segue o
+padrão dos runners normais — `run_recipe_cli` resolve a receita (presets +
+`store.load_recipes`), monta `initial_inputs`+`initial_kind` via `resolve_input`
++ `kind_for` (de `src/core/recipes/inputs.py`), cria um `CLIEventBus` e chama
+`execute_recipe` (mesmo core da GUI). Um `_make_emit` traduz `recipe_start`/
+`step_*` em linhas de log e repassa os genéricos (`progress_*`/`task_done`). UTF-8
+no stdout (nomes com `｜`). `--model` sobrescreve só o Whisper dos passos
+`transcription.transcribe`.
+
+| Flag | Default | Descrição |
+|---|---|---|
+| `recipe_op` (`list`/`run`) | — | sub-subcomando |
+| `name` (posicional de `run`) | — | nome da receita (ver `recipe list`) |
+| `input` (posicional de `run`) | — | URL ou caminho de arquivo |
+| `--model` | — | sobrescreve o Whisper dos passos de transcrição |
+
+> Nos testes (`tests/cli/test_recipe_cli.py`): `_parse(*argv)` com parser isolado;
+> mocke `src.core.recipes.runner.execute_recipe` (importado function-local em
+> `run_recipe_cli`) p/ validar o dispatch (`initial_inputs`/`initial_kind`/`emit`/
+> `cancel_is_set`); `src.core.recipes.store.load_recipes` p/ os ramos de
+> `_find_recipe`/`list`; receita inexistente, saída vazia e arquivo de extensão
+> não suportada chamam `sys.exit(1)` → `pytest.raises(SystemExit)`. `_make_emit`
+> é testável direto com um bus falso.
 
 ---
 

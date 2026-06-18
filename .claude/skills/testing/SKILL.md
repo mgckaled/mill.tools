@@ -25,6 +25,7 @@ tests/
 │   ├── test_image_cli.py                   # unit — sub-subparsers + run_image_cli (dispatch)
 │   ├── test_document_cli.py                # unit — sub-subparsers + run_document_cli (dispatch)
 │   ├── test_library_cli.py                 # unit — parser + _parse_since + run_library_cli (scan_library mockado, capsys)
+│   ├── test_recipe_cli.py                   # unit — parser list/run + run_recipe_cli (execute_recipe mockado) + _make_emit
 │   ├── test_transcribe_main.py             # unit — main.parse_args + _subtitle_formats_from_args
 │   └── test_bus.py                         # unit — CLIEventBus (eventos e formatação)
 ├── core/
@@ -57,14 +58,21 @@ tests/
 │   ├── library/
 │   │   ├── test_scanner.py                 # unit — classify_path, scan_library (árvore falsa), filter_items (kind/category/query/since), sort_items
 │   │   └── test_thumbnails.py              # unit — thumbnail_for (imagem/PDF reais, fallbacks None) + 1 integration (frame de vídeo)
-│   └── rag/                                # RAG local — tudo unit, sem Ollama (embed_fn injetado; LLM via GenericFakeChatModel)
+│   ├── rag/                                # RAG local — tudo unit, sem Ollama (embed_fn injetado; LLM via GenericFakeChatModel)
 │       ├── test_store.py                   # unit — cosseno determinístico, drop_source, persist/load (npz/json)
 │       ├── test_retriever.py               # unit — top-k + filtro de escopo (1 doc / kind / corpus); embed_query_fn mockado
 │       ├── test_embedder.py                # unit — is_available (langchain_ollama falso via sys.modules), _check_dim, shape float32
 │       ├── test_indexer.py                 # unit — chunking, header strip, filtro kind/sufixo, skip/reembed por mtime, reconciliação, progresso
 │       ├── test_chat.py                    # unit — build_context numerado [n] + dedupe de fontes; answer via GenericFakeChatModel
 │       ├── test_templates.py               # unit — defaults + merge prompts.json + proteção contra shadowing de default
-│       └── test_batch.py                   # unit — distinct_sources (dedupe/kind), run_batch (1 answer/doc, progresso)
+│       ├── test_batch.py                   # unit — distinct_sources (dedupe/kind), run_batch (1 answer/doc, progresso)
+│   └── recipes/                            # Receitas — tudo unit; STEP_REGISTRY mockado via patch.dict (sem ffmpeg/Whisper/rede)
+│       ├── test_registry.py                # unit — specs bem-formadas + cada adaptador mockado no ponto de uso; ai.answer (RAG mockado); video.subtitle multi-input
+│       ├── test_runner.py                  # unit — encadeamento, ordem de eventos, cancel, stop_on_error, emit_terminal, execute_recipe_batch, histórico
+│       ├── test_validate.py                # unit — coerência accepts/produces, mismatch, op desconhecida, receita vazia
+│       ├── test_presets.py                 # unit — cada preset válido p/ todo kind aceito pelo 1º passo
+│       ├── test_store.py                   # unit — round-trip JSON em tmp_path, replace/delete, resiliência a malformado/JSON inválido
+│       └── test_inputs.py                  # unit — kind_for (extensão → kind; url; erro em não suportado)
 └── gui/
     ├── __init__.py
     ├── test_settings.py                    # unit — src/gui/settings.py
@@ -76,7 +84,8 @@ tests/
         ├── video/test_pipeline_log.py      # unit — resolve_*, fmt_* (8 operações, inclui subtitle)
         ├── document/test_pipeline_log.py   # unit — resolve_messages, resolve_stage_label, fmt_* builders (13 operações, inclui ocr)
         ├── document/test_worker_analyze.py # unit — _run_analyze ramo .txt (mock analyzer.analyze; pula get_pdf_info)
-        └── ai/                             # unit — worker (index/answer via bus falso + core mockado) + pipeline_log (resolve_status/fmt_*)
+        ├── ai/                             # unit — worker (index/answer via bus falso + core mockado) + pipeline_log (resolve_status/fmt_*)
+        └── recipes/                        # unit — worker (single/lote/clean/false/exceção via bus falso + execute_recipe(_batch) mockado) + pipeline_log
 ```
 
 > **Nota sobre `unit` no módulo document**: ao contrário do que a tabela
@@ -468,6 +477,35 @@ via `GenericFakeChatModel`). Padrões:
   `split_text` roda de verdade (barato).
 - **`index_dir()`**: `monkeypatch.setattr(Path, "home", classmethod(lambda cls: tmp_path))`
   ou patch direto do atributo do módulo nos callers.
+
+### Core Receitas (`src/core/recipes/`) — `STEP_REGISTRY` mockado, sem core real
+
+O runner é testável sem tocar ffmpeg/Whisper: substitua os adaptadores reais por
+fakes via `patch.dict` e injete um `emit`/`cancel_is_set` simples.
+
+- **`runner` (encadeamento/cancel/erro/lote)**: `mocker.patch.dict(STEP_REGISTRY,
+  {"t.s1": StepSpec(adapter, frozenset({"url"}), "audio", "S1"), ...})` com
+  adapters que retornam `[tmp_path/"x"]`. `emit=lambda t, p: eventos.append(...)`,
+  `cancel_is_set` com contador p/ disparar no N-ésimo passo. Asserir a ordem dos
+  tipos (`recipe_start → progress_start → step_start/done×N → task_done`),
+  encadeamento (output de um vira input do próximo), `emit_terminal=False`
+  (sem `progress_start`/`task_done`; falha vira `log`), e `execute_recipe_batch`
+  (um `queue_progress` por entrada, `failed_count`, cancel entre entradas).
+- **adaptadores reais (`registry`)**: mocke a função de **core no seu módulo de
+  origem** (`mocker.patch("src.core.audio.normalizer.normalize_lufs", return_value=...)`)
+  — como cada adaptador faz `from X import Y` function-local, patchar a origem
+  funciona **e** um rename de core faz o `patch` falhar (pega drift de assinatura).
+  Para dirs canônicos, `monkeypatch.setattr(src.utils, "TRANSCRIPTIONS_TEXT_DIR", tmp_path)`.
+  `ai.answer`: mocke `embedder.is_available`/`scan_library`/`build_index`/
+  `VectorStore.load`/`retrieve`/`chat.answer` e redirecione `TRANSCRIPTIONS_ANALYSIS_DIR`.
+- **`store`**: round-trip em `tmp_path` (passe `path=` explícito — não toque
+  `~/.mill-tools`); `presets`: valide cada um contra todo kind do `accepts` do 1º passo.
+- **worker GUI** (`tests/gui/modules/recipes/test_worker.py`): bus falso
+  `emit(type, stage, payload, module_id)`; mocke `src.core.recipes.runner.
+  execute_recipe`/`execute_recipe_batch`; `install_log_handler=False`. Verifique
+  forwarding sob `module_id="recipes"`, linhas de log de passo, `clean_intermediates`
+  (escreva arquivos reais em `tmp_path`; só os não-finais somem) e retorno
+  `False` sem saída/em exceção.
 
 ### Mock de `WhisperModel` (faster-whisper) — para testar `transcriber.transcribe`
 
