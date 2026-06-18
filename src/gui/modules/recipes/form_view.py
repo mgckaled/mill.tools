@@ -197,11 +197,9 @@ def build_recipes_form(
     )
 
     def _with_help(control: ft.Control, key: str) -> ft.Control:
-        """Switch on the left, trailing ⓘ on the right (omitted if the key is unknown)."""
+        """Switch with the ⓘ right beside its label (omitted if the key is unknown)."""
         icon = help_icon_for(key, page)
-        row = [control, ft.Container(expand=True)]
-        if icon is not None:
-            row.append(icon)
+        row = [control] if icon is None else [control, icon]
         return ft.Row(
             row, vertical_alignment=ft.CrossAxisAlignment.CENTER, spacing=Space.xs
         )
