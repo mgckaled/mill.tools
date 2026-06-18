@@ -62,6 +62,11 @@ def build_recipes_module(
         page.snack_bar.open = True
         page.update()
 
+    def _toast_info(message: str) -> None:
+        page.snack_bar = ft.SnackBar(content=ft.Text(message))
+        page.snack_bar.open = True
+        page.update()
+
     def _set_progress(active: bool) -> None:
         progress_row.visible = active
         cancel_btn.visible = active
@@ -184,7 +189,9 @@ def build_recipes_module(
 
     from src.core.recipes import store
 
-    form = build_recipes_form(page, on_run=_on_run, load_saved=store.load_recipes)
+    form = build_recipes_form(
+        page, on_run=_on_run, load_saved=store.load_recipes, on_notify=_toast_info
+    )
 
     spinner_img, spinner_start, spinner_stop = spinner()
     stage_label = ft.Text(
