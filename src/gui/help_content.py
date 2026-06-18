@@ -231,6 +231,21 @@ HELP_SHORT: dict[str, str] = {
         "Converse com o seu próprio acervo — RAG 100% local. Indexa transcrições, "
         "textos de PDF e descrições de imagem e responde citando as fontes."
     ),
+    # --- Receitas ---
+    "recipes": (
+        "Encadeie módulos numa sequência automática: a saída de cada passo vira "
+        "a entrada do próximo. Rode um preset pronto ou monte a sua receita."
+    ),
+    "recipes.batch": (
+        "Roda a receita uma vez por arquivo da fila, de forma independente. "
+        "Desligado, uma única execução consome todos os arquivos juntos — útil "
+        "para mesclar PDFs ou montar um PDF a partir de várias imagens."
+    ),
+    "recipes.clean": (
+        "Ao terminar, apaga os arquivos gerados pelos passos intermediários "
+        "(ex.: o áudio baixado antes de transcrever). Mantém as saídas finais "
+        "e os seus arquivos de entrada."
+    ),
 }
 
 #: Texto longo (opcional) — quando presente, a ⓘ vira clicável e abre um modal.
@@ -391,6 +406,30 @@ HELP_LONG: dict[str, str] = {
         "Pré-requisito: ollama pull nomic-embed-text && "
         "ollama create nomic-embed-custom -f ollama/Modelfile.nomic. "
         'Paridade na linha de comando: uv run main.py ai "sua pergunta".'
+    ),
+    "recipes": (
+        "Receitas — automação entre módulos.\n\n"
+        "O que é:\n"
+        "• Uma receita é uma cadeia ordenada de passos onde a saída de um "
+        "alimenta a entrada do próximo, atravessando os módulos — por exemplo: "
+        "URL → baixar áudio → transcrever → analisar.\n"
+        "• Cada passo só aceita o tipo de conteúdo que o passo anterior produz; "
+        "a validação impede cadeias sem sentido antes de gastar processamento.\n\n"
+        "Rodar:\n"
+        "• Escolha uma receita (embutida ou salva), informe a entrada (URL ou "
+        "arquivo) e clique em Rodar. O painel mostra o progresso passo a passo "
+        "e os arquivos finais — todos visíveis na Biblioteca.\n\n"
+        "Construir:\n"
+        "• No modo Construir você monta a sua própria cadeia: o seletor só "
+        "oferece operações compatíveis com a saída do passo anterior. Reordene "
+        'com ↑/↓, remova passos e salve com um nome — fica em "Salvas" e na CLI.\n\n'
+        "Lote e limpeza:\n"
+        '• "Aplicar a cada arquivo" roda a receita uma vez por arquivo da fila, '
+        "em vez de uma execução consumindo todos.\n"
+        '• "Limpar intermediários" apaga, ao fim, os arquivos gerados pelos '
+        "passos intermediários — mantém só as saídas finais e as suas entradas.\n\n"
+        "Paridade na linha de comando: uv run main.py recipe list / "
+        'recipe run "<nome>" <URL_OU_ARQUIVO>.'
     ),
 }
 

@@ -196,6 +196,19 @@ def build_recipes_form(
         label_size=Type.input.size,
     )
 
+    def _with_help(control: ft.Control, key: str) -> ft.Control:
+        """Switch on the left, trailing ⓘ on the right (omitted if the key is unknown)."""
+        icon = help_icon_for(key, page)
+        row = [control, ft.Container(expand=True)]
+        if icon is not None:
+            row.append(icon)
+        return ft.Row(
+            row, vertical_alignment=ft.CrossAxisAlignment.CENTER, spacing=Space.xs
+        )
+
+    batch_row = _with_help(batch_switch, "recipes.batch")
+    clean_row = _with_help(clean_switch, "recipes.clean")
+
     run_btn = primary_button(
         "Rodar receita", icon=ft.Icons.PLAY_ARROW_ROUNDED, on_click=lambda _e: on_run()
     )
@@ -289,8 +302,8 @@ def build_recipes_form(
             section_label("Entrada"),
             input_source.control,
             expected_hint,
-            batch_switch,
-            clean_switch,
+            batch_row,
+            clean_row,
             run_btn,
         ],
         spacing=Space.md,
