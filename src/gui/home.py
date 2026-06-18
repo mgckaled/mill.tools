@@ -1,4 +1,4 @@
-"""Home screen do mill.tools — fundo animado + 5 ferramentas + 2 hubs (Biblioteca/IA)."""
+"""Home screen do mill.tools — fundo animado + 5 ferramentas + 3 hubs (Biblioteca/IA/Receitas)."""
 
 from __future__ import annotations
 
@@ -85,7 +85,7 @@ _TOOL_CARDS: list[dict] = [
     },
 ]
 
-# The 2 hubs — wider, horizontal cards with a gold accent + "HUB" badge. They
+# The 3 hubs — wider, horizontal cards with a gold accent + "HUB" badge. They
 # operate over every tool's output, so they get their own highlighted section.
 _HUB_CARDS: list[dict] = [
     {
@@ -108,6 +108,17 @@ _HUB_CARDS: list[dict] = [
         "features": [
             "Pergunte sobre transcrições, PDFs e imagens",
             "Respostas citando as fontes do seu conteúdo",
+        ],
+    },
+    {
+        "id": "recipes",
+        "title": "Receitas",
+        "icon": ft.Icons.ACCOUNT_TREE_OUTLINED,
+        "accent": Color.log.work,
+        "desc": "Encadeie módulos numa cadeia automática",
+        "features": [
+            "URL → áudio → transcrever → analisar num clique",
+            "Rode presets prontos ou monte a sua receita",
         ],
     },
 ]
@@ -461,8 +472,8 @@ def show_home(page: ft.Page, on_complete: Callable[[str], None]) -> None:
         horizontal_alignment=ft.CrossAxisAlignment.STRETCH,
     )
 
-    # Hubs: 2 wide cards, each ~1/2 width.
-    hubs_grid = ft.Row(controls=[hub_cards[0], hub_cards[1]], spacing=Space.xl)
+    # Hubs: wide cards in a single row (Biblioteca · IA · Receitas), each equal width.
+    hubs_grid = ft.Row(controls=hub_cards, spacing=Space.xl)
 
     cards_grid = ft.Column(
         controls=[

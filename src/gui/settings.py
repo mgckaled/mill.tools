@@ -34,6 +34,8 @@ _DEFAULTS: dict = {
     "last_ai_model": "gemma3-4b-custom",  # RAG answer — best CPU quality/speed for synthesis
     "last_ai_scope": "all",  # "all" | transcription | document | image
     "last_embed_model": "nomic-embed-custom",  # local embedding model (Ollama, num_gpu 0)
+    "last_recipe": "",  # name of the last recipe run
+    "recipe_clean_intermediates": False,  # delete intermediate outputs at the end (PR8.4)
 }
 
 

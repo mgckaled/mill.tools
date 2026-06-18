@@ -21,6 +21,7 @@ from src.gui.modules.base import Module
 from src.gui.modules.document.view import build_document_module
 from src.gui.modules.image.view import build_image_module
 from src.gui.modules.library.view import build_library_module
+from src.gui.modules.recipes.view import build_recipes_module
 from src.gui.modules.transcription.view import (
     build_transcription_module,
     get_form_start_button,
@@ -134,6 +135,11 @@ def build_app(page: ft.Page, initial_module: str = "transcription") -> None:
         icon=ft.Icons.AUTO_AWESOME_OUTLINED,
         style=_hub_btn_style(initial_module == "ai"),
     )
+    recipes_btn = ft.TextButton(
+        "Receitas",
+        icon=ft.Icons.ACCOUNT_TREE_OUTLINED,
+        style=_hub_btn_style(initial_module == "recipes"),
+    )
 
     wordmark = ft.Text(
         spans=[
@@ -158,7 +164,14 @@ def build_app(page: ft.Page, initial_module: str = "transcription") -> None:
 
     page.appbar = ft.AppBar(
         title=ft.Row(
-            controls=[wordmark, library_btn, ai_btn],
+            controls=[
+                wordmark,
+                # small gap separating the wordmark from the three hub buttons
+                ft.Container(width=Space.sm),
+                library_btn,
+                ai_btn,
+                recipes_btn,
+            ],
             spacing=Space.xs,
             vertical_alignment=ft.CrossAxisAlignment.CENTER,
         ),
@@ -183,8 +196,9 @@ def build_app(page: ft.Page, initial_module: str = "transcription") -> None:
     _document = build_document_module(page, bus, cancel_event, pipeline_running)
     _library = build_library_module(page, bus, cancel_event, pipeline_running, nav)
     _ai = build_ai_module(page, bus, cancel_event, pipeline_running, nav)
+    _recipes = build_recipes_module(page, bus, cancel_event, pipeline_running, nav)
 
-    # Library and AI are appended last so the default initial_module
+    # Library, AI and Recipes are appended last so the default initial_module
     # ("transcription") and the opening behavior are unchanged.
     MODULES: list[Module] = [
         _audio,
@@ -194,13 +208,14 @@ def build_app(page: ft.Page, initial_module: str = "transcription") -> None:
         _document,
         _library,
         _ai,
+        _recipes,
     ]
     _DEFAULT_ID = initial_module
 
-    # The rail shows only the 5 processing tools; Library and AI are hubs reached
-    # from the AppBar. They still live in MODULES (and the Stack) so navigate_to
-    # works.
-    _HUB_IDS = ("library", "ai")
+    # The rail shows only the 5 processing tools; Library, AI and Recipes are hubs
+    # reached from the AppBar. They still live in MODULES (and the Stack) so
+    # navigate_to works.
+    _HUB_IDS = ("library", "ai", "recipes")
     _RAIL_MODULES: list[Module] = [m for m in MODULES if m.id not in _HUB_IDS]
 
     def _rail_index(module_id: str) -> int | None:
@@ -235,6 +250,7 @@ def build_app(page: ft.Page, initial_module: str = "transcription") -> None:
         rail.selected_index = _rail_index(module_id)
         library_btn.style = _hub_btn_style(module_id == "library")
         ai_btn.style = _hub_btn_style(module_id == "ai")
+        recipes_btn.style = _hub_btn_style(module_id == "recipes")
         for i, m in enumerate(MODULES):
             m.control.visible = i == idx
         MODULES[idx].on_mount(payload or {})
@@ -243,6 +259,7 @@ def build_app(page: ft.Page, initial_module: str = "transcription") -> None:
     nav.append(navigate_to)  # resolve a forward reference do módulo Áudio
     library_btn.on_click = lambda _e: navigate_to("library")
     ai_btn.on_click = lambda _e: navigate_to("ai")
+    recipes_btn.on_click = lambda _e: navigate_to("recipes")
 
     def _on_rail_change(e: ft.ControlEvent) -> None:
         idx = e.control.selected_index
