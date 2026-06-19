@@ -1,4 +1,5 @@
 """Download de vídeo via yt-dlp com suporte a progresso."""
+
 from __future__ import annotations
 
 import logging
@@ -12,7 +13,14 @@ from src.utils import sanitize_filename
 
 logger = logging.getLogger(__name__)
 
-_RESOLUTIONS = {"best": None, "2160": 2160, "1080": 1080, "720": 720, "480": 480, "360": 360}
+_RESOLUTIONS = {
+    "best": None,
+    "2160": 2160,
+    "1080": 1080,
+    "720": 720,
+    "480": 480,
+    "360": 360,
+}
 
 
 def download_video(
@@ -53,7 +61,9 @@ def download_video(
             )
     else:
         if container == "webm":
-            fmt = "bestvideo[vcodec^=vp]+bestaudio[acodec^=opus]/bestvideo+bestaudio/best"
+            fmt = (
+                "bestvideo[vcodec^=vp]+bestaudio[acodec^=opus]/bestvideo+bestaudio/best"
+            )
         else:
             fmt = "bestvideo[ext=mp4]+bestaudio[ext=m4a]/bestvideo+bestaudio/best[ext=mp4]/best"
 
@@ -81,6 +91,10 @@ def download_video(
         "merge_output_format": container,
         "nopart": True,
         "overwrites": True,
+        # Download only the single video, never the playlist. A watch URL with a
+        # "&list=" param (e.g. a YouTube "RD..." radio mix, which is endless)
+        # would otherwise fetch every entry into out_dir.
+        "noplaylist": True,
         # Redireciona .temp/.part para %TEMP% do sistema — geralmente excluído do antivírus
         "paths": {"temp": tempfile.gettempdir()},
         "quiet": True,
@@ -111,7 +125,9 @@ def download_video(
             out_path = files[0]
 
     if out_path is None:
-        raise FileNotFoundError(f"Download concluído mas arquivo não encontrado em: {out_dir}")
+        raise FileNotFoundError(
+            f"Download concluído mas arquivo não encontrado em: {out_dir}"
+        )
 
     safe_stem = sanitize_filename(out_path.stem)
     if safe_stem and safe_stem != out_path.stem:

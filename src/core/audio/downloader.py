@@ -52,11 +52,13 @@ def download_audio(
     postprocessors: list[dict] = []
 
     if fmt != "best":
-        postprocessors.append({
-            "key": "FFmpegExtractAudio",
-            "preferredcodec": fmt,
-            "preferredquality": quality if quality != "best" else "0",
-        })
+        postprocessors.append(
+            {
+                "key": "FFmpegExtractAudio",
+                "preferredcodec": fmt,
+                "preferredquality": quality if quality != "best" else "0",
+            }
+        )
 
     supports_cover = embed_meta and fmt not in _NO_COVER_FMTS
 
@@ -64,7 +66,9 @@ def download_audio(
         postprocessors.append({"key": "FFmpegMetadata"})
 
     if supports_cover:
-        postprocessors.append({"key": "EmbedThumbnail", "already_have_thumbnail": False})
+        postprocessors.append(
+            {"key": "EmbedThumbnail", "already_have_thumbnail": False}
+        )
     elif embed_meta:
         logger.info("[i] %s: thumbnail not supported — metadata only", fmt)
 
@@ -90,6 +94,10 @@ def download_audio(
         "writethumbnail": supports_cover,
         "nopart": True,
         "overwrites": True,
+        # Download only the single video, never the playlist. A watch URL with a
+        # "&list=" param (e.g. a YouTube "RD..." radio mix, which is endless)
+        # would otherwise fetch every entry. The module handles one item at a time.
+        "noplaylist": True,
         "quiet": True,
         "no_warnings": True,
     }
@@ -111,7 +119,11 @@ def download_audio(
 
         if out_path is None:
             files = sorted(
-                (f for f in tmp_dir.iterdir() if f.is_file() and f.suffix.lower() not in _THUMB_EXTS),
+                (
+                    f
+                    for f in tmp_dir.iterdir()
+                    if f.is_file() and f.suffix.lower() not in _THUMB_EXTS
+                ),
                 key=lambda f: f.stat().st_mtime,
                 reverse=True,
             )
@@ -119,7 +131,9 @@ def download_audio(
                 out_path = files[0]
 
         if out_path is None:
-            raise FileNotFoundError(f"Download concluído mas arquivo não encontrado em: {tmp_dir}")
+            raise FileNotFoundError(
+                f"Download concluído mas arquivo não encontrado em: {tmp_dir}"
+            )
 
         # Sanitiza o nome enquanto ainda está em tmp_dir (sem Defender)
         safe_stem = sanitize_filename(out_path.stem)

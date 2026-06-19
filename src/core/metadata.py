@@ -18,11 +18,16 @@ def fetch_metadata(url: str) -> dict:
         Dictionary containing raw metadata fields from yt-dlp.
     """
     logging.info("[i] Fetching video metadata...")
-    with yt_dlp.YoutubeDL({"quiet": True, "no_warnings": True}) as ydl:
+    # noplaylist: resolve a watch URL with a "&list=" param (e.g. an endless
+    # YouTube "RD..." radio mix) to the single video, not the whole playlist.
+    opts = {"quiet": True, "no_warnings": True, "noplaylist": True}
+    with yt_dlp.YoutubeDL(opts) as ydl:
         meta = ydl.extract_info(url, download=False)
     logging.debug(
         "[d] Metadata: title=%r | channel=%s | duration=%ss",
-        meta.get("title"), meta.get("uploader"), meta.get("duration"),
+        meta.get("title"),
+        meta.get("uploader"),
+        meta.get("duration"),
     )
     return meta
 
@@ -55,7 +60,8 @@ def format_metadata(meta: dict, url: str, detected_language: str | None = None) 
     raw_date = meta.get("upload_date", "")
     upload_date = (
         datetime.strptime(raw_date, "%Y%m%d").strftime("%Y-%m-%d")
-        if raw_date else "n/a"
+        if raw_date
+        else "n/a"
     )
 
     duration = format_duration(int(meta.get("duration", 0)))
