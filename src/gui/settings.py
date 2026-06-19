@@ -37,7 +37,7 @@ _DEFAULTS: dict = {
     "last_recipe": "",  # name of the last recipe run
     "recipe_clean_intermediates": False,  # delete intermediate outputs at the end (PR8.4)
     # YouTube cookies (anti-bot gate) — see src/core/ytdlp_cookies.py.
-    "yt_cookies_browser": "auto",  # "auto" | "none" | zen | firefox | chrome | edge | ...
+    "yt_cookies_browser": "none",  # opt-in: "none" | auto | zen | firefox | chrome | edge | ...
     "yt_cookies_profile": "",  # optional explicit profile path (advanced)
 }
 

@@ -174,8 +174,14 @@ def test_opts_env_overrides_config(isolate, monkeypatch):
     assert c.cookie_ydl_opts() == {"cookiesfrombrowser": ("firefox", None, None, None)}
 
 
-def test_opts_default_auto_detects_zen(isolate, monkeypatch):
-    # no config, no env → default "auto" → Zen resolution
+def test_opts_default_is_none(isolate, monkeypatch):
+    # no config, no env → default "none" (opt-in) → no cookies, even if Zen exists
+    monkeypatch.setattr(c, "resolve_zen_profile", lambda: "/zen/p")
+    assert c.cookie_ydl_opts() == {}
+
+
+def test_opts_auto_detects_zen_when_chosen(isolate, monkeypatch):
+    isolate.write_text(json.dumps({"yt_cookies_browser": "auto"}), encoding="utf-8")
     monkeypatch.setattr(c, "resolve_zen_profile", lambda: "/zen/p")
     assert c.cookie_ydl_opts() == {
         "cookiesfrombrowser": ("firefox", "/zen/p", None, None)
@@ -184,8 +190,12 @@ def test_opts_default_auto_detects_zen(isolate, monkeypatch):
 
 def test_opts_malformed_config_is_safe(isolate):
     isolate.write_text("{not valid json", encoding="utf-8")
-    # malformed → {} read → default auto → Zen disabled by fixture → {}
+    # malformed → {} read → default "none" → {}
     assert c.cookie_ydl_opts() == {}
+
+
+def test_default_browser_is_opt_in():
+    assert c.DEFAULT_BROWSER == "none"
 
 
 # ── detected_summary ─────────────────────────────────────────────────────────

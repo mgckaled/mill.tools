@@ -146,7 +146,7 @@ Cada módulo tem layout split: formulário à esquerda, painel de acompanhamento
 
 #### Cookies do YouTube (verificação anti-bot)
 
-O YouTube às vezes bloqueia downloads com uma verificação "Sign in to confirm you're not a bot". Para contornar, o app usa os **cookies do seu navegador logado** ao baixar (Áudio, Vídeo e Transcrição). Por padrão (`auto`) ele **detecta o Zen Browser** automaticamente — basta estar logado no YouTube no Zen; nada extra a fazer. Para escolher outro navegador (Firefox, Chrome, Edge, Brave…) ou desativar, abra **Configurações** (engrenagem no AppBar). Os cookies são lidos **localmente**; nada sai do computador além das requisições normais de download. Também é possível configurar via variáveis de ambiente `MILL_YT_COOKIES_BROWSER`/`MILL_YT_COOKIES_PROFILE` (útil na CLI).
+O YouTube às vezes bloqueia downloads com uma verificação "Sign in to confirm you're not a bot". Para contornar, o app pode usar os **cookies do seu navegador logado** ao baixar (Áudio, Vídeo e Transcrição). Por privacidade, isso vem **desativado por padrão** (opt-in). Para ativar, abra **Configurações** (engrenagem no AppBar) e escolha o navegador: **Automático** detecta o Zen Browser sozinho, ou selecione Firefox, Chrome, Edge, Brave… (basta estar logado no YouTube nesse navegador). Os cookies são lidos **localmente**; nada sai do computador além das requisições normais de download. Também dá para configurar via variáveis de ambiente `MILL_YT_COOKIES_BROWSER`/`MILL_YT_COOKIES_PROFILE` (útil na CLI).
 
 ### CLI — Transcrição
 

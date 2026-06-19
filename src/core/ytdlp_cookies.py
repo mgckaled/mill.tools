@@ -44,7 +44,9 @@ BROWSERS: list[str] = ["auto", "none", "zen", "firefox", *_CHROMIUM]
 if sys.platform == "darwin":
     BROWSERS.append("safari")
 
-DEFAULT_BROWSER = "auto"
+# Opt-in by default: cookies are only read when the user explicitly chooses a
+# browser (Settings dialog / config / env). "none" means no cookies are touched.
+DEFAULT_BROWSER = "none"
 
 
 def _read_config() -> dict:

@@ -58,7 +58,7 @@ def open_settings_dialog(page: ft.Page) -> None:
 
     browser_dd = ft.Dropdown(
         label="Navegador dos cookies",
-        value=cfg.get("yt_cookies_browser", "auto"),
+        value=cfg.get("yt_cookies_browser", "none"),
         options=[
             ft.dropdown.Option(key=b, text=_BROWSER_LABELS.get(b, b))
             for b in ytdlp_cookies.BROWSERS
@@ -70,7 +70,7 @@ def open_settings_dialog(page: ft.Page) -> None:
     profile_field.on_blur = _refresh_status
 
     def _save(_e=None) -> None:
-        settings.set("yt_cookies_browser", browser_dd.value or "auto")
+        settings.set("yt_cookies_browser", browser_dd.value or "none")
         settings.set("yt_cookies_profile", (profile_field.value or "").strip())
         page.pop_dialog()
         page.open(ft.SnackBar(content=ft.Text("Configurações salvas."), duration=2000))
