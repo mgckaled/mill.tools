@@ -90,6 +90,14 @@ Usado por todos os CLI runners para popular `InputItem(kind, value)`.
 > decodificado via PyAV); URL → metadata + download. O ramo local checa
 > `kind == "local"` (não `"file"`).
 
+> **`--profile` (perfil de análise)**: `transcribe ... --analyze --profile <id>` escolhe
+> o esquema/prompt da análise (`src/analysis`). `choices=list_profiles()` (import lazy
+> dentro de `parse_args` para não carregar LangChain nos demais subcomandos); repassado a
+> `analyze(profile=...)`. Default `default` (esquema legado de 10 campos). Ids Tier 1:
+> `default`/`lecture`/`interview`/`tutorial`/`scientific`/`administrative`/`notes`. O
+> standalone `uv run -m src ... --profile <id>` também aceita. Nos testes, asserir
+> `ns.profile` no parser (escolha inválida → `SystemExit`).
+
 ---
 
 ## Subcomando `audio`

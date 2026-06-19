@@ -28,6 +28,7 @@ main.py                          — entry point CLI (argparse); despacha audio/
 gui.py                           — entry point GUI (splash → home → build_app)
 src/
 ├── transcriber.py · formatter.py · analyzer.py · prompter.py
+├── analysis/                    — perfis de análise (puro): types/prompts/report + profiles/ (Tier 1 por grupo); analyzer lê daqui
 ├── llm_factory.py               — roteamento gemini-* → Google, demais → Ollama
 ├── llm_utils.py                 — split_text(): chunking compartilhado + bypass Gemini (1M ctx)
 ├── utils.py                     — logging, validação, metadata, paths de output, sanitize_filename()
@@ -106,6 +107,7 @@ src/
     ├── help_content.py          — HELP_SHORT/LONG: registro central de tooltips/modais
     ├── components/
     │   ├── input_source.py      — InputSource (URL + FilePicker, allow_multiple); InputItem → core/io_types.py
+    │   ├── profile_selector.py  — seletor agrupado de perfis de análise (cards ícone+rótulo); reusado por Transcrição e Documentos
     │   └── audio_player.py      — reprodutor play/pause/seek via sounddevice + ffmpeg; AudioPlayer.load(path)
     ├── modules/
     │   ├── base.py              — dataclass Module (id, label, icon, control, on_mount/on_unmount)
@@ -285,6 +287,7 @@ uv run main.py <YOUTUBE_URL>                          # básico
 uv run main.py transcribe <URL> --format --analyze    # pipeline completo
 uv run main.py transcribe video.mp4                   # vídeo local (áudio decodificado via PyAV)
 uv run main.py transcribe notas.txt --analyze         # texto local → pula Whisper, só IA
+uv run main.py transcribe <URL> --analyze --profile lecture  # perfil de análise (default/lecture/interview/tutorial/scientific/administrative/notes)
 uv run main.py transcribe <URL> --am gemini-2.5-flash # análise via Gemini
 uv run -m src output/transcriptions/text/<file>.txt   # análise standalone
 
@@ -404,7 +407,8 @@ Cobertura por módulo (último run, com branch):
 
 - **Chunking compartilhado** (`src/llm_utils.py`): `split_text(text, *, chunk_size, chunk_overlap, model_name, bypass_long_context, separators)`. Formatter usa separadores orientados a frases `[". ", "? ", "! ", ...]`; analyzer/prompter usam separadores padrão `["\n\n", "\n", ". ", ...]`. Bypass Gemini (1M tokens) ativado por `bypass_long_context=True` em analyzer e prompter.
 - **Formatter** (`src/formatter.py`): 4500 chars/150 overlap. Modelo padrão: `phi4mini-custom`.
-- **Analyzer** (`src/analyzer.py`): 4500 chars/300 overlap, merge parcial. 10 campos, tradução automática PT-BR. Modelo padrão: `qwen7b-custom`. Temperaturas 0.4 (análise) / 0.0 (tradução).
+- **Analyzer** (`src/analyzer.py`): 4500 chars/300 overlap, merge parcial. **Perfil-dirigido** (`src/analysis/`): `analyze(..., profile="default")` resolve o perfil e **gera** prompt de análise/merge + relatório a partir dos `fields` do perfil; a temperatura vem do perfil. Tradução automática PT-BR genérica. Modelo padrão: `qwen7b-custom`. `profile="default"` reproduz o esquema legado de 10 campos byte-a-byte (`_format_report` virou wrapper sobre `analysis.format_report(default)`).
+- **Perfis de análise** (`src/analysis/`, puro/torch-free): `Field`/`AnalysisProfile`/`GroupMeta` (`types.py`); `build_analysis_prompt`/`build_merge_prompt` (`prompts.py`, **escapam chaves literais** `{`→`{{` p/ o `ChatPromptTemplate`); `format_report` (`report.py`, despacha por `kind` paragraph/list/quotes/keyvalue, `always`/`empty_text` p/ o default, disclaimer no topo). Catálogo Tier 1 (7) em `profiles/` por grupo (`media.py`: default/lecture/interview/tutorial — regra "ignore CTAs" só aqui; `documents.py`: scientific/administrative; `quick.py`: notes). `PROFILES`/`GROUPS`/`get_profile` (fallback ao default)/`list_profiles`. Adicionar perfil = uma entrada. Selecionável via CLI `transcribe --profile`, seletor GUI (`gui/components/profile_selector.py`, reusado por Transcrição e Documentos→Analisar) e param `profile` do passo `transcription.analyze` (Receitas). Persistência `last_analysis_profile`/`DocumentArgs.analyze_profile`.
 - **Prompter** (`src/prompter.py`): 4500 chars/200 overlap, ~40% de compressão. Remove CTAs/patrocinadores. Modelo padrão: `qwen7b-custom`.
 
 ## Métricas de qualidade de transcrição

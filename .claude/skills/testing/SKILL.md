@@ -15,8 +15,14 @@ tests/
 ├── test_llm_factory.py                      # src/llm_factory.py
 ├── test_llm_utils.py                        # src/llm_utils.py — split_text, bypass Gemini
 ├── test_formatter.py                        # src/formatter.py — paragraph formatting (GenericFakeChatModel)
-├── test_analyzer.py                         # src/analyzer.py — structured analysis + merge + translation
+├── test_analyzer.py                         # src/analyzer.py — structured analysis + merge + translation (+ profile=)
 ├── test_prompter.py                         # src/prompter.py — condensed digest + merge
+├── analysis/                                # src/analysis/ — perfis de análise (tudo unit, sem Ollama)
+│   ├── __init__.py
+│   ├── test_types.py                       # unit — Field/AnalysisProfile/GroupMeta (frozen, defaults)
+│   ├── test_prompts.py                     # unit — build_*_prompt invoca via GenericFakeChatModel (prova escaping de chaves)
+│   ├── test_report.py                      # unit — format_report por kind + always/empty_text + disclaimer
+│   └── test_profiles.py                    # unit — catálogo Tier 1 (ids/kinds/grupos; default = esquema legado)
 ├── cli/
 │   ├── __init__.py
 │   ├── test_transcription.py               # unit — resolve_input, build_output_stem, item_label
