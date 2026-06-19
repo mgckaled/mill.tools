@@ -5,6 +5,7 @@ Usage:
     uv run main.py <URL>                                        # basic transcription
     uv run main.py transcribe <URL>                            # explicit transcribe subcommand
     uv run main.py transcribe <URL> --format --analyze         # full transcription pipeline
+    uv run main.py transcribe <URL> --analyze --profile lecture # analysis profile (aula/entrevista/…)
     uv run main.py transcribe <URL> --srt                      # also export .srt subtitle file
     uv run main.py transcribe <URL> --subtitles                # exports .srt + .vtt
     uv run main.py transcribe /path/to/audio.mp3               # local audio/video file
@@ -109,6 +110,16 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         default="qwen7b-custom",
         help="Ollama model for analysis",
         dest="analyzer_model",
+    )
+    from src.analysis import (
+        list_profiles,
+    )  # lazy: avoids loading LangChain for other commands
+
+    parser.add_argument(
+        "--profile",
+        default="default",
+        choices=list_profiles(),
+        help="Analysis profile (schema/prompt). 'default' keeps the legacy video schema.",
     )
     parser.add_argument(
         "--prompt",
@@ -302,6 +313,7 @@ def main() -> None:
                 output_path,
                 model_name=args.analyzer_model,
                 transcription=formatted_body,
+                profile=args.profile,
             )
 
         if args.prompt:
