@@ -26,7 +26,9 @@ GEMINI_PREFIXES = ("gemini",)
 
 # Sensible Gemini defaults for this project's workloads.
 GEMINI_DEFAULT_MAX_RETRIES = 3
-GEMINI_DEFAULT_TIMEOUT = 120  # seconds — Gemini Flash usually returns in <30s for 30k-token analyses
+GEMINI_DEFAULT_TIMEOUT = (
+    120  # seconds — Gemini Flash usually returns in <30s for 30k-token analyses
+)
 
 
 def _is_gemini(model_name: str) -> bool:
@@ -41,6 +43,33 @@ def is_gemini_model(model_name: str) -> bool:
     supports a 1M-token context window.
     """
     return _is_gemini(model_name)
+
+
+# Local models with a large context window: short/medium inputs can skip the
+# chunk+merge step and run as a single, more coherent pass. The per-model char
+# budget caps the cost of a CPU single pass (a giant pass on a small CPU model is
+# impractically slow); above it we fall back to chunking. Gemini (1M tokens)
+# bypasses unconditionally via is_gemini_model and is intentionally NOT listed
+# here. Budgets are in characters (~4 chars/token).
+LONG_CONTEXT_LOCAL_BUDGETS: dict[str, int] = {
+    # gemma3-4b-custom: 128K-token ctx; ~6K-token cap keeps a CPU pass practical
+    # while skipping the merge for short/medium transcripts and notes.
+    "gemma3-4b-custom": 24_000,
+}
+
+
+def long_context_char_budget(model_name: str) -> int | None:
+    """Max input chars eligible to skip chunking for a long-context LOCAL model.
+
+    Args:
+        model_name: Model identifier (Ollama tag).
+
+    Returns:
+        The per-model character budget when *model_name* is a known long-context
+        local model (e.g. gemma3-4b-custom), or None otherwise. Gemini is handled
+        separately (unconditional bypass) and is not included here.
+    """
+    return LONG_CONTEXT_LOCAL_BUDGETS.get(model_name)
 
 
 def _load_env_once() -> None:
@@ -78,8 +107,11 @@ def _make_gemini(model_name: str, temperature: float) -> "BaseChatModel":
     # Lazy import — only loaded when the user actually opts into Gemini.
     from langchain_google_genai import ChatGoogleGenerativeAI
 
-    logging.debug("[d] Provider: Google Gemini | model=%s | temperature=%.2f",
-                  model_name, temperature)
+    logging.debug(
+        "[d] Provider: Google Gemini | model=%s | temperature=%.2f",
+        model_name,
+        temperature,
+    )
     return ChatGoogleGenerativeAI(
         model=model_name,
         temperature=temperature,
@@ -102,8 +134,11 @@ def _make_ollama(model_name: str, temperature: float) -> "BaseChatModel":
     # Lazy import — keeps the dependency optional in environments that use only Gemini.
     from langchain_ollama import ChatOllama
 
-    logging.debug("[d] Provider: Ollama (local) | model=%s | temperature=%.2f",
-                  model_name, temperature)
+    logging.debug(
+        "[d] Provider: Ollama (local) | model=%s | temperature=%.2f",
+        model_name,
+        temperature,
+    )
     # client_kwargs é repassado ao httpx.Client subjacente — define timeout de leitura
     # para evitar que chain.invoke() fique pendurado indefinidamente se o Ollama travar.
     return ChatOllama(
