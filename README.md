@@ -148,6 +148,8 @@ Cada módulo tem layout split: formulário à esquerda, painel de acompanhamento
 
 O YouTube às vezes bloqueia downloads com uma verificação "Sign in to confirm you're not a bot". Para contornar, o app pode usar os **cookies do seu navegador logado** ao baixar (Áudio, Vídeo e Transcrição). Por privacidade, isso vem **desativado por padrão** (opt-in). Para ativar, abra **Configurações** (engrenagem no AppBar) e escolha o navegador: **Automático** detecta o Zen Browser sozinho, ou selecione Firefox, Chrome, Edge, Brave… (basta estar logado no YouTube nesse navegador). Os cookies são lidos **localmente**; nada sai do computador além das requisições normais de download. Também dá para configurar via variáveis de ambiente `MILL_YT_COOKIES_BROWSER`/`MILL_YT_COOKIES_PROFILE` (útil na CLI).
 
+> **Atenção:** cookies de uma **conta logada** passam o gate anti-bot, mas o YouTube pode então exigir um *PO Token* e o download falha com `Requested format is not available` (só vêm miniaturas). Se isso acontecer, **desative os cookies** (Configurações → Desativado) e tente baixar sem eles — em geral é o caminho mais confiável. É uma limitação atual do YouTube, não do app.
+
 ### CLI — Transcrição
 
 ```bash
