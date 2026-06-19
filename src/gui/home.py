@@ -16,13 +16,14 @@ from src.gui.theme.tokens import Color, IconSize, Motion, Radius, Space, Type
 
 # Layout constants local to the home screen (not shared design tokens).
 # Cards rest compact (icon + title + one-line desc) and grow on hover to reveal
-# the feature detail. The card rows reserve the expanded height (see show_home),
-# so a card grows in place without pushing the rows below it (anti-reflow).
+# the feature detail. Rows size to their content, so the hovered card grows and
+# the rows below shift down (reflow). Only one card hovers at a time, so the
+# layout never exceeds the original all-expanded footprint and fits the window.
 # Tweak the *_EXPANDED_H values to the final copy if a feature line ever clips.
-_TOOL_COMPACT_H = 102
+_TOOL_COMPACT_H = 104
 _TOOL_EXPANDED_H = 210
-_HUB_COMPACT_H = 90
-_HUB_EXPANDED_H = 160
+_HUB_COMPACT_H = 92
+_HUB_EXPANDED_H = 162
 _HUB_ICON_CHIP = 56
 _CARD_ICON_SIZE = 40
 _GRID_WIDTH = 1280
@@ -199,6 +200,39 @@ def _make_card(
         animate_opacity=ft.Animation(Motion.fast, ft.AnimationCurve.EASE_IN),
     )
 
+    body = ft.Column(
+        controls=[
+            ft.Row(
+                controls=[
+                    ft.Icon(data["icon"], size=_CARD_ICON_SIZE, color=accent),
+                    ft.Column(
+                        controls=[
+                            ft.Text(
+                                data["title"],
+                                size=Type.heading.size,
+                                weight=ft.FontWeight.W_600,
+                                color=ft.Colors.ON_SURFACE,
+                            ),
+                            ft.Text(
+                                data["desc"],
+                                size=Type.caption.size,
+                                color=ft.Colors.ON_SURFACE_VARIANT,
+                                no_wrap=False,
+                            ),
+                        ],
+                        spacing=Space.xxs,
+                        expand=True,
+                    ),
+                ],
+                spacing=Space.md,
+                vertical_alignment=ft.CrossAxisAlignment.CENTER,
+            ),
+            ft.Container(height=Space.sm),
+            detail,
+        ],
+        spacing=0,
+    )
+
     ctr = ft.Container(
         height=_TOOL_COMPACT_H,
         expand=True,
@@ -218,42 +252,10 @@ def _make_card(
         ),
         animate=ft.Animation(Motion.base, ft.AnimationCurve.EASE_OUT),
         animate_scale=ft.Animation(Motion.base, ft.AnimationCurve.EASE_OUT),
-        content=ft.Column(
-            controls=[
-                ft.Row(
-                    controls=[
-                        ft.Icon(data["icon"], size=_CARD_ICON_SIZE, color=accent),
-                        ft.Column(
-                            controls=[
-                                ft.Text(
-                                    data["title"],
-                                    size=Type.heading.size,
-                                    weight=ft.FontWeight.W_600,
-                                    color=ft.Colors.ON_SURFACE,
-                                ),
-                                ft.Text(
-                                    data["desc"],
-                                    size=Type.caption.size,
-                                    color=ft.Colors.ON_SURFACE_VARIANT,
-                                    no_wrap=False,
-                                ),
-                            ],
-                            spacing=Space.xxs,
-                            expand=True,
-                        ),
-                    ],
-                    spacing=Space.md,
-                    vertical_alignment=ft.CrossAxisAlignment.CENTER,
-                ),
-                ft.Container(height=Space.sm),
-                detail,
-            ],
-            spacing=0,
-        ),
+        content=body,
     )
 
-    def _hover(e: ft.HoverEvent) -> None:
-        on = e.data == "true"
+    def _set_hover(on: bool) -> None:
         ctr.height = _TOOL_EXPANDED_H if on else _TOOL_COMPACT_H
         ctr.scale = 1.015 if on else 1.0
         ctr.bgcolor = ft.Colors.with_opacity(
@@ -267,11 +269,15 @@ def _make_card(
         detail.opacity = 1 if on else 0
         ctr.update()
 
-    ctr.on_hover = _hover
+    # Hover (enter/exit) and tap both live on the SAME GestureDetector. A
+    # Container.on_hover on a control fully covered by a gesture/mouse region
+    # never fires — the GestureDetector's own on_enter/on_exit do.
     return ft.GestureDetector(
         mouse_cursor=Cursor.interactive,
-        content=ctr,
         on_tap=lambda _: on_tap(data["id"]),
+        on_enter=lambda _e: _set_hover(True),
+        on_exit=lambda _e: _set_hover(False),
+        content=ctr,
         expand=True,
     )
 
@@ -376,8 +382,7 @@ def _make_hub_card(
         ),
     )
 
-    def _hover(e: ft.HoverEvent) -> None:
-        on = e.data == "true"
+    def _set_hover(on: bool) -> None:
         ctr.height = _HUB_EXPANDED_H if on else _HUB_COMPACT_H
         ctr.scale = 1.012 if on else 1.0
         ctr.bgcolor = ft.Colors.with_opacity(
@@ -391,11 +396,13 @@ def _make_hub_card(
         detail.opacity = 1 if on else 0
         ctr.update()
 
-    ctr.on_hover = _hover
+    # Tap + hover (enter/exit) both on the same GestureDetector — see _make_card.
     return ft.GestureDetector(
         mouse_cursor=Cursor.interactive,
-        content=ctr,
         on_tap=lambda _: on_tap(data["id"]),
+        on_enter=lambda _e: _set_hover(True),
+        on_exit=lambda _e: _set_hover(False),
+        content=ctr,
         expand=True,
     )
 
@@ -490,14 +497,14 @@ def show_home(page: ft.Page, on_complete: Callable[[str], None]) -> None:
 
     # Tools: 3 + 2. The second row centers its two cards at the same 1/3 width
     # via half-width spacers (flex 1 | 2·2 | 1 → each card = 2/6 = 1/3).
-    # Each row is pinned to the expanded card height with START alignment, so a
-    # card grows *inside* its row on hover without pushing the rows below it.
+    # Rows size to content. START alignment keeps resting (compact) siblings
+    # anchored at the top, so the hovered card grows downward and only the rows
+    # below it shift (reflow) — no reserved dead space at rest.
     tools_grid = ft.Column(
         controls=[
             ft.Row(
                 controls=[tool_cards[0], tool_cards[1], tool_cards[2]],
                 spacing=Space.xl,
-                height=_TOOL_EXPANDED_H,
                 vertical_alignment=ft.CrossAxisAlignment.START,
             ),
             ft.Row(
@@ -508,7 +515,6 @@ def show_home(page: ft.Page, on_complete: Callable[[str], None]) -> None:
                     ft.Container(expand=1),
                 ],
                 spacing=Space.xl,
-                height=_TOOL_EXPANDED_H,
                 vertical_alignment=ft.CrossAxisAlignment.START,
             ),
         ],
@@ -520,7 +526,6 @@ def show_home(page: ft.Page, on_complete: Callable[[str], None]) -> None:
     hubs_grid = ft.Row(
         controls=hub_cards,
         spacing=Space.xl,
-        height=_HUB_EXPANDED_H,
         vertical_alignment=ft.CrossAxisAlignment.START,
     )
 
