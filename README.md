@@ -144,6 +144,10 @@ Abre maximizado com uma splash screen animada, seguida de uma **Home Screen** co
 
 Cada módulo tem layout split: formulário à esquerda, painel de acompanhamento (log em tempo real + barra de progresso + spinner) à direita. Durante um pipeline em execução a troca de módulo é bloqueada — os logs e a barra de progresso são preservados mesmo ao navegar entre módulos.
 
+#### Cookies do YouTube (verificação anti-bot)
+
+O YouTube às vezes bloqueia downloads com uma verificação "Sign in to confirm you're not a bot". Para contornar, o app usa os **cookies do seu navegador logado** ao baixar (Áudio, Vídeo e Transcrição). Por padrão (`auto`) ele **detecta o Zen Browser** automaticamente — basta estar logado no YouTube no Zen; nada extra a fazer. Para escolher outro navegador (Firefox, Chrome, Edge, Brave…) ou desativar, abra **Configurações** (engrenagem no AppBar). Os cookies são lidos **localmente**; nada sai do computador além das requisições normais de download. Também é possível configurar via variáveis de ambiente `MILL_YT_COOKIES_BROWSER`/`MILL_YT_COOKIES_PROFILE` (útil na CLI).
+
 ### CLI — Transcrição
 
 ```bash

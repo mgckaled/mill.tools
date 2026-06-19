@@ -10,6 +10,7 @@ from typing import Callable
 
 import yt_dlp
 
+from src.core.ytdlp_cookies import cookie_ydl_opts
 from src.utils import sanitize_filename
 
 logger = logging.getLogger(__name__)
@@ -101,6 +102,8 @@ def download_audio(
         "quiet": True,
         "no_warnings": True,
     }
+    # Browser cookies (anti-bot gate) — shared resolver, no-op when disabled.
+    ydl_opts.update(cookie_ydl_opts())
 
     try:
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:

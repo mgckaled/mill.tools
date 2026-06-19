@@ -11,6 +11,7 @@ from flet.controls.core.stack import StackFit
 from src.gui import settings
 from src.gui.events import EventBus, PipelineEvent
 from src.gui.home import show_home
+from src.gui.settings_dialog import open_settings_dialog
 from src.gui.splash import show_splash
 from src.gui.theme import sync_page_bgcolor
 from src.gui.theme.components import Cursor
@@ -111,6 +112,12 @@ def build_app(page: ft.Page, initial_module: str = "transcription") -> None:
         on_click=_toggle_theme,
         style=ft.ButtonStyle(mouse_cursor=Cursor.interactive),
     )
+    settings_btn = ft.IconButton(
+        icon=ft.Icons.SETTINGS_OUTLINED,
+        tooltip="Configurações",
+        on_click=lambda _e: open_settings_dialog(page),
+        style=ft.ButtonStyle(mouse_cursor=Cursor.interactive),
+    )
 
     # Library and AI are hubs over every module's output, not peer tools — they
     # live in the AppBar next to the wordmark instead of the NavigationRail.
@@ -176,7 +183,7 @@ def build_app(page: ft.Page, initial_module: str = "transcription") -> None:
             vertical_alignment=ft.CrossAxisAlignment.CENTER,
         ),
         center_title=False,
-        actions=[home_btn, splash_btn, theme_btn],
+        actions=[home_btn, splash_btn, settings_btn, theme_btn],
     )
 
     # ------------------------------------------------------------------

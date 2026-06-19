@@ -195,6 +195,7 @@ sync_page_bgcolor(page)    # chamar sempre que theme_mode mudar
 | `ft.ReorderableListView` | **existe** (tem `on_reorder` → `e.old_index`/`e.new_index`) | **NÃO** aceita `shrink_wrap`; é um **scrollable** (precisa de `height` fixo). Aninhá-lo num `ft.Column(scroll=...)` é frágil. Para reordenar listas curtas dentro de um formulário rolável, prefira o fallback **↑/↓** (dois `ft.IconButton` por linha trocando posições — determinístico, sem aninhar scroll). Ver `modules/recipes/form_view.py`. |
 | `ft.dropdown.Option(key=, text=)` | existe | `key` é o valor lido em `dd.value`; `text` é o rótulo exibido. Para reabilitar o evento de seleção, usar `on_select` (não `on_change`). |
 | `ft.GestureDetector` hover | `on_enter`/`on_exit` (+ `on_hover`) confirmados | Para **hover e clique no mesmo controle**, use um único `GestureDetector` com `on_enter`/`on_exit` + `on_tap`. `Container.on_hover` (ou um `GestureDetector` aninhado) **não dispara** quando o controle é totalmente coberto por outra região de mouse de mesma área. Padrão crescer-no-hover dos cards da home: ver `src/gui/home.py`. |
+| `ft.AlertDialog` modal | `page.show_dialog(dlg)` abre, `page.pop_dialog()` fecha | Toast: `page.open(ft.SnackBar(content=..., duration=...))`. Ver `views/file_viewer.py` (visor) e `settings_dialog.py` (Configurações). |
 
 ---
 

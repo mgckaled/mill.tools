@@ -45,6 +45,7 @@ src/
 │   ├── ffmpeg.py                — run_ffmpeg(): runner binário compartilhado com progresso pipe:1 (aceita cwd=)
 │   ├── subtitles.py             — SubtitleCue + to_srt()/to_vtt()/write_subtitles() (puro)
 │   ├── io_types.py              — InputItem: dataclass(kind, value) — compartilhado CLI e GUI
+│   ├── ytdlp_cookies.py         — cookie_ydl_opts(): cookies-from-browser p/ TODO call site yt-dlp (Zen→firefox+perfil); puro
 │   ├── audio/
 │   │   ├── args.py              — AudioArgs: parâmetros do pipeline de áudio
 │   │   ├── downloader.py        — yt-dlp: URL → output/audio/source/
@@ -100,6 +101,7 @@ src/
     ├── assets.py                — b64() (bytes p/ ft.Image), WINDOW_ICON
     ├── events.py                — EventBus, PipelineEvent (com module_id), LogEventHandler
     ├── settings.py              — persistência em ~/.mill-tools/config.json
+    ├── settings_dialog.py       — diálogo global (engrenagem no AppBar): cookies do YouTube
     ├── workers.py               — pipeline de Transcrição em thread (module_id="transcription")
     ├── help_content.py          — HELP_SHORT/LONG: registro central de tooltips/modais
     ├── components/
@@ -251,6 +253,16 @@ Automação: cadeias **lineares** nomeadas onde a saída de um passo alimenta a 
 - **GUI** (`src/gui/modules/recipes/`): hub no AppBar, split form|painel, **auto-contido** (assina `module_id="recipes"`). `form_view.py` — toggle **Rodar | Construir** (abas manuais): Rodar lista receitas (presets + salvas) selecionáveis + `InputSource` + dica "entrada esperada" + switches **lote** e **limpar intermediários**; Construir é um editor de sequência (dropdown só oferece ops compatíveis com a saída do passo anterior; reordenar por **↑/↓** — `ft.ReorderableListView` existe mas é scrollable sem `shrink_wrap`, frágil aninhado; validação ao vivo desabilita Salvar em cadeia incoerente). `worker.py` — `run_recipe_pipeline(runs, clean_intermediates)` roda `execute_recipe`/`execute_recipe_batch` em thread; 1 run → execução direta, N runs → lote; `clean_intermediates` apaga saídas de passos não-finais. `view.py` — progresso passo-a-passo, log rolável, Cancelar (entre passos) e cards de resultado (`output_card`) com bridge "Abrir na Biblioteca". `pipeline_log.py` — `fmt_*` + `resolve_status`.
 - **Persistência**: `last_recipe`, `recipe_clean_intermediates` em `config.json`; receitas do usuário em `~/.mill-tools/recipes.json`.
 - **CLI** (`src/cli/recipes.py`): `recipe list` (presets + salvas, com a cadeia) e `recipe run "<nome>" <URL_OR_FILE>` (`--model` sobrescreve o Whisper dos passos de transcrição). Resolve a receita, monta `initial_inputs`+`initial_kind` via `resolve_input`+`kind_for`, cria `CLIEventBus` e chama `execute_recipe` — mesmo core da GUI.
+
+## Cookies do YouTube (anti-bot)
+
+O YouTube bloqueia downloads de forma intermitente com um gate anti-bot ("Sign in to confirm you're not a bot"). A mitigação é passar cookies de um navegador logado via a opção `cookiesfrombrowser` do yt-dlp. Toda a lógica fica **isolada** em `src/core/ytdlp_cookies.py` (puro, sem Flet) e é **reutilizada por todos os call sites** do yt-dlp.
+
+- **Ponto único**: `cookie_ydl_opts() -> dict` é **mesclado** (`ydl_opts.update(...)`) dentro das **3** funções core que chamam o yt-dlp — `core/audio/downloader.py` (`download_audio`), `core/video/downloader.py` (`download_video`) e `core/metadata.py` (`fetch_metadata`). Isso cobre automaticamente **Áudio, Vídeo, Transcrição, Receitas e a CLI** sem propagar parâmetro. Novos call sites só precisam mesclar o helper.
+- **Zen Browser**: o yt-dlp **não conhece "zen"** (`SUPPORTED_BROWSERS` = chromium-family + firefox + safari). Zen usa o formato `cookies.sqlite` do Firefox, então o mapeamento é `("firefox", <path absoluto do perfil Zen>, None, None)` — o `_extract_firefox_cookies` aceita um caminho absoluto como raiz. O perfil default do Zen é resolvido do `profiles.ini` (preferindo `[Install*].Default` ao legado `[Profile*] Default=1`); dir do Zen por plataforma (`%APPDATA%\zen` no Windows).
+- **Config** (desacoplada do GUI — o core lê direto, sem importar `gui.settings`): env `MILL_YT_COOKIES_BROWSER`/`MILL_YT_COOKIES_PROFILE` → senão `~/.mill-tools/config.json` (`yt_cookies_browser`/`yt_cookies_profile`). Default `"auto"` (auto-detecta o Zen; nada detectado → sem cookies, no-op seguro). Opções: `auto`/`none`/`zen`/`firefox`/`chrome`/`edge`/`brave`/`chromium`/`opera`/`vivaldi`(+`safari` no macOS).
+- **Robustez**: `cookie_ydl_opts()` **nunca levanta** (try/except → `{}`); só retorna cookies de perfil cujo dir existe. Falha de resolução nunca quebra o download.
+- **GUI**: diálogo global de Configurações (`src/gui/settings_dialog.py`), aberto pela engrenagem no AppBar (`app.py`), com seletor de navegador + status (`detected_summary()`) + perfil avançado opcional; persiste via `settings`. Caminho feliz: não precisa abrir — `auto` resolve o Zen.
 
 ## Splash + Home Screen + spinner (branding)
 

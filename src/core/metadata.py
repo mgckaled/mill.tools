@@ -7,6 +7,8 @@ from datetime import datetime
 
 import yt_dlp
 
+from src.core.ytdlp_cookies import cookie_ydl_opts
+
 
 def fetch_metadata(url: str) -> dict:
     """Fetch video metadata from a URL without downloading the media.
@@ -21,6 +23,8 @@ def fetch_metadata(url: str) -> dict:
     # noplaylist: resolve a watch URL with a "&list=" param (e.g. an endless
     # YouTube "RD..." radio mix) to the single video, not the whole playlist.
     opts = {"quiet": True, "no_warnings": True, "noplaylist": True}
+    # Browser cookies (anti-bot gate) — shared resolver, no-op when disabled.
+    opts.update(cookie_ydl_opts())
     with yt_dlp.YoutubeDL(opts) as ydl:
         meta = ydl.extract_info(url, download=False)
     logging.debug(

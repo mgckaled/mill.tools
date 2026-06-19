@@ -36,6 +36,9 @@ _DEFAULTS: dict = {
     "last_embed_model": "nomic-embed-custom",  # local embedding model (Ollama, num_gpu 0)
     "last_recipe": "",  # name of the last recipe run
     "recipe_clean_intermediates": False,  # delete intermediate outputs at the end (PR8.4)
+    # YouTube cookies (anti-bot gate) — see src/core/ytdlp_cookies.py.
+    "yt_cookies_browser": "auto",  # "auto" | "none" | zen | firefox | chrome | edge | ...
+    "yt_cookies_profile": "",  # optional explicit profile path (advanced)
 }
 
 
