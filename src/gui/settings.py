@@ -21,6 +21,7 @@ _DEFAULTS: dict = {
     "last_beam_size": 1,
     "last_format_model": "phi4mini-custom",
     "last_analyzer_model": "gemini-2.5-flash",
+    "last_analysis_profile": "default",  # analysis schema/prompt — see src/analysis
     "last_prompt_model": "gemini-2.5-flash",
     "last_use_format": False,
     "last_use_analyze": False,

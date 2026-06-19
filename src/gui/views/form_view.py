@@ -15,7 +15,14 @@ from src.core.audio.converter import AUDIO_EXTENSIONS, VIDEO_EXTENSIONS
 from src.core.io_types import InputItem
 from src.gui import settings
 from src.gui.components.input_source import build_input_source
-from src.gui.theme.components import Cursor, hairline, section, section_label
+from src.gui.components.profile_selector import build_profile_selector
+from src.gui.theme.components import (
+    Cursor,
+    hairline,
+    help_icon_for,
+    section,
+    section_label,
+)
 from src.gui.theme.tokens import Space, Type
 from src.gui.workers import PipelineArgs
 
@@ -248,8 +255,31 @@ def build_form_view(
         value=cfg.get("last_use_analyze", False),
     )
 
+    # Analysis profile (schema/prompt) — grouped icon cards, shown only when on.
+    profile_grid, profile_get_value, _profile_set_value = build_profile_selector(
+        page,
+        value=cfg.get("last_analysis_profile", "default"),
+    )
+    _profile_help = help_icon_for("transcription.analysis_profile", page)
+    profile_section = ft.Column(
+        spacing=Space.sm,
+        visible=use_analyze_switch.value,
+        controls=[
+            ft.Row(
+                controls=[
+                    section_label("Tipo de análise"),
+                    ft.Container(expand=True),
+                    *([_profile_help] if _profile_help else []),
+                ],
+                vertical_alignment=ft.CrossAxisAlignment.CENTER,
+            ),
+            profile_grid,
+        ],
+    )
+
     def _on_analyze_toggle(e: ft.ControlEvent) -> None:
         analyzer_model_field.disabled = not use_analyze_switch.value
+        profile_section.visible = use_analyze_switch.value
         page.update()
 
     use_analyze_switch.on_change = _on_analyze_toggle
@@ -336,6 +366,7 @@ def build_form_view(
             format_model=format_model_field.value or "phi4mini-custom",
             use_analyze=use_analyze_switch.value,
             analyzer_model=analyzer_model_field.value or "gemini-2.5-flash",
+            analysis_profile=profile_get_value(),
             use_prompt=use_prompt_switch.value,
             prompt_model=prompt_model_field.value or "gemini-2.5-flash",
             reprocess=reprocess_switch.value,
@@ -349,6 +380,7 @@ def build_form_view(
                 "last_beam_size": args.beam_size,
                 "last_format_model": args.format_model,
                 "last_analyzer_model": args.analyzer_model,
+                "last_analysis_profile": args.analysis_profile,
                 "last_prompt_model": args.prompt_model,
                 "last_use_format": args.use_format,
                 "last_use_analyze": args.use_analyze,
@@ -431,6 +463,7 @@ def build_form_view(
                         ),
                         use_analyze_switch,
                         ft.Row(controls=[analyzer_model_field]),
+                        profile_section,
                         hairline(),
                         # --- Prompt-ready ---
                         section(

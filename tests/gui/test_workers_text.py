@@ -53,15 +53,27 @@ def test_text_input_runs_analyzer_on_a_copy(isolate, tmp_path: Path, monkeypatch
 
     seen: dict = {}
 
-    def fake_analyze(input_path, model_name=None, transcription=None, on_event=None):
+    def fake_analyze(
+        input_path,
+        model_name=None,
+        transcription=None,
+        on_event=None,
+        profile="default",
+    ):
         seen["input_path"] = Path(input_path)
+        seen["profile"] = profile
         return tmp_path / "notes.md"
 
     monkeypatch.setattr(workers.analyzer, "analyze", fake_analyze)
 
     bus = _Bus()
     result = run_pipeline(
-        PipelineArgs(url=str(txt), use_analyze=True, analyzer_model="qwen7b-custom"),
+        PipelineArgs(
+            url=str(txt),
+            use_analyze=True,
+            analyzer_model="qwen7b-custom",
+            analysis_profile="lecture",
+        ),
         bus,
         threading.Event(),
     )
@@ -73,3 +85,4 @@ def test_text_input_runs_analyzer_on_a_copy(isolate, tmp_path: Path, monkeypatch
     assert seen["input_path"].parent == (tmp_path / "text")
     assert (tmp_path / "text" / "notes.txt").exists()
     assert txt.read_text(encoding="utf-8") == original  # source preserved
+    assert seen["profile"] == "lecture"  # form selection threaded through

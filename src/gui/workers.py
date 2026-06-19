@@ -48,6 +48,7 @@ class PipelineArgs:
     format_model: str = "phi4mini-custom"
     use_analyze: bool = False
     analyzer_model: str = "gemini-2.5-flash"
+    analysis_profile: str = "default"
     use_prompt: bool = False
     prompt_model: str = "gemini-2.5-flash"
     reprocess: bool = False
@@ -302,6 +303,7 @@ def run_pipeline(
                 model_name=args.analyzer_model,
                 transcription=formatted_body,
                 on_event=on_event,
+                profile=args.analysis_profile,
             )
             result.analysis_path = analysis_path
 

@@ -27,6 +27,11 @@ HELP_SHORT: dict[str, str] = {
         "Gera uma análise estruturada (resumo, pontos-chave, citações…) "
         "a partir da transcrição."
     ),
+    "transcription.analysis_profile": (
+        "Perfil de análise: troca o esquema de campos e o prompt conforme o tipo "
+        "de conteúdo (aula, entrevista, tutorial, reunião…). Não altera o "
+        "formulário, só o que é extraído. 'Geral' mantém o esquema padrão."
+    ),
     "transcription.prompt": (
         "Cria uma versão condensada (~40%) da transcrição, "
         "pronta para colar como contexto em prompts."
