@@ -243,6 +243,7 @@ def build_form_view(
         value=cfg.get("last_analyzer_model", "gemini-2.5-flash"),
         options=[
             ft.dropdown.Option("gemini-2.5-flash", "gemini-2.5-flash"),
+            ft.dropdown.Option("gemma3-4b-custom", "gemma3-4b-custom (local)"),
             ft.dropdown.Option("qwen7b-custom", "qwen7b-custom"),
         ],
         expand=True,
@@ -293,6 +294,7 @@ def build_form_view(
         value=cfg.get("last_prompt_model", "gemini-2.5-flash"),
         options=[
             ft.dropdown.Option("gemini-2.5-flash", "gemini-2.5-flash"),
+            ft.dropdown.Option("gemma3-4b-custom", "gemma3-4b-custom (local)"),
             ft.dropdown.Option("qwen7b-custom", "qwen7b-custom"),
         ],
         expand=True,

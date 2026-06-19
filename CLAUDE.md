@@ -501,8 +501,10 @@ Iniciada com `uv run gui.py`. Flutter desktop no Windows.
 | Campo | Opções |
 |---|---|
 | Formatação | `phi4mini-custom`, `qwen7b-custom` |
-| Análise | `gemini-2.5-flash`, `qwen7b-custom` |
-| Prompt-ready | `gemini-2.5-flash`, `qwen7b-custom` |
+| Análise | `gemini-2.5-flash`, `gemma3-4b-custom`, `qwen7b-custom` |
+| Prompt-ready | `gemini-2.5-flash`, `gemma3-4b-custom`, `qwen7b-custom` |
+
+> `gemma3-4b-custom` é o meio-termo **local** (mais rápido que o `qwen7b-custom` na CPU, ~3,3 GB, 128K ctx) para Análise e Prompt-ready — tarefas de síntese onde ele se sai bem (mesmo modelo do default do RAG). Não entra na Formatação (o `phi4mini-custom` já ocupa o slot pequeno/rápido e a formatação exige preservar o texto verbatim).
 
 ### Thread safety
 
