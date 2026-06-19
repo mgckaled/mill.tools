@@ -20,124 +20,53 @@ Usage (standalone):
 import argparse
 import json
 import logging
-import sys
 from collections.abc import Callable
-from datetime import datetime
 from pathlib import Path
 from time import time
 
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.prompts import ChatPromptTemplate
 
+from src.analysis import (
+    build_analysis_prompt,
+    build_merge_prompt,
+    format_report,
+    get_profile,
+    list_profiles,
+)
 from src.llm_factory import make_llm
 from src.llm_utils import split_text
 from src.utils import TRANSCRIPTIONS_ANALYSIS_DIR, setup_logging
 
 DEFAULT_MODEL = "qwen7b-custom"
+DEFAULT_PROFILE = "default"
 CHUNK_SIZE = 4500
 CHUNK_OVERLAP = 300
 
-ANALYSIS_PROMPT = ChatPromptTemplate.from_messages([
-    ("system", (
-        "Você é um analista especialista. Você recebe a transcrição de um vídeo do YouTube "
-        "e deve produzir uma análise estruturada em formato JSON. "
-        "Responda APENAS com JSON válido, sem texto extra antes ou depois. "
-        "Responda SEMPRE em português brasileiro.\n\n"
-        "Estrutura JSON obrigatória:\n"
-        '{{\n'
-        '  "summary": "Um parágrafo conciso resumindo o conteúdo principal.",\n'
-        '  "key_points": ["ponto 1", "ponto 2", "..."],\n'
-        '  "action_items": ["ação 1", "ação 2", "..."],\n'
-        '  "key_concepts": ["Termo: definição curta de uma linha", "..."],\n'
-        '  "tools_mentioned": ["ferramenta ou tecnologia 1", "..."],\n'
-        '  "metrics": ["número ou estatística com contexto", "..."],\n'
-        '  "quotes": ["frase notável do speaker com contexto mínimo", "..."],\n'
-        '  "assumptions": ["premissa implícita identificada", "..."],\n'
-        '  "vocabulary": ["Jargão: definição inferida do contexto", "..."],\n'
-        '  "sentiment_arc": "evolução do tom ao longo do conteúdo"\n'
-        '}}\n\n'
-        "Regras:\n"
-        "- summary: 3-5 frases, capture a essência\n"
-        "- key_points: 5-10 pontos mais importantes; cada ponto deve ser uma frase completa com sujeito e verbo, "
-        "com no mínimo 12 palavras; explique o 'como' ou 'por que' sempre que possível, não apenas liste fatos; "
-        "ERRADO: 'Bolo feito no liquidificador' | CERTO: 'O liquidificador substitui a batedeira ao emulsionar os ingredientes, resultando em massa mais homogênea e fofa'; "
-        "IGNORE CTAs (curtir, inscrever, comentar), patrocinadores e autopromoção\n"
-        "- action_items: passos práticos ou recomendações mencionados (lista vazia se nenhum); "
-        "IGNORE pedidos de inscrição, curtida ou comentário\n"
-        "- key_concepts: conceitos abstratos ou técnicos centrais para entender o tema, formato obrigatório 'Termo: definição de uma linha'; "
-        "Ex: 'Fermento químico: agente que libera CO2 durante o cozimento, tornando a massa mais leve'; "
-        "(lista vazia se nenhum)\n"
-        "- tools_mentioned: ferramentas, bibliotecas, plataformas ou tecnologias citadas (lista vazia se nenhuma)\n"
-        "- metrics: números, estatísticas, durações, quantidades mencionadas com seu contexto (lista vazia se nenhuma)\n"
-        "- quotes: até 5 frases marcantes ou citações quase literais do speaker que sintetizem bem uma ideia; "
-        "inclua contexto mínimo entre parênteses se necessário; (lista vazia se nenhuma)\n"
-        "- assumptions: até 5 premissas implícitas que o speaker assume como verdade sem questionar; "
-        "formule como afirmação, ex: 'O público já conhece os fundamentos de X'; (lista vazia se nenhuma)\n"
-        "- vocabulary: jargões, siglas ou termos de nicho usados pelo speaker, formato 'Termo: definição inferida'; "
-        "diferente de key_concepts — foco em linguagem específica do domínio/nicho; (lista vazia se nenhum)\n"
-        "- sentiment_arc: UMA frase descrevendo como o tom evolui do início ao fim; "
-        "ex: 'Introdução técnica e expositiva → aprofundamento crítico → encerramento motivacional'"
-    )),
-    ("human", "Transcrição:\n\n{text}"),
-])
+DETECT_LANGUAGE_PROMPT = ChatPromptTemplate.from_messages(
+    [
+        (
+            "system",
+            "You are a language detector. Reply with ONLY the ISO 639-1 language code (e.g. pt, en, es, fr). No extra text.",
+        ),
+        ("human", "{text}"),
+    ]
+)
 
-DETECT_LANGUAGE_PROMPT = ChatPromptTemplate.from_messages([
-    ("system", "You are a language detector. Reply with ONLY the ISO 639-1 language code (e.g. pt, en, es, fr). No extra text."),
-    ("human", "{text}"),
-])
-
-TRANSLATE_PROMPT = ChatPromptTemplate.from_messages([
-    ("system", (
-        "You are a professional translator. Translate the following JSON content "
-        "to Brazilian Portuguese (pt-BR). Keep the JSON structure intact — translate "
-        "ONLY the string values, not the keys. Respond with ONLY the translated JSON, "
-        "no extra text."
-    )),
-    ("human", "{json_text}"),
-])
-
-MERGE_PROMPT = ChatPromptTemplate.from_messages([
-    ("system", (
-        "Você é um analista especialista. Você recebe múltiplas análises parciais de uma "
-        "única transcrição de vídeo do YouTube dividida em partes. "
-        "Sua tarefa é consolidar tudo em UMA análise final coerente e bem escrita.\n\n"
-        "Regras de consolidação:\n"
-        "- Elimine pontos duplicados ou semanticamente equivalentes — mantenha apenas a versão mais completa\n"
-        "- Unifique pontos que tratam do mesmo assunto em um único ponto abrangente\n"
-        "- Todos os itens de key_points devem ser frases completas com inicial maiúscula\n"
-        "- O summary deve ser um parágrafo coeso de 3-5 frases, sem repetições\n"
-        "- Use português brasileiro correto — sem neologismos, sem palavras inventadas\n\n"
-        "Responda APENAS com JSON válido, sem texto extra antes ou depois.\n\n"
-        "Estrutura JSON obrigatória:\n"
-        '{{\n'
-        '  "summary": "Um parágrafo conciso resumindo o conteúdo principal.",\n'
-        '  "key_points": ["ponto 1", "ponto 2", "..."],\n'
-        '  "action_items": ["ação 1", "ação 2", "..."],\n'
-        '  "key_concepts": ["Termo: definição curta de uma linha", "..."],\n'
-        '  "tools_mentioned": ["ferramenta ou tecnologia 1", "..."],\n'
-        '  "metrics": ["número ou estatística com contexto", "..."],\n'
-        '  "quotes": ["frase notável do speaker com contexto mínimo", "..."],\n'
-        '  "assumptions": ["premissa implícita identificada", "..."],\n'
-        '  "vocabulary": ["Jargão: definição inferida do contexto", "..."],\n'
-        '  "sentiment_arc": "evolução do tom ao longo do conteúdo"\n'
-        '}}\n\n'
-        "Regras por campo:\n"
-        "- summary: 3-5 frases, capture a essência sem repetir pontos do key_points\n"
-        "- key_points: 5-10 pontos distintos; cada ponto deve ser uma frase completa com sujeito e verbo, "
-        "com no mínimo 12 palavras; explique o 'como' ou 'por que' sempre que possível; "
-        "IGNORE CTAs (curtir, inscrever, comentar), patrocinadores e autopromoção\n"
-        "- action_items: passos práticos mencionados (lista vazia se nenhum); "
-        "IGNORE pedidos de inscrição, curtida ou comentário\n"
-        "- key_concepts: conceitos abstratos/técnicos centrais; formato 'Termo: definição'; elimine duplicatas (lista vazia se nenhum)\n"
-        "- tools_mentioned: consolide sem repetição (lista vazia se nenhuma)\n"
-        "- metrics: elimine duplicatas, mantenha contexto (lista vazia se nenhuma)\n"
-        "- quotes: consolide as mais representativas, até 5; elimine duplicatas (lista vazia se nenhuma)\n"
-        "- assumptions: consolide premissas únicas, até 5 (lista vazia se nenhuma)\n"
-        "- vocabulary: consolide jargões únicos; formato 'Termo: definição' (lista vazia se nenhum)\n"
-        "- sentiment_arc: sintetize o arco completo em UMA frase a partir de todos os arcos parciais"
-    )),
-    ("human", "Análises parciais para consolidar:\n\n{analyses}"),
-])
+TRANSLATE_PROMPT = ChatPromptTemplate.from_messages(
+    [
+        (
+            "system",
+            (
+                "You are a professional translator. Translate the following JSON content "
+                "to Brazilian Portuguese (pt-BR). Keep the JSON structure intact — translate "
+                "ONLY the string values, not the keys. Respond with ONLY the translated JSON, "
+                "no extra text."
+            ),
+        ),
+        ("human", "{json_text}"),
+    ]
+)
 
 
 def _parse_json_response(text: str) -> dict:
@@ -243,7 +172,11 @@ def _format_report(
     video_meta: dict | None = None,
     transcription: str | None = None,
 ) -> str:
-    """Format the analysis dictionary as a Markdown report.
+    """Format the analysis dictionary as a Markdown report (default profile).
+
+    Thin backward-compatible wrapper around ``src.analysis.format_report`` with
+    the default profile — preserves the historical signature/output for callers
+    and tests that render the legacy schema directly.
 
     Args:
         analysis: Dictionary with summary, key_points, action_items, etc.
@@ -254,96 +187,9 @@ def _format_report(
     Returns:
         Formatted Markdown string.
     """
-    video_meta = video_meta or {}
-    title = video_meta.get("title") or f"Análise: {source_path.stem}"
-    channel = video_meta.get("channel", "")
-    duration = video_meta.get("duration", "")
-    url = video_meta.get("url", "")
-    generated_at = datetime.now().strftime("%Y-%m-%d %H:%M")
-
-    lines = [f"# {title}", ""]
-
-    meta_parts = []
-    if channel:
-        meta_parts.append(f"**Canal:** {channel}")
-    if duration:
-        meta_parts.append(f"**Duração:** {duration}")
-    if meta_parts:
-        lines.append(" | ".join(meta_parts))
-    if url:
-        lines.append(f"[Assistir no YouTube]({url})")
-
-    lines.extend([
-        "",
-        f"> Gerado em: {generated_at} | Fonte: `{source_path.name}`",
-        "",
-        "---",
-        "",
-        "## Resumo",
-        "",
-        analysis.get("summary", "N/A"),
-        "",
-        "## Pontos-chave",
-        "",
-    ])
-    for point in analysis.get("key_points", []):
-        lines.append(f"- {point}")
-
-    lines.extend(["", "## Ações sugeridas", ""])
-    actions=analysis.get("action_items", [])
-    if actions:
-        for action in actions:
-            lines.append(f"- {action}")
-    else:
-        lines.append("Nenhuma ação identificada.")
-
-    concepts=analysis.get("key_concepts", [])
-    if concepts:
-        lines.extend(["", "## Conceitos-chave", ""])
-        for concept in concepts:
-            lines.append(f"- {concept}")
-
-    tools=analysis.get("tools_mentioned", [])
-    if tools:
-        lines.extend(["", "## Ferramentas mencionadas", ""])
-        for tool in tools:
-            lines.append(f"- {tool}")
-
-    metrics = analysis.get("metrics", [])
-    if metrics:
-        lines.extend(["", "## Métricas e números", ""])
-        for metric in metrics:
-            lines.append(f"- {metric}")
-
-    quotes = analysis.get("quotes", [])
-    if quotes:
-        lines.extend(["", "## Citações notáveis", ""])
-        for quote in quotes:
-            lines.append(f"> {quote}")
-            lines.append("")
-
-    assumptions = analysis.get("assumptions", [])
-    if assumptions:
-        lines.extend(["", "## Premissas implícitas", ""])
-        for assumption in assumptions:
-            lines.append(f"- {assumption}")
-
-    vocabulary = analysis.get("vocabulary", [])
-    if vocabulary:
-        lines.extend(["", "## Vocabulário do nicho", ""])
-        for term in vocabulary:
-            lines.append(f"- {term}")
-
-    sentiment_arc = analysis.get("sentiment_arc", "")
-    if sentiment_arc:
-        lines.extend(["", "## Arco de sentimento", "", sentiment_arc])
-
-    if transcription:
-        lines.extend(["", "---", "", "## Transcrição", ""])
-        lines.append(transcription)
-
-    lines.append("")
-    return "\n".join(lines)
+    return format_report(
+        get_profile(DEFAULT_PROFILE), analysis, source_path, video_meta, transcription
+    )
 
 
 def _ensure_portuguese(
@@ -363,21 +209,21 @@ def _ensure_portuguese(
     Returns:
         Original analysis if already in Portuguese, or translated version.
     """
+
     def _emit(type: str, payload: dict = {}) -> None:
         if on_event:
             on_event(type, "analyze", payload)
 
-    summary=analysis.get("summary", "")
+    summary = analysis.get("summary", "")
     if not summary:
         return analysis
 
     logging.info("[~] Detecting analysis language...")
-    detect_chain=DETECT_LANGUAGE_PROMPT | llm
-    lang_response=detect_chain.invoke({"text": summary[:500]})
-    raw_lang=lang_response.content.strip()
-    detected=raw_lang.lower()[:2]
-    logging.debug("[d] Language raw response: %r → parsed: %r",
-                  raw_lang, detected)
+    detect_chain = DETECT_LANGUAGE_PROMPT | llm
+    lang_response = detect_chain.invoke({"text": summary[:500]})
+    raw_lang = lang_response.content.strip()
+    detected = raw_lang.lower()[:2]
+    logging.debug("[d] Language raw response: %r → parsed: %r", raw_lang, detected)
     logging.info("[i] Detected language: %s", detected)
     _emit("language_detected", {"lang": detected})
 
@@ -386,10 +232,10 @@ def _ensure_portuguese(
 
     logging.info("[~] Translating analysis to PT-BR...")
     _emit("translation_start", {})
-    json_text=json.dumps(analysis, ensure_ascii=False, indent=2)
-    translate_chain=TRANSLATE_PROMPT | llm
-    translated_response=translate_chain.invoke({"json_text": json_text})
-    translated=_parse_json_response(translated_response.content)
+    json_text = json.dumps(analysis, ensure_ascii=False, indent=2)
+    translate_chain = TRANSLATE_PROMPT | llm
+    translated_response = translate_chain.invoke({"json_text": json_text})
+    translated = _parse_json_response(translated_response.content)
 
     logging.info("[✓] Translation complete.")
     _emit("translation_done", {})
@@ -401,6 +247,7 @@ def analyze(
     model_name: str = DEFAULT_MODEL,
     transcription: str | None = None,
     on_event: Callable[[str, str, dict], None] | None = None,
+    profile: str = DEFAULT_PROFILE,
 ) -> Path:
     """Analyze a transcription file and generate a structured Markdown report.
 
@@ -416,6 +263,9 @@ def analyze(
         transcription: Formatted transcription body to append to the report (optional).
             When provided (e.g. after --format), the full text is included at the
             bottom of the .md under a "Transcrição" section.
+        profile: Analysis profile id (see ``src.analysis``). Drives the schema,
+            prompts, temperature and report sections. ``"default"`` reproduces the
+            historical 10-field video schema. Unknown ids fall back to default.
 
     Returns:
         Path to the generated .md report file.
@@ -424,6 +274,7 @@ def analyze(
         FileNotFoundError: If the input file does not exist.
         ValueError: If the LLM returns invalid JSON after all attempts.
     """
+
     def _emit(type: str, payload: dict = {}) -> None:
         if on_event:
             on_event(type, "analyze", payload)
@@ -432,86 +283,121 @@ def analyze(
         logging.error("File not found: %s", input_path)
         raise FileNotFoundError(input_path)
 
-    logging.info("[*] Analyzing: %s", input_path.name)
-    logging.info("[*] Model: %s", model_name)
+    prof = get_profile(profile)
+    analysis_prompt = build_analysis_prompt(prof)
+    merge_prompt = build_merge_prompt(prof)
 
-    raw_text=input_path.read_text(encoding="utf-8")
-    video_meta=_parse_header(raw_text)
-    body=_extract_transcription_body(raw_text)
-    logging.debug("[d] File: %d chars total | body after header strip: %d chars",
-                  len(raw_text), len(body))
+    logging.info("[*] Analyzing: %s", input_path.name)
+    logging.info("[*] Model: %s | Profile: %s", model_name, prof.id)
+
+    raw_text = input_path.read_text(encoding="utf-8")
+    video_meta = _parse_header(raw_text)
+    body = _extract_transcription_body(raw_text)
+    logging.debug(
+        "[d] File: %d chars total | body after header strip: %d chars",
+        len(raw_text),
+        len(body),
+    )
 
     if not body:
         logging.error("Transcription body is empty: %s", input_path)
         raise ValueError(f"Corpo da transcrição está vazio: {input_path.name}")
 
-    chunks=_split_text(body, model_name)
-    logging.info("[i] Text split into %d chunk(s) (%d chars total)",
-                 len(chunks), len(body))
+    chunks = _split_text(body, model_name)
+    logging.info(
+        "[i] Text split into %d chunk(s) (%d chars total)", len(chunks), len(body)
+    )
     for i, chunk in enumerate(chunks, 1):
         logging.debug("[d] Chunk %d/%d: %d chars", i, len(chunks), len(chunk))
-    _emit("analyze_started", {"filename": input_path.name, "total_chunks": len(chunks), "model_name": model_name})
+    _emit(
+        "analyze_started",
+        {
+            "filename": input_path.name,
+            "total_chunks": len(chunks),
+            "model_name": model_name,
+            "profile": prof.id,
+        },
+    )
 
-    llm = make_llm(model_name=model_name, temperature=0.4)      # análise e merge
-    llm_util = make_llm(model_name=model_name, temperature=0)   # detecção de idioma e tradução
+    # análise e merge usam a temperatura do perfil
+    llm = make_llm(model_name=model_name, temperature=prof.temperature)
+    llm_util = make_llm(
+        model_name=model_name, temperature=0
+    )  # detecção de idioma e tradução
 
-    start=time()
+    start = time()
 
     if len(chunks) == 1:
         logging.info("[~] Analyzing single chunk...")
         _emit("analyze_chunk_start", {"i": 1, "total": 1})
-        t_chunk=time()
-        chain=ANALYSIS_PROMPT | llm
-        response=chain.invoke({"text": chunks[0]})
-        analysis=_parse_json_response(response.content)
+        t_chunk = time()
+        chain = analysis_prompt | llm
+        response = chain.invoke({"text": chunks[0]})
+        analysis = _parse_json_response(response.content)
         chunk_elapsed = time() - t_chunk
-        logging.debug("[d] Single chunk done in %.1fs | response: %d chars | keys: %s",
-                      chunk_elapsed, len(response.content), list(analysis.keys()))
-        _emit("analyze_chunk_done", {"i": 1, "total": 1, "elapsed": round(chunk_elapsed, 1)})
+        logging.debug(
+            "[d] Single chunk done in %.1fs | response: %d chars | keys: %s",
+            chunk_elapsed,
+            len(response.content),
+            list(analysis.keys()),
+        )
+        _emit(
+            "analyze_chunk_done",
+            {"i": 1, "total": 1, "elapsed": round(chunk_elapsed, 1)},
+        )
     else:
-        partial_analyses=[]
+        partial_analyses = []
         for i, chunk in enumerate(chunks, 1):
             logging.info("[~] Analyzing chunk %d/%d...", i, len(chunks))
             _emit("analyze_chunk_start", {"i": i, "total": len(chunks)})
-            t_chunk=time()
-            chain=ANALYSIS_PROMPT | llm
-            response=chain.invoke({"text": chunk})
-            partial=_parse_json_response(response.content)
+            t_chunk = time()
+            chain = analysis_prompt | llm
+            response = chain.invoke({"text": chunk})
+            partial = _parse_json_response(response.content)
             chunk_elapsed = time() - t_chunk
-            logging.debug("[d] Chunk %d done in %.1fs | response: %d chars | keys: %s",
-                          i, chunk_elapsed, len(response.content), list(partial.keys()))
-            _emit("analyze_chunk_done", {"i": i, "total": len(chunks), "elapsed": round(chunk_elapsed, 1)})
+            logging.debug(
+                "[d] Chunk %d done in %.1fs | response: %d chars | keys: %s",
+                i,
+                chunk_elapsed,
+                len(response.content),
+                list(partial.keys()),
+            )
+            _emit(
+                "analyze_chunk_done",
+                {"i": i, "total": len(chunks), "elapsed": round(chunk_elapsed, 1)},
+            )
             partial_analyses.append(partial)
 
-        logging.info("[~] Merging %d partial analyses...",
-                     len(partial_analyses))
+        logging.info("[~] Merging %d partial analyses...", len(partial_analyses))
         _emit("analyze_merge_start", {"total_chunks": len(partial_analyses)})
-        t_merge=time()
-        merge_input=json.dumps(partial_analyses, ensure_ascii=False, indent=2)
-        merge_chain=MERGE_PROMPT | llm
-        merge_response=merge_chain.invoke({"analyses": merge_input})
-        analysis=_parse_json_response(merge_response.content)
+        t_merge = time()
+        merge_input = json.dumps(partial_analyses, ensure_ascii=False, indent=2)
+        merge_chain = merge_prompt | llm
+        merge_response = merge_chain.invoke({"analyses": merge_input})
+        analysis = _parse_json_response(merge_response.content)
         logging.debug("[d] Merge done in %.1fs", time() - t_merge)
 
     analysis = _ensure_portuguese(analysis, llm_util, on_event)
 
-    elapsed=time() - start
+    elapsed = time() - start
 
     TRANSCRIPTIONS_ANALYSIS_DIR.mkdir(parents=True, exist_ok=True)
-    report = _format_report(analysis, input_path, video_meta, transcription)
-    output_path=TRANSCRIPTIONS_ANALYSIS_DIR / f"{input_path.stem}.md"
+    report = format_report(prof, analysis, input_path, video_meta, transcription)
+    output_path = TRANSCRIPTIONS_ANALYSIS_DIR / f"{input_path.stem}.md"
     output_path.write_text(report, encoding="utf-8")
-    md_size_kb=output_path.stat().st_size / 1024
+    md_size_kb = output_path.stat().st_size / 1024
     logging.debug("[d] Report size: %.1f KB", md_size_kb)
 
     logging.info("[✓] Analysis saved to: %s (%.0fs)", output_path, elapsed)
-    _emit("analyze_done", {"elapsed": round(elapsed, 1), "output_path": str(output_path)})
+    _emit(
+        "analyze_done", {"elapsed": round(elapsed, 1), "output_path": str(output_path)}
+    )
     return output_path
 
 
 def main() -> None:
     """Entry point for standalone analyzer CLI."""
-    parser=argparse.ArgumentParser(
+    parser = argparse.ArgumentParser(
         description="Analyze a transcription file using a local or cloud LLM.",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
@@ -525,11 +411,17 @@ def main() -> None:
         help="Model name — local Ollama (e.g. qwen7b-custom) or Gemini (e.g. gemini-2.5-flash)",
     )
     parser.add_argument(
+        "--profile",
+        default=DEFAULT_PROFILE,
+        choices=list_profiles(),
+        help="Analysis profile (schema/prompt). 'default' keeps the legacy video schema.",
+    )
+    parser.add_argument(
         "--verbose",
         action="store_true",
         help="Enable debug logging",
     )
-    args=parser.parse_args()
+    args = parser.parse_args()
 
     setup_logging(args.verbose)
-    analyze(Path(args.input_file), model_name=args.model)
+    analyze(Path(args.input_file), model_name=args.model, profile=args.profile)
