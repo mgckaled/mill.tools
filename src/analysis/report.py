@@ -31,17 +31,21 @@ def _is_empty(value: object) -> bool:
     return False
 
 
-def _render_section(field: Field, value: object) -> list[str] | None:
+def _render_section(field: Field, analysis: dict) -> list[str] | None:
     """Render one field as Markdown lines, or None when it should be omitted.
 
     Args:
         field: The profile field descriptor.
-        value: The value read from the analysis dict for this field.
+        analysis: The full analysis dict (presence of the key matters for the
+            paragraph fallback — a missing key uses ``empty_text``, while a
+            present-but-blank value renders as-is, mirroring the legacy report).
 
     Returns:
         The section lines (header + body) or None when the field is empty and
         not marked ``always``.
     """
+    present = field.key in analysis
+    value = analysis.get(field.key)
     empty = _is_empty(value)
     if empty and not field.always:
         return None
@@ -49,8 +53,13 @@ def _render_section(field: Field, value: object) -> list[str] | None:
     header = [f"## {field.title}", ""]
 
     if field.kind == KIND_PARAGRAPH:
-        text = field.empty_text if empty else str(value)
-        return header + ([text] if text else [])
+        if field.always:
+            # Missing key -> placeholder; present (even blank) -> one value line.
+            text = (
+                ("" if value is None else str(value)) if present else field.empty_text
+            )
+            return header + [text]
+        return header + [str(value)]
 
     items = [] if empty else list(value)  # type: ignore[arg-type]
 
@@ -126,7 +135,7 @@ def format_report(
 
     sections = []
     for field in profile.fields:
-        rendered = _render_section(field, analysis.get(field.key))
+        rendered = _render_section(field, analysis)
         if rendered is not None:
             sections.append(rendered)
     for i, section in enumerate(sections):
