@@ -24,7 +24,7 @@ def test_is_gemini(model, expected):
 @pytest.mark.parametrize(
     "model, expected",
     [
-        ("gemma3-4b-custom", 24_000),
+        ("gemma3-4b-custom", 12_000),
         ("qwen7b-custom", None),
         ("gemini-2.5-flash", None),  # Gemini bypasses unconditionally, not via budget
         ("unknown-model", None),
@@ -51,10 +51,25 @@ def test_make_llm_gemini_raises_without_api_key(monkeypatch):
 def test_make_llm_routes_ollama(mocker):
     """make_llm para nome sem prefixo 'gemini' deve instanciar ChatOllama."""
     mock_ollama = mocker.patch("src.llm_factory._make_ollama")
-    from src.llm_factory import make_llm
+    from src.llm_factory import DEFAULT_OLLAMA_NUM_CTX, make_llm
 
     make_llm("qwen7b-custom", temperature=0.4)
-    mock_ollama.assert_called_once_with("qwen7b-custom", 0.4)
+    mock_ollama.assert_called_once_with("qwen7b-custom", 0.4, DEFAULT_OLLAMA_NUM_CTX)
+
+
+@pytest.mark.unit
+def test_make_ollama_passes_num_ctx_to_chatollama(mocker):
+    """num_ctx must reach ChatOllama (overrides Ollama's 2048 default)."""
+    import sys
+    from unittest.mock import MagicMock
+
+    fake_mod = MagicMock()
+    mocker.patch.dict(sys.modules, {"langchain_ollama": fake_mod})
+    from src.llm_factory import _make_ollama
+
+    _make_ollama("qwen7b-custom", 0.4, num_ctx=8192)
+    _, kwargs = fake_mod.ChatOllama.call_args
+    assert kwargs["num_ctx"] == 8192
 
 
 @pytest.mark.unit

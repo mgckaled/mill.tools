@@ -96,6 +96,41 @@ def _parse_json_response(text: str) -> dict:
         raise ValueError("LLM did not return valid JSON") from exc
 
 
+def _invoke_and_parse(chain, payload: dict, *, retries: int = 1) -> dict:
+    """Invoke *chain* and parse its JSON response, retrying once on failure.
+
+    Local models occasionally emit malformed or truncated JSON (verbose schemas
+    can run long). A single re-invocation usually recovers without failing the
+    whole pipeline; only after exhausting the retries does the error propagate.
+
+    Args:
+        chain: A `prompt | llm` runnable returning a message with `.content`.
+        payload: The variables to pass to `chain.invoke`.
+        retries: Number of extra attempts after the first (default 1).
+
+    Returns:
+        The parsed analysis dict.
+
+    Raises:
+        ValueError: If every attempt yields invalid JSON.
+    """
+    last_exc: ValueError | None = None
+    for attempt in range(retries + 1):
+        response = chain.invoke(payload)
+        try:
+            return _parse_json_response(response.content)
+        except ValueError as exc:
+            last_exc = exc
+            if attempt < retries:
+                logging.warning(
+                    "[!] Invalid JSON from model (attempt %d/%d) — retrying",
+                    attempt + 1,
+                    retries + 1,
+                )
+    assert last_exc is not None
+    raise last_exc
+
+
 def _split_text(text: str, model_name: str) -> list[str]:
     """Split transcription text into chunks for processing.
 
@@ -332,13 +367,11 @@ def analyze(
         _emit("analyze_chunk_start", {"i": 1, "total": 1})
         t_chunk = time()
         chain = analysis_prompt | llm
-        response = chain.invoke({"text": chunks[0]})
-        analysis = _parse_json_response(response.content)
+        analysis = _invoke_and_parse(chain, {"text": chunks[0]})
         chunk_elapsed = time() - t_chunk
         logging.debug(
-            "[d] Single chunk done in %.1fs | response: %d chars | keys: %s",
+            "[d] Single chunk done in %.1fs | keys: %s",
             chunk_elapsed,
-            len(response.content),
             list(analysis.keys()),
         )
         _emit(
@@ -352,14 +385,12 @@ def analyze(
             _emit("analyze_chunk_start", {"i": i, "total": len(chunks)})
             t_chunk = time()
             chain = analysis_prompt | llm
-            response = chain.invoke({"text": chunk})
-            partial = _parse_json_response(response.content)
+            partial = _invoke_and_parse(chain, {"text": chunk})
             chunk_elapsed = time() - t_chunk
             logging.debug(
-                "[d] Chunk %d done in %.1fs | response: %d chars | keys: %s",
+                "[d] Chunk %d done in %.1fs | keys: %s",
                 i,
                 chunk_elapsed,
-                len(response.content),
                 list(partial.keys()),
             )
             _emit(
@@ -373,8 +404,7 @@ def analyze(
         t_merge = time()
         merge_input = json.dumps(partial_analyses, ensure_ascii=False, indent=2)
         merge_chain = merge_prompt | llm
-        merge_response = merge_chain.invoke({"analyses": merge_input})
-        analysis = _parse_json_response(merge_response.content)
+        analysis = _invoke_and_parse(merge_chain, {"analyses": merge_input})
         logging.debug("[d] Merge done in %.1fs", time() - t_merge)
 
     analysis = _ensure_portuguese(analysis, llm_util, on_event)

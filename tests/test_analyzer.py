@@ -105,6 +105,52 @@ def test_parse_json_response_unclosed_fence_still_parses():
     assert out == {"k": 1}
 
 
+# ── _invoke_and_parse (retry on malformed/truncated JSON) ─────────────────────
+
+
+class _FakeMsg:
+    def __init__(self, content: str) -> None:
+        self.content = content
+
+
+class _FakeChain:
+    """Stand-in for a `prompt | llm` runnable yielding canned contents in order."""
+
+    def __init__(self, *contents: str) -> None:
+        self._it = iter(contents)
+        self.calls = 0
+
+    def invoke(self, _payload: dict) -> "_FakeMsg":
+        self.calls += 1
+        return _FakeMsg(next(self._it))
+
+
+def test_invoke_and_parse_succeeds_first_try():
+    from src.analyzer import _invoke_and_parse
+
+    chain = _FakeChain('{"summary": "ok"}')
+    assert _invoke_and_parse(chain, {"text": "x"}) == {"summary": "ok"}
+    assert chain.calls == 1  # no retry consumed
+
+
+def test_invoke_and_parse_retries_then_succeeds():
+    from src.analyzer import _invoke_and_parse
+
+    # truncated/invalid JSON on the first attempt, valid on the retry
+    chain = _FakeChain('{"summary": "tru', '{"summary": "ok"}')
+    assert _invoke_and_parse(chain, {"text": "x"}) == {"summary": "ok"}
+    assert chain.calls == 2
+
+
+def test_invoke_and_parse_raises_after_exhausting_retries():
+    from src.analyzer import _invoke_and_parse
+
+    chain = _FakeChain("not json {{", "still not json")
+    with pytest.raises(ValueError, match="valid JSON"):
+        _invoke_and_parse(chain, {"text": "x"})
+    assert chain.calls == 2
+
+
 # ── _extract_transcription_body ──────────────────────────────────────────────
 
 

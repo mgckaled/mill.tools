@@ -30,6 +30,13 @@ GEMINI_DEFAULT_TIMEOUT = (
     120  # seconds — Gemini Flash usually returns in <30s for 30k-token analyses
 )
 
+# Ollama defaults num_ctx to 2048 tokens — far too small for the verbose structured
+# JSON the analyzer/prompter emit (and for the long-context bypass), which silently
+# truncates the output into invalid JSON. A larger window prevents that. Kept uniform
+# so Ollama does not reload the model when a large analysis call and a small
+# language-detection call alternate within the same run.
+DEFAULT_OLLAMA_NUM_CTX = 8192
+
 
 def _is_gemini(model_name: str) -> bool:
     """Return True when the model name belongs to the Google Gemini family."""
@@ -52,9 +59,11 @@ def is_gemini_model(model_name: str) -> bool:
 # bypasses unconditionally via is_gemini_model and is intentionally NOT listed
 # here. Budgets are in characters (~4 chars/token).
 LONG_CONTEXT_LOCAL_BUDGETS: dict[str, int] = {
-    # gemma3-4b-custom: 128K-token ctx; ~6K-token cap keeps a CPU pass practical
-    # while skipping the merge for short/medium transcripts and notes.
-    "gemma3-4b-custom": 24_000,
+    # gemma3-4b-custom: skip the merge for short/medium inputs. The cap stays well
+    # under DEFAULT_OLLAMA_NUM_CTX so the prompt + the verbose JSON output still fit
+    # in the window (~3K input tokens leaves ~4.5K for prompt+output at 8192 ctx);
+    # it also keeps a CPU single pass practical. Above it, chunking resumes.
+    "gemma3-4b-custom": 12_000,
 }
 
 
@@ -121,12 +130,18 @@ def _make_gemini(model_name: str, temperature: float) -> "BaseChatModel":
     )
 
 
-def _make_ollama(model_name: str, temperature: float) -> "BaseChatModel":
+def _make_ollama(
+    model_name: str,
+    temperature: float,
+    num_ctx: int = DEFAULT_OLLAMA_NUM_CTX,
+) -> "BaseChatModel":
     """Instantiate a ChatOllama for local inference.
 
     Args:
         model_name: Ollama model name (e.g. "qwen7b-custom").
         temperature: Sampling temperature.
+        num_ctx: Context window in tokens. Overrides Ollama's 2048 default so the
+            verbose structured JSON the analyzer/prompter emit is not truncated.
 
     Returns:
         A ChatOllama instance.
@@ -135,20 +150,26 @@ def _make_ollama(model_name: str, temperature: float) -> "BaseChatModel":
     from langchain_ollama import ChatOllama
 
     logging.debug(
-        "[d] Provider: Ollama (local) | model=%s | temperature=%.2f",
+        "[d] Provider: Ollama (local) | model=%s | temperature=%.2f | num_ctx=%d",
         model_name,
         temperature,
+        num_ctx,
     )
     # client_kwargs é repassado ao httpx.Client subjacente — define timeout de leitura
     # para evitar que chain.invoke() fique pendurado indefinidamente se o Ollama travar.
     return ChatOllama(
         model=model_name,
         temperature=temperature,
+        num_ctx=num_ctx,
         client_kwargs={"timeout": 300.0},
     )
 
 
-def make_llm(model_name: str, temperature: float = 0.0) -> "BaseChatModel":
+def make_llm(
+    model_name: str,
+    temperature: float = 0.0,
+    num_ctx: int = DEFAULT_OLLAMA_NUM_CTX,
+) -> "BaseChatModel":
     """Return a LangChain chat model routed by name prefix.
 
     - Names starting with "gemini" → Google Gemini (requires GOOGLE_API_KEY in .env)
@@ -157,6 +178,7 @@ def make_llm(model_name: str, temperature: float = 0.0) -> "BaseChatModel":
     Args:
         model_name: Model identifier as received from the CLI (--fm/--am/--pm).
         temperature: Sampling temperature (0.0 = deterministic, 1.0 = creative).
+        num_ctx: Ollama context window in tokens (ignored for Gemini).
 
     Returns:
         A LangChain BaseChatModel compatible with the existing `prompt | llm`
@@ -167,4 +189,4 @@ def make_llm(model_name: str, temperature: float = 0.0) -> "BaseChatModel":
     """
     if _is_gemini(model_name):
         return _make_gemini(model_name, temperature)
-    return _make_ollama(model_name, temperature)
+    return _make_ollama(model_name, temperature, num_ctx)
