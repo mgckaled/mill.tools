@@ -15,8 +15,14 @@ from src.gui.theme.components import Cursor
 from src.gui.theme.tokens import Color, IconSize, Motion, Radius, Space, Type
 
 # Layout constants local to the home screen (not shared design tokens).
-_TOOL_CARD_H = 188
-_HUB_CARD_H = 142
+# Cards rest compact (icon + title + one-line desc) and grow on hover to reveal
+# the feature detail. The card rows reserve the expanded height (see show_home),
+# so a card grows in place without pushing the rows below it (anti-reflow).
+# Tweak the *_EXPANDED_H values to the final copy if a feature line ever clips.
+_TOOL_COMPACT_H = 102
+_TOOL_EXPANDED_H = 210
+_HUB_COMPACT_H = 90
+_HUB_EXPANDED_H = 160
 _HUB_ICON_CHIP = 56
 _CARD_ICON_SIZE = 40
 _GRID_WIDTH = 1280
@@ -30,8 +36,9 @@ _TOOL_CARDS: list[dict] = [
         "accent": Color.log.ok,
         "desc": "Baixe e processe áudio com qualidade profissional",
         "features": [
-            "Baixe áudio de YouTube e outras plataformas",
-            "Remova ruído de fundo com processamento local",
+            "Baixe de YouTube, SoundCloud e mais",
+            "Converta entre MP3, M4A, WAV, OGG e Opus",
+            "Reduza ruído de fundo, 100 % local",
             "Normalize o volume pelo padrão EBU R128",
         ],
     },
@@ -40,11 +47,12 @@ _TOOL_CARDS: list[dict] = [
         "title": "Vídeo",
         "icon": ft.Icons.VIDEO_FILE_OUTLINED,
         "accent": Color.log.info,
-        "desc": "Sete operações para edição e processamento de vídeo",
+        "desc": "Oito operações para baixar, editar e processar vídeo",
         "features": [
-            "Baixe, converta e corte vídeos com precisão",
-            "Comprima em H.264 e redimensione sem perda visual",
-            "Extraia a trilha de áudio ou capture thumbnail",
+            "Baixe, converta de codec e corte por tempo",
+            "Comprima em H.264 e redimensione sem perda",
+            "Extraia a trilha de áudio ou thumbnails",
+            "Embuta ou queime legendas SRT/VTT",
         ],
     },
     {
@@ -54,9 +62,10 @@ _TOOL_CARDS: list[dict] = [
         "accent": Color.log.step,
         "desc": "Doze operações para editar e analisar imagens",
         "features": [
-            "Converta, redimensione, recorte e gire imagens",
+            "Converta, redimensione, recorte e gire",
+            "Marca d'água, borda, filtros e ajustes",
             "Remova fundos automaticamente com IA local",
-            "Descreva o conteúdo de imagens com visão por IA",
+            "Descreva imagens com visão por IA",
         ],
     },
     {
@@ -66,9 +75,10 @@ _TOOL_CARDS: list[dict] = [
         "accent": Color.log.work,
         "desc": "Converta áudio em texto com Whisper, 100 % local",
         "features": [
-            "Transcreva com faster-whisper acelerado por GPU",
-            "Formate e analise com LLM local ou em nuvem",
-            "Exporte em TXT, Markdown ou formato prompt",
+            "Transcreva áudio, vídeo ou URL local",
+            "Aceleração por GPU + legendas SRT/VTT",
+            "Formate e analise com LLM local ou nuvem",
+            "Exporte em TXT, Markdown ou prompt",
         ],
     },
     {
@@ -76,11 +86,12 @@ _TOOL_CARDS: list[dict] = [
         "title": "Documentos",
         "icon": ft.Icons.DESCRIPTION_OUTLINED,
         "accent": Color.log.error,
-        "desc": "12 operações para PDFs — local, sem nuvem, torch-free",
+        "desc": "Treze operações para PDFs — local e torch-free",
         "features": [
-            "Una, divida, comprima e gire PDFs com precisão",
-            "Aplique marcas d'água, carimbos e criptografia AES-256",
-            "Extraia texto, converta páginas e gere QR codes",
+            "Una, divida, comprima, gire e rotule",
+            "Marcas d'água, carimbos e AES-256",
+            "Extraia texto, faça OCR e analise",
+            "Converta páginas em imagens e gere QR",
         ],
     },
 ]
@@ -93,10 +104,11 @@ _HUB_CARDS: list[dict] = [
         "title": "Biblioteca",
         "icon": ft.Icons.COLLECTIONS_BOOKMARK_OUTLINED,
         "accent": Color.dark.primary,
-        "desc": "Tudo que você já gerou, num só lugar",
+        "desc": "Tudo que você já gerou, reunido",
         "features": [
-            "Navegue, filtre e busque todas as suas saídas",
-            "Reabra um arquivo ou reenvie para outro módulo",
+            "Navegue, filtre, busque e ordene",
+            "Abra resultados sem reprocessar",
+            "Reenvie a qualquer outro módulo",
         ],
     },
     {
@@ -104,10 +116,11 @@ _HUB_CARDS: list[dict] = [
         "title": "IA",
         "icon": ft.Icons.AUTO_AWESOME_OUTLINED,
         "accent": Color.log.step,
-        "desc": "Converse com o seu próprio acervo — RAG 100 % local",
+        "desc": "Converse com seu acervo, RAG local",
         "features": [
-            "Pergunte sobre transcrições, PDFs e imagens",
-            "Respostas citando as fontes do seu conteúdo",
+            "Pergunte sobre todo o seu acervo",
+            "Respostas citando as fontes [n]",
+            "Embeddings 100 % locais",
         ],
     },
     {
@@ -115,10 +128,11 @@ _HUB_CARDS: list[dict] = [
         "title": "Receitas",
         "icon": ft.Icons.ACCOUNT_TREE_OUTLINED,
         "accent": Color.log.work,
-        "desc": "Encadeie módulos numa cadeia automática",
+        "desc": "Cadeias automáticas entre módulos",
         "features": [
-            "URL → áudio → transcrever → analisar num clique",
-            "Rode presets prontos ou monte a sua receita",
+            "URL → áudio → transcrever → analisar",
+            "Rode presets ou crie a sua",
+            "Processe em lote, limpe restos",
         ],
     },
 ]
@@ -132,33 +146,6 @@ def _palette(page: ft.Page):
 def _border(side: ft.BorderSide) -> ft.Border:
     """Borda uniforme nos quatro lados."""
     return ft.Border(left=side, right=side, top=side, bottom=side)
-
-
-def _on_card_hover(
-    e: ft.HoverEvent,
-    ctr: ft.Container,
-    accent: str,
-    page: ft.Page,
-    *,
-    hub: bool = False,
-) -> None:
-    """Realça bg + borda no hover. Hubs descansam com borda dourada (não outline)."""
-    is_hover = e.data == "true"
-    pal = _palette(page)
-    rest_bg = 0.80 if hub else 0.75
-    ctr.bgcolor = (
-        ft.Colors.with_opacity(0.90 if hub else 0.88, pal.surface_hover)
-        if is_hover
-        else ft.Colors.with_opacity(rest_bg, pal.surface)
-    )
-    hover_side = ft.BorderSide(1.5, ft.Colors.with_opacity(0.6, accent))
-    rest_side = (
-        ft.BorderSide(1.5, ft.Colors.with_opacity(0.45, ft.Colors.PRIMARY))
-        if hub
-        else ft.BorderSide(1.5, pal.outline_variant)
-    )
-    ctr.border = _border(hover_side if is_hover else rest_side)
-    ctr.update()
 
 
 def _feature_row(text: str) -> ft.Row:
@@ -199,13 +186,24 @@ def _make_card(
     on_tap: Callable[[str], None],
     page: ft.Page,
 ) -> ft.GestureDetector:
-    """Card vertical de ferramenta (sem CTA — a dica fica no canto da tela)."""
+    """Vertical tool card: rests compact, grows on hover to reveal its detail."""
     accent = data["accent"]
     pal = _palette(page)
 
+    # Feature detail — present in the tree but hidden at rest (clip crops it; the
+    # opacity fade is polish). Revealed when the card grows on hover.
+    detail = ft.Column(
+        controls=[_feature_row(f) for f in data["features"]],
+        spacing=4,
+        opacity=0,
+        animate_opacity=ft.Animation(Motion.fast, ft.AnimationCurve.EASE_IN),
+    )
+
     ctr = ft.Container(
-        height=_TOOL_CARD_H,
+        height=_TOOL_COMPACT_H,
         expand=True,
+        scale=1.0,
+        clip_behavior=ft.ClipBehavior.ANTI_ALIAS,  # crops the detail while compact
         border_radius=Radius.lg,
         border=_border(ft.BorderSide(1.5, pal.outline_variant)),
         bgcolor=ft.Colors.with_opacity(0.75, pal.surface),
@@ -218,7 +216,8 @@ def _make_card(
             offset=ft.Offset(0, 4),
             color=ft.Colors.with_opacity(0.20, ft.Colors.BLACK),
         ),
-        animate=ft.Animation(Motion.fast, ft.AnimationCurve.EASE_IN_OUT),
+        animate=ft.Animation(Motion.base, ft.AnimationCurve.EASE_OUT),
+        animate_scale=ft.Animation(Motion.base, ft.AnimationCurve.EASE_OUT),
         content=ft.Column(
             controls=[
                 ft.Row(
@@ -247,16 +246,28 @@ def _make_card(
                     vertical_alignment=ft.CrossAxisAlignment.CENTER,
                 ),
                 ft.Container(height=Space.sm),
-                ft.Column(
-                    controls=[_feature_row(f) for f in data["features"]], spacing=4
-                ),
+                detail,
             ],
             spacing=0,
-            expand=True,
         ),
     )
-    ctr.on_hover = lambda e: _on_card_hover(e, ctr, accent, page)
 
+    def _hover(e: ft.HoverEvent) -> None:
+        on = e.data == "true"
+        ctr.height = _TOOL_EXPANDED_H if on else _TOOL_COMPACT_H
+        ctr.scale = 1.015 if on else 1.0
+        ctr.bgcolor = ft.Colors.with_opacity(
+            0.88 if on else 0.75, pal.surface_hover if on else pal.surface
+        )
+        ctr.border = _border(
+            ft.BorderSide(1.5, ft.Colors.with_opacity(0.6, accent))
+            if on
+            else ft.BorderSide(1.5, pal.outline_variant)
+        )
+        detail.opacity = 1 if on else 0
+        ctr.update()
+
+    ctr.on_hover = _hover
     return ft.GestureDetector(
         mouse_cursor=Cursor.interactive,
         content=ctr,
@@ -270,9 +281,10 @@ def _make_hub_card(
     on_tap: Callable[[str], None],
     page: ft.Page,
 ) -> ft.GestureDetector:
-    """Card horizontal de hub — ícone em chip à esquerda, conteúdo à direita.
+    """Horizontal hub card — icon chip on the left, content on the right.
 
-    Mais largo, com borda dourada e selo "HUB" para destacá-lo das ferramentas.
+    Wider, with a gold rest border and a "HUB" badge. Like the tool cards, it
+    rests compact and grows on hover to reveal its feature detail.
     """
     accent = data["accent"]
     pal = _palette(page)
@@ -300,6 +312,14 @@ def _make_hub_card(
         ),
     )
 
+    # Feature detail — hidden at rest (clipped), revealed when the card grows.
+    detail = ft.Column(
+        controls=[_feature_row(f) for f in data["features"]],
+        spacing=4,
+        opacity=0,
+        animate_opacity=ft.Animation(Motion.fast, ft.AnimationCurve.EASE_IN),
+    )
+
     info = ft.Column(
         controls=[
             ft.Row(
@@ -322,15 +342,17 @@ def _make_hub_card(
                 no_wrap=False,
             ),
             ft.Container(height=Space.xxs),
-            ft.Column(controls=[_feature_row(f) for f in data["features"]], spacing=4),
+            detail,
         ],
         spacing=Space.xxs,
         expand=True,
     )
 
     ctr = ft.Container(
-        height=_HUB_CARD_H,
+        height=_HUB_COMPACT_H,
         expand=True,
+        scale=1.0,
+        clip_behavior=ft.ClipBehavior.ANTI_ALIAS,
         border_radius=Radius.lg,
         border=_border(
             ft.BorderSide(1.5, ft.Colors.with_opacity(0.45, ft.Colors.PRIMARY))
@@ -345,15 +367,31 @@ def _make_hub_card(
             offset=ft.Offset(0, 5),
             color=ft.Colors.with_opacity(0.24, ft.Colors.BLACK),
         ),
-        animate=ft.Animation(Motion.fast, ft.AnimationCurve.EASE_IN_OUT),
+        animate=ft.Animation(Motion.base, ft.AnimationCurve.EASE_OUT),
+        animate_scale=ft.Animation(Motion.base, ft.AnimationCurve.EASE_OUT),
         content=ft.Row(
             controls=[icon_chip, info],
             spacing=Space.md,
             vertical_alignment=ft.CrossAxisAlignment.START,
         ),
     )
-    ctr.on_hover = lambda e: _on_card_hover(e, ctr, accent, page, hub=True)
 
+    def _hover(e: ft.HoverEvent) -> None:
+        on = e.data == "true"
+        ctr.height = _HUB_EXPANDED_H if on else _HUB_COMPACT_H
+        ctr.scale = 1.012 if on else 1.0
+        ctr.bgcolor = ft.Colors.with_opacity(
+            0.90 if on else 0.80, pal.surface_hover if on else pal.surface
+        )
+        ctr.border = _border(
+            ft.BorderSide(1.5, ft.Colors.with_opacity(0.6, accent))
+            if on
+            else ft.BorderSide(1.5, ft.Colors.with_opacity(0.45, ft.Colors.PRIMARY))
+        )
+        detail.opacity = 1 if on else 0
+        ctr.update()
+
+    ctr.on_hover = _hover
     return ft.GestureDetector(
         mouse_cursor=Cursor.interactive,
         content=ctr,
@@ -452,11 +490,15 @@ def show_home(page: ft.Page, on_complete: Callable[[str], None]) -> None:
 
     # Tools: 3 + 2. The second row centers its two cards at the same 1/3 width
     # via half-width spacers (flex 1 | 2·2 | 1 → each card = 2/6 = 1/3).
+    # Each row is pinned to the expanded card height with START alignment, so a
+    # card grows *inside* its row on hover without pushing the rows below it.
     tools_grid = ft.Column(
         controls=[
             ft.Row(
                 controls=[tool_cards[0], tool_cards[1], tool_cards[2]],
                 spacing=Space.xl,
+                height=_TOOL_EXPANDED_H,
+                vertical_alignment=ft.CrossAxisAlignment.START,
             ),
             ft.Row(
                 controls=[
@@ -466,6 +508,8 @@ def show_home(page: ft.Page, on_complete: Callable[[str], None]) -> None:
                     ft.Container(expand=1),
                 ],
                 spacing=Space.xl,
+                height=_TOOL_EXPANDED_H,
+                vertical_alignment=ft.CrossAxisAlignment.START,
             ),
         ],
         spacing=Space.md,
@@ -473,7 +517,12 @@ def show_home(page: ft.Page, on_complete: Callable[[str], None]) -> None:
     )
 
     # Hubs: wide cards in a single row (Biblioteca · IA · Receitas), each equal width.
-    hubs_grid = ft.Row(controls=hub_cards, spacing=Space.xl)
+    hubs_grid = ft.Row(
+        controls=hub_cards,
+        spacing=Space.xl,
+        height=_HUB_EXPANDED_H,
+        vertical_alignment=ft.CrossAxisAlignment.START,
+    )
 
     cards_grid = ft.Column(
         controls=[
