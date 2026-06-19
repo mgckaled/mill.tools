@@ -238,6 +238,40 @@ def test_subtitle_adapter_recovers_video_and_srt_from_context(mocker, tmp_path):
 
 
 @pytest.mark.unit
+def test_analyze_adapter_forwards_profile_param(mocker, tmp_path):
+    import src.core.recipes.registry as reg
+    from src.core.recipes.types import StepContext
+
+    mock = mocker.patch("src.analyzer.analyze", return_value=tmp_path / "o.md")
+    ctx = StepContext(
+        emit=lambda *a: None,
+        cancel_is_set=lambda: False,
+        initial_inputs=[tmp_path / "in.txt"],
+        outputs_by_op={},
+    )
+
+    reg._analyze([tmp_path / "in.txt"], {"profile": "scientific"}, ctx)
+    assert mock.call_args.kwargs["profile"] == "scientific"
+
+
+@pytest.mark.unit
+def test_analyze_adapter_defaults_profile_to_default(mocker, tmp_path):
+    import src.core.recipes.registry as reg
+    from src.core.recipes.types import StepContext
+
+    mock = mocker.patch("src.analyzer.analyze", return_value=tmp_path / "o.md")
+    ctx = StepContext(
+        emit=lambda *a: None,
+        cancel_is_set=lambda: False,
+        initial_inputs=[tmp_path / "in.txt"],
+        outputs_by_op={},
+    )
+
+    reg._analyze([tmp_path / "in.txt"], {}, ctx)
+    assert mock.call_args.kwargs["profile"] == "default"
+
+
+@pytest.mark.unit
 def test_ai_answer_adapter_writes_markdown_with_sources(mocker, tmp_path, monkeypatch):
     import src.core.recipes.registry as reg
     import src.utils as utils

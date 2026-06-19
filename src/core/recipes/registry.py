@@ -306,6 +306,7 @@ def _analyze(inputs: list, params: dict, ctx: StepContext) -> list[Path]:
         input_path=Path(inputs[0]),
         model_name=params.get("model", analyzer.DEFAULT_MODEL),
         on_event=lambda t, s, p: ctx.emit(t, p),
+        profile=params.get("profile", analyzer.DEFAULT_PROFILE),
     )
     return [out]
 
