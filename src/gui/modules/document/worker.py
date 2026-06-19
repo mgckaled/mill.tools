@@ -542,7 +542,9 @@ def _run_analyze(
 
     # analyze() writes to transcriptions/analysis/ and returns the .md path —
     # use it directly (do not guess a path under output/document/).
-    analysis_path = analyze(txt_path, model_name=args.analyze_model)
+    analysis_path = analyze(
+        txt_path, model_name=args.analyze_model, profile=args.analyze_profile
+    )
     elapsed = f"{time() - t0:.1f}s"
     emit(
         "document_op_done",

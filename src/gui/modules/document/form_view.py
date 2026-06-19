@@ -281,6 +281,7 @@ def build_document_form(
             qr_size=qr_refs.get_size(),
             qr_fmt=qr_refs.get_fmt(),
             analyze_model=analyze_refs.get_model(),
+            analyze_profile=analyze_refs.get_profile(),
             ocr_lang=ocr_refs.get_lang(),
             ocr_dpi=ocr_refs.get_dpi(),
         )

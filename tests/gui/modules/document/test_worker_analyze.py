@@ -24,8 +24,15 @@ def test_run_analyze_text_skips_pdf_extraction(tmp_path: Path, monkeypatch):
 
     seen: dict = {}
 
-    def fake_analyze(input_path, model_name=None, transcription=None, on_event=None):
+    def fake_analyze(
+        input_path,
+        model_name=None,
+        transcription=None,
+        on_event=None,
+        profile="default",
+    ):
         seen["input_path"] = Path(input_path)
+        seen["profile"] = profile
         return md
 
     # The worker imports analyze lazily (from src.analyzer import analyze).
@@ -42,7 +49,10 @@ def test_run_analyze_text_skips_pdf_extraction(tmp_path: Path, monkeypatch):
         events.append((type, payload or {}))
 
     args = DocumentArgs(
-        input_paths=[txt], operation="analyze", analyze_model="qwen7b-custom"
+        input_paths=[txt],
+        operation="analyze",
+        analyze_model="qwen7b-custom",
+        analyze_profile="scientific",
     )
     ok = docworker._run_analyze(args, emit, threading.Event())
 
@@ -50,6 +60,7 @@ def test_run_analyze_text_skips_pdf_extraction(tmp_path: Path, monkeypatch):
     types = [t for t, _ in events]
     assert "task_done" in types
     assert seen["input_path"] == txt  # analyzed the .txt directly
+    assert seen["profile"] == "scientific"  # profile threaded through
     start = next(p for t, p in events if t == "document_op_start")
     assert start["page_count"] == 0
     done = next(p for t, p in events if t == "document_op_done")

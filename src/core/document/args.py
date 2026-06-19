@@ -52,6 +52,7 @@ class DocumentArgs:
 
     # --- analyze ---
     analyze_model: str = "qwen7b-custom"  # qwen7b-custom | gemini-2.5-flash
+    analyze_profile: str = "default"  # analysis schema/prompt — see src/analysis
 
     # --- ocr ---
     ocr_lang: str = "por"  # por | eng | por+eng | spa
