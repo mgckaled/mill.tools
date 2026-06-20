@@ -99,4 +99,137 @@ LITERARY = AnalysisProfile(
     ),
 )
 
-PROFILES = (LITERARY,)
+REVIEW = AnalysisProfile(
+    id="review",
+    label="Resenha",
+    icon="RATE_REVIEW_OUTLINED",
+    persona="Você é um crítico que escreve resenhas equilibradas.",
+    source_hint=(
+        "transcrição de uma resenha ou análise crítica "
+        "(produto, livro, filme, ferramenta...)"
+    ),
+    temperature=0.4,
+    fields=(
+        Field(
+            "subject",
+            "Objeto",
+            KIND_PARAGRAPH,
+            "o que está sendo resenhado e o contexto, em 1-2 frases",
+            always=True,
+            empty_text="N/A",
+        ),
+        Field(
+            "verdict",
+            "Veredito",
+            KIND_PARAGRAPH,
+            "a conclusão geral em 1-2 frases — recomenda ou não, e para quem",
+            always=True,
+            empty_text="N/A",
+        ),
+        Field(
+            "rating",
+            "Nota / Selo",
+            KIND_PARAGRAPH,
+            "nota ou selo atribuído, se houver (ex.: '8/10', 'recomendado'); "
+            "senão escreva 'sem nota explícita'",
+        ),
+        Field(
+            "pros",
+            "Pontos fortes",
+            KIND_LIST,
+            "aspectos positivos destacados, cada um concreto. (lista vazia se nenhum)",
+        ),
+        Field(
+            "cons",
+            "Pontos fracos",
+            KIND_LIST,
+            "críticas e limitações apontadas, cada uma concreta. "
+            "(lista vazia se nenhuma)",
+        ),
+        Field(
+            "comparisons",
+            "Comparações",
+            KIND_LIST,
+            "alternativas/concorrentes citados e como se comparam. "
+            "(lista vazia se nenhuma)",
+        ),
+        Field(
+            "best_for",
+            "Ideal para",
+            KIND_LIST,
+            "para quem/qual uso o objeto é mais indicado. (lista vazia se não dito)",
+        ),
+        Field(
+            "notable_quotes",
+            "Frases marcantes",
+            KIND_QUOTES,
+            "até 4 falas que sintetizam o juízo do crítico. (lista vazia se nenhuma)",
+        ),
+    ),
+)
+
+STORYTELLING = AnalysisProfile(
+    id="storytelling",
+    label="Narrativa",
+    icon="AUTO_STORIES_OUTLINED",
+    persona="Você é um roteirista que disseca a estrutura de histórias.",
+    source_hint=(
+        "transcrição de uma narrativa, roteiro ou conteúdo com arco narrativo"
+    ),
+    temperature=0.5,
+    fields=(
+        Field(
+            "logline",
+            "Logline",
+            KIND_PARAGRAPH,
+            "a história em 1-2 frases (quem quer o quê e qual o obstáculo)",
+            always=True,
+            empty_text="N/A",
+        ),
+        Field(
+            "hook",
+            "Gancho",
+            KIND_PARAGRAPH,
+            "como a abertura prende a atenção",
+        ),
+        Field(
+            "arc",
+            "Arco narrativo",
+            KIND_LIST,
+            "momentos-chave em ordem (início → conflito → virada → desfecho); "
+            "cada item uma frase",
+        ),
+        Field(
+            "characters",
+            "Personagens e vozes",
+            KIND_KEYVALUE,
+            "formato 'Nome/papel: função na história'. (lista vazia se não houver)",
+        ),
+        Field(
+            "conflict",
+            "Conflito",
+            KIND_PARAGRAPH,
+            "a tensão central que move a narrativa",
+        ),
+        Field(
+            "themes",
+            "Temas",
+            KIND_LIST,
+            "ideias/mensagens sob a superfície. (lista vazia se nenhuma)",
+        ),
+        Field(
+            "pacing",
+            "Ritmo",
+            KIND_PARAGRAPH,
+            "como o ritmo varia e onde concentra tensão/alívio",
+        ),
+        Field(
+            "takeaway",
+            "Mensagem e payoff",
+            KIND_PARAGRAPH,
+            "o que fica ao final; a recompensa para quem acompanhou",
+        ),
+    ),
+)
+
+PROFILES = (LITERARY, REVIEW, STORYTELLING)

@@ -36,7 +36,7 @@ GROUPS: tuple[GroupMeta, ...] = (
     GroupMeta(
         label="Criativo",
         icon="PALETTE_OUTLINED",
-        profile_ids=("literary",),
+        profile_ids=("literary", "review", "storytelling"),
     ),
     GroupMeta(
         label="Rápido",

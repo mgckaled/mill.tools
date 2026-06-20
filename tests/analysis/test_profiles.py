@@ -14,6 +14,8 @@ _EXPECTED_PROFILES = {
     "scientific",
     "administrative",
     "literary",
+    "review",
+    "storytelling",
     "notes",
 }
 
@@ -105,11 +107,24 @@ def test_literary_profile_shape_and_group():
     # synopsis is always rendered; notable passages use blockquotes
     assert by_key["summary"].always
     assert by_key["notable_passages"].kind == "quotes"
-    # literary lives in a dedicated creative group
+    # literary lives in the creative group
     creative = next(g for g in GROUPS if g.label == "Criativo")
-    assert creative.profile_ids == ("literary",)
+    assert "literary" in creative.profile_ids
     # creative profiles carry no "ignore CTAs" rule
     assert "IGNORE CTAs" not in " ".join(f.rule for f in prof.fields)
+
+
+def test_creative_group_holds_literary_review_storytelling():
+    from src.analysis import GROUPS, get_profile
+
+    creative = next(g for g in GROUPS if g.label == "Criativo")
+    assert creative.profile_ids == ("literary", "review", "storytelling")
+    # review: verdict always rendered; storytelling: logline always rendered
+    assert {f.key: f for f in get_profile("review").fields}["verdict"].always
+    assert {f.key: f for f in get_profile("storytelling").fields}["logline"].always
+    # both are interpretive, no "ignore CTAs" rule
+    for pid in ("review", "storytelling"):
+        assert "IGNORE CTAs" not in " ".join(f.rule for f in get_profile(pid).fields)
 
 
 def test_ignore_cta_rule_only_in_media_profiles():
