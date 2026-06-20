@@ -41,7 +41,7 @@ GROUPS: tuple[GroupMeta, ...] = (
     GroupMeta(
         label="Rápido",
         icon="BOLT",
-        profile_ids=("notes",),
+        profile_ids=("notes", "tldr", "flashcards"),
     ),
 )
 

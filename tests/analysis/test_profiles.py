@@ -17,6 +17,8 @@ _EXPECTED_PROFILES = {
     "review",
     "storytelling",
     "notes",
+    "tldr",
+    "flashcards",
 }
 
 _DEFAULT_FIELDS = [
@@ -125,6 +127,18 @@ def test_creative_group_holds_literary_review_storytelling():
     # both are interpretive, no "ignore CTAs" rule
     for pid in ("review", "storytelling"):
         assert "IGNORE CTAs" not in " ".join(f.rule for f in get_profile(pid).fields)
+
+
+def test_quick_group_holds_notes_tldr_flashcards():
+    from src.analysis import GROUPS, get_profile
+
+    rapido = next(g for g in GROUPS if g.label == "Rápido")
+    assert rapido.profile_ids == ("notes", "tldr", "flashcards")
+    # tldr leads with an always-rendered TL;DR; flashcards uses keyvalue Q->A pairs
+    assert {f.key: f for f in get_profile("tldr").fields}["tldr"].always
+    assert {f.key: f for f in get_profile("flashcards").fields}[
+        "flashcards"
+    ].kind == "keyvalue"
 
 
 def test_ignore_cta_rule_only_in_media_profiles():
