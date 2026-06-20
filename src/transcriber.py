@@ -14,7 +14,7 @@ from tqdm import tqdm
 
 from src.core.metadata import format_duration, format_metadata
 
-LOW_CONF_LOGPROB = -1.0   # avg_logprob abaixo disso indica baixa confiança
+LOW_CONF_LOGPROB = -1.0  # avg_logprob abaixo disso indica baixa confiança
 HIGH_NO_SPEECH_PROB = 0.6  # no_speech_prob acima disso indica provável silêncio/ruído
 
 
@@ -96,6 +96,7 @@ def transcribe(
     Returns:
         Elapsed transcription time in seconds.
     """
+
     def _emit(type: str, payload: dict = {}) -> None:
         if on_event:
             on_event(type, "transcribe", payload)
@@ -105,18 +106,28 @@ def transcribe(
             logging.info("[»] Overwriting existing transcription: %s", output_path.name)
         else:
             answer = input(
-                f"[!] Transcription already exists: '{output_path}'. Overwrite? [y/N] ")
+                f"[!] Transcription already exists: '{output_path}'. Overwrite? [y/N] "
+            )
             if answer.strip().lower() != "y":
                 logging.info("Skipping transcription.")
                 return None
 
     device, compute_type = _resolve_device(threads)
-    logging.debug("[d] Device: %s | compute_type: %s | threads: %d | beam_size: %d",
-                  device.upper(), compute_type, threads, beam_size)
-    logging.info("[*] Loading model '%s' on %s (%s)...",
-                 model_size, device.upper(), compute_type)
+    logging.debug(
+        "[d] Device: %s | compute_type: %s | threads: %d | beam_size: %d",
+        device.upper(),
+        compute_type,
+        threads,
+        beam_size,
+    )
+    logging.info(
+        "[*] Loading model '%s' on %s (%s)...", model_size, device.upper(), compute_type
+    )
     model_load_start = time()
-    _emit("whisper_loading", {"model_size": model_size, "device": device, "compute_type": compute_type})
+    _emit(
+        "whisper_loading",
+        {"model_size": model_size, "device": device, "compute_type": compute_type},
+    )
     model = WhisperModel(
         model_size,
         device=device,
@@ -148,13 +159,37 @@ def transcribe(
         )
         logging.debug(
             "[d] Audio duration: %.1fs | language_prob: %.2f | vad_filter: on | min_silence: 500ms",
-            info.duration, info.language_probability,
+            info.duration,
+            info.language_probability,
         )
-        _emit("language_detected", {
-            "language": info.language,
-            "confidence": info.language_probability,
-            "audio_duration": info.duration,
-        })
+        _emit(
+            "language_detected",
+            {
+                "language": info.language,
+                "confidence": info.language_probability,
+                "audio_duration": info.duration,
+            },
+        )
+
+        # VAD optimization: report how much silence was skipped.
+        duration_after_vad = getattr(info, "duration_after_vad", None)
+        if duration_after_vad is not None:
+            removed = info.duration - duration_after_vad
+            if removed >= 1:
+                pct = (removed / info.duration * 100) if info.duration else 0
+                logging.info(
+                    "[i] VAD removed %s of silence (%.0f%%)",
+                    format_elapsed(removed),
+                    pct,
+                )
+                _emit(
+                    "vad_filtered",
+                    {
+                        "duration": info.duration,
+                        "duration_after_vad": duration_after_vad,
+                        "removed": removed,
+                    },
+                )
 
         header = format_metadata(meta, url, detected_language=info.language)
         duration = int(meta.get("duration", 0))
@@ -165,7 +200,9 @@ def transcribe(
         with output_path.open("w", encoding="utf-8") as f:
             f.write(header)
             current = 0.0
-            with tqdm(total=duration, unit="s", desc="Transcribing", ncols=72) as progress_bar:
+            with tqdm(
+                total=duration, unit="s", desc="Transcribing", ncols=72
+            ) as progress_bar:
                 for segment in segments:
                     text = segment.text.strip()
                     low_conf = (
@@ -183,24 +220,32 @@ def transcribe(
                     segment_count += 1
                     if subtitle_formats:
                         from src.core.subtitles import SubtitleCue
-                        cues.append(SubtitleCue(
-                            index=segment_count,
-                            start=segment.start,
-                            end=segment.end,
-                            text=text,
-                        ))
-                    _emit("transcribe_segment", {
-                        "text": segment.text,
-                        "start": segment.start,
-                        "end": segment.end,
-                        "is_low_confidence": low_conf,
-                    })
+
+                        cues.append(
+                            SubtitleCue(
+                                index=segment_count,
+                                start=segment.start,
+                                end=segment.end,
+                                text=text,
+                            )
+                        )
+                    _emit(
+                        "transcribe_segment",
+                        {
+                            "text": segment.text,
+                            "start": segment.start,
+                            "end": segment.end,
+                            "is_low_confidence": low_conf,
+                        },
+                    )
 
         elapsed = time() - start
         txt_size_kb = output_path.stat().st_size / 1024
         logging.debug(
             "[d] Segments transcribed: %d | flagged low-confidence: %d | output size: %.1f KB",
-            segment_count, flagged_count, txt_size_kb,
+            segment_count,
+            flagged_count,
+            txt_size_kb,
         )
         if flagged_count:
             logging.info(
@@ -211,17 +256,23 @@ def transcribe(
         if subtitle_formats and cues:
             from src.core.subtitles import write_subtitles
             from src.utils import TRANSCRIPTIONS_SUBTITLES_DIR
+
             TRANSCRIPTIONS_SUBTITLES_DIR.mkdir(parents=True, exist_ok=True)
             sub_stem = TRANSCRIPTIONS_SUBTITLES_DIR / output_path.stem
             sub_paths = write_subtitles(cues, sub_stem, subtitle_formats)
-            logging.info("[✓] Subtitles written: %s", ", ".join(p.name for p in sub_paths))
+            logging.info(
+                "[✓] Subtitles written: %s", ", ".join(p.name for p in sub_paths)
+            )
             _emit("subtitles_done", {"paths": [str(p) for p in sub_paths]})
 
-        _emit("transcribe_done", {
-            "elapsed": elapsed,
-            "flagged_count": flagged_count,
-            "output_path": str(output_path),
-        })
+        _emit(
+            "transcribe_done",
+            {
+                "elapsed": elapsed,
+                "flagged_count": flagged_count,
+                "output_path": str(output_path),
+            },
+        )
         return elapsed
 
     except KeyboardInterrupt:

@@ -485,7 +485,7 @@ Iniciada com `uv run gui.py`. Flutter desktop no Windows.
 
 **Documentos (stage="document"):** `document_op_start` (`operation`, `item_name`, `item_idx`, `total`, `page_count`), `document_op_done` (`output_path`, `elapsed`, `operation`, `item_idx`, `total`, `extra_stats`), `document_op_error` (`item_name`, `message`). `operation` ∈ {`merge`, `split`, `compress`, `rotate`, `watermark`, `stamp`, `encrypt`, `extract`, `ocr`, `pdf_to_images`, `images_to_pdf`, `analyze`, `qr`}.
 
-**Transcrição (stage específico):** `metadata_start/done`, `audio_cached`, `download_start/done`, `whisper_loading/loaded`, `transcribe_started`, `language_detected` (`audio_duration`), `transcribe_segment` (`end`, `is_low_confidence`), `transcribe_summary`, `format_*`, `analyze_*`, `translation_*`, `prompt_*`.
+**Transcrição (stage específico):** `metadata_start/done`, `audio_cached`, `download_start/done`, `whisper_loading/loaded`, `transcribe_started`, `language_detected` (`audio_duration`), `vad_filtered` (`duration`, `duration_after_vad`, `removed` — silêncio pulado pelo VAD; logado como `[i] VAD removed Xs of silence (Y%)`), `transcribe_segment` (`end`, `is_low_confidence`), `transcribe_summary`, `format_*`, `analyze_*`, `translation_*`, `prompt_*`.
 
 **Receitas (module_id="recipes"):** `recipe_start` (`name`, `total_steps`), `step_start` (`op`, `label`, `idx`, `total`), `step_done` (`op`, `idx`, `total`, `outputs`), `step_error` (`op`, `idx`, `message`); reusa `progress_start`/`progress_update`/`task_done`/`task_error` e, no lote, `queue_progress`. Os adaptantes de passo encaminham os eventos das funções de core (ex.: `transcribe_segment`) sob o mesmo `module_id`.
 
