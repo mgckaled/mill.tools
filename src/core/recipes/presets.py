@@ -29,7 +29,7 @@ PRESETS: list[Recipe] = [
         steps=[
             RecipeStep("transcription.transcribe", {"model": "small"}),
             RecipeStep("transcription.format"),
-            RecipeStep("transcription.analyze", {"model": "qwen7b-custom"}),
+            RecipeStep("transcription.analyze", {"model": "gemma3-4b-custom"}),
         ],
     ),
     Recipe(
@@ -46,7 +46,7 @@ PRESETS: list[Recipe] = [
         description="OCR do PDF e análise por LLM.",
         steps=[
             RecipeStep("document.ocr", {"lang": "por"}),
-            RecipeStep("transcription.analyze", {"model": "qwen7b-custom"}),
+            RecipeStep("transcription.analyze", {"model": "gemma3-4b-custom"}),
         ],
     ),
     Recipe(

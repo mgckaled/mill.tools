@@ -38,7 +38,7 @@ from src.llm_factory import make_llm
 from src.llm_utils import split_text
 from src.utils import TRANSCRIPTIONS_ANALYSIS_DIR, setup_logging
 
-DEFAULT_MODEL = "qwen7b-custom"
+DEFAULT_MODEL = "gemma3-4b-custom"
 DEFAULT_PROFILE = "default"
 CHUNK_SIZE = 4500
 CHUNK_OVERLAP = 300

@@ -107,7 +107,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     )
     parser.add_argument(
         "--am",
-        default="qwen7b-custom",
+        default="gemma3-4b-custom",
         help="Ollama model for analysis",
         dest="analyzer_model",
     )
@@ -128,7 +128,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     )
     parser.add_argument(
         "--pm",
-        default="qwen7b-custom",
+        default="gemma3-4b-custom",
         help="Ollama model for prompt-ready condensation",
         dest="prompt_model",
     )

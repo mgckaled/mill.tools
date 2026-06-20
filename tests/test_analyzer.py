@@ -502,7 +502,9 @@ def test_analyze_multi_chunk_calls_merge(tmp_path, mocker, isolate_analysis_dir)
             _fake_llm("pt"),
         ],
     )
-    out = analyzer.analyze(src)
+    # pin a chunking model: the default (gemma3-4b) bypasses chunking for inputs
+    # this size, which would skip the merge path this test exercises.
+    out = analyzer.analyze(src, model_name="qwen7b-custom")
     assert "MERGED RESULT" in out.read_text(encoding="utf-8")
 
 
@@ -550,7 +552,12 @@ def test_analyze_multi_chunk_emits_merge_event(tmp_path, mocker, isolate_analysi
         ],
     )
     events: list[tuple[str, str, dict]] = []
-    analyzer.analyze(src, on_event=lambda t, s, p: events.append((t, s, p)))
+    # pin a chunking model so the merge path runs (gemma3-4b would bypass).
+    analyzer.analyze(
+        src,
+        model_name="qwen7b-custom",
+        on_event=lambda t, s, p: events.append((t, s, p)),
+    )
     assert "analyze_merge_start" in [e[0] for e in events]
 
 
