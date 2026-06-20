@@ -7,12 +7,18 @@ include it in that module's ``PROFILES`` tuple, and reference its id in ``GROUPS
 
 from __future__ import annotations
 
-from src.analysis.profiles import documents, media, quick
+from src.analysis.profiles import creative, documents, media, quick
 from src.analysis.types import AnalysisProfile, GroupMeta
 
 # Ordered registry id -> profile (insertion order defines the default cycling).
 PROFILES: dict[str, AnalysisProfile] = {
-    p.id: p for p in (*media.PROFILES, *documents.PROFILES, *quick.PROFILES)
+    p.id: p
+    for p in (
+        *media.PROFILES,
+        *documents.PROFILES,
+        *creative.PROFILES,
+        *quick.PROFILES,
+    )
 }
 
 # Grouped metadata for the grouped GUI selector (label/icon per section).
@@ -26,6 +32,11 @@ GROUPS: tuple[GroupMeta, ...] = (
         label="Acadêmico / Documento",
         icon="DESCRIPTION_OUTLINED",
         profile_ids=("scientific", "administrative"),
+    ),
+    GroupMeta(
+        label="Criativo",
+        icon="PALETTE_OUTLINED",
+        profile_ids=("literary",),
     ),
     GroupMeta(
         label="Rápido",

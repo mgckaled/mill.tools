@@ -6,13 +6,14 @@ import pytest
 
 pytestmark = pytest.mark.unit
 
-_EXPECTED_TIER1 = {
+_EXPECTED_PROFILES = {
     "default",
     "lecture",
     "interview",
     "tutorial",
     "scientific",
     "administrative",
+    "literary",
     "notes",
 }
 
@@ -30,10 +31,10 @@ _DEFAULT_FIELDS = [
 ]
 
 
-def test_catalog_has_exactly_tier1_profiles():
+def test_catalog_has_expected_profiles():
     from src.analysis import PROFILES
 
-    assert set(PROFILES.keys()) == _EXPECTED_TIER1
+    assert set(PROFILES.keys()) == _EXPECTED_PROFILES
 
 
 def test_profile_ids_match_dict_keys():
@@ -92,6 +93,23 @@ def test_list_profiles_returns_all_ids_in_registry_order():
 
     assert list_profiles() == list(PROFILES.keys())
     assert list_profiles()[0] == "default"
+
+
+def test_literary_profile_shape_and_group():
+    from src.analysis import GROUPS, get_profile
+
+    prof = get_profile("literary")
+    assert prof.label == "Literatura"
+    assert prof.temperature == 0.55
+    by_key = {f.key: f for f in prof.fields}
+    # synopsis is always rendered; notable passages use blockquotes
+    assert by_key["summary"].always
+    assert by_key["notable_passages"].kind == "quotes"
+    # literary lives in a dedicated creative group
+    creative = next(g for g in GROUPS if g.label == "Criativo")
+    assert creative.profile_ids == ("literary",)
+    # creative profiles carry no "ignore CTAs" rule
+    assert "IGNORE CTAs" not in " ".join(f.rule for f in prof.fields)
 
 
 def test_ignore_cta_rule_only_in_media_profiles():
