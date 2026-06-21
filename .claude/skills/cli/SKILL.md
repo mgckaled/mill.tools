@@ -228,6 +228,7 @@ do Windows).
 
 ```bash
 uv run main.py ai index                                  # (re)indexa o corpus
+uv run main.py ai stats                                  # resumo do índice (read-only)
 uv run main.py ai "pergunta?"                            # responde, citando fontes
 uv run main.py ai "resuma" --scope output/.../x.txt      # um documento
 uv run main.py ai "liste as ações" --batch --kind transcription
@@ -235,14 +236,21 @@ uv run main.py ai "..." --model gemini-2.5-flash --k 8
 ```
 
 **Um único positional** `query` (não usa sub-subparser): se for o literal
-`index` → (re)indexa e retorna; senão é a pergunta. Reaproveita o core
+`index` → (re)indexa e retorna; se for `stats` → imprime o resumo do índice
+(`_stats()`, **read-only**, reaproveita `src.core.rag.stats.index_stats`, **não**
+toca o embedder/Ollama) e retorna; senão é a pergunta. Reaproveita o core
 (`scan_library`/`build_index`/`retrieve`/`answer`); **não** usa `CLIEventBus`
 nem `run_*_pipeline` (como `library`). Embeddings **sempre locais** (Ollama);
 Gemini só no passo de resposta. `run_ai_cli` reconfigura `sys.stdout` p/ UTF-8.
 
+`ai stats` imprime cabeçalho (docs · chunks · dim · modelo de embedding ·
+tamanho em disco · atualizado em · local) + tabela por documento
+(nome · tipo · #chunks · data). Índice vazio → dica para rodar `ai index`
+(sem `sys.exit`, pois é só leitura).
+
 | Flag | Default | Descrição |
 |---|---|---|
-| `query` (posicional) | — | Pergunta, ou o literal `index` para (re)indexar |
+| `query` (posicional) | — | Pergunta, ou `index` para (re)indexar / `stats` para resumir o índice |
 | `--scope` | (acervo) | Caminho de arquivo (1 doc) **ou** kind (`transcription`/`document`/`image`). `_resolve_scope` resolve path existente → absoluto; senão trata como kind |
 | `--model` | `qwen7b-custom` | Modelo da resposta — Ollama tag ou `gemini-2.5-flash` |
 | `--embed-model` | `nomic-embed-custom` | Modelo de embedding (sempre local, CPU `num_gpu 0`; ver `ollama/Modelfile.nomic`) |
@@ -252,12 +260,14 @@ Gemini só no passo de resposta. `run_ai_cli` reconfigura `sys.stdout` p/ UTF-8.
 | `--kind` | — | Com `--batch`, restringe a um kind |
 
 > Nos testes (`tests/cli/test_ai_cli.py`): mocke `src.core.rag.embedder.is_available`
-> e os runners `src.cli.ai._build`/`_ask`/`_batch` para validar o dispatch;
+> e os runners `src.cli.ai._build`/`_ask`/`_batch`/`_stats` para validar o dispatch;
 > para `_build`/`_ask`/`_batch` em si, monkeypatch `src.core.rag.indexer.index_dir`
 > p/ `tmp_path`, mocke `embedder.embed_texts`/`embed_query` e
 > `src.core.rag.chat.make_llm` (via `GenericFakeChatModel`). `query == "index"`
 > e os erros (índice vazio / embedder indisponível) chamam `sys.exit(1)` →
-> `pytest.raises(SystemExit)`.
+> `pytest.raises(SystemExit)`. Para `_stats`, basta `_persisted_store(tmp_path)` +
+> monkeypatch de `indexer.index_dir` + `capsys` (não toca embedder; índice vazio
+> **não** chama `sys.exit`).
 
 ---
 

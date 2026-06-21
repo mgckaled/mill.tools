@@ -1,7 +1,8 @@
 """CLI subcommand `ai` — local RAG over the Library corpus.
 
-Two flows behind one positional:
+Flows behind one positional:
     uv run main.py ai index                       # (re)build the vector index
+    uv run main.py ai stats                        # summarize the persisted index
     uv run main.py ai "what did I say about X?"    # ask the whole corpus
     uv run main.py ai "summarize" --scope path.txt # ask a single document
     uv run main.py ai "..." --model gemini-2.5-flash --k 8
@@ -20,8 +21,9 @@ from typing import Callable
 
 import numpy as np
 
-# Sentinel positional that triggers a (re)index instead of a question.
+# Sentinel positionals that trigger maintenance flows instead of a question.
 _INDEX_CMD = "index"
+_STATS_CMD = "stats"
 
 
 def add_ai_parser(subparsers: argparse._SubParsersAction) -> None:
@@ -32,7 +34,7 @@ def add_ai_parser(subparsers: argparse._SubParsersAction) -> None:
     )
     p.add_argument(
         "query",
-        help='Your question, or the literal "index" to (re)build the index',
+        help='Your question, or "index" to (re)build / "stats" to summarize the index',
     )
     p.add_argument(
         "--scope",
@@ -132,6 +134,45 @@ def _build(embed_model: str) -> None:
     )
 
 
+def _stats() -> None:
+    """Print a read-only summary of the persisted index (reuses the core)."""
+    import time
+
+    from src.core.rag.indexer import index_dir
+    from src.core.rag.stats import fmt_disk_size, index_stats
+
+    directory = index_dir()
+    stats = index_stats(directory)
+    if stats.n_chunks == 0:
+        print('Índice vazio. Rode "uv run main.py ai index" primeiro.')
+        return
+
+    when = (
+        time.strftime("%d/%m/%Y %H:%M", time.localtime(stats.updated_at))
+        if stats.updated_at
+        else "?"
+    )
+    print("Índice RAG")
+    print(f"  Documentos : {stats.n_docs}")
+    print(f"  Chunks     : {stats.n_chunks}")
+    print(f"  Dimensão   : {stats.dim}")
+    print(f"  Modelo     : {stats.embed_model}")
+    print(f"  Tamanho    : {fmt_disk_size(stats.disk_bytes)}")
+    print(f"  Atualizado : {when}")
+    print(f"  Local      : {directory}")
+    print()
+
+    name_w = 48
+    print(f"  {'documento':<{name_w}} {'tipo':<13} {'chunks':>6}  data")
+    print(f"  {'-' * name_w} {'-' * 13} {'-' * 6}  {'-' * 16}")
+    for doc in stats.per_doc:
+        name = Path(doc.source_path).name
+        if len(name) > name_w:
+            name = name[: name_w - 1] + "…"
+        doc_when = time.strftime("%d/%m/%Y %H:%M", time.localtime(doc.mtime))
+        print(f"  {name:<{name_w}} {doc.kind:<13} {doc.n_chunks:>6}  {doc_when}")
+
+
 def _ask(ns: argparse.Namespace, embed_model: str) -> None:
     """Retrieve top-k chunks for the question and print a cited answer."""
     from src.core.rag import embedder
@@ -207,6 +248,10 @@ def run_ai_cli(ns: argparse.Namespace) -> None:
         sys.stdout.reconfigure(encoding="utf-8", errors="replace")
     except Exception:
         pass
+
+    if ns.query == _STATS_CMD:  # read-only summary; no embedder needed
+        _stats()
+        return
 
     from src.core.rag import embedder
 

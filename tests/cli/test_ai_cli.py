@@ -119,6 +119,56 @@ def test_index_exits_when_embedder_unavailable(mocker, capsys):
 
 
 @pytest.mark.unit
+def test_stats_query_parses():
+    ns = _parse("stats")
+    assert ns.query == "stats"
+    assert callable(ns.func)
+
+
+@pytest.mark.unit
+def test_stats_dispatches_to_stats_runner(mocker):
+    stats = mocker.patch("src.cli.ai._stats")
+    ask = mocker.patch("src.cli.ai._ask")
+    build = mocker.patch("src.cli.ai._build")
+
+    ns = _parse("stats")
+    ns.func(ns)
+
+    assert stats.called
+    assert not ask.called
+    assert not build.called
+
+
+@pytest.mark.unit
+def test_stats_runner_prints_summary(tmp_path, monkeypatch, capsys):
+    import src.core.rag.indexer as indexer
+    from src.cli.ai import _stats
+
+    rag_dir = tmp_path / "rag"
+    _persisted_store(rag_dir, source="alpha.txt")
+    monkeypatch.setattr(indexer, "index_dir", lambda: rag_dir)
+
+    _stats()
+
+    out = capsys.readouterr().out
+    assert "Índice RAG" in out
+    assert "Documentos : 1" in out
+    assert "Chunks     : 1" in out
+    assert "alpha.txt" in out
+    assert "transcription" in out
+
+
+@pytest.mark.unit
+def test_stats_runner_empty_index_prints_hint(tmp_path, monkeypatch, capsys):
+    import src.core.rag.indexer as indexer
+    from src.cli.ai import _stats
+
+    monkeypatch.setattr(indexer, "index_dir", lambda: tmp_path / "empty")
+    _stats()
+    assert "Índice vazio" in capsys.readouterr().out
+
+
+@pytest.mark.unit
 def test_resolve_scope_existing_file_becomes_absolute(tmp_path):
     from src.cli.ai import _resolve_scope
 
