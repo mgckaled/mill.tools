@@ -33,7 +33,7 @@ def _chunk(
 
 
 @pytest.mark.unit
-def test_build_context_numbers_blocks_and_dedupes_sources():
+def test_build_context_numbers_by_distinct_source():
     from src.core.rag.chat import build_context
 
     retrieved = [
@@ -43,11 +43,13 @@ def test_build_context_numbers_blocks_and_dedupes_sources():
     ]
     context, sources = build_context(retrieved)
 
-    assert "[1] (a.txt)" in context
-    assert "[2] (a.txt)" in context
-    assert "[3] (b.txt)" in context
-    assert "first" in context and "third" in context
-    # Distinct sources, first-seen order.
+    # Both chunks of a.txt share [1]; b.txt is [2] — citation numbers match the
+    # distinct source list, never exceeding it.
+    assert "[1] (a.txt)\nfirst" in context
+    assert "[1] (a.txt)\nsecond" in context
+    assert "[2] (b.txt)\nthird" in context
+    assert "[3]" not in context  # no orphan numbers beyond the source count
+    # Distinct sources, first-seen order, parallel to the [n] markers.
     assert sources == [Path("a.txt"), Path("b.txt")]
 
 

@@ -41,19 +41,27 @@ RAG_PROMPT = ChatPromptTemplate.from_messages(
 def build_context(retrieved: list[RetrievedChunk]) -> tuple[str, list[Path]]:
     """Render numbered context blocks and the distinct source list.
 
-    Returns ``(context_text, sources)`` where each block is prefixed with its
-    citation number ``[n]`` and the originating filename, and ``sources`` lists
-    the distinct source paths in first-seen order (parallel to the [n] markers).
+    The citation number ``[n]`` is keyed to the *distinct source document*, not
+    to the chunk position: several chunks from the same file share one ``[n]``.
+    This keeps the model's ``[n]`` markers in lock-step with the ``sources`` list
+    shown in the UI — otherwise, with k chunks from fewer documents, the model
+    would cite ``[5]``/``[6]`` while only 4 source badges exist.
+
+    Returns ``(context_text, sources)`` where ``sources`` lists the distinct
+    source paths in first-seen order, parallel to the ``[n]`` markers.
     """
     blocks: list[str] = []
     sources: list[Path] = []
-    for i, h in enumerate(retrieved, 1):
+    number_of: dict[str, int] = {}
+    for h in retrieved:
         path = Path(h.meta.source_path)
-        blocks.append(f"[{i}] ({path.name})\n{h.meta.text}")
-        sources.append(path)
+        key = str(path)
+        if key not in number_of:
+            sources.append(path)
+            number_of[key] = len(sources)  # 1-based, per distinct document
+        blocks.append(f"[{number_of[key]}] ({path.name})\n{h.meta.text}")
     context = "\n\n".join(blocks) if blocks else "(sem contexto)"
-    distinct = list(dict.fromkeys(sources))  # dedupe, preserve order
-    return context, distinct
+    return context, sources
 
 
 def answer(
