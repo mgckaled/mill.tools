@@ -206,3 +206,46 @@ sync_page_bgcolor(page)    # chamar sempre que theme_mode mudar
 - **Padrão de linha com ⓘ:** `ft.Row([section_label("Label"), ft.Container(expand=True), help_icon_for("key", page)], vertical_alignment=ft.CrossAxisAlignment.CENTER)`
 - Tooltip: `BoxConstraints(max_width=280)`, decoração com borda + sombra, cursor `interactive` (com modal) ou `help` (sem modal).
 - Hint de clique (`↗ Clique para mais detalhes`) é anexado automaticamente quando `HELP_LONG` existe.
+
+---
+
+## Eventos do pipeline (`PipelineEvent`)
+
+`PipelineEvent(type, stage, payload, module_id)` é publicado via `page.pubsub.send_all()` (thread-safe; worker thread → callbacks na UI thread). `module_id` ∈ {`"transcription"`, `"audio"`, `"image"`, `"video"`, `"document"`, `"ai"`, `"recipes"`, `""` (legado)}. O `ProgressPanel` ignora eventos cujo `module_id` ≠ `owner_id`; os hubs **IA** e **Receitas** são auto-contidos (assinam os próprios eventos, não usam `ProgressPanel`).
+
+`pipeline_log.py` (por módulo) separa "o que emitir" de "como exibir": `worker.py` importa `fmt_*` p/ `emit("log", ...)`; `view.py`/`progress_view.py` importa `resolve_messages()`/`resolve_stage_label()`. Os campos exatos de cada payload são derivados do `worker.py`/`pipeline_log.py` do módulo — as tabelas abaixo são o contrato de referência.
+
+**Genéricos (todos os módulos):**
+
+| Evento | Payload | Efeito na UI |
+|---|---|---|
+| `progress_start` | — | barra indeterminada + inicia spinner |
+| `progress_update` | `current`, `total` (0–1) | barra determinada |
+| `queue_progress` | `current_item`, `total_items`, `item_name` | label "Item 2/5 — arquivo.mp3" |
+| `task_done` | `output_path(s)` | barra 1.0, para spinner, habilita Resultados |
+| `task_error` | `message` | log de erro, para spinner |
+| `log` | `message`, `level`, `mutable: bool` | passthrough colorido; `mutable=True` atualiza a última linha em vez de criar nova (progresso contínuo, ex.: download yt-dlp) |
+
+**Áudio (stage="audio"):** `audio_op_start` (`operation`, `item_name`, `item_idx`, `total`), `audio_op_done` (`output_path`, `elapsed`, `item_idx`, `total`, `src_size_bytes`, `out_size_bytes`). `operation` ∈ {`download`, `convert`, `extract`, `denoise`, `normalize`}.
+
+**Vídeo (stage="video"):** `video_op_start` (`operation`, `item_name`, `item_idx`, `total`), `video_op_done` (`output_path`, `elapsed`, `item_idx`, `total`, `src_size_bytes`, `out_size_bytes`), `video_op_error` (`item_name`, `message`). `operation` ∈ {`download`, `convert`, `trim`, `compress`, `resize`, `extract_audio`, `thumbnail`}.
+
+**Imagens (stage="image"):** `image_op_start` (`operation`, `item_name`, `item_idx`, `total_items`, `thumb: bytes|None`), `image_op_done` (`output_path`, `elapsed`, `src_size_bytes`, `out_size_bytes`, `thumb`, `item_idx`, `total_items`), `image_op_error` (`item_name`, `message`).
+
+**Documentos (stage="document"):** `document_op_start` (`operation`, `item_name`, `item_idx`, `total`, `page_count`), `document_op_done` (`output_path`, `elapsed`, `operation`, `item_idx`, `total`, `extra_stats`), `document_op_error` (`item_name`, `message`). `operation` ∈ {`merge`, `split`, `compress`, `rotate`, `watermark`, `stamp`, `encrypt`, `extract`, `ocr`, `pdf_to_images`, `images_to_pdf`, `analyze`, `qr`}.
+
+**Transcrição (stage específico):** `metadata_start/done`, `audio_cached`, `download_start/done`, `whisper_loading/loaded`, `transcribe_started`, `language_detected` (`audio_duration`), `vad_filtered` (`duration`, `duration_after_vad`, `removed` — silêncio pulado pelo VAD; `[i] VAD removed Xs of silence (Y%)`), `transcribe_segment` (`end`, `is_low_confidence`), `transcribe_summary`, `format_*`, `analyze_*`, `translation_*`, `prompt_*`. A resposta da IA emite `answer_done` com `query`/`text`/`sources`/`model_name`/`elapsed`.
+
+**Receitas (module_id="recipes"):** `recipe_start` (`name`, `total_steps`), `step_start` (`op`, `label`, `idx`, `total`), `step_done` (`op`, `idx`, `total`, `outputs`), `step_error` (`op`, `idx`, `message`); reusa `progress_*`/`task_done`/`task_error` e, no lote, `queue_progress`. Os adaptadores de passo encaminham os eventos das funções de core (ex.: `transcribe_segment`) sob o mesmo `module_id`.
+
+### Barra de progresso (transcrição/genérico)
+
+- **Idle**: oculta, label "Inicie o pipeline pelo formulário →". **Indeterminada**: 1º evento de início (`value=None`).
+- **Determinada**: transcrição `transcribe_segment.end / audio_duration`; áudio `progress_update(current/total)`; chunks LLM `i / total`.
+- **`extra_header` no `build_progress_view`**: `ft.Control | None` opcional entre a barra e o log (Áudio injeta o `AudioPlayer`).
+
+### Thread safety
+
+- `bus.emit()` roda na worker thread; `page.pubsub.send_all()` é thread-safe; callbacks de `subscribe` rodam na UI thread.
+- `pipeline_running[0]` resetado em `finally` (sucesso/erro/cancelamento) — senão a navegação trava.
+- Não chamar `page.update()` em cascata no mesmo evento.
