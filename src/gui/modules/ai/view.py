@@ -24,6 +24,7 @@ import flet as ft
 from src.gui import settings
 from src.gui.events import PipelineEvent
 from src.gui.modules.ai.form_view import build_ai_form
+from src.gui.modules.ai.index_tab import build_index_tab
 from src.gui.modules.ai.pipeline_log import resolve_status
 from src.gui.modules.ai.worker import start_ai_answer, start_ai_index
 from src.gui.modules.base import Module
@@ -170,6 +171,9 @@ def build_ai_module(
                 status_text.value = fmt_status_line(stats)
             else:
                 status_text.value = "Índice vazio — clique em Reindexar para começar."
+
+            if stats:
+                index_tab.apply(stats)  # keep the inspector tab in sync
 
             form.set_available(available)
             if not available:
@@ -507,13 +511,67 @@ def build_ai_module(
 
     session_area = ft.Stack([session_list, empty_state], expand=True)
 
-    panel = ft.Column(
+    # ------------------------------------------------------------------
+    # Panel: manual "Conversa | Índice" tabs over a Stack (Flet 0.85 has no
+    # ft.Tabs). The Conversa view is the existing chat; the Índice view is the
+    # RAG index inspector, kept in sync by _refresh_status → index_tab.apply.
+    # ------------------------------------------------------------------
+
+    conversa_view = ft.Column(
         controls=[
             status_row,
             hairline(),
             progress_row,
             status_detail,
             session_area,
+        ],
+        expand=True,
+        spacing=Space.sm,
+    )
+
+    index_tab = build_index_tab(page, on_reindex=lambda: _reindex_from_index())
+    index_view = index_tab.control
+    index_view.visible = False
+
+    def _tab_style(active: bool) -> ft.ButtonStyle:
+        return ft.ButtonStyle(
+            color=ft.Colors.PRIMARY if active else ft.Colors.ON_SURFACE_VARIANT,
+            mouse_cursor=Cursor.interactive,
+        )
+
+    tab_conversa = ft.TextButton(
+        "Conversa", icon=ft.Icons.CHAT_OUTLINED, style=_tab_style(True)
+    )
+    tab_indice = ft.TextButton(
+        "Índice", icon=ft.Icons.INVENTORY_2_OUTLINED, style=_tab_style(False)
+    )
+
+    def _show_tab(name: str, *, refresh: bool = True) -> None:
+        is_conv = name == "conversa"
+        conversa_view.visible = is_conv
+        index_view.visible = not is_conv
+        tab_conversa.style = _tab_style(is_conv)
+        tab_indice.style = _tab_style(not is_conv)
+        settings.set("last_ai_tab", name)
+        if not is_conv and refresh:
+            _refresh_status()  # recompute stats → index_tab.apply
+        page.update()
+
+    def _reindex_from_index() -> None:
+        # Reindex triggered from the Índice tab — jump to Conversa to show progress.
+        _show_tab("conversa", refresh=False)
+        _on_reindex()
+
+    tab_conversa.on_click = lambda _e: _show_tab("conversa")
+    tab_indice.on_click = lambda _e: _show_tab("indice")
+
+    body_stack = ft.Stack([conversa_view, index_view], expand=True)
+
+    panel = ft.Column(
+        controls=[
+            ft.Row([tab_conversa, tab_indice], spacing=Space.xs),
+            hairline(),
+            body_stack,
         ],
         expand=True,
         spacing=Space.sm,
@@ -549,7 +607,10 @@ def build_ai_module(
         # pre-selects the "this document" scope.
         file = payload.get("file") if payload else None
         form.bind_document(str(file) if file else None)
-        _refresh_status()
+        # A document bridge means the user wants to ask → land on Conversa.
+        saved = "conversa" if file else settings.load().get("last_ai_tab", "conversa")
+        _show_tab(saved, refresh=False)
+        _refresh_status()  # computes stats once, updating both status line + tab
 
     return Module(
         id=_MODULE_ID,

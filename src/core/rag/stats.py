@@ -161,12 +161,12 @@ def index_stats(directory: Path) -> IndexStats:
     )
 
 
-def _fmt_thousands(n: int) -> str:
+def fmt_thousands(n: int) -> str:
     """Format an int with a dot as the thousands separator (PT-BR style)."""
     return f"{n:,}".replace(",", ".")
 
 
-def _fmt_datetime(ts: float) -> str:
+def fmt_datetime(ts: float) -> str:
     """Format a POSIX timestamp as 'DD mês HH:MM' with a PT-BR month abbrev."""
     import time
 
@@ -181,11 +181,11 @@ def fmt_status_line(stats: IndexStats) -> str:
     """
     if stats.n_chunks == 0:
         return "Índice vazio"
-    docs = _fmt_thousands(stats.n_docs)
-    chunks = _fmt_thousands(stats.n_chunks)
+    docs = fmt_thousands(stats.n_docs)
+    chunks = fmt_thousands(stats.n_chunks)
     line = f"{docs} docs · {chunks} chunks"
     if stats.updated_at is not None:
-        line += f" · {_fmt_datetime(stats.updated_at)}"
+        line += f" · {fmt_datetime(stats.updated_at)}"
     return line
 
 

@@ -191,6 +191,25 @@ def test_fmt_status_line_empty_index():
 
 
 @pytest.mark.unit
+@pytest.mark.parametrize(
+    ("n", "expected"),
+    [(0, "0"), (999, "999"), (1000, "1.000"), (4654, "4.654"), (1234567, "1.234.567")],
+)
+def test_fmt_thousands(n, expected):
+    from src.core.rag.stats import fmt_thousands
+
+    assert fmt_thousands(n) == expected
+
+
+@pytest.mark.unit
+def test_fmt_datetime_pt_month():
+    from src.core.rag.stats import fmt_datetime
+
+    ts = time.mktime(time.struct_time((2026, 1, 5, 9, 3, 0, 0, 0, -1)))
+    assert fmt_datetime(ts) == "5 jan 09:03"
+
+
+@pytest.mark.unit
 def test_fmt_status_line_without_timestamp():
     from src.core.rag.stats import IndexStats, fmt_status_line
 
