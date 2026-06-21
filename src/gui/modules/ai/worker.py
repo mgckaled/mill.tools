@@ -10,6 +10,7 @@ from __future__ import annotations
 import contextlib
 import logging
 import threading
+import time
 from typing import TYPE_CHECKING, Callable
 
 from src.gui.modules._pipeline_runner import _LogScope, make_emitter
@@ -160,8 +161,10 @@ def run_ai_answer(
             def _embed_query(q: str):
                 return embedder.embed_query(q, model=embed_model)
 
+            t0 = time.monotonic()
             hits = retrieve(query, store, _embed_query, k=k, scope=scope)
             result = _answer(query, hits, model_name=model_name)
+            elapsed = time.monotonic() - t0
 
             emit(
                 "answer_done",
@@ -169,6 +172,8 @@ def run_ai_answer(
                     "query": query,
                     "text": result.text,
                     "sources": [str(s) for s in result.sources],
+                    "model_name": model_name,
+                    "elapsed": elapsed,
                 },
             )
             emit(

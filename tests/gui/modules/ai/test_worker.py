@@ -167,6 +167,9 @@ def test_answer_emits_answer_done_with_sources(tmp_path, monkeypatch, mocker):
     done = bus.payload_of("answer_done")
     assert done["text"] == "resposta [1]"
     assert done["sources"] == ["doc.txt"]
+    # Timing fields feed the per-model "typical time" estimate in the view.
+    assert done["model_name"] == "qwen7b-custom"
+    assert done["elapsed"] >= 0.0
 
 
 @pytest.mark.unit

@@ -12,10 +12,12 @@ clickable source cards).
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import os
 import subprocess
 import threading
+import time
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -23,6 +25,7 @@ import flet as ft
 
 from src.gui import settings
 from src.gui.events import PipelineEvent
+from src.gui.modules.ai import timing
 from src.gui.modules.ai.form_view import build_ai_form
 from src.gui.modules.ai.index_tab import build_index_tab
 from src.gui.modules.ai.pipeline_log import resolve_status
@@ -112,19 +115,25 @@ def build_ai_module(
         if not query:
             _toast("Digite uma pergunta.")
             return
+        model = form.get_model()
         pipeline_running[0] = True
         cancel_event.clear()
         form.set_running(True)
         reindex_btn.disabled = True
         status_detail.value = ""
         _set_progress(True)
+        # Live answer timer + a "typical time" learned from this model's history.
+        _pending_model[0] = model
+        times = settings.load().get("ai_answer_times", {}).get(model, [])
+        typical = timing.format_typical(timing.average(times), model)
+        _start_answer_ticker(typical)
         page.update()
         start_ai_answer(
             bus,
             cancel_event,
             query=query,
             scope=form.get_scope(),
-            model_name=form.get_model(),
+            model_name=model,
             embed_model=embed_model,
             k=6,
         )
@@ -148,6 +157,48 @@ def build_ai_module(
             spinner_start()
         else:
             spinner_stop()
+            _stop_answer_ticker()
+
+    # ------------------------------------------------------------------
+    # Answer timer: a single blocking invoke() has no progress fraction, so we
+    # show elapsed + a rolling per-model "typical" estimate instead of a fake ETA.
+    # ------------------------------------------------------------------
+
+    _answer_t0: list[float] = [0.0]
+    _ticker_stop = threading.Event()
+    _pending_model: list[str] = [""]
+
+    async def _tick(typical: str | None) -> None:
+        # Runs on the page's UI event loop (via page.run_task) so each update is
+        # flushed to the client — a background thread's control.update() would
+        # not repaint until the next UI-thread page.update().
+        while not _ticker_stop.is_set():
+            elapsed = time.monotonic() - _answer_t0[0]
+            gen_status.value = timing.compose_status(elapsed, typical)
+            try:
+                page.update()
+            except Exception:
+                break
+            await asyncio.sleep(1.0)
+
+    def _start_answer_ticker(typical: str | None) -> None:
+        _answer_t0[0] = time.monotonic()
+        _ticker_stop.clear()
+        gen_status.value = timing.compose_status(0, typical)
+        gen_status.visible = True
+        page.run_task(_tick, typical)
+
+    def _stop_answer_ticker() -> None:
+        _ticker_stop.set()
+        gen_status.visible = False
+
+    def _record_answer_time(model: str, elapsed: float) -> None:
+        """Fold a finished answer's wall-clock time into the model's history."""
+        if not model or elapsed <= 0:
+            return
+        times_map = dict(settings.load().get("ai_answer_times", {}))
+        times_map[model] = timing.record_duration(times_map.get(model, []), elapsed)
+        settings.set("ai_answer_times", times_map)
 
     # ------------------------------------------------------------------
     # Index status — counted off the UI thread (is_available pings Ollama).
@@ -387,6 +438,9 @@ def build_ai_module(
                 _append_turn(
                     p.get("query", ""), p.get("text", ""), p.get("sources", [])
                 )
+                _record_answer_time(
+                    p.get("model_name", _pending_model[0]), p.get("elapsed", 0.0)
+                )
             case "task_done":
                 progress_bar.value = 1.0
                 _set_progress(False)
@@ -454,6 +508,14 @@ def build_ai_module(
     progress_bar = ft.ProgressBar(
         value=None, color=ft.Colors.PRIMARY, bgcolor=ft.Colors.OUTLINE_VARIANT
     )
+    # Live answer timer ("Gerando resposta… 0:14 · ~28s (típico do …)").
+    gen_status = ft.Text(
+        "",
+        size=Type.small.size,
+        color=ft.Colors.PRIMARY,
+        weight=ft.FontWeight.W_500,
+        visible=False,
+    )
     progress_row = ft.Column(
         controls=[
             ft.Row(
@@ -462,6 +524,7 @@ def build_ai_module(
                 vertical_alignment=ft.CrossAxisAlignment.CENTER,
             ),
             progress_bar,
+            gen_status,
         ],
         spacing=Space.xs,
         visible=False,
