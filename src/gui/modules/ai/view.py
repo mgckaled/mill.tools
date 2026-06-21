@@ -12,12 +12,10 @@ clickable source cards).
 
 from __future__ import annotations
 
-import json
 import logging
 import os
 import subprocess
 import threading
-import time
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -158,28 +156,18 @@ def build_ai_module(
         def _worker() -> None:
             from src.core.rag import embedder
             from src.core.rag.indexer import index_dir
+            from src.core.rag.stats import fmt_status_line, index_stats
 
-            n_docs = n_chunks = 0
-            updated: float | None = None
-            meta_path = index_dir() / "meta.json"
             try:
-                if meta_path.exists():
-                    raw = json.loads(meta_path.read_text(encoding="utf-8"))
-                    n_chunks = len(raw)
-                    n_docs = len({m["source_path"] for m in raw})
-                    updated = (index_dir() / "vectors.npz").stat().st_mtime
-            except (OSError, ValueError, KeyError) as exc:
+                stats = index_stats(index_dir())
+            except Exception as exc:  # pure read, but stay defensive
                 logging.debug("[d] status read failed: %s", exc)
+                stats = None
 
             available = embedder.is_available(embed_model)
 
-            if n_chunks:
-                when = (
-                    time.strftime("%H:%M", time.localtime(updated)) if updated else "?"
-                )
-                status_text.value = (
-                    f"{n_docs} documento(s) · {n_chunks} chunk(s) · atualizado {when}"
-                )
+            if stats and stats.n_chunks:
+                status_text.value = fmt_status_line(stats)
             else:
                 status_text.value = "Índice vazio — clique em Reindexar para começar."
 
