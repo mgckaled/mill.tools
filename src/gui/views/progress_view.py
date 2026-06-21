@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Callable
 
 import threading
+import time
 
 import flet as ft
 
@@ -23,6 +24,7 @@ _MAX_LOG_LINES = 500
 # Helpers de formatação
 # ---------------------------------------------------------------------------
 
+
 def _fmt_dur(seconds: int | float) -> str:
     return format_duration(int(seconds))
 
@@ -30,6 +32,7 @@ def _fmt_dur(seconds: int | float) -> str:
 # ---------------------------------------------------------------------------
 # Resolução de mensagens (retorna lista para suportar múltiplas linhas)
 # ---------------------------------------------------------------------------
+
 
 def _resolve_messages(event: PipelineEvent) -> list[str]:
     """Dispatch a PipelineEvent to the appropriate pipeline_log resolver."""
@@ -42,9 +45,11 @@ def _resolve_messages(event: PipelineEvent) -> list[str]:
             return [msg] if msg else []
         case "audio_op_start" | "audio_op_done":
             from src.gui.modules.audio import pipeline_log as _audio_log
+
             return _audio_log.resolve_messages(event)
         case "video_op_start" | "video_op_done" | "video_op_error":
             from src.gui.modules.video import pipeline_log as _video_log
+
             return _video_log.resolve_messages(event)
         case "queue_progress" | "progress_start" | "progress_update":
             return []
@@ -58,6 +63,7 @@ def _resolve_messages(event: PipelineEvent) -> list[str]:
             return [f"[!] Erro: {msg}"]
         case _:
             from src.gui.modules.transcription import pipeline_log as _txn_log
+
             return _txn_log.resolve_messages(event)
 
 
@@ -65,7 +71,10 @@ def _resolve_messages(event: PipelineEvent) -> list[str]:
 # Progresso determinado
 # ---------------------------------------------------------------------------
 
-def _resolve_progress(event: PipelineEvent, audio_duration: list[float]) -> float | None:
+
+def _resolve_progress(
+    event: PipelineEvent, audio_duration: list[float]
+) -> float | None:
     p = event.payload
     t = event.type
 
@@ -83,9 +92,12 @@ def _resolve_progress(event: PipelineEvent, audio_duration: list[float]) -> floa
         return min(end / audio_duration[0], 1.0)
 
     if t in (
-        "format_chunk_start", "format_chunk_done",
-        "analyze_chunk_start", "analyze_chunk_done",
-        "prompt_chunk_start", "prompt_chunk_done",
+        "format_chunk_start",
+        "format_chunk_done",
+        "analyze_chunk_start",
+        "analyze_chunk_done",
+        "prompt_chunk_start",
+        "prompt_chunk_done",
     ):
         chunk = p.get("i")
         total = p.get("total")
@@ -99,6 +111,7 @@ def _resolve_progress(event: PipelineEvent, audio_duration: list[float]) -> floa
 # Stage label
 # ---------------------------------------------------------------------------
 
+
 def _resolve_stage_label(event: PipelineEvent) -> str | None:
     """Dispatch a PipelineEvent to the appropriate stage-label resolver."""
     match event.type:
@@ -110,9 +123,11 @@ def _resolve_stage_label(event: PipelineEvent) -> str | None:
             return f"Item {cur}/{tot}" + (f" — {name}" if name else "")
         case "audio_op_start" | "audio_op_done":
             from src.gui.modules.audio import pipeline_log as _audio_log
+
             return _audio_log.resolve_stage_label(event)
         case "video_op_start" | "video_op_done" | "video_op_error":
             from src.gui.modules.video import pipeline_log as _video_log
+
             return _video_log.resolve_stage_label(event)
         case "task_done":
             return "Pipeline concluído!"
@@ -120,12 +135,14 @@ def _resolve_stage_label(event: PipelineEvent) -> str | None:
             return "Erro no pipeline."
         case _:
             from src.gui.modules.transcription import pipeline_log as _txn_log
+
             return _txn_log.resolve_stage_label(event)
 
 
 # ---------------------------------------------------------------------------
 # Card de resumo
 # ---------------------------------------------------------------------------
+
 
 def _make_summary_card(payload: dict) -> ft.Control:
     title = payload.get("title", "n/a")
@@ -135,21 +152,56 @@ def _make_summary_card(payload: dict) -> ft.Control:
     flagged = payload.get("flagged_count", 0)
 
     rows = [
-        ft.Text("=" * 52, size=Type.tiny.size, color=Color.log.ok, font_family=Type.FONT_MONO),
-        ft.Text(f"  title    : {title}", size=Type.mono.size, color=Color.log.text, font_family=Type.FONT_MONO, selectable=True),
-        ft.Text(f"  duration : {duration}", size=Type.mono.size, color=Color.log.text, font_family=Type.FONT_MONO),
+        ft.Text(
+            "=" * 52,
+            size=Type.tiny.size,
+            color=Color.log.ok,
+            font_family=Type.FONT_MONO,
+        ),
+        ft.Text(
+            f"  title    : {title}",
+            size=Type.mono.size,
+            color=Color.log.text,
+            font_family=Type.FONT_MONO,
+            selectable=True,
+        ),
+        ft.Text(
+            f"  duration : {duration}",
+            size=Type.mono.size,
+            color=Color.log.text,
+            font_family=Type.FONT_MONO,
+        ),
         ft.Text(
             f"  output   : {Path(output_path).name}",
-            size=Type.mono.size, color=Color.log.text, font_family=Type.FONT_MONO, selectable=True,
+            size=Type.mono.size,
+            color=Color.log.text,
+            font_family=Type.FONT_MONO,
+            selectable=True,
         ),
-        ft.Text(f"  elapsed  : {elapsed}", size=Type.mono.size, color=Color.log.text, font_family=Type.FONT_MONO),
+        ft.Text(
+            f"  elapsed  : {elapsed}",
+            size=Type.mono.size,
+            color=Color.log.text,
+            font_family=Type.FONT_MONO,
+        ),
     ]
     if flagged:
-        rows.append(ft.Text(
-            f"  flagged  : {flagged} segment(s) [?]",
-            size=Type.mono.size, color=Color.log.work, font_family=Type.FONT_MONO,
-        ))
-    rows.append(ft.Text("=" * 52, size=Type.tiny.size, color=Color.log.ok, font_family=Type.FONT_MONO))
+        rows.append(
+            ft.Text(
+                f"  flagged  : {flagged} segment(s) [?]",
+                size=Type.mono.size,
+                color=Color.log.work,
+                font_family=Type.FONT_MONO,
+            )
+        )
+    rows.append(
+        ft.Text(
+            "=" * 52,
+            size=Type.tiny.size,
+            color=Color.log.ok,
+            font_family=Type.FONT_MONO,
+        )
+    )
 
     return ft.Container(
         margin=ft.Margin(top=8, bottom=4, left=0, right=0),
@@ -170,9 +222,11 @@ def _make_summary_card(payload: dict) -> ft.Control:
 # ProgressPanel
 # ---------------------------------------------------------------------------
 
+
 @dataclass
 class ProgressPanel:
     """Painel de progresso com métodos de controle de estado."""
+
     control: ft.Control
     reset: Callable[[], None]
     show_results: Callable[[object], None]
@@ -204,7 +258,10 @@ def build_progress_view(
     _done_called: list[bool] = [False]  # guard contra duplo on_done
     _mutable_line: list[ft.Text | None] = [None]  # última linha "viva" de progresso
     _seg_counter: list[int] = [0]  # throttle: render every N segments
-    _ui_lock = threading.Lock()  # serializes concurrent pubsub callbacks → prevents ObjectPatch race
+    _transcribe_t0: list[float | None] = [None]  # wall clock at transcribe start (ETA)
+    _ui_lock = (
+        threading.Lock()
+    )  # serializes concurrent pubsub callbacks → prevents ObjectPatch race
 
     def _call_on_done(payload: dict) -> None:
         if not _done_called[0]:
@@ -242,6 +299,15 @@ def build_progress_view(
         on_click=lambda _: on_cancel(),
     )
 
+    # ETA label — shown under the last transcribed line while Whisper runs.
+    eta_label = ft.Text(
+        "",
+        size=Type.caption.size,
+        color=ft.Colors.PRIMARY,
+        weight=ft.FontWeight.W_500,
+        visible=False,
+    )
+
     # --- moinho giratório no header do pipeline ---
     status_icon, _start_spin, _stop_spin = spinner()
 
@@ -265,21 +331,26 @@ def build_progress_view(
         ),
     ]
     _log_ctr_kwargs = {"height": log_height} if log_height else {"expand": True}
-    _pipeline_controls.extend([
-        ft.Container(
-            content=log_list,
-            border=ft.Border(
-                left=ft.BorderSide(1, ft.Colors.OUTLINE_VARIANT),
-                right=ft.BorderSide(1, ft.Colors.OUTLINE_VARIANT),
-                top=ft.BorderSide(1, ft.Colors.OUTLINE_VARIANT),
-                bottom=ft.BorderSide(1, ft.Colors.OUTLINE_VARIANT),
+    _pipeline_controls.extend(
+        [
+            ft.Container(
+                content=log_list,
+                border=ft.Border(
+                    left=ft.BorderSide(1, ft.Colors.OUTLINE_VARIANT),
+                    right=ft.BorderSide(1, ft.Colors.OUTLINE_VARIANT),
+                    top=ft.BorderSide(1, ft.Colors.OUTLINE_VARIANT),
+                    bottom=ft.BorderSide(1, ft.Colors.OUTLINE_VARIANT),
+                ),
+                border_radius=Radius.sm,
+                bgcolor=Color.dark.surface_variant,
+                **_log_ctr_kwargs,
             ),
-            border_radius=Radius.sm,
-            bgcolor=Color.dark.surface_variant,
-            **_log_ctr_kwargs,
-        ),
-        ft.Row(controls=[cancel_button], alignment=ft.MainAxisAlignment.END),
-    ])
+            ft.Row(
+                controls=[eta_label, ft.Container(expand=True), cancel_button],
+                vertical_alignment=ft.CrossAxisAlignment.CENTER,
+            ),
+        ]
+    )
 
     pipeline_panel = ft.Column(
         controls=_pipeline_controls,
@@ -306,22 +377,30 @@ def build_progress_view(
         for i, btn in enumerate(tab_btns):
             btn.style = ft.ButtonStyle(
                 color={
-                    ft.ControlState.DEFAULT: ft.Colors.PRIMARY if i == idx else ft.Colors.ON_SURFACE_VARIANT,
+                    ft.ControlState.DEFAULT: ft.Colors.PRIMARY
+                    if i == idx
+                    else ft.Colors.ON_SURFACE_VARIANT,
                 },
             )
         page.update()
 
-    tab_btns.append(ft.TextButton(
-        "Pipeline",
-        style=ft.ButtonStyle(color={ft.ControlState.DEFAULT: ft.Colors.PRIMARY}),
-        on_click=lambda _: _switch_tab(0),
-    ))
-    tab_btns.append(ft.TextButton(
-        "Resultados",
-        disabled=True,
-        style=ft.ButtonStyle(color={ft.ControlState.DEFAULT: ft.Colors.ON_SURFACE_VARIANT}),
-        on_click=lambda _: _switch_tab(1),
-    ))
+    tab_btns.append(
+        ft.TextButton(
+            "Pipeline",
+            style=ft.ButtonStyle(color={ft.ControlState.DEFAULT: ft.Colors.PRIMARY}),
+            on_click=lambda _: _switch_tab(0),
+        )
+    )
+    tab_btns.append(
+        ft.TextButton(
+            "Resultados",
+            disabled=True,
+            style=ft.ButtonStyle(
+                color={ft.ControlState.DEFAULT: ft.Colors.ON_SURFACE_VARIANT}
+            ),
+            on_click=lambda _: _switch_tab(1),
+        )
+    )
 
     tab_bar = ft.Row(controls=[*tab_btns, ft.Container(expand=True)], spacing=0)
 
@@ -340,13 +419,35 @@ def build_progress_view(
             progress_bar.value = prog
         elif event.type in (
             "progress_start",
-            "metadata_start", "download_start", "whisper_loading",
-            "transcribe_started", "format_started", "analyze_started",
-            "analyze_merge_start", "translation_start", "prompt_started",
+            "metadata_start",
+            "download_start",
+            "whisper_loading",
+            "transcribe_started",
+            "format_started",
+            "analyze_started",
+            "analyze_merge_start",
+            "translation_start",
+            "prompt_started",
         ):
             progress_bar.visible = True
             progress_bar.value = None
             _start_spin()
+
+        # ETA bookkeeping for the Whisper phase (running-average remaining time).
+        if event.type == "transcribe_started":
+            _transcribe_t0[0] = time.monotonic()
+            eta_label.value = ""
+            eta_label.visible = False
+        elif event.type == "transcribe_segment" and _transcribe_t0[0] is not None:
+            from src.gui.modules.transcription.pipeline_log import format_eta
+
+            elapsed = time.monotonic() - _transcribe_t0[0]
+            eta = format_eta(elapsed, event.payload.get("end", 0), audio_duration[0])
+            if eta:
+                eta_label.value = eta
+                eta_label.visible = True
+        elif event.type in ("transcribe_done", "format_started", "analyze_started"):
+            eta_label.visible = False  # transcription phase is over
 
         if event.type == "transcribe_summary":
             log_list.controls.append(_make_summary_card(event.payload))
@@ -355,7 +456,9 @@ def build_progress_view(
             return
 
         msgs = _resolve_messages(event)
-        mutable = isinstance(event.payload, dict) and event.payload.get("mutable", False)
+        mutable = isinstance(event.payload, dict) and event.payload.get(
+            "mutable", False
+        )
         for msg in msgs:
             if mutable and _mutable_line[0] is not None:
                 _mutable_line[0].value = msg
@@ -368,6 +471,7 @@ def build_progress_view(
         if event.type == "task_done":
             progress_bar.value = 1.0
             cancel_button.disabled = True
+            eta_label.visible = False
             _stop_spin()
             _call_on_done(event.payload)
             return
@@ -375,6 +479,7 @@ def build_progress_view(
         if event.type == "task_error":
             progress_bar.visible = False
             cancel_button.disabled = True
+            eta_label.visible = False
             _stop_spin()
             _call_on_done({"error": True})
             page.update()
@@ -386,6 +491,7 @@ def build_progress_view(
             stage_label.color = ft.Colors.ON_SURFACE_VARIANT
             stage_label.italic = True
             progress_bar.visible = False
+            eta_label.visible = False
             _stop_spin()
             _call_on_done({"cancelled": True})
             page.update()
@@ -419,6 +525,9 @@ def build_progress_view(
         _done_called[0] = False
         _mutable_line[0] = None
         _seg_counter[0] = 0
+        _transcribe_t0[0] = None
+        eta_label.value = ""
+        eta_label.visible = False
         _stop_spin()
         log_list.controls.clear()
         progress_bar.value = None
@@ -458,13 +567,15 @@ def build_progress_view(
             from src.gui.workers import PipelineResult
 
             if isinstance(result, PipelineResult):
-                results_inner.controls.append(build_result_view(
-                    page,
-                    raw_path=result.raw_path,
-                    analysis_path=result.analysis_path,
-                    prompt_path=result.prompt_path,
-                    subtitle_paths=result.subtitle_paths,
-                ))
+                results_inner.controls.append(
+                    build_result_view(
+                        page,
+                        raw_path=result.raw_path,
+                        analysis_path=result.analysis_path,
+                        prompt_path=result.prompt_path,
+                        subtitle_paths=result.subtitle_paths,
+                    )
+                )
 
         # Renderizar o conteúdo ENQUANTO o painel ainda está invisível —
         # evita diff visible=False → visible=True+conteúdo complexo no Flet 0.85

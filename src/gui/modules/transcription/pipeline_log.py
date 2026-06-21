@@ -3,6 +3,7 @@
 Imported by:
   progress_view.py — resolve_* translates PipelineEvent → display text
 """
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -14,12 +15,49 @@ if TYPE_CHECKING:
 
 def _fmt_dur(seconds: int | float) -> str:
     from src.core.metadata import format_duration
+
     return format_duration(int(seconds))
+
+
+# Minimum fraction transcribed before showing an ETA. The first few seconds are
+# noisy (model load, VAD, first beam) so an early estimate would swing wildly —
+# the same reasoning behind threshold-gated ETAs in download/progress tooling.
+_ETA_MIN_FRAC = 0.05
+
+
+def format_eta(elapsed: float, end: float, audio_duration: float) -> str | None:
+    """Return a remaining-time label for a transcription in flight, or None.
+
+    Uses a running-average rate: the wall-clock ``elapsed`` so far covered
+    ``end`` seconds of a ``audio_duration``-second source, so the remaining
+    audio scales by the same rate. ``None`` when it is too early (< 5%
+    transcribed), already done, or the duration is unknown.
+
+    Args:
+        elapsed: Wall-clock seconds since transcription started.
+        end: End timestamp (s) of the latest transcribed segment.
+        audio_duration: Total audio duration (s), from language detection.
+
+    Returns:
+        e.g. "≈ 10m 30s restantes · 0,85× tempo-real", or None.
+    """
+    if audio_duration <= 0 or elapsed <= 0 or end <= 0:
+        return None
+    frac = end / audio_duration
+    if frac < _ETA_MIN_FRAC or frac >= 1.0:
+        return None
+    remaining = elapsed * (1.0 - frac) / frac
+    speed = end / elapsed  # × real-time (>1 faster than playback)
+    speed_str = f"{speed:.2f}".replace(".", ",")
+    from src.transcriber import format_elapsed
+
+    return f"≈ {format_elapsed(remaining)} restantes · {speed_str}× tempo-real"
 
 
 # ---------------------------------------------------------------------------
 # resolve_messages
 # ---------------------------------------------------------------------------
+
 
 def resolve_messages(event: "PipelineEvent") -> list[str]:
     """Translate a PipelineEvent into zero or more log lines for the transcription panel."""
@@ -165,6 +203,7 @@ def resolve_messages(event: "PipelineEvent") -> list[str]:
 # ---------------------------------------------------------------------------
 # resolve_stage_label
 # ---------------------------------------------------------------------------
+
 
 def resolve_stage_label(event: "PipelineEvent") -> str | None:
     """Translate a PipelineEvent into a stage label string. None = no change."""
