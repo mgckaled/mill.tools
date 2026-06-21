@@ -19,6 +19,7 @@ import flet as ft
 
 from src.gui import settings
 from src.gui.events import PipelineEvent
+from src.gui.modules.ai.index_button import rag_index_button
 from src.gui.modules.base import Module
 from src.gui.modules.recipes.form_view import build_recipes_form
 from src.gui.modules.recipes.pipeline_log import resolve_status
@@ -159,6 +160,10 @@ def build_recipes_module(
                     ],
                 )
             )
+        # Offer RAG indexing only when at least one output is text.
+        index_row.visible = any(
+            Path(p).suffix.lower() in (".txt", ".md") for p in paths
+        )
         results_card.visible = bool(paths)
 
     # ------------------------------------------------------------------
@@ -239,6 +244,10 @@ def build_recipes_module(
     log_view = ft.ListView(expand=True, spacing=2, auto_scroll=True)
 
     results_col = ft.Column(spacing=0)
+    # Shown when the recipe produced any textual output (.txt/.md) worth indexing.
+    index_row = ft.Row(
+        [ft.Container(expand=True), rag_index_button(page)], visible=False
+    )
     results_card = ft.Container(
         visible=False,
         content=ft.Column(
@@ -250,6 +259,7 @@ def build_recipes_module(
                     color=ft.Colors.ON_SURFACE_VARIANT,
                 ),
                 results_col,
+                index_row,
             ],
             spacing=Space.xs,
         ),

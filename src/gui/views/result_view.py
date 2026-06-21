@@ -9,6 +9,7 @@ from typing import Callable
 
 import flet as ft
 
+from src.gui.modules.ai.index_button import rag_index_button
 from src.gui.theme.components import hairline
 
 
@@ -211,6 +212,10 @@ def build_result_view(
             )
         )
     action_controls.append(ft.Container(expand=True))
+    # Offer indexing into the RAG corpus when there is any textual output to feed
+    # it (transcription/analysis/prompt-ready are always .txt/.md).
+    if any(_path_exists(p) for p in (raw_path, analysis_path, prompt_path)):
+        action_controls.append(rag_index_button(page))
     if on_restart is not None:
         action_controls.append(
             ft.TextButton("Nova transcrição", on_click=lambda _: on_restart())

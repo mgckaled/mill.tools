@@ -12,6 +12,7 @@ import flet as ft
 from src.core.document.args import DocumentArgs
 from src.core.document.info import render_first_page_png
 from src.gui.events import PipelineEvent
+from src.gui.modules.ai.index_button import rag_index_button
 from src.gui.modules.base import Module
 from src.gui.modules.document.form_view import DocumentFormPanel, build_document_form
 from src.gui.modules.document import pipeline_log
@@ -254,6 +255,12 @@ def build_document_module(
         accent=ft.Colors.PRIMARY,
     )
 
+    # Shown only after a text-producing op (analyze/extract/ocr) so the user can
+    # fold the new text into the RAG corpus by choice.
+    index_btn = rag_index_button(page)
+    index_btn.visible = False
+    _TEXT_OPS = {"analyze", "extract", "ocr"}
+
     right_panel = ft.Column(
         controls=[
             preview_container,
@@ -280,7 +287,12 @@ def build_document_module(
                 bgcolor=Color.dark.surface_variant,
             ),
             ft.Row(
-                controls=[open_folder_btn, ft.Container(expand=True), cancel_btn],
+                controls=[
+                    open_folder_btn,
+                    ft.Container(expand=True),
+                    index_btn,
+                    cancel_btn,
+                ],
                 spacing=4,
             ),
         ],
@@ -353,6 +365,10 @@ def build_document_module(
                 except Exception:
                     _show_placeholder()
 
+            # Offer RAG indexing once a text-producing op has output.
+            if op in _TEXT_OPS and output_path:
+                index_btn.visible = True
+
             elif op == "pdf_to_images" and output_path:
                 # Mode 3: first image thumbnail
                 try:
@@ -406,6 +422,7 @@ def build_document_module(
         stage_label.color = ft.Colors.ON_SURFACE
         stage_label.italic = False
         _show_placeholder()
+        index_btn.visible = False  # re-hidden until a new text op produces output
         _last_input_thumb[0] = None
         _last_op[0] = args.operation
 
