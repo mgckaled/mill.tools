@@ -9,6 +9,7 @@ without changing this interface.
 from __future__ import annotations
 
 import json
+import time
 from dataclasses import asdict
 from pathlib import Path
 
@@ -61,12 +62,29 @@ class VectorStore:
         top = np.argsort(scores)[::-1][:k]
         return [RetrievedChunk(self.meta[i], float(scores[i])) for i in top]
 
-    def persist(self, directory: Path) -> None:
-        """Write the matrix (npz) and metadata (json) to ``directory``."""
+    def persist(self, directory: Path, *, embed_model: str | None = None) -> None:
+        """Write the matrix (npz), metadata (json) and an info sidecar.
+
+        ``index_info.json`` records the embedding model and vector width so the
+        index can be described (``stats.index_stats``) and a future dimension
+        mismatch detected (Ollama #10176) without loading the matrix. Older
+        indexes lack the sidecar; ``index_stats`` treats that as ``embed_model="?"``.
+        """
         directory.mkdir(parents=True, exist_ok=True)
         np.savez_compressed(directory / "vectors.npz", vectors=self.vectors)
         (directory / "meta.json").write_text(
             json.dumps([asdict(m) for m in self.meta], ensure_ascii=False),
+            encoding="utf-8",
+        )
+        (directory / "index_info.json").write_text(
+            json.dumps(
+                {
+                    "embed_model": embed_model,
+                    "dim": self.dim,
+                    "created_at": time.time(),
+                },
+                ensure_ascii=False,
+            ),
             encoding="utf-8",
         )
 

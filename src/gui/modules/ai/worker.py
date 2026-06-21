@@ -82,7 +82,7 @@ def run_ai_index(
                 return embedder.embed_texts(texts, model=embed_model)
 
             build_index(items, store, _embed, progress_cb=_progress)
-            store.persist(index_dir())
+            store.persist(index_dir(), embed_model=embed_model)
 
             added = len(store) - before
             emit(

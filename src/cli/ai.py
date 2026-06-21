@@ -122,7 +122,7 @@ def _build(embed_model: str) -> None:
 
     build_index(items, store, embed_texts, progress_cb=_progress)
     bar.close()
-    store.persist(index_dir())
+    store.persist(index_dir(), embed_model=embed_model)
 
     added = len(store) - before
     sign = "+" if added >= 0 else ""
