@@ -147,6 +147,95 @@ def run_data_save(bus: EventBus, files: list, sql: str, fmt: str, stem: str) -> 
         return False
 
 
+def run_data_index(bus: EventBus, *, embed_model: str) -> bool:
+    """Index the Library (incl. data cards) into the RAG, emitting data events.
+
+    Mirrors ``run_ai_index`` but under module_id="data" so the Preview tab can show
+    progress/log in the same shape as the Consulta tab. Incremental: unchanged
+    files are skipped; data files are indexed via their data card.
+
+    Emits: data_index_start, data_index_progress (current/total), log, data_indexed
+    ({added, total, chunks}), task_done — or task_error on failure.
+    """
+    from src.core.library.scanner import scan_library
+    from src.core.rag import embedder
+    from src.core.rag.indexer import build_index, indexable_items, index_dir
+    from src.core.rag.store import VectorStore
+
+    emit = make_emitter(bus, _MODULE_ID, "data")
+    try:
+        emit("data_index_start")
+        if not embedder.is_available(embed_model):
+            emit(
+                "task_error",
+                payload={
+                    "message": f"Embedder indisponível. Rode: {embedder.SETUP_HINT}"
+                },
+            )
+            return False
+
+        items = scan_library()
+        total = len(indexable_items(items))
+        emit("log", payload={"message": f"Indexando {total} documento(s)…"})
+        store = VectorStore.load(index_dir(), dim=embedder.EMBED_DIM)
+        before = len(store)
+
+        def _progress(current: int, tot: int) -> None:
+            emit("data_index_progress", payload={"current": current, "total": tot})
+
+        def _embed(texts: list[str]):
+            return embedder.embed_texts(texts, model=embed_model)
+
+        def _card(item):
+            from src.core.data.datacard import card_for_path
+
+            return card_for_path(Path(item.path))
+
+        build_index(items, store, _embed, progress_cb=_progress, card_fn=_card)
+        store.persist(index_dir(), embed_model=embed_model)
+
+        added = len(store) - before
+        emit(
+            "data_indexed",
+            payload={"added": added, "total": total, "chunks": len(store)},
+        )
+        emit("task_done", payload={})
+        return True
+    except Exception as exc:
+        logging.getLogger(__name__).warning("[!] Data index error: %s", exc)
+        emit("task_error", payload={"message": f"Falha ao indexar: {exc}"})
+        return False
+
+
+def run_data_assess(bus: EventBus, file, *, model_name: str) -> bool:
+    """Run the IA data-quality assessment over *file*, emitting data events.
+
+    Emits: data_assess_start ({name}), data_assessed ({name, text}), task_done —
+    or task_error if the IA fails. The result is cached for reuse by indexing.
+    """
+    from src.core.data import assess as assess_mod
+    from src.core.data.datacard import sample_to_text
+    from src.core.data.engine import preview
+    from src.core.data.profile import profile_text
+    from src.core.data.scanner import schema_text
+
+    emit = make_emitter(bus, _MODULE_ID, "data")
+    try:
+        emit("data_assess_start", payload={"name": file.path.name})
+        schema = schema_text([file])
+        prof = profile_text(file.path)
+        sample = sample_to_text(preview(file.path, limit=10))
+        text = assess_mod.assess(schema, prof, sample, model_name=model_name)
+        assess_mod.save_assessment(file.path, text)  # cache → reused by indexing
+        emit("data_assessed", payload={"name": file.path.name, "text": text})
+        emit("task_done", payload={})
+        return True
+    except Exception as exc:
+        logging.getLogger(__name__).warning("[!] Data assess error: %s", exc)
+        emit("task_error", payload={"message": f"Não foi possível avaliar: {exc}"})
+        return False
+
+
 def _spawn(target: Callable, *args, **kwargs) -> threading.Thread:
     """Run *target* in a daemon thread."""
     thread = threading.Thread(target=lambda: target(*args, **kwargs), daemon=True)
@@ -176,3 +265,13 @@ def start_save(
 ) -> threading.Thread:
     """Launch run_data_save in a daemon thread."""
     return _spawn(run_data_save, bus, files, sql, fmt, stem)
+
+
+def start_index(bus: EventBus, *, embed_model: str) -> threading.Thread:
+    """Launch run_data_index in a daemon thread."""
+    return _spawn(run_data_index, bus, embed_model=embed_model)
+
+
+def start_assess(bus: EventBus, file, *, model_name: str) -> threading.Thread:
+    """Launch run_data_assess in a daemon thread."""
+    return _spawn(run_data_assess, bus, file, model_name=model_name)
