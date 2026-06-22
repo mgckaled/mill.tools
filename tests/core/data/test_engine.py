@@ -106,6 +106,17 @@ def test_reader_expr_unsupported_format(tmp_path):
 
 
 @pytest.mark.unit
+def test_xlsx_reader_uses_all_varchar(tmp_path):
+    from src.core.data.engine import reader_expr
+
+    # XLSX is read as text so locale-formatted numbers (pt-BR "4.500,00") and
+    # mixed columns never break DuckDB's DOUBLE inference and the file loads.
+    expr = reader_expr(tmp_path / "planilha.xlsx")
+    assert "read_xlsx(" in expr
+    assert "all_varchar = true" in expr
+
+
+@pytest.mark.unit
 def test_detect_encoding_missing_file_falls_back(tmp_path):
     from src.core.data.engine import detect_encoding
 

@@ -118,7 +118,12 @@ def reader_expr(path: Path) -> str:
     if suffix in _PARQUET_EXTS:
         return f"read_parquet({literal})"
     if suffix in _XLSX_EXTS:
-        return f"read_xlsx({literal})"
+        # all_varchar: read every cell as text so the file always loads. XLSX
+        # type inference picks DOUBLE from numeric-looking cells and then chokes
+        # on locale-formatted values (pt-BR "4.500,00" → not a US DOUBLE) or
+        # mixed columns. Reading as text never fails; the user casts in SQL
+        # (e.g. CAST(replace(replace(col,'.',''),',','.') AS DOUBLE)).
+        return f"read_xlsx({literal}, all_varchar = true)"
     raise DataEngineError(f"Formato não suportado: {suffix or path.name}")
 
 
