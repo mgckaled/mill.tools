@@ -114,8 +114,11 @@ def build_data_module(
             if typical:
                 line += f" · {typical}"
             gen_status.value = line
+            # Update ONLY the status text — a full page.update() here would
+            # interrupt the spinner's in-flight rotation animation, so its
+            # on_animation_end chain never re-fires and the mill stops turning.
             try:
-                page.update()
+                gen_status.update()
             except Exception:
                 break
             await asyncio.sleep(1.0)
@@ -226,13 +229,14 @@ def build_data_module(
         empty_state.visible = False  # gone for good after the first action
         progress_row.visible = True
         progress_bar.value = None
-        # Flush visibility BEFORE starting the spin: the spinner's first frame
-        # must run on a control already visible client-side, otherwise the
-        # on_animation_end chain never engages (mirrors progress_view, whose
-        # spinner icon is always mounted/visible when _start_spin runs).
-        page.update()
+        # Start the spin, then let the single page.update() below flush the
+        # first rotation — exactly like progress_view (its page.update() comes
+        # *after* _start_spin). The on_animation_end chain then keeps it turning
+        # via control-level img.update()s; the ticker must NOT page.update()
+        # (it would interrupt that animation — see _tick).
         spinner_start()
         _start_ticker()
+        page.update()
 
     def _end() -> None:
         pipeline_running[0] = False
