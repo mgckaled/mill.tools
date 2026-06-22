@@ -409,6 +409,13 @@ def build_data_module(
         preview_content.visible = has
         analysis_empty.visible = not has
         analysis_content.visible = has
+        # If a source was added while already on the preview/analysis tab, load
+        # it now so the tab isn't left blank until the user re-selects.
+        if has and _tab[0] == "preview":
+            _refresh_sheet_dd(_preview_file())
+            page.run_task(_load_preview)
+        elif has and _tab[0] == "analysis":
+            _load_assessment_cache()
 
     # ------------------------------------------------------------------
     # Preview tab — first rows of a source file (types in the header)
@@ -549,7 +556,6 @@ def build_data_module(
             case "data_scanned":
                 form.set_files(p.get("_files", []))
                 _refresh_source_selectors()
-                _refresh_sheet_dd(_preview_file())
             case "data_sql_ready":
                 _record_query_time(p.get("model_name", ""), p.get("elapsed", 0.0))
                 _end()
