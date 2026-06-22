@@ -79,9 +79,10 @@ def build_data_form(
             color=ft.Colors.ON_SURFACE,
         ),
     ]
+    # The ⓘ sits right next to the title (left-grouped), not pushed to the edge.
     _help = help_icon_for("data", page)
     if _help is not None:
-        header_controls.extend([ft.Container(expand=True), _help])
+        header_controls.append(_help)
     header = ft.Row(
         header_controls,
         vertical_alignment=ft.CrossAxisAlignment.CENTER,
@@ -215,8 +216,8 @@ def build_data_form(
     query_box = ft.TextField(
         label="Pergunta em português",
         multiline=True,
-        min_lines=3,
-        max_lines=8,
+        min_lines=5,
+        max_lines=10,
         border_color=ft.Colors.OUTLINE,
         focused_border_color=ft.Colors.PRIMARY,
     )

@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import logging
 import threading
+import time
 from pathlib import Path
 from typing import TYPE_CHECKING, Callable
 
@@ -75,8 +76,18 @@ def run_data_translate(
     try:
         emit("progress_start")
         schema = schema_text(files)
+        t0 = time.monotonic()
         sql, explanation = nl2sql.to_sql(schema, question, model_name=model_name)
-        emit("data_sql_ready", payload={"sql": sql, "explanation": explanation})
+        elapsed = time.monotonic() - t0
+        emit(
+            "data_sql_ready",
+            payload={
+                "sql": sql,
+                "explanation": explanation,
+                "model_name": model_name,
+                "elapsed": elapsed,
+            },
+        )
         emit("task_done", payload={})
         return True
     except Exception as exc:

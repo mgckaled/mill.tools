@@ -12,9 +12,11 @@ the table contents stay 100% local in DuckDB.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import subprocess
 import threading
+import time
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -23,6 +25,7 @@ import flet as ft
 from src.core.data import convert
 from src.gui import settings
 from src.gui.events import PipelineEvent
+from src.gui.modules.ai import timing
 from src.gui.modules.base import Module
 from src.gui.modules.data.form_view import build_data_form
 from src.gui.modules.data.worker import (
@@ -75,6 +78,9 @@ def build_data_module(
     _rename_fields: dict[str, ft.TextField] = {}
     _last_saved: list[Path | None] = [None]
     _action: list[str] = ["query"]  # which flow the in-flight worker is running
+    _pending_model: list[str] = [""]  # model of the in-flight translate (for timing)
+    _last_error: list[str] = [""]  # last query/translate error (for IA refinement)
+    _last_failed_sql: list[str] = [""]
 
     def _toast(message: str, *, error: bool = True) -> None:
         page.snack_bar = ft.SnackBar(
@@ -83,6 +89,63 @@ def build_data_module(
         )
         page.snack_bar.open = True
         page.update()
+
+    # ------------------------------------------------------------------
+    # Live timer: like the AI hub, a blocking IA invoke() has no honest
+    # countdown, so we show elapsed + a per-model "typical" learned from a
+    # rolling average. The ticker also keeps the spinner repainting (a daemon
+    # thread's update() would not flush until the next UI-thread page.update()).
+    # ------------------------------------------------------------------
+
+    _t0: list[float] = [0.0]
+    _ticker_stop = threading.Event()
+    _ACTION_LABEL = {
+        "translate": "Traduzindo a pergunta",
+        "query": "Executando a consulta",
+        "save": "Salvando",
+        "converse": "Salvando",
+    }
+
+    async def _tick(typical: str | None) -> None:
+        while not _ticker_stop.is_set():
+            elapsed = time.monotonic() - _t0[0]
+            label = _ACTION_LABEL.get(_action[0], "Processando")
+            line = f"{label}… {timing.format_clock(elapsed)}"
+            if typical:
+                line += f" · {typical}"
+            gen_status.value = line
+            try:
+                page.update()
+            except Exception:
+                break
+            await asyncio.sleep(1.0)
+
+    def _start_ticker() -> None:
+        _t0[0] = time.monotonic()
+        _ticker_stop.clear()
+        # Only the translate (NL→SQL) step has a per-model typical estimate.
+        typical = None
+        if _action[0] == "translate":
+            times = (
+                settings.load().get("data_query_times", {}).get(_pending_model[0], [])
+            )
+            typical = timing.format_typical(timing.average(times), _pending_model[0])
+        label = _ACTION_LABEL.get(_action[0], "Processando")
+        gen_status.value = f"{label}… 0:00" + (f" · {typical}" if typical else "")
+        gen_status.visible = True
+        page.run_task(_tick, typical)
+
+    def _stop_ticker() -> None:
+        _ticker_stop.set()
+        gen_status.visible = False
+
+    def _record_query_time(model: str, elapsed: float) -> None:
+        """Fold a finished translation's wall-clock time into the model's history."""
+        if not model or elapsed <= 0:
+            return
+        times_map = dict(settings.load().get("data_query_times", {}))
+        times_map[model] = timing.record_duration(times_map.get(model, []), elapsed)
+        settings.set("data_query_times", times_map)
 
     # ------------------------------------------------------------------
     # Form callbacks
@@ -130,8 +193,26 @@ def build_data_module(
             _toast("Nada para executar — pré-visualize ou escreva a consulta.")
             return
         _action[0] = "query"
+        _last_failed_sql[0] = sql  # remembered so an error can be sent back to the IA
         _begin()
         start_query(bus, form.get_files(), sql)
+
+    def _on_refine_with_ai(_e=None) -> None:
+        """Send the failed SQL + DuckDB error back to the IA to fix the query."""
+        if pipeline_running[0] or not form.get_files() or not _last_error[0]:
+            return
+        base = form.get_text() or "Corrija a consulta SQL para responder à pergunta."
+        augmented = (
+            f"{base}\n\n"
+            "A consulta SQL gerada anteriormente falhou ao executar no DuckDB.\n"
+            f"SQL com erro: {_last_failed_sql[0] or '(desconhecido)'}\n"
+            f"Mensagem de erro: {_last_error[0]}\n"
+            "Gere uma nova consulta SELECT que corrija esse erro, usando apenas "
+            "colunas existentes no esquema."
+        )
+        _action[0] = "translate"
+        _begin()
+        start_translate(bus, form.get_files(), augmented, model_name=form.get_model())
 
     # ------------------------------------------------------------------
     # Panel state helpers
@@ -140,10 +221,13 @@ def build_data_module(
     def _begin() -> None:
         pipeline_running[0] = True
         form.set_running(True)
+        _pending_model[0] = form.get_model()
+        error_box.visible = False  # clear any previous error while we work
+        empty_state.visible = False  # gone for good after the first action
         progress_row.visible = True
         progress_bar.value = None
         spinner_start()
-        status_detail.value = ""
+        _start_ticker()
         page.update()
 
     def _end() -> None:
@@ -151,6 +235,7 @@ def build_data_module(
         form.set_running(False)
         progress_row.visible = False
         spinner_stop()
+        _stop_ticker()
 
     def _show_review(sql: str, explanation: str) -> None:
         review_card.visible = True
@@ -218,6 +303,7 @@ def build_data_module(
     def _show_result() -> None:
         empty_state.visible = False
         result_area.visible = True
+        footer.visible = True  # actions become available with a valid result
         _page_idx[0] = 0
         _render_table()
         _build_rename_fields()
@@ -290,6 +376,7 @@ def build_data_module(
             case "data_scanned":
                 form.set_files(p.get("_files", []))
             case "data_sql_ready":
+                _record_query_time(p.get("model_name", ""), p.get("elapsed", 0.0))
                 _end()
                 _show_review(p.get("sql", ""), p.get("explanation", ""))
             case "data_result":
@@ -312,9 +399,17 @@ def build_data_module(
                     return
                 _toast(f"Salvo em output/data/{out.name}", error=False)
             case "task_error":
+                # A failed translate has no SQL; a failed query keeps the SQL it
+                # tried, so the IA refinement can reference both.
+                if _action[0] == "translate":
+                    _record_query_time(_pending_model[0], time.monotonic() - _t0[0])
                 _end()
                 message = p.get("message", "Erro.")
-                status_detail.value = f"[!] {message}"
+                _last_error[0] = message
+                error_text.value = message
+                # Offer "fix with the IA" only when there are files to re-query.
+                refine_btn.visible = bool(form.get_files())
+                error_box.visible = True
                 _toast(message)
             case "task_done":
                 pass  # terminal bookkeeping handled by the specific events above
@@ -334,10 +429,18 @@ def build_data_module(
     progress_bar = ft.ProgressBar(
         value=None, color=ft.Colors.PRIMARY, bgcolor=ft.Colors.OUTLINE_VARIANT
     )
+    # Live status line ("Traduzindo a pergunta… 0:14 · ~12s (típico do …)").
+    gen_status = ft.Text(
+        "",
+        size=Type.small.size,
+        color=ft.Colors.PRIMARY,
+        weight=ft.FontWeight.W_500,
+        visible=False,
+    )
     progress_row = ft.Column(
         controls=[
             ft.Row(
-                [spinner_img, ft.Text("Processando…", size=Type.input.size)],
+                [spinner_img, gen_status],
                 spacing=Space.sm,
                 vertical_alignment=ft.CrossAxisAlignment.CENTER,
             ),
@@ -346,12 +449,52 @@ def build_data_module(
         spacing=Space.xs,
         visible=False,
     )
-    status_detail = ft.Text(
+
+    # ── highlighted error block (with an "ask the IA to fix it" action) ────
+    error_text = ft.Text(
         "",
-        size=Type.small.size,
-        color=ft.Colors.ON_SURFACE_VARIANT,
-        font_family=Type.FONT_MONO,
+        size=Type.body.size,
+        color=ft.Colors.ON_SURFACE,
         no_wrap=False,
+        expand=True,
+    )
+    refine_btn = action_button(
+        "Corrigir com a IA",
+        icon=ft.Icons.AUTO_FIX_HIGH_OUTLINED,
+        on_click=_on_refine_with_ai,
+        accent=ft.Colors.ERROR,
+    )
+    error_box = ft.Container(
+        visible=False,
+        bgcolor=ft.Colors.with_opacity(0.12, ft.Colors.ERROR),
+        border=ft.Border(
+            left=ft.BorderSide(3, ft.Colors.ERROR),
+            top=ft.BorderSide(1, ft.Colors.with_opacity(0.4, ft.Colors.ERROR)),
+            right=ft.BorderSide(1, ft.Colors.with_opacity(0.4, ft.Colors.ERROR)),
+            bottom=ft.BorderSide(1, ft.Colors.with_opacity(0.4, ft.Colors.ERROR)),
+        ),
+        border_radius=Radius.md,
+        padding=ft.Padding(
+            left=Space.md, right=Space.md, top=Space.sm, bottom=Space.sm
+        ),
+        content=ft.Column(
+            controls=[
+                ft.Row(
+                    [
+                        ft.Icon(
+                            ft.Icons.ERROR_OUTLINE,
+                            size=IconSize.lg,
+                            color=ft.Colors.ERROR,
+                        ),
+                        error_text,
+                    ],
+                    spacing=Space.sm,
+                    vertical_alignment=ft.CrossAxisAlignment.START,
+                ),
+                ft.Row([refine_btn], alignment=ft.MainAxisAlignment.END),
+            ],
+            spacing=Space.xs,
+        ),
     )
 
     # ── review card ("entendi assim") ─────────────────────────────────────
@@ -508,14 +651,30 @@ def build_data_module(
                 spacing=Space.sm,
                 vertical_alignment=ft.CrossAxisAlignment.END,
             ),
-            ft.Row(
-                [save_btn, converse_btn, recipe_btn],
-                spacing=Space.sm,
-                wrap=True,
-            ),
-            saved_row,
         ],
         spacing=Space.sm,
+    )
+
+    # Fixed footer: the return actions live here, pinned to the bottom of the
+    # panel (outside the scroll). Hidden until there is a valid result.
+    footer = ft.Container(
+        visible=False,
+        bgcolor=ft.Colors.SURFACE,
+        border=ft.Border(top=ft.BorderSide(1.5, ft.Colors.OUTLINE_VARIANT)),
+        padding=ft.Padding(
+            left=Space.md, right=Space.md, top=Space.sm, bottom=Space.sm
+        ),
+        content=ft.Column(
+            controls=[
+                saved_row,
+                ft.Row(
+                    [save_btn, converse_btn, recipe_btn],
+                    spacing=Space.sm,
+                    wrap=True,
+                ),
+            ],
+            spacing=Space.xs,
+        ),
     )
 
     result_area = ft.Column(
@@ -557,16 +716,21 @@ def build_data_module(
         expand=True,
     )
 
-    panel = ft.Column(
+    scroll_content = ft.Column(
         controls=[
             progress_row,
-            status_detail,
+            error_box,
             review_card,
             ft.Stack([empty_state, result_area], expand=True),
         ],
         expand=True,
         spacing=Space.sm,
         scroll=ft.ScrollMode.AUTO,
+    )
+    panel = ft.Column(
+        controls=[scroll_content, footer],
+        expand=True,
+        spacing=Space.sm,
     )
 
     control = ft.Row(
