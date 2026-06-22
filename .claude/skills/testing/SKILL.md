@@ -513,6 +513,35 @@ fakes via `patch.dict` e injete um `emit`/`cancel_is_set` simples.
   (escreva arquivos reais em `tmp_path`; só os não-finais somem) e retorno
   `False` sem saída/em exceção.
 
+### Core Dados (`src/core/data/`) — DuckDB in-process (qualifica como `unit`)
+
+DuckDB roda in-process (sem ffmpeg/rede/GPU), então os testes de dados são `unit`
+como os do RAG. Fixtures locais em `tests/core/data/conftest.py` (`csv_sales`,
+`csv_people_cp1252`, `json_file`). Arquivos: `test_validate`/`test_engine`/
+`test_scanner`/`test_convert`/`test_profile`/`test_nl2sql`/`test_store` + (PR9.3)
+`test_assess`/`test_datacard`.
+
+- **`engine.preview`/`reader_expr`/`xlsx_sheet_names`** (`test_engine.py`): use
+  `csv_sales` real; `preview(limit/offset)` janela linhas; `reader_expr(.xlsx,
+  sheet=)` deve emitir `sheet = '...'` (aspas escapadas) e **ignorar** `sheet` em
+  CSV; para `xlsx_sheet_names`, monte um XLSX mínimo com `zipfile` + um
+  `xl/workbook.xml` (declare o ns `r:`!) — zip corrompido / não-XLSX → `[]`.
+- **`profile.summarize_sql`** (puro): abaixo do threshold → `SUMMARIZE "view"`;
+  acima → `SUMMARIZE SELECT * FROM "view" USING SAMPLE n ROWS`. `profile_text`
+  retorna o relatório sem gravar.
+- **`assess`** (`test_assess.py`): LLM via `GenericFakeChatModel` (injete
+  `make_llm_fn=lambda *a, **k: _fake_llm(...)`); o prompt não tem chaves literais
+  (valores com `{` são seguros). Cache: passe `cache_file=tmp_path/...` em
+  `load/save_assessment`; mudar o mtime do arquivo invalida; cache malformado →
+  miss; salvar p/ arquivo inexistente é no-op.
+- **`datacard.build_data_card`** (puro): asserir seções ARQUIVO/SCHEMA/PERFIL/
+  AMOSTRA e que `AVALIAÇÃO DA IA` só aparece com `assessment=`; `card_for_path`
+  lê arquivo real e dobra a avaliação cacheada (mocke `assess._cache_file`).
+- **indexer `kind="data"`** (`tests/core/rag/test_indexer.py`): `build_index(...,
+  card_fn=...)` embeda o cartão (não o arquivo); sem `card_fn`, itens de dados
+  são pulados; `card_fn` que levanta pula só aquele item; `indexable_items`
+  inclui `kind="data"` por kind (qualquer sufixo).
+
 ### Mock de `WhisperModel` (faster-whisper) — para testar `transcriber.transcribe`
 
 `src/transcriber.py` instancia `WhisperModel(...)` e chama

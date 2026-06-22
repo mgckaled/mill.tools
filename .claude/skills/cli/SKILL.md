@@ -314,9 +314,10 @@ no stdout (nomes com `｜`). `--model` sobrescreve só o Whisper dos passos
 uv run main.py data query <arquivos...> "<pergunta>" [--sql] [--out csv|xlsx|json|parquet] [--name] [--limit]
 uv run main.py data convert <arquivo> [--out parquet]
 uv run main.py data profile <arquivo>
+uv run main.py data assess <arquivo> [--model gemma3-4b-custom] [--no-cache]
 ```
 
-Usa **sub-subparsers** (`ns.data_op` ∈ {`query`, `convert`, `profile`}); `set_defaults(func=run_data_cli)`
+Usa **sub-subparsers** (`ns.data_op` ∈ {`query`, `convert`, `profile`, `assess`}); `set_defaults(func=run_data_cli)`
 no parser `data`. Como `library`/`ai`, **reusa o core puro direto** (`src/core/data/`) — operações
 síncronas, sem progresso → **sem `CLIEventBus`/`run_*_pipeline`**. `run_data_cli` reconfigura
 `sys.stdout` p/ UTF-8 (valores com caracteres fora do cp1252). `query` é **multi-input** (`files`
@@ -333,10 +334,18 @@ da tabela; `--out` salva em `output/data/`.
 | `--out` | — (`csv` no convert) | Formato de saída: `csv`/`tsv`/`json`/`parquet`/`xlsx` |
 | `--name` | `consulta` | Nome do arquivo de saída (sem extensão) |
 | `--limit` | `50` | Linhas exibidas na prévia |
+| `--no-cache` (`assess`) | off | Ignora a avaliação cacheada e força uma nova |
+
+`assess <arquivo>` (PR9.3) roda o parecer de qualidade da IA (esquema + `SUMMARIZE` +
+amostra, nunca as linhas), imprime o Markdown e **cacheia** o resultado em
+`~/.mill-tools/data_assessments.json` (reaproveitado pela indexação); por padrão reusa
+a avaliação cacheada se houver. `--model` = modelo do parecer.
 
 > Nos testes (`tests/cli/test_data_cli.py`): `_parse(*argv)` isolado; mocke `src.cli.data.run_query`/
 > `src.cli.data.nl2sql.to_sql`/`src.cli.data.convert.*`/`src.cli.data.profile.profile_file` p/ o
 > dispatch; `--sql` deve **não** chamar `to_sql`; arquivo inexistente/ não suportado → `sys.exit(1)`.
+> Para `assess`, mocke `src.core.data.assess.load_cached_assessment`/`assess`/`save_assessment`
+> (cache hit não chama `assess`; `--no-cache` força e salva).
 
 ---
 
