@@ -16,6 +16,7 @@ import flet as ft
 
 from src.core.library.types import (
     KIND_AUDIO,
+    KIND_DATA,
     KIND_DOCUMENT,
     KIND_IMAGE,
     KIND_TRANSCRIPTION,
@@ -32,6 +33,7 @@ KIND_ACCENT: dict[str, str] = {
     KIND_IMAGE: Color.log.step,
     KIND_TRANSCRIPTION: Color.log.work,
     KIND_DOCUMENT: Color.log.error,
+    KIND_DATA: Color.log.muted,
 }
 
 KIND_ICON: dict[str, str] = {
@@ -40,6 +42,7 @@ KIND_ICON: dict[str, str] = {
     KIND_IMAGE: ft.Icons.IMAGE_OUTLINED,
     KIND_TRANSCRIPTION: ft.Icons.SUBTITLES_OUTLINED,
     KIND_DOCUMENT: ft.Icons.DESCRIPTION_OUTLINED,
+    KIND_DATA: ft.Icons.TABLE_CHART_OUTLINED,
 }
 
 # Category → short PT-BR badge shown on the card (visible label = Portuguese).

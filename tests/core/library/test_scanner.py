@@ -23,6 +23,7 @@ _ROOT_ATTRS = (
     ("TRANSCRIPTIONS_TEXT_DIR", "transcription", "text"),
     ("TRANSCRIPTIONS_ANALYSIS_DIR", "transcription", "analysis"),
     ("TRANSCRIPTIONS_DIGEST_DIR", "transcription", "digest"),
+    ("DATA_DIR", "data", "processed"),
 )
 
 

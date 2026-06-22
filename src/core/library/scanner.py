@@ -7,6 +7,7 @@ from pathlib import Path
 
 from src.core.library.types import (
     KIND_AUDIO,
+    KIND_DATA,
     KIND_DOCUMENT,
     KIND_IMAGE,
     KIND_TRANSCRIPTION,
@@ -16,6 +17,7 @@ from src.core.library.types import (
 from src.utils import (
     AUDIO_PROCESSED_DIR,
     AUDIO_SOURCE_DIR,
+    DATA_DIR,
     DOCUMENT_PROCESSED_DIR,
     DOCUMENT_SOURCE_DIR,
     IMAGE_PROCESSED_DIR,
@@ -47,6 +49,7 @@ def _library_roots() -> list[tuple[Path, str, str]]:
         (TRANSCRIPTIONS_TEXT_DIR, KIND_TRANSCRIPTION, "text"),
         (TRANSCRIPTIONS_ANALYSIS_DIR, KIND_TRANSCRIPTION, "analysis"),
         (TRANSCRIPTIONS_DIGEST_DIR, KIND_TRANSCRIPTION, "digest"),
+        (DATA_DIR, KIND_DATA, "processed"),
     ]
 
 

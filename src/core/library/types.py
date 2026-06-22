@@ -11,6 +11,7 @@ KIND_VIDEO = "video"
 KIND_IMAGE = "image"
 KIND_DOCUMENT = "document"
 KIND_TRANSCRIPTION = "transcription"
+KIND_DATA = "data"
 
 # All kinds, in display priority order (mirrors the NavigationRail).
 ALL_KINDS: tuple[str, ...] = (
@@ -19,6 +20,7 @@ ALL_KINDS: tuple[str, ...] = (
     KIND_IMAGE,
     KIND_TRANSCRIPTION,
     KIND_DOCUMENT,
+    KIND_DATA,
 )
 
 

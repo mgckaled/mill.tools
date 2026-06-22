@@ -16,6 +16,7 @@ from src.core.library.scanner import filter_items, scan_library, sort_items
 from src.core.library.thumbnails import thumbnail_for
 from src.core.library.types import (
     KIND_AUDIO,
+    KIND_DATA,
     KIND_DOCUMENT,
     KIND_IMAGE,
     KIND_VIDEO,
@@ -49,7 +50,15 @@ _MODULE_ID = "library"
 _TEXT_EXTS = {".txt", ".md"}
 
 # Filter chips: value → PT-BR label (visible). "all" clears the kind filter.
-_FILTER_OPTIONS = ["all", "audio", "video", "image", "transcription", "document"]
+_FILTER_OPTIONS = [
+    "all",
+    "audio",
+    "video",
+    "image",
+    "transcription",
+    "document",
+    "data",
+]
 _FILTER_LABELS = {
     "all": "Todos",
     "audio": "Áudio",
@@ -57,6 +66,7 @@ _FILTER_LABELS = {
     "image": "Imagens",
     "transcription": "Transcrição",
     "document": "Documentos",
+    "data": "Dados",
 }
 
 # Sort key → visible PT-BR label (the key is what gets persisted).
@@ -112,6 +122,9 @@ _BRIDGES: dict[str, list[tuple[str, str, str]]] = {
     ],
     KIND_DOCUMENT: [
         ("document", "Reprocessar nos Documentos", ft.Icons.DESCRIPTION_OUTLINED),
+    ],
+    KIND_DATA: [
+        ("data", "Consultar nos Dados", ft.Icons.TABLE_CHART_OUTLINED),
     ],
 }
 
