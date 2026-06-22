@@ -117,6 +117,87 @@ def test_xlsx_reader_uses_all_varchar(tmp_path):
 
 
 @pytest.mark.unit
+def test_xlsx_reader_threads_sheet_name():
+    from pathlib import Path
+
+    from src.core.data.engine import reader_expr
+
+    expr = reader_expr(Path("planilha.xlsx"), sheet="Vendas 2024")
+    assert "sheet = 'Vendas 2024'" in expr
+    # A sheet name with a single quote is escaped (no SQL break-out).
+    expr2 = reader_expr(Path("planilha.xlsx"), sheet="O'Brien")
+    assert "sheet = 'O''Brien'" in expr2
+
+
+@pytest.mark.unit
+def test_reader_expr_ignores_sheet_for_csv(csv_sales):
+    from src.core.data.engine import reader_expr
+
+    # Non-XLSX formats have no sheets — the parameter is silently ignored.
+    expr = reader_expr(csv_sales, sheet="Sheet1")
+    assert "sheet =" not in expr
+    assert expr == reader_expr(csv_sales)
+    assert "read_csv(" in expr
+
+
+@pytest.mark.unit
+def test_xlsx_sheet_names_non_xlsx_returns_empty(csv_sales):
+    from src.core.data.engine import xlsx_sheet_names
+
+    assert xlsx_sheet_names(csv_sales) == []
+
+
+@pytest.mark.unit
+def test_xlsx_sheet_names_reads_workbook(tmp_path):
+    import zipfile
+
+    from src.core.data.engine import xlsx_sheet_names
+
+    # A minimal XLSX is just a ZIP; the sheet names live in xl/workbook.xml.
+    p = tmp_path / "book.xlsx"
+    workbook = (
+        '<?xml version="1.0"?>'
+        '<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"'
+        ' xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">'
+        "<sheets>"
+        '<sheet name="Receita" sheetId="1" r:id="rId1"/>'
+        '<sheet name="Despesas" sheetId="2" r:id="rId2"/>'
+        "</sheets></workbook>"
+    )
+    with zipfile.ZipFile(p, "w") as zf:
+        zf.writestr("xl/workbook.xml", workbook)
+    assert xlsx_sheet_names(p) == ["Receita", "Despesas"]
+
+
+@pytest.mark.unit
+def test_xlsx_sheet_names_corrupt_zip_returns_empty(tmp_path):
+    from src.core.data.engine import xlsx_sheet_names
+
+    p = tmp_path / "broken.xlsx"
+    p.write_bytes(b"not a zip at all")
+    assert xlsx_sheet_names(p) == []
+
+
+@pytest.mark.unit
+def test_preview_windows_rows_with_limit_offset(csv_sales):
+    from src.core.data.engine import preview
+
+    res = preview(csv_sales, limit=2, offset=0)
+    assert res.columns == ["produto", "qtd", "preco"]
+    assert res.n_rows == 2
+    res2 = preview(csv_sales, limit=2, offset=2)
+    assert res2.n_rows == 1  # only 3 data rows total
+
+
+@pytest.mark.unit
+def test_preview_bad_file_raises_engine_error(tmp_path):
+    from src.core.data.engine import DataEngineError, preview
+
+    with pytest.raises(DataEngineError):
+        preview(tmp_path / "missing.csv")
+
+
+@pytest.mark.unit
 def test_detect_encoding_missing_file_falls_back(tmp_path):
     from src.core.data.engine import detect_encoding
 

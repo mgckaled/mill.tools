@@ -102,12 +102,13 @@ def detect_encoding(path: Path) -> str:
     return "latin-1"
 
 
-def reader_expr(path: Path) -> str:
+def reader_expr(path: Path, *, sheet: str | None = None) -> str:
     """Return the DuckDB table-function expression that reads *path*.
 
     The expression is embedded in a ``FROM`` clause. CSV/TSV get an explicit
     ``encoding`` from :func:`detect_encoding`; the delimiter, header and types are
-    left to DuckDB's sniffer.
+    left to DuckDB's sniffer. ``sheet`` selects a worksheet (XLSX only — ignored
+    for the other formats, which have no concept of sheets).
     """
     suffix = path.suffix.lower()
     literal = _quote_str(str(path))
@@ -123,8 +124,40 @@ def reader_expr(path: Path) -> str:
         # on locale-formatted values (pt-BR "4.500,00" → not a US DOUBLE) or
         # mixed columns. Reading as text never fails; the user casts in SQL
         # (e.g. CAST(replace(replace(col,'.',''),',','.') AS DOUBLE)).
-        return f"read_xlsx({literal}, all_varchar = true)"
+        sheet_arg = f", sheet = {_quote_str(sheet)}" if sheet else ""
+        return f"read_xlsx({literal}, all_varchar = true{sheet_arg})"
     raise DataEngineError(f"Formato não suportado: {suffix or path.name}")
+
+
+def xlsx_sheet_names(path: Path) -> list[str]:
+    """Return the worksheet names of an XLSX file, or ``[]`` if not resolvable.
+
+    An XLSX is a ZIP whose ``xl/workbook.xml`` lists the sheets — so the names
+    are read with the stdlib (``zipfile`` + ``ElementTree``), no DuckDB round-trip
+    and no new dependency. Best-effort: any failure (not an XLSX, corrupt zip,
+    unexpected XML) returns ``[]`` so callers can fall back to the default sheet.
+    """
+    path = Path(path)
+    if path.suffix.lower() not in _XLSX_EXTS:
+        return []
+    try:
+        import xml.etree.ElementTree as ET
+        import zipfile
+
+        with zipfile.ZipFile(path) as zf:
+            xml = zf.read("xl/workbook.xml")
+        root = ET.fromstring(xml)
+        # The <sheet> elements live under a namespaced <sheets>; match by local
+        # tag name so we don't hard-code the spreadsheetml namespace URI.
+        names = [
+            el.get("name")
+            for el in root.iter()
+            if el.tag.rsplit("}", 1)[-1] == "sheet" and el.get("name")
+        ]
+        return [n for n in names if n]
+    except Exception as exc:  # best-effort — never fatal
+        logging.debug("[d] Could not read sheet names from %s: %s", path, exc)
+        return []
 
 
 def _ensure_excel(con) -> None:
@@ -233,6 +266,47 @@ def convert_file(
         if isinstance(exc, DataEngineError):
             raise
         raise DataEngineError(f"Erro ao converter {src_path.name}: {exc}") from exc
+    finally:
+        con.close()
+
+
+def preview(
+    path: Path,
+    *,
+    limit: int = 100,
+    offset: int = 0,
+    sheet: str | None = None,
+    connect_fn: Callable = _connect,
+) -> QueryResult:
+    """Read a window of rows straight from *path* (no view registration needed).
+
+    Powers the source-preview modal: ``SELECT * FROM <reader> LIMIT ? OFFSET ?``.
+    Cheap for CSV/TSV/Parquet (streamed); for XLSX a whole sheet loads but the
+    UI always passes a small ``limit``. ``sheet`` selects an XLSX worksheet.
+
+    Raises:
+        DataEngineError: if the file cannot be read.
+    """
+    path = Path(path)
+    con = connect_fn()
+    try:
+        if _needs_excel([path]):
+            _ensure_excel(con)
+        expr = reader_expr(path, sheet=sheet)
+        sql = f"SELECT * FROM {expr} LIMIT {int(limit)} OFFSET {int(offset)}"
+        start = time.perf_counter()
+        try:
+            cur = con.execute(sql)
+            columns = [d[0] for d in cur.description] if cur.description else []
+            rows = cur.fetchall()
+        except Exception as exc:
+            raise DataEngineError(f"Não foi possível ler {path.name}: {exc}") from exc
+        return QueryResult(
+            columns=columns,
+            rows=[tuple(r) for r in rows],
+            elapsed=time.perf_counter() - start,
+            n_rows=len(rows),
+        )
     finally:
         con.close()
 
