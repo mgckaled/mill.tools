@@ -226,9 +226,13 @@ def build_data_module(
         empty_state.visible = False  # gone for good after the first action
         progress_row.visible = True
         progress_bar.value = None
+        # Flush visibility BEFORE starting the spin: the spinner's first frame
+        # must run on a control already visible client-side, otherwise the
+        # on_animation_end chain never engages (mirrors progress_view, whose
+        # spinner icon is always mounted/visible when _start_spin runs).
+        page.update()
         spinner_start()
         _start_ticker()
-        page.update()
 
     def _end() -> None:
         pipeline_running[0] = False
