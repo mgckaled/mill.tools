@@ -2,12 +2,18 @@
 
 A NavigationRail tool (the 6th), but self-contained like the AI/Recipes hubs: it
 subscribes to its own PipelineEvents (module_id="data") and updates the panel on
-the UI thread. The panel holds the "entendi assim" review card (with an editable
-SQL box), a paginated preview of the result, and a return-shaping block (rename
-columns, pick a format, Save / Conversar sobre / Salvar como Receita).
+the UI thread. The right panel has three manual tabs (Flet 0.85 has no ft.Tabs),
+mirroring the AI hub's Conversa|Índice toggle:
 
-Privacy: with Gemini selected, only the column names reach the cloud (NL→SQL);
-the table contents stay 100% local in DuckDB.
+- **Consulta**: the "entendi assim" review card (editable SQL), a paginated
+  preview of the query result, and a return-shaping block (rename columns, pick a
+  format, Save / Conversar sobre / Salvar como Receita / Indexar no RAG).
+- **Pré-visualização**: the first rows of a source file, with the inferred type
+  per column in the header (a quality lens) and an XLSX sheet selector.
+- **Análise com IA**: a data-quality narrative from the IA over a source file.
+
+Privacy: the IA (NL→SQL and the assessment) only ever sees the column names +
+statistics + a small sample — never the table rows.
 """
 
 from __future__ import annotations
@@ -28,6 +34,7 @@ from src.gui.events import PipelineEvent
 from src.gui.modules.ai import timing
 from src.gui.modules.base import Module
 from src.gui.modules.data.form_view import build_data_form
+from src.gui.modules.data.table_view import build_paginated_table
 from src.gui.modules.data.worker import (
     start_query,
     start_save,
@@ -48,7 +55,8 @@ if TYPE_CHECKING:
     from src.gui.events import EventBus
 
 _MODULE_ID = "data"
-_PAGE_SIZE = 50  # rows shown per preview page (in-memory, like the Library)
+_PAGE_SIZE = 50  # rows shown per result-preview page (in-memory, like the Library)
+_PREVIEW_LIMIT = 200  # rows pulled for the source preview tab (paginated 50 at a time)
 
 
 def build_data_module(
@@ -58,7 +66,7 @@ def build_data_module(
     pipeline_running: list[bool],
     nav: list,
 ) -> Module:
-    """Build the Data module — query files, preview, shape and save the result.
+    """Build the Data module — query files, preview, assess, shape and save.
 
     Args:
         page: Flet page.
@@ -81,6 +89,8 @@ def build_data_module(
     _pending_model: list[str] = [""]  # model of the in-flight translate (for timing)
     _last_error: list[str] = [""]  # last query/translate error (for IA refinement)
     _last_failed_sql: list[str] = [""]
+    _has_result: list[bool] = [False]
+    _tab: list[str] = ["consulta"]
 
     def _toast(message: str, *, error: bool = True) -> None:
         page.snack_bar = ft.SnackBar(
@@ -218,7 +228,7 @@ def build_data_module(
         start_translate(bus, form.get_files(), augmented, model_name=form.get_model())
 
     # ------------------------------------------------------------------
-    # Panel state helpers
+    # Panel state helpers (Consulta tab)
     # ------------------------------------------------------------------
 
     def _begin() -> None:
@@ -253,7 +263,7 @@ def build_data_module(
         page.update()
 
     # ------------------------------------------------------------------
-    # Preview table (paginated, in-memory)
+    # Result preview table (paginated, in-memory) — Consulta tab
     # ------------------------------------------------------------------
 
     def _cell(value) -> str:
@@ -311,7 +321,8 @@ def build_data_module(
     def _show_result() -> None:
         empty_state.visible = False
         result_area.visible = True
-        footer.visible = True  # actions become available with a valid result
+        _has_result[0] = True
+        footer.visible = _tab[0] == "consulta"  # actions belong to the query tab
         _page_idx[0] = 0
         _render_table()
         _build_rename_fields()
@@ -373,6 +384,160 @@ def build_data_module(
             logging.debug("[d] explorer select failed for %s: %s", path, exc)
 
     # ------------------------------------------------------------------
+    # Source-file selection (shared by the Preview + Analysis tabs)
+    # ------------------------------------------------------------------
+
+    def _file_by_name(name: str | None):
+        for f in form.get_files():
+            if f.path.name == name:
+                return f
+        files = form.get_files()
+        return files[0] if files else None
+
+    def _refresh_source_selectors() -> None:
+        """Repopulate the per-tab file dropdowns from the current sources."""
+        files = form.get_files()
+        names = [f.path.name for f in files]
+        has = bool(files)
+        for dd in (preview_file_dd, analysis_file_dd):
+            dd.options = [ft.dropdown.Option(n) for n in names]
+            if dd.value not in names:
+                dd.value = names[0] if names else None
+            dd.visible = len(files) > 1
+        # Empty vs content per tab.
+        preview_empty.visible = not has
+        preview_content.visible = has
+        analysis_empty.visible = not has
+        analysis_content.visible = has
+
+    # ------------------------------------------------------------------
+    # Preview tab — first rows of a source file (types in the header)
+    # ------------------------------------------------------------------
+
+    def _preview_file():
+        return _file_by_name(preview_file_dd.value)
+
+    def _refresh_sheet_dd(file) -> None:
+        """Rebuild the XLSX sheet selector for the selected file (hidden otherwise)."""
+        from src.core.data.engine import xlsx_sheet_names
+
+        sheets = xlsx_sheet_names(file.path) if file else []
+        preview_sheet_dd.options = [ft.dropdown.Option(s) for s in sheets]
+        if preview_sheet_dd.value not in sheets:
+            preview_sheet_dd.value = sheets[0] if sheets else None
+        preview_sheet_dd.visible = len(sheets) > 1
+
+    async def _load_preview() -> None:
+        from src.core.data.engine import DataEngineError, preview
+
+        file = _preview_file()
+        if file is None:
+            return
+        types = {c.name: c.dtype for c in file.columns}
+        preview_status.value = "Carregando…"
+        try:
+            preview_status.update()
+        except Exception:
+            pass
+        try:
+            res = await asyncio.to_thread(
+                preview, file.path, limit=_PREVIEW_LIMIT, sheet=preview_sheet_dd.value
+            )
+        except DataEngineError as exc:
+            preview_status.value = f"Não foi possível ler: {exc}"
+            preview_status.update()
+            return
+        except Exception as exc:  # defensive — never break the tab
+            logging.getLogger(__name__).warning("[!] preview load failed: %s", exc)
+            preview_status.value = "Falha ao carregar a prévia."
+            preview_status.update()
+            return
+        ptable.set_data(res.columns, res.rows, types)
+        capped = " (primeiras linhas)" if res.n_rows >= _PREVIEW_LIMIT else ""
+        preview_status.value = f"{file.path.name} · {res.n_rows} linha(s){capped}"
+        page.update()
+
+    def _on_preview_file_change(_e=None) -> None:
+        _refresh_sheet_dd(_preview_file())
+        page.run_task(_load_preview)
+
+    # ------------------------------------------------------------------
+    # Analysis tab — IA data-quality narrative over a source file
+    # ------------------------------------------------------------------
+
+    def _analysis_file():
+        return _file_by_name(analysis_file_dd.value)
+
+    def _show_assessment(text: str) -> None:
+        assess_md.value = text
+        assess_md.visible = True
+        assess_hint.visible = False
+
+    def _load_assessment_cache() -> None:
+        """Show a cached assessment for the selected file, or the CTA if none."""
+        from src.core.data import assess as assess_mod
+
+        file = _analysis_file()
+        if file is None:
+            return
+        cached = None
+        try:
+            cached = assess_mod.load_cached_assessment(file.path)
+        except Exception as exc:
+            logging.debug("[d] assessment cache read failed: %s", exc)
+        if cached:
+            _show_assessment(cached)
+            assess_status.value = "(do cache)"
+        else:
+            assess_md.visible = False
+            assess_hint.visible = True
+            assess_status.value = ""
+
+    async def _run_assessment() -> None:
+        from src.core.data import assess as assess_mod
+        from src.core.data.datacard import sample_to_text
+        from src.core.data.engine import preview as engine_preview
+        from src.core.data.profile import profile_text
+        from src.core.data.scanner import schema_text
+
+        file = _analysis_file()
+        if file is None:
+            return
+        model = form.get_model()
+        assess_btn.disabled = True
+        assess_status.value = "Avaliando…"
+        assess_hint.visible = True
+        assess_hint.value = "Consultando a IA…"
+        assess_md.visible = False
+        page.update()
+
+        def _work() -> str:
+            schema = schema_text([file])
+            prof = profile_text(file.path)
+            sample = sample_to_text(engine_preview(file.path, limit=10))
+            text = assess_mod.assess(schema, prof, sample, model_name=model)
+            assess_mod.save_assessment(file.path, text)  # cache → reused by indexing
+            return text
+
+        try:
+            text = await asyncio.to_thread(_work)
+        except Exception as exc:
+            logging.getLogger(__name__).warning("[!] assessment failed: %s", exc)
+            assess_status.value = ""
+            assess_btn.disabled = False
+            assess_hint.value = f"Não foi possível avaliar: {exc}"
+            page.update()
+            return
+        _show_assessment(text)
+        assess_status.value = ""
+        assess_btn.disabled = False
+        page.update()
+
+    def _on_analysis_file_change(_e=None) -> None:
+        _load_assessment_cache()
+        page.update()
+
+    # ------------------------------------------------------------------
     # Event subscription (UI thread)
     # ------------------------------------------------------------------
 
@@ -383,6 +548,8 @@ def build_data_module(
         match event.type:
             case "data_scanned":
                 form.set_files(p.get("_files", []))
+                _refresh_source_selectors()
+                _refresh_sheet_dd(_preview_file())
             case "data_sql_ready":
                 _record_query_time(p.get("model_name", ""), p.get("elapsed", 0.0))
                 _end()
@@ -426,27 +593,21 @@ def build_data_module(
     page.pubsub.subscribe(_on_event)
 
     # ------------------------------------------------------------------
-    # Controls
+    # Controls — form
     # ------------------------------------------------------------------
 
-    def _on_eye(file) -> None:
-        from src.gui.modules.data.preview_modal import open_preview_modal
-
-        open_preview_modal(page, file)
-
     form = build_data_form(
-        page,
-        on_pick=_on_pick,
-        on_preview=_on_preview,
-        on_run=_on_run,
-        on_eye=_on_eye,
+        page, on_pick=_on_pick, on_preview=_on_preview, on_run=_on_run
     )
+
+    # ------------------------------------------------------------------
+    # Controls — shared progress/error (Consulta tab)
+    # ------------------------------------------------------------------
 
     spinner_img, spinner_start, spinner_stop = spinner()
     progress_bar = ft.ProgressBar(
         value=None, color=ft.Colors.PRIMARY, bgcolor=ft.Colors.OUTLINE_VARIANT
     )
-    # Live status line ("Traduzindo a pergunta… 0:14 · ~12s (típico do …)").
     gen_status = ft.Text(
         "",
         size=Type.small.size,
@@ -467,7 +628,6 @@ def build_data_module(
         visible=False,
     )
 
-    # ── highlighted error block (with an "ask the IA to fix it" action) ────
     error_text = ft.Text(
         "",
         size=Type.body.size,
@@ -566,7 +726,7 @@ def build_data_module(
         ),
     )
 
-    # ── preview table ─────────────────────────────────────────────────────
+    # ── result preview table ──────────────────────────────────────────────
     result_status = ft.Text(
         "", size=Type.input.size, color=ft.Colors.ON_SURFACE_VARIANT
     )
@@ -677,8 +837,6 @@ def build_data_module(
         spacing=Space.sm,
     )
 
-    # Fixed footer: the return actions live here, pinned to the bottom of the
-    # panel (outside the scroll). Hidden until there is a valid result.
     footer = ft.Container(
         visible=False,
         bgcolor=ft.Colors.SURFACE,
@@ -738,7 +896,7 @@ def build_data_module(
         expand=True,
     )
 
-    scroll_content = ft.Column(
+    consulta_scroll = ft.Column(
         controls=[
             progress_row,
             error_box,
@@ -749,8 +907,169 @@ def build_data_module(
         spacing=Space.sm,
         scroll=ft.ScrollMode.AUTO,
     )
+    consulta_view = ft.Column(
+        controls=[consulta_scroll, footer],
+        expand=True,
+        spacing=Space.sm,
+    )
+
+    # ------------------------------------------------------------------
+    # Controls — Preview tab
+    # ------------------------------------------------------------------
+
+    ptable = build_paginated_table(page)
+    preview_file_dd = ft.Dropdown(
+        label="Arquivo",
+        visible=False,
+        on_select=_on_preview_file_change,
+        width=240,
+        border_color=ft.Colors.OUTLINE,
+        focused_border_color=ft.Colors.PRIMARY,
+    )
+    preview_sheet_dd = ft.Dropdown(
+        label="Aba",
+        visible=False,
+        on_select=lambda _e: page.run_task(_load_preview),
+        width=180,
+        border_color=ft.Colors.OUTLINE,
+        focused_border_color=ft.Colors.PRIMARY,
+    )
+    preview_status = ft.Text(
+        "", size=Type.small.size, color=ft.Colors.ON_SURFACE_VARIANT
+    )
+    preview_content = ft.Column(
+        controls=[
+            ft.Row(
+                [preview_file_dd, preview_sheet_dd],
+                spacing=Space.sm,
+                vertical_alignment=ft.CrossAxisAlignment.END,
+            ),
+            preview_status,
+            ptable.control,
+        ],
+        expand=True,
+        spacing=Space.sm,
+        visible=False,
+    )
+    preview_empty = _tab_empty_state(
+        ft.Icons.TABLE_ROWS_OUTLINED,
+        "Pré-visualize seus dados",
+        "Selecione arquivos para ver as primeiras linhas e o tipo inferido de "
+        "cada coluna. A leitura é 100% local.",
+    )
+    preview_view = ft.Column(
+        controls=[ft.Stack([preview_empty, preview_content], expand=True)],
+        expand=True,
+        visible=False,
+    )
+
+    # ------------------------------------------------------------------
+    # Controls — Analysis tab
+    # ------------------------------------------------------------------
+
+    analysis_file_dd = ft.Dropdown(
+        label="Arquivo",
+        visible=False,
+        on_select=_on_analysis_file_change,
+        width=240,
+        border_color=ft.Colors.OUTLINE,
+        focused_border_color=ft.Colors.PRIMARY,
+    )
+    assess_btn = primary_button("Avaliar com a IA", icon=ft.Icons.AUTO_AWESOME_OUTLINED)
+    assess_btn.on_click = lambda _e: page.run_task(_run_assessment)
+    assess_status = ft.Text("", size=Type.small.size, color=ft.Colors.PRIMARY)
+    assess_hint = ft.Text(
+        "A IA examina o esquema, as estatísticas e uma amostra — nunca a tabela "
+        "inteira — e aponta inconsistências de tipo, nomes e estrutura.",
+        size=Type.input.size,
+        color=ft.Colors.ON_SURFACE_VARIANT,
+        italic=True,
+        no_wrap=False,
+    )
+    assess_md = ft.Markdown(
+        "",
+        selectable=True,
+        extension_set=ft.MarkdownExtensionSet.GITHUB_WEB,
+        visible=False,
+    )
+    analysis_content = ft.Column(
+        controls=[
+            ft.Row(
+                [analysis_file_dd, assess_btn, assess_status],
+                spacing=Space.sm,
+                vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                wrap=True,
+            ),
+            assess_hint,
+            assess_md,
+        ],
+        expand=True,
+        spacing=Space.sm,
+        scroll=ft.ScrollMode.AUTO,
+        visible=False,
+    )
+    analysis_empty = _tab_empty_state(
+        ft.Icons.AUTO_AWESOME_OUTLINED,
+        "Avalie seus dados com a IA",
+        "Selecione arquivos e a IA aponta inconsistências de tipo, nomes e "
+        "estrutura — sem enviar as linhas, só esquema e estatísticas.",
+    )
+    analysis_view = ft.Column(
+        controls=[ft.Stack([analysis_empty, analysis_content], expand=True)],
+        expand=True,
+        visible=False,
+    )
+
+    # ------------------------------------------------------------------
+    # Tab bar (Consulta | Pré-visualização | Análise com IA)
+    # ------------------------------------------------------------------
+
+    def _tab_style(active: bool) -> ft.ButtonStyle:
+        return ft.ButtonStyle(
+            color=ft.Colors.PRIMARY if active else ft.Colors.ON_SURFACE_VARIANT,
+            mouse_cursor=Cursor.interactive,
+        )
+
+    tab_consulta = ft.TextButton(
+        "Consulta", icon=ft.Icons.QUERY_STATS_OUTLINED, style=_tab_style(True)
+    )
+    tab_preview = ft.TextButton(
+        "Pré-visualização", icon=ft.Icons.TABLE_ROWS_OUTLINED, style=_tab_style(False)
+    )
+    tab_analysis = ft.TextButton(
+        "Análise com IA", icon=ft.Icons.AUTO_AWESOME_OUTLINED, style=_tab_style(False)
+    )
+
+    def _show_tab(name: str) -> None:
+        _tab[0] = name
+        consulta_view.visible = name == "consulta"
+        preview_view.visible = name == "preview"
+        analysis_view.visible = name == "analysis"
+        tab_consulta.style = _tab_style(name == "consulta")
+        tab_preview.style = _tab_style(name == "preview")
+        tab_analysis.style = _tab_style(name == "analysis")
+        # The return actions belong to the query result only.
+        footer.visible = name == "consulta" and _has_result[0]
+        settings.set("last_data_tab", name)
+        if name == "preview" and form.get_files():
+            _refresh_sheet_dd(_preview_file())
+            page.run_task(_load_preview)
+        elif name == "analysis" and form.get_files():
+            _load_assessment_cache()
+        page.update()
+
+    tab_consulta.on_click = lambda _e: _show_tab("consulta")
+    tab_preview.on_click = lambda _e: _show_tab("preview")
+    tab_analysis.on_click = lambda _e: _show_tab("analysis")
+
+    body_stack = ft.Stack([consulta_view, preview_view, analysis_view], expand=True)
+
     panel = ft.Column(
-        controls=[scroll_content, footer],
+        controls=[
+            ft.Row([tab_consulta, tab_preview, tab_analysis], spacing=Space.xs),
+            hairline(),
+            body_stack,
+        ],
         expand=True,
         spacing=Space.sm,
     )
@@ -790,6 +1109,7 @@ def build_data_module(
                 ".pq",
             }:
                 start_scan(bus, [path])
+        _show_tab(settings.load().get("last_data_tab", "consulta"))
 
     return Module(
         id=_MODULE_ID,
@@ -798,4 +1118,34 @@ def build_data_module(
         selected_icon=ft.Icons.TABLE_CHART,
         control=control,
         on_mount=_on_mount,
+    )
+
+
+def _tab_empty_state(icon: str, title: str, body: str) -> ft.Container:
+    """Build a centered empty-state placeholder for a tab with no data yet."""
+    return ft.Container(
+        content=ft.Column(
+            controls=[
+                ft.Icon(icon, size=IconSize.hero, color=ft.Colors.OUTLINE_VARIANT),
+                ft.Text(
+                    title,
+                    size=Type.heading.size,
+                    weight=ft.FontWeight.W_600,
+                    color=ft.Colors.ON_SURFACE_VARIANT,
+                ),
+                ft.Text(
+                    body,
+                    size=Type.input.size,
+                    color=ft.Colors.ON_SURFACE_VARIANT,
+                    italic=True,
+                    text_align=ft.TextAlign.CENTER,
+                    no_wrap=False,
+                ),
+            ],
+            horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+            alignment=ft.MainAxisAlignment.CENTER,
+            spacing=Space.sm,
+        ),
+        alignment=ft.Alignment.CENTER,
+        expand=True,
     )
