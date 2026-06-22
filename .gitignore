@@ -48,3 +48,5 @@ notes.md
 
 # implementation plans (working artifacts, not versioned)
 docs/*.md
+# Dados de teste ad-hoc do modulo Dados (scratch local)
+test_data/
