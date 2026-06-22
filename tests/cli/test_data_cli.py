@@ -149,3 +149,52 @@ def test_run_data_cli_profile_dispatch(mocker, csv_sales, tmp_path):
     ns = _parse("profile", str(csv_sales))
     ns.func(ns)
     assert mock_prof.called
+
+
+@pytest.mark.unit
+def test_assess_parser_defaults():
+    ns = _parse("assess", "a.csv")
+    assert ns.data_op == "assess"
+    assert ns.file == "a.csv"
+    assert ns.no_cache is False
+    assert callable(ns.func)
+
+
+@pytest.mark.unit
+def test_run_data_cli_assess_uses_cache(mocker, csv_sales, capsys):
+    # A cached assessment short-circuits the LLM call entirely.
+    mocker.patch(
+        "src.core.data.assess.load_cached_assessment",
+        return_value="## ok\n- consistente",
+    )
+    mock_assess = mocker.patch("src.core.data.assess.assess")
+    ns = _parse("assess", str(csv_sales))
+    ns.func(ns)
+
+    mock_assess.assert_not_called()
+    out = capsys.readouterr().out
+    assert "do cache" in out
+    assert "consistente" in out
+
+
+@pytest.mark.unit
+def test_run_data_cli_assess_generates_and_caches(mocker, csv_sales, capsys):
+    mocker.patch("src.core.data.assess.load_cached_assessment", return_value=None)
+    mock_assess = mocker.patch(
+        "src.core.data.assess.assess", return_value="- coluna qtd ok"
+    )
+    mock_save = mocker.patch("src.core.data.assess.save_assessment")
+    ns = _parse("assess", str(csv_sales), "--no-cache")
+    ns.func(ns)
+
+    assert mock_assess.called
+    assert mock_save.called  # result is cached for reuse by indexing
+    out = capsys.readouterr().out
+    assert "coluna qtd ok" in out
+
+
+@pytest.mark.unit
+def test_run_data_cli_assess_missing_file_exits():
+    ns = _parse("assess", "ghost.csv")
+    with pytest.raises(SystemExit):
+        ns.func(ns)

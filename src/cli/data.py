@@ -80,6 +80,23 @@ def add_data_parser(subparsers) -> None:
     p.add_argument("file", help="Arquivo de dados de entrada")
     p.add_argument("--verbose", action="store_true", help="Logging DEBUG")
 
+    # assess ----------------------------------------------------------------
+    a = data_sub.add_parser(
+        "assess", help="Avaliação de qualidade pela IA (esquema + perfil + amostra)"
+    )
+    a.add_argument("file", help="Arquivo de dados de entrada")
+    a.add_argument(
+        "--model",
+        default=nl2sql.DEFAULT_MODEL,
+        help=f"Modelo da avaliação (default: {nl2sql.DEFAULT_MODEL})",
+    )
+    a.add_argument(
+        "--no-cache",
+        action="store_true",
+        help="Ignora a avaliação cacheada e força uma nova",
+    )
+    a.add_argument("--verbose", action="store_true", help="Logging DEBUG")
+
     data_p.set_defaults(func=run_data_cli)
 
 
@@ -163,6 +180,35 @@ def _profile(ns: argparse.Namespace) -> None:
     print(out.read_text(encoding="utf-8"))
 
 
+def _assess(ns: argparse.Namespace) -> None:
+    """Run the ``data assess`` operation (IA data-quality narrative)."""
+    from src.core.data import assess as assess_mod
+    from src.core.data.datacard import sample_to_text
+    from src.core.data.engine import preview
+
+    (src,) = _resolve_files([ns.file])
+
+    if not ns.no_cache:
+        cached = assess_mod.load_cached_assessment(src)
+        if cached:
+            print(f"[✓] Avaliação de {src.name} (do cache):\n")
+            print(cached)
+            return
+
+    file = scanner.scan_file(src)
+    schema = scanner.schema_text([file])
+    prof = profile.profile_text(src)
+    sample = sample_to_text(preview(src, limit=10))
+    try:
+        text = assess_mod.assess(schema, prof, sample, model_name=ns.model)
+    except Exception as exc:
+        logging.error("Falha ao avaliar com a IA: %s", exc)
+        sys.exit(1)
+    assess_mod.save_assessment(src, text)  # cache → reused by indexing
+    print(f"[✓] Avaliação de {src.name}:\n")
+    print(text)
+
+
 def run_data_cli(ns: argparse.Namespace) -> None:
     """Dispatch the ``data`` subcommand to its operation handler."""
     # Data values often contain non-cp1252 characters; force UTF-8 stdout.
@@ -179,3 +225,5 @@ def run_data_cli(ns: argparse.Namespace) -> None:
         _convert(ns)
     elif op == "profile":
         _profile(ns)
+    elif op == "assess":
+        _assess(ns)
