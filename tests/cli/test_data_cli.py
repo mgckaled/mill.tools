@@ -1,0 +1,151 @@
+"""Tests for the ``data`` CLI subcommand (parser + dispatch)."""
+
+import argparse
+
+import pytest
+
+from src.cli.data import add_data_parser
+
+
+@pytest.fixture
+def csv_sales(tmp_path):
+    """A small real CSV so the scanner/dispatch run without mocking the engine."""
+    p = tmp_path / "vendas.csv"
+    p.write_text("produto,qtd\nmaca,3\nbanana,5\n", encoding="utf-8")
+    return p
+
+
+def _parse(*argv: str) -> argparse.Namespace:
+    parser = argparse.ArgumentParser()
+    sub = parser.add_subparsers(dest="command", required=True)
+    add_data_parser(sub)
+    return parser.parse_args(["data", *argv])
+
+
+@pytest.mark.unit
+def test_query_parses_files_and_question():
+    ns = _parse("query", "a.csv", "b.csv", "quantas linhas?")
+    assert ns.data_op == "query"
+    assert ns.files == ["a.csv", "b.csv"]
+    assert ns.question == "quantas linhas?"
+    assert ns.sql is False
+    assert ns.limit == 50
+    assert callable(ns.func)
+
+
+@pytest.mark.unit
+def test_query_sql_and_out_flags():
+    ns = _parse(
+        "query", "a.csv", "SELECT 1", "--sql", "--out", "parquet", "--name", "r"
+    )
+    assert ns.sql is True
+    assert ns.out == "parquet"
+    assert ns.name == "r"
+
+
+@pytest.mark.unit
+def test_query_invalid_out_format_rejected():
+    with pytest.raises(SystemExit):
+        _parse("query", "a.csv", "q", "--out", "xml")
+
+
+@pytest.mark.unit
+def test_convert_defaults_to_csv():
+    ns = _parse("convert", "a.json")
+    assert ns.data_op == "convert"
+    assert ns.file == "a.json"
+    assert ns.out == "csv"
+
+
+@pytest.mark.unit
+def test_profile_parser():
+    ns = _parse("profile", "a.csv")
+    assert ns.data_op == "profile"
+    assert ns.file == "a.csv"
+
+
+@pytest.mark.unit
+def test_run_data_cli_query_sql_dispatch(mocker, csv_sales, capsys):
+    from src.core.data.types import QueryResult
+
+    mock_run = mocker.patch(
+        "src.cli.data.run_query",
+        return_value=QueryResult(["n"], [(3,)], 0.01, 1),
+    )
+    mock_to_sql = mocker.patch("src.cli.data.nl2sql.to_sql")  # must NOT be called
+
+    ns = _parse("query", str(csv_sales), "SELECT count(*) AS n FROM vendas", "--sql")
+    ns.func(ns)
+
+    assert mock_run.called
+    mock_to_sql.assert_not_called()  # --sql skips the IA
+    out = capsys.readouterr().out
+    assert "1 linha(s)" in out
+
+
+@pytest.mark.unit
+def test_run_data_cli_query_uses_nl2sql(mocker, csv_sales, capsys):
+    from src.core.data.types import QueryResult
+
+    mocker.patch(
+        "src.cli.data.nl2sql.to_sql",
+        return_value=("SELECT 1", "Conta as linhas."),
+    )
+    mocker.patch(
+        "src.cli.data.run_query",
+        return_value=QueryResult(["x"], [(1,)], 0.0, 1),
+    )
+    ns = _parse("query", str(csv_sales), "quantas linhas?")
+    ns.func(ns)
+
+    out = capsys.readouterr().out
+    assert "Entendi assim: Conta as linhas." in out
+
+
+@pytest.mark.unit
+def test_run_data_cli_query_saves_output(mocker, csv_sales, tmp_path):
+    from src.core.data.types import QueryResult
+
+    mocker.patch(
+        "src.cli.data.run_query",
+        return_value=QueryResult(["n"], [(3,)], 0.0, 1),
+    )
+    mock_save = mocker.patch(
+        "src.cli.data.convert.save_query", return_value=tmp_path / "r.csv"
+    )
+    ns = _parse(
+        "query", str(csv_sales), "SELECT 1", "--sql", "--out", "csv", "--name", "r"
+    )
+    ns.func(ns)
+
+    assert mock_save.called
+    assert mock_save.call_args.args[3] == "csv"  # fmt
+    assert mock_save.call_args.args[4] == "r"  # stem
+
+
+@pytest.mark.unit
+def test_run_data_cli_missing_file_exits(mocker):
+    ns = _parse("query", "does_not_exist.csv", "q", "--sql")
+    with pytest.raises(SystemExit):
+        ns.func(ns)
+
+
+@pytest.mark.unit
+def test_run_data_cli_convert_dispatch(mocker, csv_sales, tmp_path):
+    mock_conv = mocker.patch(
+        "src.cli.data.convert.convert_file", return_value=tmp_path / "o.json"
+    )
+    ns = _parse("convert", str(csv_sales), "--out", "json")
+    ns.func(ns)
+    assert mock_conv.called
+    assert mock_conv.call_args.args[2] == "json"
+
+
+@pytest.mark.unit
+def test_run_data_cli_profile_dispatch(mocker, csv_sales, tmp_path):
+    report = tmp_path / "vendas_profile.txt"
+    report.write_text("# Perfil\n- Linhas: 3\n", encoding="utf-8")
+    mock_prof = mocker.patch("src.cli.data.profile.profile_file", return_value=report)
+    ns = _parse("profile", str(csv_sales))
+    ns.func(ns)
+    assert mock_prof.called
