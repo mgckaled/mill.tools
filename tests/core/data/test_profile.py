@@ -48,3 +48,32 @@ def test_fmt_cell_handles_text_and_null():
     assert _fmt_cell("") == "-"
     assert _fmt_cell("banana") == "banana"  # genuine text passes through
     assert _fmt_cell(5) == "5"
+
+
+@pytest.mark.unit
+def test_summarize_sql_full_for_small_files():
+    from src.core.data.profile import summarize_sql
+
+    # Below the threshold: a plain whole-table SUMMARIZE (no sampling).
+    sql = summarize_sql("vendas", 100)
+    assert sql == 'SUMMARIZE "vendas"'
+    assert "SAMPLE" not in sql
+
+
+@pytest.mark.unit
+def test_summarize_sql_samples_large_files():
+    from src.core.data.profile import summarize_sql
+
+    # Past the threshold: SUMMARIZE over a reservoir sample so profiling a huge
+    # file never scans it end-to-end.
+    sql = summarize_sql("big", 5_000_000, threshold=1000, sample_rows=2000)
+    assert sql == 'SUMMARIZE SELECT * FROM "big" USING SAMPLE 2000 ROWS'
+
+
+@pytest.mark.unit
+def test_profile_text_returns_report_without_writing(csv_sales):
+    from src.core.data.profile import profile_text
+
+    text = profile_text(csv_sales)
+    assert "Linhas: 3" in text
+    assert "produto" in text

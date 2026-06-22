@@ -13,6 +13,30 @@ from src.core.data.engine import run_query
 from src.core.data.scanner import scan_file
 from src.core.data.types import DataFile, QueryResult
 
+# Above this many rows the SUMMARIZE runs over a reservoir sample instead of a
+# full scan — the profile stays a quick descriptive sketch (the exact min/max of
+# a huge file is not worth a full pass when indexing the data card).
+SAMPLE_THRESHOLD = 200_000
+SAMPLE_ROWS = 100_000
+
+
+def summarize_sql(
+    view_name: str,
+    n_rows: int,
+    *,
+    threshold: int = SAMPLE_THRESHOLD,
+    sample_rows: int = SAMPLE_ROWS,
+) -> str:
+    """Build the SUMMARIZE query for a view, sampling when the file is large.
+
+    Pure and testable: small files get ``SUMMARIZE "view"`` (whole table); files
+    past *threshold* get ``SUMMARIZE SELECT * FROM "view" USING SAMPLE n ROWS`` so
+    profiling never scans an enormous file end-to-end.
+    """
+    if n_rows > threshold:
+        return f'SUMMARIZE SELECT * FROM "{view_name}" USING SAMPLE {int(sample_rows)} ROWS'
+    return f'SUMMARIZE "{view_name}"'
+
 
 def _fmt_cell(value) -> str:
     """Render a SUMMARIZE cell for the report (``-`` for NULL/empty).
@@ -74,15 +98,25 @@ def format_profile(file: DataFile, summary: QueryResult) -> str:
     return "\n".join(lines).rstrip() + "\n"
 
 
+def profile_text(path: Path) -> str:
+    """Profile *path* and return the report as text (no file written).
+
+    Shared by :func:`profile_file` (writes it) and the data card builder (embeds
+    it). The SUMMARIZE is sampled for large files via :func:`summarize_sql`.
+    """
+    path = Path(path)
+    file = scan_file(path)
+    summary = run_query([file], summarize_sql(file.view_name, file.n_rows))
+    return format_profile(file, summary)
+
+
 def profile_file(path: Path, out_dir: Path) -> Path:
     """Profile *path* and write the report to ``out_dir/<stem>_profile.txt``.
 
     Returns the path of the written report.
     """
     path = Path(path)
-    file = scan_file(path)
-    summary = run_query([file], f'SUMMARIZE "{file.view_name}"')
-    text = format_profile(file, summary)
+    text = profile_text(path)
 
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
