@@ -12,11 +12,11 @@ description: Guia da CLI modular do mill.tools (subcomandos audio/video/image/do
 `main.py` despacha para subcomandos por prefixo do primeiro argumento:
 
 ```python
-_NON_TRANSCRIBE_CMDS = frozenset({"audio", "video", "image", "document", "library", "ai", "recipe"})
+_NON_TRANSCRIBE_CMDS = frozenset({"audio", "video", "image", "document", "library", "ai", "recipe", "data"})
 
 def main():
     if len(sys.argv) > 1 and sys.argv[1] in _NON_TRANSCRIBE_CMDS:
-        _dispatch_other(sys.argv[1])   # → src/cli/{audio,video,image,document,library,ai,recipes}.py
+        _dispatch_other(sys.argv[1])   # → src/cli/{audio,video,image,document,library,ai,recipes,data}.py
         return
     # legado: transcrição (parse_args direto)
 ```
@@ -37,7 +37,8 @@ src/cli/
 ├── document.py       — add_document_parser() + run_document_cli()  (sub-subparsers)
 ├── library.py        — add_library_parser() + run_library_cli()  (read-only, sem CLIEventBus)
 ├── ai.py             — add_ai_parser() + run_ai_cli()  (RAG local; index / pergunta / --batch)
-└── recipes.py        — add_recipe_parser() + run_recipe_cli()  (recipe list / run; usa CLIEventBus)
+├── recipes.py        — add_recipe_parser() + run_recipe_cli()  (recipe list / run; usa CLIEventBus)
+└── data.py           — add_data_parser() + run_data_cli()  (query/convert/profile; reusa core direto)
 ```
 
 ---
@@ -304,6 +305,38 @@ no stdout (nomes com `｜`). `--model` sobrescreve só o Whisper dos passos
 > `_find_recipe`/`list`; receita inexistente, saída vazia e arquivo de extensão
 > não suportada chamam `sys.exit(1)` → `pytest.raises(SystemExit)`. `_make_emit`
 > é testável direto com um bus falso.
+
+---
+
+## Subcomando `data`
+
+```bash
+uv run main.py data query <arquivos...> "<pergunta>" [--sql] [--out csv|xlsx|json|parquet] [--name] [--limit]
+uv run main.py data convert <arquivo> [--out parquet]
+uv run main.py data profile <arquivo>
+```
+
+Usa **sub-subparsers** (`ns.data_op` ∈ {`query`, `convert`, `profile`}); `set_defaults(func=run_data_cli)`
+no parser `data`. Como `library`/`ai`, **reusa o core puro direto** (`src/core/data/`) — operações
+síncronas, sem progresso → **sem `CLIEventBus`/`run_*_pipeline`**. `run_data_cli` reconfigura
+`sys.stdout` p/ UTF-8 (valores com caracteres fora do cp1252). `query` é **multi-input** (`files`
+`nargs="+"` seguido do positional `question` — argparse reserva o último p/ a pergunta); `--sql`
+pula o NL→SQL; em PT mostra a explicação da IA + o SQL (espelha o cartão de revisão da GUI) antes
+da tabela; `--out` salva em `output/data/`.
+
+| Flag | Default | Descrição |
+|---|---|---|
+| `files` (posicional, `query`) | — | Um ou mais arquivos de dados (CSV/TSV/JSON/Parquet/XLSX) |
+| `question` (posicional, `query`) | — | Pergunta em PT, ou a consulta SQL com `--sql` |
+| `--sql` | off | Trata `question` como SQL literal (pula a IA) |
+| `--model` | `gemma3-4b-custom` | Modelo da tradução PT→SQL |
+| `--out` | — (`csv` no convert) | Formato de saída: `csv`/`tsv`/`json`/`parquet`/`xlsx` |
+| `--name` | `consulta` | Nome do arquivo de saída (sem extensão) |
+| `--limit` | `50` | Linhas exibidas na prévia |
+
+> Nos testes (`tests/cli/test_data_cli.py`): `_parse(*argv)` isolado; mocke `src.cli.data.run_query`/
+> `src.cli.data.nl2sql.to_sql`/`src.cli.data.convert.*`/`src.cli.data.profile.profile_file` p/ o
+> dispatch; `--sql` deve **não** chamar `to_sql`; arquivo inexistente/ não suportado → `sys.exit(1)`.
 
 ---
 

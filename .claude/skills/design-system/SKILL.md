@@ -211,7 +211,7 @@ sync_page_bgcolor(page)    # chamar sempre que theme_mode mudar
 
 ## Eventos do pipeline (`PipelineEvent`)
 
-`PipelineEvent(type, stage, payload, module_id)` é publicado via `page.pubsub.send_all()` (thread-safe; worker thread → callbacks na UI thread). `module_id` ∈ {`"transcription"`, `"audio"`, `"image"`, `"video"`, `"document"`, `"ai"`, `"recipes"`, `""` (legado)}. O `ProgressPanel` ignora eventos cujo `module_id` ≠ `owner_id`; os hubs **IA** e **Receitas** são auto-contidos (assinam os próprios eventos, não usam `ProgressPanel`).
+`PipelineEvent(type, stage, payload, module_id)` é publicado via `page.pubsub.send_all()` (thread-safe; worker thread → callbacks na UI thread). `module_id` ∈ {`"transcription"`, `"audio"`, `"image"`, `"video"`, `"document"`, `"data"`, `"ai"`, `"recipes"`, `""` (legado)}. O `ProgressPanel` ignora eventos cujo `module_id` ≠ `owner_id`; os hubs **IA** e **Receitas** e a ferramenta **Dados** são auto-contidos (assinam os próprios eventos, não usam `ProgressPanel`). Eventos próprios do **Dados**: `data_scanned` (chips de fonte), `data_sql_ready` (`sql`/`explanation`), `data_result` (`columns`/`rows`/`n_rows`/`elapsed`/`truncated`), `data_saved` (`output_path`).
 
 `pipeline_log.py` (por módulo) separa "o que emitir" de "como exibir": `worker.py` importa `fmt_*` p/ `emit("log", ...)`; `view.py`/`progress_view.py` importa `resolve_messages()`/`resolve_stage_label()`. Os campos exatos de cada payload são derivados do `worker.py`/`pipeline_log.py` do módulo — as tabelas abaixo são o contrato de referência.
 

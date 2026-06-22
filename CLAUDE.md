@@ -1,6 +1,6 @@
 # mill.tools
 
-Multiferramenta pessoal extensível para processamento de áudio, vídeo, imagens, documentos e transcrição, com GUI desktop (Flet) e CLI. O módulo de Transcrição usa faster-whisper com aceleração GPU — 100% local. A GUI é organizada em **módulos** acessíveis por uma sidebar (NavigationRail) + 3 hubs no AppBar.
+Multiferramenta pessoal extensível para processamento de áudio, vídeo, imagens, documentos, dados estruturados e transcrição, com GUI desktop (Flet) e CLI. O módulo de Transcrição usa faster-whisper com aceleração GPU — 100% local. A GUI é organizada em **módulos** acessíveis por uma sidebar (NavigationRail) + 3 hubs no AppBar.
 
 ## Stack
 
@@ -11,6 +11,7 @@ Multiferramenta pessoal extensível para processamento de áudio, vídeo, imagen
 - **Pillow 12.2+** (imagens, AVIF nativo) · **pymupdf** (PDF engine) · **qrcode** (QR) · **rembg[cpu]** + **onnxruntime** (extra `[ai-image]`, remoção de fundo)
 - **LangChain** + **Ollama** (local) / **Google Gemini** (nuvem) — formatação/análise/condensação/descrição de imagens; **RAG local** via `OllamaEmbeddings` (`nomic-embed-custom`, CPU, 768-dim)
 - **numpy** — vector store do RAG (`.npz`) · **Flet 0.85** (Flutter desktop; testado 0.85.2) · **tqdm** (CLI)
+- **duckdb** (motor SQL embutido, in-process, **torch-free**, sem servidor) + **charset-normalizer** (detecção de encoding de CSV) — módulo Dados; extensão `excel` do DuckDB só para XLSX
 
 > **Decisão consciente: sem PyTorch.** Pós-processamento de áudio é CPU-only/torch-free. IA com torch (Demucs, DeepFilterNet) ficaria isolada num extra `[ai-audio]` — o app base permanece torch-free. **Encoding de vídeo 100% CPU — sem NVENC** (definitivo).
 
@@ -21,13 +22,14 @@ main.py / gui.py                 — entry points CLI / GUI (splash → home →
 src/
 ├── transcriber.py · formatter.py · analyzer.py · prompter.py · llm_factory.py · llm_utils.py · utils.py
 ├── analysis/                    — perfis de análise (puro): types/prompts/report + profiles/ por grupo
-├── cli/                         — bus.py (CLIEventBus) + 1 módulo por subcomando (audio/video/image/document/library/ai/recipes) + transcription.py (helpers)
+├── cli/                         — bus.py (CLIEventBus) + 1 módulo por subcomando (audio/video/image/document/library/ai/recipes/data) + transcription.py (helpers)
 ├── core/                        — PURO (sem Flet): reutilizável por CLI e GUI
 │   ├── ffmpeg.py (run_ffmpeg, aceita cwd=) · subtitles.py · io_types.py · metadata.py · ytdlp_cookies.py
 │   ├── audio/  video/  image/  document/   — cada um: args.py + downloader/converter/info + específicos
 │   ├── library/                — types.py (LibraryItem) · scanner.py · thumbnails.py
 │   ├── rag/                    — types · embedder (única rede) · store (VectorStore) · indexer · retriever · chat · templates · batch · stats
-│   └── recipes/                — types · registry · runner · validate · inputs · presets · store
+│   ├── recipes/                — types · registry · runner · validate · inputs · presets · store
+│   └── data/                   — types · scanner · engine (única fronteira DuckDB) · nl2sql · validate · convert · profile · store
 └── gui/
     ├── app.py (build_app: rail + hubs) · splash.py · home.py · events.py · settings.py · settings_dialog.py · workers.py · help_content.py
     ├── components/             — input_source.py · profile_selector.py · audio_player.py
@@ -40,10 +42,10 @@ src/
 
 ## Sistema de módulos (GUI)
 
-- **5 ferramentas** (Áudio→Vídeo→Imagens→Transcrição→Documentos) na **NavigationRail**. **Biblioteca/IA/Receitas** são **hubs** fora da rail (operam sobre as saídas de todos) — botões dourados no AppBar. Os 3 ainda estão em `MODULES`/`ft.Stack`; `_RAIL_MODULES` exclui os `_HUB_IDS`.
+- **6 ferramentas** (Áudio→Vídeo→Imagens→Transcrição→Documentos→Dados) na **NavigationRail**. **Biblioteca/IA/Receitas** são **hubs** fora da rail (operam sobre as saídas de todos) — botões dourados no AppBar. Os 3 ainda estão em `MODULES`/`ft.Stack`; `_RAIL_MODULES` exclui os `_HUB_IDS`.
 - **Registry** (`app.py`): `MODULES: list[Module]` é fonte única — adicionar módulo = uma entrada. **Module** (`modules/base.py`): dataclass `id/label/icon/selected_icon/control/on_mount(payload)/on_unmount`; o `control` é construído uma vez (trocar de aba não destrói estado).
 - **navigate_to(module_id, payload)**: alterna **visibilidade** num `ft.Stack` (não reatribui `content` — evita `object_patch` IndexError do Flet 0.85). Bloqueia troca enquanto `pipeline_running[0]`.
-- **Entrada via Home Screen** (`home.py`): 5 ferramentas (grade 3+2) + 3 hubs (cards largos, borda dourada, selo "HUB") sobre o moinho girando. Clique → `build_app(initial_module=id)`.
+- **Entrada via Home Screen** (`home.py`): 6 ferramentas (grade 3 por linha = 3+3) + 3 hubs (cards largos, borda dourada, selo "HUB") sobre o moinho girando. Clique → `build_app(initial_module=id)`.
 - **Bridges** (`navigate_to(target, {"file": path})` → `on_mount` chama `fill_from_path`/`bind_document`): Áudio/Vídeo/Biblioteca→Transcrição; Vídeo→Transcrição/Áudio (botões pós-`extract_audio`); Biblioteca→IA ("Conversar sobre", fixa escopo do documento).
 - **Escopo de eventos**: cada `ProgressPanel` tem `owner_id` e ignora `module_id` diferente; IA e Receitas são auto-contidos (assinam os próprios eventos).
 
@@ -123,6 +125,16 @@ Cadeias **lineares** nomeadas onde a saída de um passo alimenta o próximo, atr
 - **GUI** (`modules/recipes/`): hub, auto-contido. Toggle **Rodar | Construir** (Construir: dropdown só oferece ops compatíveis com a saída anterior; reordenar por **↑/↓** — `ft.ReorderableListView` é scrollable frágil aninhado; validação ao vivo). `worker` roda `execute_recipe(_batch)` em thread; `clean_intermediates` apaga saídas não-finais.
 - **CLI** (`cli/recipes.py`): `recipe list` / `recipe run "<nome>" <input>` (`--model` sobrescreve o Whisper). **Persistência**: `last_recipe`, `recipe_clean_intermediates`; receitas em `~/.mill-tools/recipes.json`.
 
+## Módulo Dados (PR9)
+
+6ª ferramenta na rail (transforma entrada→saída, como Documentos/Imagens — **não** é hub). Paradigma **query-first**: a composição (juntar+filtrar+agrupar+somar+ordenar) vive numa **consulta única**, escrita em português (traduzida pela IA) ou na mão. Motor **DuckDB** (in-process, torch-free). **Divisão de responsabilidades**: a IA recebe **só o schema** (nomes/tipos de coluna) e devolve `(sql, explicação)` — nunca toca nas linhas; o DuckDB abre os arquivos e executa; o core orquestra. **Privacidade**: com Gemini, só os nomes de coluna saem da máquina.
+
+- **Core puro** (`core/data/`): `engine.py` é a **única fronteira com o DuckDB** (injetável, como o `embedder` do RAG) — conexão **in-memory efêmera** por consulta (nada gravável anexado), detecta encoding de CSV via `charset-normalizer` (cp1252/utf-8/utf-16 → encodings do DuckDB; exóticos → latin-1), registra cada arquivo como view, `run_query`/`export_query`/`convert_file` (`COPY ... TO`). `validate.py` — guarda: só leitura (SELECT/WITH/FROM/DESCRIBE/SUMMARIZE), rejeita COPY/ATTACH/INSTALL/PRAGMA/DML e múltiplos statements (strip de comentários antes). `nl2sql.py` — `to_sql(schema, pergunta)` via `make_llm`; saída sempre validada por `ensure_select`. `scanner.py` — `scan_file → DataFile` (view name, contagem, colunas) + `schema_text` p/ a IA. `convert.py` — CSV/TSV/JSON/Parquet/XLSX + `rename_sql` (renomeia colunas no output, puro). `profile.py` — relatório textual (`SUMMARIZE`) indexável. `store.py` — `queries.json`.
+- **GUI** (`modules/data/`): rail tool, auto-contido (`module_id="data"`), split form|painel. `form_view` — fontes (FilePicker → chips com contagem de linhas/colunas) + toggle **Português | Consulta** + caixa + Pré-visualizar/Executar. `worker` — `scan`/`translate`/`query`/`save` em threads daemon. `view` — cartão de revisão **"entendi assim"** (SQL editável), prévia **paginada** em `DataTable` (`_PAGE_SIZE=50`, no máx `PREVIEW_ROWS=200` em memória), e **personalizar retorno** (renomear colunas, formato, Salvar/Conversar sobre/Salvar como Receita).
+- **CLI** (`cli/data.py`): `data query <arquivos...> "<pergunta>" [--sql] [--out csv|xlsx|json|parquet] [--name] [--limit]`, `data convert`, `data profile`. Reusa o core direto (como `ai`/`library`, sem `CLIEventBus`); stdout em UTF-8.
+- **Integrações**: Receitas — `data.query` (multi-input, consome a lista inteira; `sql` ou `question` nos params; produz KIND_TEXT p/ fechar `data.query → ai.answer`), `data.convert`, `data.profile` (novo `KIND_DATA`). Biblioteca — `output/data/ → kind="data"`; ícone de tabela; filtro "Dados"; bridge "Consultar nos Dados".
+- **Persistência**: `last_data_model`/`last_data_format`/`last_data_mode`; saídas em `output/data/`; consultas em `~/.mill-tools/queries.json`. **XLSX** isolado em `convert.py`/`engine.py` (extensão `excel` do DuckDB carregada sob demanda; degrada com erro claro se faltar).
+
 ## Cookies do YouTube (anti-bot)
 
 Mitiga o gate anti-bot intermitente passando cookies de um navegador logado (`cookiesfrombrowser`). Lógica isolada em `core/ytdlp_cookies.py` (puro), reusada por **todos** os call sites.
@@ -136,7 +148,7 @@ Mitiga o gate anti-bot intermitente passando cookies de um navegador logado (`co
 
 Fluxo: `show_splash` → `show_home` → `build_app(initial_module)` (`splash.py`/`home.py`/`app.py`).
 
-- **Home** (`home.py`): 5 ferramentas (grade 3+2) + 3 hubs sobre o moinho girando. Cards **crescer-no-hover**: cada card é **um único `GestureDetector`** (tap + `on_enter`/`on_exit`) sobre um `Container` animado (sem `ink=True`); cresce no hover e revela o detalhe; reflow sem fixar altura das `Row` (só um card hovered por vez → cabe sem scroll). **Crítico**: `Container.on_hover` não dispara quando coberto — usar o `on_enter`/`on_exit` do próprio GD (ver tabela de quirks).
+- **Home** (`home.py`): 6 ferramentas (grade 3 por linha, `_tool_row` paga as sobras com spacers) + 3 hubs sobre o moinho girando. Cards **crescer-no-hover**: cada card é **um único `GestureDetector`** (tap + `on_enter`/`on_exit`) sobre um `Container` animado (sem `ink=True`); cresce no hover e revela o detalhe; reflow sem fixar altura das `Row` (só um card hovered por vez → cabe sem scroll). **Crítico**: `Container.on_hover` não dispara quando coberto — usar o `on_enter`/`on_exit` do próprio GD (ver tabela de quirks).
 - **AppBar** (`app.py`): wordmark + botões-hub Biblioteca/IA/Receitas (dourados quando ativos); Home/Splash/tema em `actions` (bloqueados se pipeline rodando). `page.pubsub.unsubscribe_all()` no início de `build_app` evita acúmulo de subscribers.
 - **Spinner**: cata-vento, giro encadeado via `on_animation_end` (LINEAR). **Assets** (`assets.py`): `b64(name)` → bytes; `WINDOW_ICON`.
 
@@ -150,9 +162,11 @@ uv run main.py audio   <URL_OR_FILE> [--fmt mp3] [--quality 320] [--denoise] [--
 uv run main.py video   <download|convert|trim|compress|resize|extract-audio|thumbnail|subtitle> <input> [opções]
 uv run main.py image   <convert|resize|crop|rotate|watermark|border|adjust|filter|favicon|contact-sheet|remove-bg|describe> <input> [opções]
 uv run main.py document <merge|split|compress|rotate|watermark|stamp|encrypt|extract|ocr|pdf-to-images|images-to-pdf|qr> <input> [opções]
-uv run main.py library list [--kind audio] [--since 7d] [--sort size]
+uv run main.py library list [--kind audio|data] [--since 7d] [--sort size]
 uv run main.py ai index | ai stats | ai "pergunta" [--scope X] [--model gemini-2.5-flash] [--k 8] [--batch]
 uv run main.py recipe list | recipe run "<nome>" <URL_OR_FILE> [--model medium]
+uv run main.py data   query <arquivos...> "<pergunta>" [--sql] [--out csv|xlsx|json|parquet] [--name] [--limit]
+uv run main.py data   convert <arquivo> [--out parquet] | data profile <arquivo>
 ```
 
 > Referência completa de flags → skill `cli` (`.claude/skills/cli/SKILL.md`).
@@ -255,5 +269,8 @@ Histórico detalhado em `docs/ROADMAP_*.md` e `docs/STATUS_TIER0.md`.
 - **PR7** ✅ — Módulo IA / RAG local (core `src/core/rag/`, GUI hub, CLI `ai`).
 - **PR8** ✅ — Módulo Receitas / Automação (core `src/core/recipes/`, GUI Rodar|Construir, CLI `recipe`).
 - **PR7.2** ✅ — Inspetor de índice + `ai stats` + indexação por escolha + ETA da Transcrição + estimativa de tempo da resposta.
+- **PR9** ✅ — Módulo Dados / query-first sobre DuckDB (core `src/core/data/`, GUI 6ª ferramenta, CLI `data`, PT→SQL pela IA, integração Receitas/Biblioteca).
+- **PR9.1** — Gráficos (`plot`) via `matplotlib` (extra `[data-plot]`).
+- **PR9.2** — Encadeamento em estágios (resultado vira nova fonte).
 - **PR3.1-B** — IA de áudio com torch (extra `[ai-audio]`): DeepFilterNet, Demucs (a avaliar).
 - **Futuro** — Imagens (batch rename, upscale); arrastar arquivos do SO (não nativo no Flet).
