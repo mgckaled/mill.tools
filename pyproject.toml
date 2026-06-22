@@ -22,6 +22,8 @@ dependencies = [
     "pymupdf>=1.24",
     "qrcode>=7.4",
     "flet-desktop>=0.85.2",
+    "duckdb>=1.5.4",
+    "charset-normalizer>=3.4.7",
 ]
 
 [project.optional-dependencies]

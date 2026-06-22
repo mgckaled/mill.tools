@@ -13,28 +13,29 @@ from tqdm import tqdm
 os.environ["HF_HUB_DISABLE_SYMLINKS_WARNING"] = "1"
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
-OUTPUT_DIR               = PROJECT_ROOT / "output"
-AUDIO_SOURCE_DIR         = OUTPUT_DIR / "audio" / "source"
-AUDIO_PROCESSED_DIR      = OUTPUT_DIR / "audio" / "processed"
-VIDEO_SOURCE_DIR         = OUTPUT_DIR / "video" / "source"
-VIDEO_PROCESSED_DIR      = OUTPUT_DIR / "video" / "processed"
-IMAGE_SOURCE_DIR         = OUTPUT_DIR / "image" / "source"
-IMAGE_PROCESSED_DIR      = OUTPUT_DIR / "image" / "processed"
-DOCUMENT_SOURCE_DIR      = OUTPUT_DIR / "document" / "source"
-DOCUMENT_PROCESSED_DIR   = OUTPUT_DIR / "document" / "processed"
-TRANSCRIPTIONS_TEXT_DIR  = OUTPUT_DIR / "transcriptions" / "text"
+OUTPUT_DIR = PROJECT_ROOT / "output"
+AUDIO_SOURCE_DIR = OUTPUT_DIR / "audio" / "source"
+AUDIO_PROCESSED_DIR = OUTPUT_DIR / "audio" / "processed"
+VIDEO_SOURCE_DIR = OUTPUT_DIR / "video" / "source"
+VIDEO_PROCESSED_DIR = OUTPUT_DIR / "video" / "processed"
+IMAGE_SOURCE_DIR = OUTPUT_DIR / "image" / "source"
+IMAGE_PROCESSED_DIR = OUTPUT_DIR / "image" / "processed"
+DOCUMENT_SOURCE_DIR = OUTPUT_DIR / "document" / "source"
+DOCUMENT_PROCESSED_DIR = OUTPUT_DIR / "document" / "processed"
+TRANSCRIPTIONS_TEXT_DIR = OUTPUT_DIR / "transcriptions" / "text"
 TRANSCRIPTIONS_ANALYSIS_DIR = OUTPUT_DIR / "transcriptions" / "analysis"
 TRANSCRIPTIONS_DIGEST_DIR = OUTPUT_DIR / "transcriptions" / "digest"
 TRANSCRIPTIONS_SUBTITLES_DIR = OUTPUT_DIR / "transcriptions" / "subtitles"
+DATA_DIR = OUTPUT_DIR / "data"  # structured-data module (PR9)
 
-_SANITIZE_SEPS = re.compile(r'\s*[｜|·–—]\s*')
-_SANITIZE_WIDE_COLON = re.compile(r'\s*[：]\s*')
+_SANITIZE_SEPS = re.compile(r"\s*[｜|·–—]\s*")
+_SANITIZE_WIDE_COLON = re.compile(r"\s*[：]\s*")
 _SANITIZE_INVALID = re.compile(r'[<>"\\/?*\x00-\x1f]')
-_SANITIZE_PUNCT = re.compile(r'[!！？]')
-_SANITIZE_DASH_SPACE = re.compile(r'\s*-\s*')
-_SANITIZE_SPACES = re.compile(r'\s+')
-_SANITIZE_MULTI_US = re.compile(r'_+')
-_SANITIZE_MULTI_HY = re.compile(r'-+')
+_SANITIZE_PUNCT = re.compile(r"[!！？]")
+_SANITIZE_DASH_SPACE = re.compile(r"\s*-\s*")
+_SANITIZE_SPACES = re.compile(r"\s+")
+_SANITIZE_MULTI_US = re.compile(r"_+")
+_SANITIZE_MULTI_HY = re.compile(r"-+")
 
 
 def sanitize_filename(name: str) -> str:
@@ -44,15 +45,15 @@ def sanitize_filename(name: str) -> str:
     chars invalid on Windows are removed. Accented characters are preserved
     (NTFS supports them).
     """
-    name = _SANITIZE_SEPS.sub('-', name)
-    name = _SANITIZE_WIDE_COLON.sub('-', name)
-    name = _SANITIZE_INVALID.sub('', name)
-    name = _SANITIZE_PUNCT.sub('', name)
-    name = _SANITIZE_DASH_SPACE.sub('-', name.strip())
-    name = _SANITIZE_SPACES.sub('_', name)
-    name = _SANITIZE_MULTI_US.sub('_', name)
-    name = _SANITIZE_MULTI_HY.sub('-', name)
-    return name.strip('-_.')
+    name = _SANITIZE_SEPS.sub("-", name)
+    name = _SANITIZE_WIDE_COLON.sub("-", name)
+    name = _SANITIZE_INVALID.sub("", name)
+    name = _SANITIZE_PUNCT.sub("", name)
+    name = _SANITIZE_DASH_SPACE.sub("-", name.strip())
+    name = _SANITIZE_SPACES.sub("_", name)
+    name = _SANITIZE_MULTI_US.sub("_", name)
+    name = _SANITIZE_MULTI_HY.sub("-", name)
+    return name.strip("-_.")
 
 
 class TqdmLoggingHandler(logging.Handler):
@@ -77,10 +78,12 @@ def setup_logging(verbose: bool) -> None:
     """
     level = logging.DEBUG if verbose else logging.INFO
     handler = TqdmLoggingHandler()
-    handler.setFormatter(logging.Formatter(
-        fmt="%(asctime)s [%(levelname)s] %(message)s",
-        datefmt="%H:%M:%S",
-    ))
+    handler.setFormatter(
+        logging.Formatter(
+            fmt="%(asctime)s [%(levelname)s] %(message)s",
+            datefmt="%H:%M:%S",
+        )
+    )
     logging.root.setLevel(level)
     logging.root.handlers = [handler]
 
