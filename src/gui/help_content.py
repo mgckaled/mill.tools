@@ -236,6 +236,12 @@ HELP_SHORT: dict[str, str] = {
         "Converse com o seu próprio acervo — RAG 100% local. Indexa transcrições, "
         "textos de PDF e descrições de imagem e responde citando as fontes."
     ),
+    # --- Dados ---
+    "data": (
+        "Consulte planilhas e arquivos de dados (CSV, JSON, Parquet, XLSX) com o "
+        "motor DuckDB. Descreva o que quer em português — a IA traduz para SQL "
+        "vendo só os nomes de coluna; o conteúdo das tabelas fica 100% local."
+    ),
     # --- Receitas ---
     "recipes": (
         "Encadeie módulos numa sequência automática: a saída de cada passo vira "

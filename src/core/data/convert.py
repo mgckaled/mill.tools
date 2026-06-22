@@ -56,6 +56,32 @@ def convert_file(src_path: Path, out_dir: Path, fmt: str) -> Path:
     return engine.convert_file(src_path, out_path, options)
 
 
+def _quote_ident(name: str) -> str:
+    """Quote a SQL identifier (double quotes doubled)."""
+    return '"' + name.replace('"', '""') + '"'
+
+
+def rename_sql(base_sql: str, columns: list[str], renames: dict[str, str]) -> str:
+    """Wrap *base_sql* so selected columns are renamed in the output.
+
+    Pure and testable: returns *base_sql* unchanged when there is nothing to
+    rename; otherwise wraps it as ``SELECT "c" AS "new", ... FROM (base) _q``.
+    Only entries whose new name is non-empty and actually differs are applied,
+    and only for columns that exist in *columns*.
+    """
+    effective = {
+        old: new
+        for old, new in renames.items()
+        if new and new != old and old in columns
+    }
+    if not effective:
+        return base_sql
+    select_list = ", ".join(
+        f"{_quote_ident(c)} AS {_quote_ident(effective.get(c, c))}" for c in columns
+    )
+    return f"SELECT {select_list} FROM ({base_sql}) AS _q"
+
+
 def save_query(
     files: list[DataFile],
     sql: str,

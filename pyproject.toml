@@ -24,6 +24,7 @@ dependencies = [
     "flet-desktop>=0.85.2",
     "duckdb>=1.5.4",
     "charset-normalizer>=3.4.7",
+    "pytesseract>=0.3",
 ]
 
 [project.optional-dependencies]

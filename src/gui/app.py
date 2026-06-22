@@ -19,6 +19,7 @@ from src.gui.theme.tokens import Motion, Space, Type
 from src.gui.modules.ai.view import build_ai_module
 from src.gui.modules.audio.view import build_audio_module
 from src.gui.modules.base import Module
+from src.gui.modules.data.view import build_data_module
 from src.gui.modules.document.view import build_document_module
 from src.gui.modules.image.view import build_image_module
 from src.gui.modules.library.view import build_library_module
@@ -201,6 +202,7 @@ def build_app(page: ft.Page, initial_module: str = "transcription") -> None:
     _video = build_video_module(page, bus, cancel_event, pipeline_running, nav)
     _image = build_image_module(page, bus, cancel_event, pipeline_running)
     _document = build_document_module(page, bus, cancel_event, pipeline_running)
+    _data = build_data_module(page, bus, cancel_event, pipeline_running, nav)
     _library = build_library_module(page, bus, cancel_event, pipeline_running, nav)
     _ai = build_ai_module(page, bus, cancel_event, pipeline_running, nav)
     _recipes = build_recipes_module(page, bus, cancel_event, pipeline_running, nav)
@@ -213,6 +215,7 @@ def build_app(page: ft.Page, initial_module: str = "transcription") -> None:
         _image,
         _transcription,
         _document,
+        _data,
         _library,
         _ai,
         _recipes,

@@ -90,6 +90,29 @@ def test_save_query_writes_result(csv_sales, tmp_path):
 
 
 @pytest.mark.unit
+def test_rename_sql_noop_when_empty():
+    from src.core.data.convert import rename_sql
+
+    base = "SELECT a, b FROM t"
+    assert rename_sql(base, ["a", "b"], {}) == base
+    # new name equal to old, or for a missing column, is ignored
+    assert rename_sql(base, ["a", "b"], {"a": "a", "z": "x"}) == base
+
+
+@pytest.mark.unit
+def test_rename_sql_wraps_and_aliases(csv_sales):
+    from src.core.data.convert import rename_sql
+    from src.core.data.engine import run_query
+    from src.core.data.scanner import scan_files
+
+    files = scan_files([csv_sales])
+    base = f'SELECT produto, qtd FROM "{files[0].view_name}"'
+    wrapped = rename_sql(base, ["produto", "qtd"], {"produto": "item"})
+    res = run_query(files, wrapped)
+    assert res.columns == ["item", "qtd"]
+
+
+@pytest.mark.unit
 def test_save_query_rejects_non_select(csv_sales, tmp_path):
     from src.core.data.convert import save_query
     from src.core.data.scanner import scan_files

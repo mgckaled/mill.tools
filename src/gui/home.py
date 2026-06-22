@@ -95,6 +95,19 @@ _TOOL_CARDS: list[dict] = [
             "Converta páginas em imagens e gere QR",
         ],
     },
+    {
+        "id": "data",
+        "title": "Dados",
+        "icon": ft.Icons.TABLE_CHART_OUTLINED,
+        "accent": Color.log.muted,
+        "desc": "Consulte planilhas em português, motor DuckDB",
+        "features": [
+            "Leia CSV, TSV, JSON, Parquet e XLSX",
+            "Pergunte em português — a IA traduz para SQL",
+            "Junte, filtre e agrupe numa consulta só",
+            "Salve o resultado e converse com a IA",
+        ],
+    },
 ]
 
 # The 3 hubs — wider, horizontal cards with a gold accent + "HUB" badge. They
@@ -492,31 +505,27 @@ def show_home(page: ft.Page, on_complete: Callable[[str], None]) -> None:
     tool_cards = [_make_card(data, _on_tap, page) for data in _TOOL_CARDS]
     hub_cards = [_make_hub_card(data, _on_tap, page) for data in _HUB_CARDS]
 
-    def _flex(ctrl: ft.Control, weight: int) -> ft.Container:
-        return ft.Container(content=ctrl, expand=weight)
+    # Tools laid out three per row. The last row is padded with invisible
+    # equal-width spacers so its cards keep the same 1/3 width as a full row
+    # (e.g. 6 tools → two full rows; 5 → 3 + [2 cards + 1 spacer]). Rows size to
+    # content; START alignment keeps resting siblings anchored at the top, so the
+    # hovered card grows downward and only the rows below it reflow.
+    _PER_ROW = 3
 
-    # Tools: 3 + 2. The second row centers its two cards at the same 1/3 width
-    # via half-width spacers (flex 1 | 2·2 | 1 → each card = 2/6 = 1/3).
-    # Rows size to content. START alignment keeps resting (compact) siblings
-    # anchored at the top, so the hovered card grows downward and only the rows
-    # below it shift (reflow) — no reserved dead space at rest.
+    def _tool_row(cards: list[ft.Control]) -> ft.Row:
+        padded = list(cards) + [
+            ft.Container(expand=True) for _ in range(_PER_ROW - len(cards))
+        ]
+        return ft.Row(
+            controls=padded,
+            spacing=Space.xl,
+            vertical_alignment=ft.CrossAxisAlignment.START,
+        )
+
     tools_grid = ft.Column(
         controls=[
-            ft.Row(
-                controls=[tool_cards[0], tool_cards[1], tool_cards[2]],
-                spacing=Space.xl,
-                vertical_alignment=ft.CrossAxisAlignment.START,
-            ),
-            ft.Row(
-                controls=[
-                    ft.Container(expand=1),
-                    _flex(tool_cards[3], 2),
-                    _flex(tool_cards[4], 2),
-                    ft.Container(expand=1),
-                ],
-                spacing=Space.xl,
-                vertical_alignment=ft.CrossAxisAlignment.START,
-            ),
+            _tool_row(tool_cards[i : i + _PER_ROW])
+            for i in range(0, len(tool_cards), _PER_ROW)
         ],
         spacing=Space.md,
         horizontal_alignment=ft.CrossAxisAlignment.STRETCH,
