@@ -14,9 +14,19 @@ KIND_IMAGE = "image"
 KIND_PDF = "pdf"
 KIND_TEXT = "text"  # transcription / extracted / OCR .txt
 KIND_MARKDOWN = "markdown"  # analysis / digest .md
+KIND_DATA = "data"  # structured data file (CSV/TSV/JSON/Parquet/XLSX)
 
 ALL_KINDS = frozenset(
-    {KIND_URL, KIND_AUDIO, KIND_VIDEO, KIND_IMAGE, KIND_PDF, KIND_TEXT, KIND_MARKDOWN}
+    {
+        KIND_URL,
+        KIND_AUDIO,
+        KIND_VIDEO,
+        KIND_IMAGE,
+        KIND_PDF,
+        KIND_TEXT,
+        KIND_MARKDOWN,
+        KIND_DATA,
+    }
 )
 
 

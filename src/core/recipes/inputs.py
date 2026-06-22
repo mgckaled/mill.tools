@@ -12,6 +12,7 @@ from pathlib import Path
 
 from src.core.recipes.types import (
     KIND_AUDIO,
+    KIND_DATA,
     KIND_IMAGE,
     KIND_PDF,
     KIND_TEXT,
@@ -33,6 +34,7 @@ _IMAGE_EXT = {
     ".ico",
 }
 _TEXT_EXT = {".txt", ".md"}
+_DATA_EXT = {".csv", ".tsv", ".json", ".ndjson", ".jsonl", ".parquet", ".pq", ".xlsx"}
 
 
 def kind_for(kind: str, value: str) -> str:
@@ -61,4 +63,6 @@ def kind_for(kind: str, value: str) -> str:
         return KIND_PDF
     if ext in _TEXT_EXT:
         return KIND_TEXT
+    if ext in _DATA_EXT:
+        return KIND_DATA
     raise ValueError(f"Tipo de arquivo não suportado em receitas: {ext or value}")

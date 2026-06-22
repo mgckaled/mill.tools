@@ -185,6 +185,8 @@ _ADAPTER_CASES = [
     ),
     ("image.convert", "src.core.image.converter.convert_image", Path("o.webp")),
     ("image.resize", "src.core.image.transform.resize_image", Path("o.webp")),
+    ("data.convert", "src.core.data.convert.convert_file", Path("o.csv")),
+    ("data.profile", "src.core.data.profile.profile_file", Path("o_profile.txt")),
 ]
 
 
@@ -211,6 +213,89 @@ def test_adapter_calls_core_and_returns_path_list(
     assert mock.called
     assert isinstance(out, list)
     assert out and all(isinstance(p, Path) for p in out)
+
+
+@pytest.mark.unit
+def test_data_query_accepts_data_and_produces_text():
+    from src.core.recipes.registry import STEP_REGISTRY
+    from src.core.recipes.types import KIND_DATA, KIND_TEXT
+
+    spec = STEP_REGISTRY["data.query"]
+    assert spec.accepts == frozenset({KIND_DATA})
+    assert spec.produces == KIND_TEXT
+
+
+@pytest.mark.unit
+def test_data_query_adapter_with_sql_skips_translation(mocker, tmp_path):
+    from src.core.recipes.registry import STEP_REGISTRY
+    from src.core.recipes.types import StepContext
+
+    scan = mocker.patch(
+        "src.core.data.scanner.scan_files", return_value=["fake_datafile"]
+    )
+    save = mocker.patch(
+        "src.core.data.convert.save_query", return_value=tmp_path / "consulta.csv"
+    )
+    to_sql = mocker.patch("src.core.data.nl2sql.to_sql")  # must NOT be called
+
+    ctx = StepContext(
+        emit=lambda *a: None,
+        cancel_is_set=lambda: False,
+        initial_inputs=[tmp_path / "a.csv", tmp_path / "b.csv"],
+        outputs_by_op={},
+    )
+    out = STEP_REGISTRY["data.query"].adapter(
+        [tmp_path / "a.csv", tmp_path / "b.csv"], {"sql": "SELECT 1"}, ctx
+    )
+
+    assert scan.called  # multi-input: scans the whole list
+    to_sql.assert_not_called()
+    assert save.call_args.args[1] == "SELECT 1"
+    assert out == [tmp_path / "consulta.csv"]
+
+
+@pytest.mark.unit
+def test_data_query_adapter_translates_question(mocker, tmp_path):
+    from src.core.recipes.registry import STEP_REGISTRY
+    from src.core.recipes.types import StepContext
+
+    mocker.patch("src.core.data.scanner.scan_files", return_value=["fake"])
+    mocker.patch("src.core.data.scanner.schema_text", return_value="t: a INT")
+    to_sql = mocker.patch(
+        "src.core.data.nl2sql.to_sql", return_value=("SELECT a FROM t", "ok")
+    )
+    save = mocker.patch(
+        "src.core.data.convert.save_query", return_value=tmp_path / "consulta.csv"
+    )
+
+    ctx = StepContext(
+        emit=lambda *a: None,
+        cancel_is_set=lambda: False,
+        initial_inputs=[tmp_path / "a.csv"],
+        outputs_by_op={},
+    )
+    STEP_REGISTRY["data.query"].adapter(
+        [tmp_path / "a.csv"], {"question": "quanto?"}, ctx
+    )
+
+    assert to_sql.called
+    assert save.call_args.args[1] == "SELECT a FROM t"
+
+
+@pytest.mark.unit
+def test_data_query_adapter_requires_sql_or_question(mocker, tmp_path):
+    from src.core.recipes.registry import STEP_REGISTRY
+    from src.core.recipes.types import StepContext
+
+    mocker.patch("src.core.data.scanner.scan_files", return_value=["fake"])
+    ctx = StepContext(
+        emit=lambda *a: None,
+        cancel_is_set=lambda: False,
+        initial_inputs=[tmp_path / "a.csv"],
+        outputs_by_op={},
+    )
+    with pytest.raises(ValueError):
+        STEP_REGISTRY["data.query"].adapter([tmp_path / "a.csv"], {}, ctx)
 
 
 @pytest.mark.unit

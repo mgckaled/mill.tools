@@ -17,6 +17,11 @@ import pytest
         ("d.pdf", "pdf"),
         ("notes.txt", "text"),
         ("notes.md", "text"),
+        ("vendas.csv", "data"),
+        ("vendas.TSV", "data"),
+        ("dados.parquet", "data"),
+        ("planilha.xlsx", "data"),
+        ("items.json", "data"),
     ],
 )
 def test_kind_for_local_by_extension(value, expected):
