@@ -2,12 +2,13 @@
 
 <img src="assets/logo/mill-logo-wordmark.png" alt="mill.tools" width="380">
 
-**Multiferramenta pessoal para áudio, vídeo e transcrição — local-first, com GUI e CLI.**
+**Multiferramenta pessoal, local-first, para áudio, vídeo, imagens, documentos, dados e transcrição — com GUI desktop e CLI.**
 
 ![Python](https://img.shields.io/badge/Python-3.13+-3776AB?logo=python&logoColor=white)
 ![uv](https://img.shields.io/badge/uv-managed-DE5FE9)
 ![Flet](https://img.shields.io/badge/GUI-Flet%200.85-02569B)
-![Whisper](https://img.shields.io/badge/faster--whisper-GPU-FFB000)
+![faster-whisper](https://img.shields.io/badge/faster--whisper-GPU-FFB000)
+![DuckDB](https://img.shields.io/badge/DuckDB-embutido-FFF000?logo=duckdb&logoColor=black)
 
 </div>
 
@@ -15,67 +16,61 @@
 
 ## Visão geral
 
-**mill.tools** é uma caixa de ferramentas pessoal para quem trabalha com áudio, vídeo, imagens e documentos — tudo rodando diretamente no seu computador, sem enviar arquivos para servidores externos, sem assinaturas e sem limites de uso.
+**mill.tools** é uma caixa de ferramentas pessoal que processa mídia, documentos e dados **diretamente no seu computador** — sem enviar arquivos para servidores, sem assinaturas e sem limites de uso. A IA roda 100% local por padrão (via [Ollama](https://ollama.com)), com o [Google Gemini](https://ai.google.dev/) disponível como alternativa opt-in na nuvem.
 
-A ferramenta é organizada em **módulos independentes**, cada um especializado em uma categoria de tarefa. Você os acessa por uma interface visual (aplicativo desktop) ou pela linha de comando. Os módulos também se integram: após baixar e converter um áudio, por exemplo, um clique já o envia para transcrição.
+A aplicação é organizada em **módulos independentes que se integram**: cada um é especializado numa categoria de tarefa, mas a saída de um alimenta o outro — um áudio baixado segue para a transcrição com um clique, e uma cadeia inteira (`URL → áudio → transcrever → analisar`) cabe numa receita.
 
-### O que você pode fazer
+Acesse por uma **GUI desktop** (Flet/Flutter) ou pela **CLI** — paridade de comportamento entre as duas.
 
-- 🎙️ **Transcrever áudio e vídeo** — converta fala em texto usando o mesmo modelo de reconhecimento de voz da OpenAI (Whisper), acelerado pela placa de vídeo do seu computador. O idioma é detectado automaticamente, e trechos de baixa confiança ficam marcados para revisão.
+---
 
-- 🧠 **Transformar transcrições em conhecimento** — após transcrever, a inteligência artificial organiza o texto em parágrafos legíveis, extrai um resumo estruturado com pontos-chave, tópicos, citações e conclusões, e ainda gera uma versão compacta pronta para colar como contexto em outros sistemas de IA.
+## Módulos
 
-- 🎵 **Baixar, converter e pós-processar áudio** — faça download de áudio do YouTube, SoundCloud e centenas de outras plataformas, ou converta e extraia faixas de arquivos de vídeo locais. Formatos de saída: MP3, WAV, M4A, OGG, OPUS e mais, com capa e metadados embutidos automaticamente. Pós-processamento opcional em fila: **redução de ruído** (spectral gating, CPU) e **normalização de loudness** (EBU R128 — −14 LUFS streaming, −23 broadcast, configurável).
+Seis **ferramentas** de processamento (NavigationRail) e três **hubs** que operam sobre as saídas de todas elas (AppBar).
 
-- 🖼️ **Processar imagens em lote** — 12 operações disponíveis: converter formatos, redimensionar, recortar, girar, aplicar filtros e ajustes de cor, adicionar marca d'água ou borda, gerar favicon `.ico`, montar colagens — e com IA: remover o fundo automaticamente e gerar descrições textuais detalhadas da imagem. Tudo com visor Antes/Depois integrado.
-
-- 📄 **Manipular documentos PDF** — 12 operações: juntar, dividir, comprimir, girar, aplicar marca d'água ou carimbo (PAGO/RASCUNHO/CONFIDENCIAL), criptografar com AES-256, extrair texto, rasterizar páginas em imagens, montar PDF a partir de imagens, gerar QR codes e analisar conteúdo com IA. 100% local via pymupdf.
-
-- 📚 **Reunir tudo num só lugar** — a Biblioteca indexa automaticamente tudo que você já gerou (áudios, vídeos, imagens, transcrições e documentos), numa grade visual com miniaturas ou numa lista compacta em tabela. Filtre por tipo e data, busque por nome, reabra um arquivo ou sua pasta, e reenvie qualquer saída para outro módulo num clique — por exemplo, mandar um áudio baixado direto para a Transcrição.
-
-- 🤖 **Conversar com o seu próprio acervo** — o módulo IA indexa o texto que você já produziu (transcrições, análises, texto de PDF, descrições de imagem) e responde perguntas em linguagem natural **citando as fontes** — uma busca semântica privada sobre o seu conteúdo. Os embeddings rodam 100% local; o Gemini é opcional apenas no passo de resposta.
-
-- 🧩 **Automatizar cadeias inteiras** — o módulo Receitas encadeia os módulos numa sequência nomeada onde a saída de um passo alimenta a entrada do próximo: `YouTube → baixar áudio → transcrever → analisar` num clique. Rode os presets prontos, monte a sua receita no construtor (só oferece passos compatíveis), aplique a cada arquivo (lote) e opcionalmente limpe os intermediários.
-
-- 🔀 **Escolher onde a IA roda** — por padrão, todos os modelos de linguagem funcionam 100% offline via [Ollama](https://ollama.com) (nenhum dado sai do computador). Para quem prefere, o [Google Gemini](https://ai.google.dev/) gratuito está disponível como alternativa na nuvem — basta escolher o modelo na interface.
-
-### Módulos
-
-| Módulo | Status | Descrição |
+| Módulo | Tipo | Descrição |
 |---|---|---|
-| **Transcrição** | ✅ Disponível | Aceita URL, áudio/vídeo local ou arquivo de texto. Whisper local + pós-processamento por IA: parágrafos, análise estruturada e resumo. Um `.txt`/`.md` pula a transcrição e vai direto para a IA |
-| **Áudio** | ✅ Disponível | Download, conversão e extração de faixas em fila; pós-processamento: denoise spectral + normalize loudnorm (EBU R128) |
-| **Imagens** | ✅ Disponível | 12 operações: manipulação, conversão, remoção de fundo e descrição por IA vision |
-| **Vídeo** | ✅ Disponível | 7 operações: download, conversão, corte, compressão, redimensionamento, extração de áudio e thumbnail |
-| **Documentos** | ✅ Disponível | 12 operações PDF: merge, split, compress, rotate, watermark, stamp, encrypt, extract, pdf-to-images, images-to-pdf, QR e análise por IA |
-| **Biblioteca** | ✅ Disponível | Hub navegável de todas as saídas: grade com thumbnails ou lista em tabela, filtro por tipo, busca, ordenação e período; abrir arquivo/pasta e reenviar para outro módulo num clique |
-| **IA** | ✅ Disponível | RAG local sobre o seu acervo: pergunte ao corpus inteiro ou a um documento e receba respostas citando as fontes. Embeddings locais (Ollama); Gemini opcional na resposta. Prompt library + templates; modo batch na CLI |
-| **Receitas** | ✅ Disponível | Automação: cadeias lineares entre módulos (`URL → áudio → transcrever → analisar`). Presets prontos + construtor com validação ao vivo; lote sobre N arquivos; limpar intermediários; paridade na CLI (`recipe run`/`list`) |
+| **Transcrição** | Ferramenta | Whisper local (GPU) sobre URL, áudio/vídeo local ou texto; pós-processamento por IA: parágrafos, análise estruturada e digest. Um `.txt`/`.md` pula o Whisper e vai direto à IA |
+| **Áudio** | Ferramenta | Download (yt-dlp), conversão e extração de faixas em fila; pós-processamento opcional: denoise (spectral gating) + normalização de loudness (EBU R128) |
+| **Vídeo** | Ferramenta | 8 operações: download, convert, trim, compress, resize, extract-audio, thumbnail e legenda (mux/burn-in). Encoding 100% CPU — sem NVENC |
+| **Imagens** | Ferramenta | 12 operações de manipulação/conversão + IA: remoção de fundo (rembg) e descrição por visão. Visor Antes/Depois |
+| **Documentos** | Ferramenta | 13 operações PDF/QR (merge, split, compress, rotate, watermark, stamp, encrypt, extract, OCR, pdf↔imagens, QR, análise). 100% local via pymupdf |
+| **Dados** | Ferramenta | Consulte CSV/TSV/JSON/Parquet/XLSX em **português** (a IA traduz para SQL vendo só o schema) ou SQL na mão; motor **DuckDB** embutido. Salva o resultado e perfila |
+| **Biblioteca** | Hub | Índice navegável de tudo em `output/`: grade com thumbnails ou lista, filtro/busca/ordenação, abrir arquivo/pasta e reenviar a outro módulo |
+| **IA** | Hub | RAG local sobre o seu acervo: pergunte ao corpus e receba respostas **citando as fontes**. Embeddings sempre locais; Gemini opt-in na resposta |
+| **Receitas** | Hub | Automação: cadeias lineares entre módulos (`URL → áudio → transcrever → analisar`). Presets + construtor com validação ao vivo; lote; CLI `recipe run` |
 
-### Destaques técnicos
+---
+
+## Destaques técnicos
 
 | Característica | Detalhe |
 |---|---|
-| Processamento de vídeo | yt-dlp (download) + ffmpeg CPU-only: libx264, libx265, libvpx-vp9 — sem NVENC |
-| Transcrição local | [faster-whisper](https://github.com/SYSTRAN/faster-whisper) + ctranslate2, aceleração GPU, sem PyTorch |
-| Sem dependência de nuvem | Ollama local por padrão; Gemini como opção opt-in por prefixo de modelo |
-| Pós-processamento de áudio | noisereduce (spectral gating, CPU) + ffmpeg loudnorm (EBU R128, 2 passes); torch-free, base deps |
-| Remoção de fundo | rembg + ONNX Runtime, 100% CPU, sem GPU dedicada |
-| Manipulação de PDF | [pymupdf](https://pymupdf.readthedocs.io) — merge/split/compress/rotate/watermark/stamp/encrypt/rasterização, 100% local |
-| Interface desktop | [Flet 0.85](https://flet.dev) (Flutter/Windows) com log em tempo real e design system próprio |
-| Ajuda contextual | Ícone ⓘ em todos os controles — tooltip no hover, modal detalhado ao clicar |
+| Transcrição local | [faster-whisper](https://github.com/SYSTRAN/faster-whisper) + ctranslate2, aceleração GPU, **sem PyTorch** |
+| Dados | [DuckDB](https://duckdb.org) embutido (in-process, torch-free); PT→SQL pela IA recebendo só o schema — o conteúdo das tabelas nunca sai da máquina |
+| RAG local | embeddings Ollama (`nomic-embed-text`, CPU), vector store numpy, busca cosseno, resposta com fontes `[n]` |
+| Vídeo | yt-dlp + ffmpeg CPU-only (libx264/libx265/libvpx-vp9) — sem NVENC |
+| Áudio | noisereduce (spectral gating, CPU) + ffmpeg loudnorm (EBU R128, 2 passes); torch-free |
+| Imagens | Pillow + rembg/ONNX Runtime (CPU) para remoção de fundo |
+| Documentos | [pymupdf](https://pymupdf.readthedocs.io) (PDF) + Tesseract (OCR híbrido, opcional) |
+| Interface | [Flet 0.85](https://flet.dev) (Flutter desktop) com log em tempo real, design system próprio e ajuda contextual (ⓘ) |
+| IA | Ollama local por padrão; Gemini opt-in por prefixo de modelo (`gemini-*`) |
+
+> **Decisão consciente: sem PyTorch.** O app base é torch-free. IA de áudio com torch (DeepFilterNet/Demucs) ficaria isolada num extra opcional.
 
 ---
 
 ## Requisitos
 
-- [Python 3.13+](https://www.python.org/)
-- [uv](https://docs.astral.sh/uv/)
-- [ffmpeg](https://ffmpeg.org/download.html) no PATH
-- [yt-dlp](https://github.com/yt-dlp/yt-dlp) no PATH
-- [Ollama](https://ollama.com/download) — apenas se usar modelos locais (`--format`/`--analyze`/`--prompt`)
-- Chave da [Google AI Studio](https://aistudio.google.com/apikey) — apenas se usar modelos Gemini
-- [Tesseract OCR](https://github.com/UB-Mannheim/tesseract/wiki) + language packs (`por`, `eng`) — apenas para a operação **OCR** de Documentos (extra `[ocr]`). Detectado no PATH ou em `C:\Program Files\Tesseract-OCR`; o card OCR desabilita-se graciosamente se ausente.
+| Requisito | Necessário para |
+|---|---|
+| [Python 3.13+](https://www.python.org/) · [uv](https://docs.astral.sh/uv/) | Tudo |
+| [ffmpeg](https://ffmpeg.org/download.html) · [yt-dlp](https://github.com/yt-dlp/yt-dlp) (no PATH) | Áudio, Vídeo, Transcrição |
+| [Ollama](https://ollama.com/download) | Modelos de IA locais (formatação, análise, RAG, PT→SQL) |
+| Chave [Google AI Studio](https://aistudio.google.com/apikey) | Modelos Gemini (opcional) |
+| [Tesseract OCR](https://github.com/UB-Mannheim/tesseract/wiki) + packs `por`/`eng` | OCR de Documentos (extra `[ocr]`) |
+
+DuckDB e a extensão `excel` (XLSX) são embutidos — sem instalação separada.
 
 ---
 
@@ -87,48 +82,38 @@ cd mill-tools
 uv sync
 ```
 
-### Opção A — modelos locais (Ollama)
+### Modelos locais (Ollama)
 
 ```bash
-# análise
-ollama pull qwen2.5:7b
-ollama create qwen7b-custom -f ollama/Modelfile
-
-# formatação de parágrafos
-ollama pull phi4-mini
-ollama create phi4mini-custom -f ollama/Modelfile.phi4mini
-
-# descrição de imagens (módulo Imagens → Descrever)
-ollama pull moondream
-ollama create moondream-custom -f ollama/Modelfile.vision
-
-# embeddings do módulo IA (RAG local) — CPU-only (num_gpu 0)
-ollama pull nomic-embed-text
-ollama create nomic-embed-custom -f ollama/Modelfile.nomic
-
-# resposta do módulo IA — rápido (interativo) e profundo (sob demanda)
-ollama pull gemma3:1b
-ollama create gemma3-1b-custom -f ollama/Modelfile.gemma3-1b
-ollama pull gemma3:4b
-ollama create gemma3-4b-custom -f ollama/Modelfile.gemma3-4b
+# formatação de parágrafos (Transcrição)
+ollama pull phi4-mini      && ollama create phi4mini-custom  -f ollama/Modelfile.phi4mini
+# análise / RAG / PT→SQL (qualidade máxima, lento na CPU)
+ollama pull qwen2.5:7b     && ollama create qwen7b-custom    -f ollama/Modelfile
+# análise / RAG / PT→SQL (padrão — melhor custo-benefício) e fallback rápido
+ollama pull gemma3:4b      && ollama create gemma3-4b-custom -f ollama/Modelfile.gemma3-4b
+ollama pull gemma3:1b      && ollama create gemma3-1b-custom -f ollama/Modelfile.gemma3-1b
+# embeddings do RAG (CPU-only, num_gpu 0)
+ollama pull nomic-embed-text && ollama create nomic-embed-custom -f ollama/Modelfile.nomic
+# descrição de imagens (visão)
+ollama pull moondream      && ollama create moondream-custom -f ollama/Modelfile.vision
 ```
 
 ### Extras opcionais
 
 ```bash
-# remoção de fundo (módulo Imagens → Remover fundo)
-uv sync --extra ai-image
+uv sync --extra ai-image   # remoção de fundo (Imagens)
+uv sync --extra ocr        # OCR de PDFs escaneados (requer binário Tesseract no PATH)
 ```
 
-> O app base funciona sem os extras. A operação "Remover fundo" fica com card desabilitado enquanto `[ai-image]` não estiver instalado.
+> O app base funciona sem os extras; os cards correspondentes desabilitam-se graciosamente quando ausentes.
 
-### Opção B — Google Gemini (free tier)
+### Google Gemini (opcional, free tier)
 
 ```bash
-cp .env.example .env       # edite e preencha GOOGLE_API_KEY=...
+cp .env.example .env       # preencha GOOGLE_API_KEY=...
 ```
 
-O `.env` é carregado automaticamente quando `--fm`, `--am` ou `--pm` recebe um modelo iniciado por `gemini`. O Ollama continua sendo o padrão — nada quebra se você não criar o `.env`. **Modelo recomendado:** `gemini-2.5-flash` (free tier robusto, contexto de 1M tokens, boa saída JSON).
+O `.env` é carregado quando um modelo começa com `gemini`. O Ollama segue como padrão — nada quebra sem o `.env`. Recomendado: `gemini-2.5-flash` (contexto de 1M tokens).
 
 ---
 
@@ -140,536 +125,134 @@ O `.env` é carregado automaticamente quando `--fm`, `--am` ou `--pm` recebe um 
 uv run gui.py
 ```
 
-Abre maximizado com uma splash screen animada, seguida de uma **Home Screen** com duas zonas — 5 ferramentas (grade 3+2) e 3 hubs em destaque (Biblioteca, IA e Receitas) — clique em qualquer card para entrar diretamente no módulo escolhido. Cada card descansa compacto (ícone + título + uma linha) e **cresce ao passar o mouse**, revelando os recursos do módulo sem poluir a tela. O AppBar exibe a wordmark "mill.tools", os botões **Biblioteca**, **IA** e **Receitas** (os hubs sobre as saídas) e os botões "Home" e "Splash" para navegar de volta a qualquer momento.
+Abre maximizado: splash animada → **Home Screen** (6 ferramentas em grade 3+3 e 3 hubs em destaque) → módulo escolhido. Cada módulo tem layout split — formulário à esquerda, painel de acompanhamento (log + barra de progresso + spinner) à direita. A troca de módulo é bloqueada enquanto um pipeline roda; os logs são preservados ao navegar.
 
-Cada módulo tem layout split: formulário à esquerda, painel de acompanhamento (log em tempo real + barra de progresso + spinner) à direita. Durante um pipeline em execução a troca de módulo é bloqueada — os logs e a barra de progresso são preservados mesmo ao navegar entre módulos.
-
-#### Cookies do YouTube (verificação anti-bot)
-
-O YouTube às vezes bloqueia downloads com uma verificação "Sign in to confirm you're not a bot". Para contornar, o app pode usar os **cookies do seu navegador logado** ao baixar (Áudio, Vídeo e Transcrição). Por privacidade, isso vem **desativado por padrão** (opt-in). Para ativar, abra **Configurações** (engrenagem no AppBar) e escolha o navegador: **Automático** detecta o Zen Browser sozinho, ou selecione Firefox, Chrome, Edge, Brave… (basta estar logado no YouTube nesse navegador). Os cookies são lidos **localmente**; nada sai do computador além das requisições normais de download. Também dá para configurar via variáveis de ambiente `MILL_YT_COOKIES_BROWSER`/`MILL_YT_COOKIES_PROFILE` (útil na CLI).
-
-> **Atenção:** cookies de uma **conta logada** passam o gate anti-bot, mas o YouTube pode então exigir um *PO Token* e o download falha com `Requested format is not available` (só vêm miniaturas). Se isso acontecer, **desative os cookies** (Configurações → Desativado) e tente baixar sem eles — em geral é o caminho mais confiável. É uma limitação atual do YouTube, não do app.
-
-### CLI — Transcrição
+### CLI
 
 ```bash
-# básico (idioma automático)
-uv run main.py <YOUTUBE_URL>
+# Transcrição (idioma automático; --format/--analyze/--prompt adicionam etapas de IA)
+uv run main.py <URL|video.mp4|notas.txt> --format --analyze --profile lecture
 
-# + formatação e análise
-uv run main.py <YOUTUBE_URL> --format --analyze
+# Áudio — download/conversão/extração + pós-processamento
+uv run main.py audio <URL|arquivo> --fmt mp3 --quality 320 --denoise --normalize
 
-# áudio/vídeo local (vídeo é decodificado via PyAV — sem extração separada)
-uv run main.py transcribe video.mp4 --format
-
-# arquivo de texto: pula o Whisper e roda só a IA
-uv run main.py transcribe notas.txt --analyze
-
-# análise standalone (sobre transcrição existente)
-uv run -m src output/transcriptions/text/transcricao_ovabeV.txt
-```
-
-### CLI — Áudio
-
-```bash
-# download do YouTube com pós-processamento
-uv run main.py audio <URL> --fmt mp3 --quality 320 --denoise --normalize
-
-# converter arquivo local
-uv run main.py audio audio.wav --fmt ogg --quality 192
-
-# extrair áudio de vídeo local
-uv run main.py audio video.mp4 --fmt m4a
-```
-
-### CLI — Vídeo
-
-```bash
+# Vídeo — download | convert | trim | compress | resize | extract-audio | thumbnail | subtitle
 uv run main.py video download <URL> --quality 1080 --container mp4
-uv run main.py video convert video.mkv --codec h264 --container mp4
-uv run main.py video trim video.mp4 --start 0:30 --end 2:15
-uv run main.py video compress video.mp4 --crf 23 --preset medium
-uv run main.py video extract-audio video.mp4 --fmt mp3
-uv run main.py video thumbnail video.mp4 --time 00:00:05 --fmt jpg
 uv run main.py video subtitle video.mp4 --subs legenda.srt --mode soft
-```
 
-### CLI — Imagens
-
-```bash
+# Imagens — convert | resize | crop | rotate | watermark | border | adjust | filter | favicon | contact-sheet | remove-bg | describe
 uv run main.py image convert photo.jpg --fmt webp --quality 85
-uv run main.py image resize photo.jpg --mode contain --width 1920
-uv run main.py image crop photo.jpg --mode ratio --ratio 16:9
-uv run main.py image watermark photo.jpg --text "© 2025" --opacity 0.5
-uv run main.py image contact-sheet *.jpg --cols 4 --thumb 200
 uv run main.py image remove-bg photo.png --model u2net
-uv run main.py image describe photo.jpg --model moondream-custom
-```
 
-### CLI — Documentos
-
-```bash
-# juntar, dividir, comprimir
-uv run main.py document merge a.pdf b.pdf c.pdf
+# Documentos — merge | split | compress | rotate | watermark | stamp | encrypt | extract | ocr | pdf-to-images | images-to-pdf | qr
 uv run main.py document split doc.pdf --pages "1-3,5,8-"
-uv run main.py document compress doc.pdf --image-quality 60
-
-# anotações
-uv run main.py document rotate doc.pdf --angle 90 --pages "1,3"
-uv run main.py document watermark doc.pdf --text "CONFIDENCIAL" --opacity 0.3
-uv run main.py document stamp doc.pdf --text "PAGO"
-
-# proteção e conversão
-uv run main.py document encrypt doc.pdf --password "senha"
-uv run main.py document extract doc.pdf
 uv run main.py document ocr scanned.pdf --lang por --dpi 300
-uv run main.py document pdf-to-images doc.pdf --fmt jpg --dpi 150
-uv run main.py document images-to-pdf *.jpg --name "album"
-uv run main.py document qr "https://example.com" --size 300 --fmt png
-```
 
-### CLI — Biblioteca
+# Dados — consulta em PT (a IA traduz) ou SQL na mão; converte e perfila
+uv run main.py data query vendas.csv clientes.csv "total por cliente, do maior para o menor" --out xlsx
+uv run main.py data query dados.parquet "SELECT * FROM dados LIMIT 10" --sql
+uv run main.py data convert dados.csv --out parquet
+uv run main.py data profile dados.csv
 
-```bash
-# lista tudo que está em output/ como tabela
-uv run main.py library list
+# Biblioteca — índice de output/ como tabela
+uv run main.py library list --kind audio --since 7d --sort size
 
-# filtra por tipo, período e ordenação
-uv run main.py library list --kind audio
-uv run main.py library list --since 7d --sort size
-```
-
-### CLI — IA (RAG local sobre o corpus)
-
-```bash
-# (re)indexa o acervo — exige o modelo de embedding (ver "Módulo IA" abaixo)
+# IA — RAG local sobre o corpus (cita fontes)
 uv run main.py ai index
+uv run main.py ai "o que eu disse sobre faster-whisper?" --k 8
 
-# pergunta ao acervo inteiro (a resposta cita as fontes)
-uv run main.py ai "o que eu disse sobre faster-whisper?"
-
-# restringe a um documento específico, ou aplica um prompt a cada documento
-uv run main.py ai "resuma em 3 frases" --scope output/transcriptions/text/aula.txt
-uv run main.py ai "liste as ações" --batch --kind transcription
-
-# resposta via Gemini (opt-in; só os trechos recuperados vão à nuvem)
-uv run main.py ai "..." --model gemini-2.5-flash --k 8
-```
-
-### CLI — Receitas (cadeias entre módulos)
-
-```bash
-# lista os presets embutidos e as receitas que você salvou
+# Receitas — cadeias nomeadas entre módulos
 uv run main.py recipe list
-
-# roda uma receita por nome, sobre uma URL ou um arquivo local
-uv run main.py recipe run "Limpar áudio do YouTube" "https://youtu.be/..."
-uv run main.py recipe run "Transcrever e analisar (arquivo local)" aula.mp3
-
-# --model sobrescreve o modelo Whisper dos passos de transcrição
 uv run main.py recipe run "YouTube → transcrição completa" "https://youtu.be/..." --model medium
 ```
 
-### Referência de flags
+#### Flags da Transcrição
 
-| Flag            | Default           | Descrição                                                    |
-| --------------- | ----------------- | ------------------------------------------------------------ |
-| `--wm`          | `small`           | Whisper model: `tiny`, `base`, `small`, `medium`, `large-v3-turbo`, `large-v3` |
-| `--language`    | auto              | Código do idioma (`en`, `pt`, etc.)                          |
-| `--threads`     | `2`               | Threads CPU (só em fallback CPU)                             |
-| `--beam-size`   | `1`               | Beam size: `1` = rápido, `5` = preciso                       |
-| `--output-name` | auto              | Nome customizado do arquivo de saída                         |
-| `--format`      | off               | Insere quebras de parágrafo via LLM                          |
-| `--fm`          | `phi4mini-custom` | Modelo para formatação — Ollama tag ou `gemini-*`            |
-| `--analyze`     | off               | Roda análise estruturada após transcrição                    |
-| `--am`          | `qwen7b-custom`   | Modelo para análise — Ollama tag ou `gemini-*`               |
-| `--prompt`      | off               | Gera versão condensada (digest)                              |
-| `--pm`          | `qwen7b-custom`   | Modelo para condensação — Ollama tag ou `gemini-*`           |
-| `--verbose`     | off               | Ativa logging DEBUG                                          |
+| Flag | Default | Descrição |
+|---|---|---|
+| `--wm` | `small` | Whisper: `tiny`/`base`/`small`/`medium`/`large-v3-turbo`/`large-v3` |
+| `--language` | auto | Código do idioma (`pt`, `en`…) |
+| `--beam-size` | `1` | `1` = rápido, `5` = preciso |
+| `--format` / `--fm` | off / `phi4mini-custom` | Quebra de parágrafos via LLM |
+| `--analyze` / `--am` | off / `gemma3-4b-custom` | Análise estruturada (`--profile` escolhe o esquema) |
+| `--prompt` / `--pm` | off / `gemma3-4b-custom` | Digest condensado (~40%) |
+| `--verbose` | off | Logging DEBUG |
 
-### Exemplos
+> Modelos `gemini-*` em `--fm`/`--am`/`--pm` roteiam para o Google (requer `GOOGLE_API_KEY`).
 
-```bash
-# forçar idioma + maior precisão
-uv run main.py <URL> --language pt --beam-size 3
+#### Cookies do YouTube (verificação anti-bot)
 
-# pipeline completo: formatação + análise (transcrição incluída no relatório)
-uv run main.py <URL> --format --analyze
-
-# tudo na nuvem: Whisper local + Gemini nas 3 etapas (requer GOOGLE_API_KEY)
-uv run main.py <URL> \
-  --format  --fm gemini-2.5-flash \
-  --analyze --am gemini-2.5-flash \
-  --prompt  --pm gemini-2.5-flash
-
-# híbrido: formatação local rápida + análise sofisticada via Gemini
-uv run main.py <URL> --format --analyze --am gemini-2.5-flash
-
-# análise standalone usando Gemini
-uv run -m src output/transcriptions/text/transcricao_ovabeV.txt --model gemini-2.5-flash
-```
+O YouTube às vezes bloqueia downloads com "Sign in to confirm you're not a bot". O app pode usar os **cookies do seu navegador logado** (Áudio/Vídeo/Transcrição) — **desativado por padrão** (opt-in). Ative em **Configurações** (engrenagem no AppBar) ou via `MILL_YT_COOKIES_BROWSER`/`MILL_YT_COOKIES_PROFILE`. Os cookies são lidos localmente. **Atenção:** cookies de **conta logada** podem fazer o YouTube exigir um *PO Token* e o download falhar (`Requested format is not available`) — nesse caso, desative-os e tente sem.
 
 ---
 
 ## Saídas
 
-Tudo é gravado em `output/`, organizado por tipo.
-
-### Transcrição — `output/transcriptions/text/*.txt`
-
-Cabeçalho de metadados seguido do texto corrido:
+Tudo é gravado em `output/`, organizado por tipo:
 
 ```text
-title:        Claude Design Full Course
-channel:      Some Channel
-upload_date:  2024-03-15
-duration:     02:14:33
-language:     en
-url:          https://www.youtube.com/watch?v=ovabeVoWrA0
-----------------------------------------------------------------
-[transcription text...]
+output/
+├── audio/         source/ (downloads) · processed/ (conversões, extrações)
+├── video/         source/ · processed/
+├── image/         source/ · processed/
+├── document/      processed/
+├── data/          consultas, conversões e perfis do módulo Dados
+└── transcriptions/ text/ · analysis/ (--analyze) · digest/ (--prompt) · subtitles/
 ```
 
-Segmentos de baixa confiança são marcados com `[?]` no texto (revisão manual sugerida). Critérios: `avg_logprob < -1.0` ou `no_speech_prob > 0.6`. O total de flags é exibido ao final.
-
-### Análise — `output/transcriptions/analysis/*.md` (`--analyze`)
-
-Relatório estruturado com 10 campos extraídos pelo LLM:
-
-| Campo | Descrição |
-| ----- | --------- |
-| `summary` | Resumo de 3–5 frases do conteúdo principal |
-| `key_points` | 5–10 pontos-chave (frases completas, o *como* e o *porquê*) |
-| `action_items` | Passos práticos ou recomendações |
-| `key_concepts` | Conceitos centrais no formato `Termo: definição` |
-| `tools_mentioned` | Ferramentas, bibliotecas, plataformas citadas |
-| `metrics` | Números e estatísticas com contexto |
-| `quotes` | Frases marcantes / citações |
-| `assumptions` | Premissas implícitas do speaker |
-| `vocabulary` | Jargões no formato `Termo: definição` |
-| `sentiment_arc` | Evolução do tom em uma frase |
-
-Resultados fora do português são traduzidos automaticamente para PT-BR. Com `--format --analyze`, a transcrição formatada é incluída no fim do relatório.
-
-### Digest — `output/transcriptions/digest/*.txt` (`--prompt`)
-
-Versão condensada (~40% do tamanho), sem cumprimentos/CTAs/patrocinadores, mantendo todo o conteúdo técnico. Otimizada para colar como contexto em prompts de LLM.
-
-### Áudio — `output/audio/`
-
-Downloads em `source/`; conversões/extrações em `processed/`.
-
-### Imagens — `output/image/`
-
-Downloads de URL em `source/`; imagens processadas em `processed/`.
-
-### Vídeo — `output/video/`
-
-Downloads de URL em `source/`; vídeos processados (convert, trim, compress, resize, thumbnail) e áudios extraídos em `processed/`.
-
-### Documentos — `output/document/`
-
-Todos os arquivos processados em `processed/`. Nomes de saída incluem sufixo da operação (ex.: `doc_compressed.pdf`, `doc_p1-3.pdf`, `doc_rotated90.pdf`). Operação `pdf_to_images` gera `stem_p001.jpg`, `stem_p002.jpg`… Operação `extract` gera `stem_text.txt`.
-
----
-
-## Módulo Documentos — operações disponíveis
-
-| Operação | Entrada | O que faz |
-|---|---|---|
-| **Juntar** | múltiplos PDFs | Mescla N arquivos em um único PDF, na ordem fornecida |
-| **Dividir** | PDF | Extrai páginas por intervalo (ex.: `1-3,5,8-`). Cada faixa contígua vira um arquivo separado |
-| **Comprimir** | PDF | Reimprimir imagens embutidas em JPEG (qualidade configurável 50–95) e limpa objetos mortos |
-| **Girar** | PDF | Rotaciona páginas selecionadas em 90°, 180° ou 270° |
-| **Marca d'água** | PDF | Texto diagonal semitransparente em todas as páginas (opacidade e posição configuráveis) |
-| **Carimbo** | PDF | Texto em destaque centralizado (PAGO, RASCUNHO, CONFIDENCIAL ou personalizado) |
-| **Criptografar** | PDF | Protege o arquivo com AES-256 (senha de usuário e proprietário) |
-| **Extrair texto** | PDF | Extrai todo o texto para `.txt`. `has_text=False` indica PDF escaneado (sem texto embutido) |
-| **OCR** | PDF | Reconhece texto de PDFs escaneados via Tesseract (idioma e DPI configuráveis). Híbrido: usa texto nativo quando existe; OCR só nas páginas-imagem. Requer Tesseract instalado |
-| **PDF → Imagens** | PDF | Rasteriza cada página em JPG ou PNG. DPI configurável: 72 / 96 / 150 / 300 |
-| **Imagens → PDF** | imagens | Combina N imagens JPEG/PNG em um único PDF, uma por página |
-| **QR Code** | texto/URL | Gera QR code em PNG ou JPG. Tamanho aproximado em pixels configurável |
-| **Analisar** | PDF ou texto | PDF: extrai o texto e envia para análise LLM (local via Ollama ou Google Gemini). `.txt`/`.md`: analisa direto, sem extração. Apenas na GUI |
-
----
-
-## Módulo Vídeo — operações disponíveis
-
-| Operação | Entrada | O que faz |
-|---|---|---|
-| **Baixar** | URL | Download via yt-dlp, resolução máx. configurável (360p–4K), containers MP4/MKV/WebM |
-| **Converter** | arquivo local | Muda container e/ou codec. `copy` = sem reencoding (rápido). H.264 / H.265 / VP9 disponíveis |
-| **Recortar** | arquivo local | Corta trecho por tempo (`HH:MM:SS`). Modo rápido (copy, no keyframe) ou frame-preciso (reencoda) |
-| **Comprimir** | arquivo local | Reencoda com H.264/CRF (18–28). CRF 18 = alta qualidade; CRF 28 = menor tamanho |
-| **Redimensionar** | arquivo local | Ajusta resolução preservando aspect ratio. Deixe um eixo em branco para calcular automaticamente |
-| **Extrair áudio** | arquivo local | Extrai faixa de áudio em MP3/M4A/WAV. Resultado aparece com botões "Transcrever" e "Processar no Áudio" |
-| **Thumbnail** | arquivo local | Captura um frame específico (`HH:MM:SS`) como JPG ou PNG |
-| **Legenda** | arquivo local | Insere uma legenda `.srt`/`.vtt` no vídeo: **Embutir** (mux, faixa toggleável, sem reencode) ou **Queimar** (burn-in permanente, reencoda em H.264) |
-
-Encoding 100% CPU — sem NVENC (decisão definitiva). Preset e CRF configuráveis no formulário.
-
----
-
-## Módulo Imagens — operações disponíveis
-
-| Operação | O que faz |
-|---|---|
-| **Converter** | Converte entre 8 formatos: JPG, PNG, WebP, AVIF, TIFF, BMP, GIF, ICO |
-| **Redimensionar** | Caber (proporcional), Exato (força dimensões) ou Escala % |
-| **Cortar** | Manual (px), Proporção (16:9, 4:3…) ou Auto-trim (remove borda por cor) |
-| **Girar** | Ângulo 90°/180°/270°, espelhamento H/V, correção automática EXIF |
-| **Marca d'água** | Texto ou imagem sobreposta, com posição e opacidade configuráveis |
-| **Borda** | Borda sólida configurável, com opção de preencher alpha pela cor |
-| **Ajustes** | Brilho, contraste, saturação e nitidez (sliders 0.1–2.0) |
-| **Filtros** | Blur, Nitidez, Autocontraste, Equalizar, Escala de cinza |
-| **Favicon** | Gera `.ico` com múltiplas resoluções embutidas (16–256 px) |
-| **Colagem** | Monta grade de miniaturas de N imagens em uma única saída |
-| **Remover fundo** | Remove o fundo via rembg/ONNX (CPU). Saída sempre PNG com alpha. 5 modelos: u2net, u2netp, silueta, isnet, humano. Requer `uv sync --extra ai-image`. |
-| **Descrever** | Envia a imagem a um modelo Ollama vision e salva a descrição como `.txt`. Modelos: moondream-custom (padrão), llava:7b, minicpm-v. |
-
-O visor **Before/After** mostra a imagem original e o resultado lado a lado. Para "Descrever" (saída texto), o visor permanece em single-pane com a imagem de entrada.
-
----
-
-## Módulo Biblioteca
-
-A Biblioteca é o hub que reúne tudo que os outros módulos já produziram em `output/`. Diferente das ferramentas de processamento, ela vive **no AppBar** (ao lado do wordmark), não na NavigationRail — e abre uma tela cheia com uma grade de cards.
-
-| Recurso | O que faz |
-|---|---|
-| **Dois modos de exibição** | Alterne entre **grade** (cards com miniatura) e **lista** (tabela compacta com colunas Nome / Categoria / Tamanho / Data / Ações) pelo toggle no cabeçalho. |
-| **Grade com thumbnails** | Cards com miniatura sob demanda: imagem (Pillow), 1ª página de PDF (pymupdf) ou frame de vídeo (ffmpeg). Áudio e texto usam ícone do tipo. |
-| **Lista em tabela** | Linhas compactas com ícone de tipo; clique na linha abre o arquivo, a última coluna traz as ações; nomes longos truncam e mostram o valor completo ao parar o mouse (tooltip). |
-| **Filtrar por tipo** | Chips Todos / Áudio / Vídeo / Imagens / Transcrição / Documentos. |
-| **Filtrar por categoria** | Todas / Origem (downloads) / Processado (saídas geradas). |
-| **Buscar e ordenar** | Busca por nome (com debounce) + ordenação por data, nome ou tamanho. |
-| **Filtrar por período** | Qualquer data / últimas 24h / 7 dias / 30 dias. |
-| **Abrir** | Texto (`.md`/`.txt`) abre num **visor in-app** com Markdown renderizado — ler um resultado já processado sem reprocessar nem sair do app; outros tipos abrem no programa padrão do sistema. Também é possível revelar a pasta no explorador. |
-| **Reenviar para outro módulo** | Bridges num clique: áudio/vídeo → Transcrição ou Áudio; imagem → Imagens; PDF → Documentos; texto (`.txt`/`.md`) → "Analisar na Transcrição". |
-
-A lista é recarregada ao abrir a Biblioteca e quando um pipeline termina. Cada modo exibe até 120 itens por vez, com botão "Carregar mais". Preferências de filtro, ordenação e modo de exibição são lembradas entre sessões. Há paridade na CLI via `uv run main.py library list`.
-
----
-
-## Módulo IA
-
-O módulo **IA** transforma o seu acervo numa base de conhecimento conversável — **RAG (Retrieval-Augmented Generation) 100% local**. Como a Biblioteca, é um hub: vive no AppBar (botão **IA**), não na NavigationRail.
-
-Como funciona, em três passos:
-
-1. **Indexar** — o conteúdo textual que você já gerou (transcrições, análises, digests, texto extraído/OCR de PDF e descrições de imagem) é dividido em trechos e convertido em vetores de embedding pelo Ollama (`nomic-embed-text`). A indexação é **incremental**: só reembute o que mudou desde a última vez.
-2. **Recuperar** — para a sua pergunta, os trechos mais semelhantes são encontrados por similaridade (busca cosseno sobre os vetores).
-3. **Responder** — um LLM redige a resposta usando **apenas** os trechos recuperados e **cita as fontes** `[n]`; cada fonte vira um card clicável que abre o arquivo no visor.
-
-| Recurso | O que faz |
-|---|---|
-| **Escopo** | Pergunte ao acervo inteiro, a um tipo (Transcrições / Documentos / Imagens) ou a um único documento (via "Conversar sobre" na Biblioteca). |
-| **Modelo da resposta** | `gemma3-4b-custom` (padrão — melhor síntese/citação) ou `gemma3-1b-custom` (mais rápido, menos RAM, mais fraco) / `qwen7b-custom`, todos locais; ou `gemini-2.5-flash` (nuvem, opt-in, com aviso de privacidade). |
-| **Fontes citadas** | Cada resposta lista os documentos usados; clicar abre o texto no visor in-app ou o arquivo no sistema. |
-| **Status do índice** | Mostra documentos · chunks · horário da última atualização, com botão **Reindexar**. |
-| **Prompt library + templates** | Chips de atalho — Resumir, Pontos-chave, Reescrever formal, Traduzir — e templates estruturados — Ata de reunião, E-mail, Resumo executivo — que preenchem a pergunta. |
-
-**Privacidade:** os embeddings são **sempre locais**. Se você escolher um modelo Gemini, apenas os trechos recuperados são enviados à nuvem no passo de resposta.
-
-**Pré-requisito** — o modelo de embedding `nomic-embed-custom` (build CPU-only de `nomic-embed-text`, para não disputar a GPU com o Whisper):
-
-```bash
-ollama pull nomic-embed-text
-ollama create nomic-embed-custom -f ollama/Modelfile.nomic
-```
-
-Há paridade na CLI via `uv run main.py ai`.
+- **Transcrição** (`text/*.txt`): cabeçalho de metadados + texto; segmentos incertos marcados com `[?]` (`avg_logprob < -1.0` ou `no_speech_prob > 0.6`).
+- **Análise** (`analysis/*.md`): relatório estruturado (resumo, pontos-chave, ações, conceitos, métricas, citações…), perfil-dirigido (`--profile`). Saída em PT-BR.
+- **Digest** (`digest/*.txt`): versão condensada (~40%) sem CTAs, pronta para colar como contexto.
 
 ---
 
 ## Modelos
 
-### Whisper
+**Whisper** (`--wm`): `tiny` → `large-v3` (mais rápido → mais preciso); `small` é o padrão equilibrado.
 
-| Modelo           | Velocidade  | Precisão  |
-| ---------------- | ----------- | --------- |
-| `tiny`           | mais rápido | baixa     |
-| `small`          | rápido      | boa       |
-| `medium`         | moderado    | muito boa |
-| `large-v3-turbo` | lento       | excelente |
-| `large-v3`       | mais lento  | melhor    |
+**Ollama** (local, padrão) — customizados via Modelfiles em `ollama/` (CPU-pinned, `num_gpu 0`):
 
-### Ollama (local, padrão)
+| Modelo | Papel | Tamanho |
+|---|---|---|
+| `phi4mini-custom` | Formatação | ~2,5 GB |
+| `gemma3-4b-custom` | Análise · Prompt · RAG · PT→SQL (**padrão**) | ~3,3 GB |
+| `gemma3-1b-custom` | Fallback rápido / baixa-RAM | ~815 MB |
+| `qwen7b-custom` | Análise/RAG de máxima qualidade (lento na CPU) | ~4,7 GB |
+| `nomic-embed-custom` | Embeddings do RAG (768-dim) | ~275 MB |
+| `moondream-custom` | Descrição de imagens (visão) | ~1,7 GB |
 
-| Modelo            | Uso          | Tamanho | Qualidade |
-| ----------------- | ------------ | ------- | --------- |
-| `phi4mini-custom` | `--format`   | 2.5 GB  | básica    |
-| `qwen7b-custom`   | `--analyze`  | 4.7 GB  | boa       |
-
-Os modelos customizados vêm dos Modelfiles em `ollama/`. Ajuste conforme o hardware (`num_gpu`, `num_thread`, `num_ctx`, `temperature`) e recrie:
-
-```bash
-ollama create qwen7b-custom -f ollama/Modelfile
-ollama create phi4mini-custom -f ollama/Modelfile.phi4mini
-```
-
-### Gemini (nuvem, free tier)
-
-Roteamento por prefixo: qualquer nome começando com `gemini` vai para o Google. Como a janela é de 1M tokens, `--analyze` e `--prompt` **dispensam chunking** com Gemini (processam o texto inteiro de uma vez); `--format` mantém chunking por ser tarefa localizada.
-
-| Modelo                  | Uso recomendado          | Free tier | Contexto |
-| ----------------------- | ------------------------ | --------- | -------- |
-| `gemini-2.5-flash`      | `--analyze`, `--prompt`  | sim       | 1M       |
-| `gemini-2.5-flash-lite` | `--format` (mais rápido) | sim       | 1M       |
-
-Limites do projeto em <https://aistudio.google.com/rate-limit> (RPD reseta à meia-noite do Pacífico, ≈ 04:00 BRT).
+**Gemini** (nuvem, opt-in): roteado por prefixo `gemini-*`. Com a janela de 1M tokens, `--analyze`/`--prompt` dispensam chunking. Recomendado: `gemini-2.5-flash`.
 
 ---
 
-## Design System
+## Arquitetura
 
-A GUI usa um Design System interno em `src/gui/theme/`, construído sobre o Material 3 do Flet 0.85. Todos os módulos consomem as mesmas fábricas — adicionar um novo módulo não requer reinventar botões, cores ou espaçamento.
-
-### Paleta
-
-| Token | Dark | Light | Uso |
-|---|---|---|---|
-| `primary` | `#F4A63C` | `#E0982F` | Acento único — botões, foco, seleção ativa |
-| `bg` | `#101012` | `#F6F8FB` | Fundo da janela |
-| `surface` | `#1E1E22` | `#FFFFFF` | Painéis e cards |
-| `outline` | `#5A5A62` | `#7890A0` | Bordas de containers |
-| `outline_variant` | `#36363C` | `#AEBCC8` | Divisórias hairline |
-
-Fonte de UI: **Verdana**. Fonte mono (log): **JetBrains Mono** / **Consolas** (escala tipográfica `mono`).
-
-### Componentes disponíveis
-
-| Fábrica | Módulo | Descrição |
-|---|---|---|
-| `primary_button` | `buttons` | Ação primária — herda dourado do tema |
-| `secondary_button` | `buttons` | Ação secundária — contorno |
-| `danger_button` | `buttons` | Ação destrutiva — vermelho semântico |
-| `action_button` | `buttons` | Ação de link/secundária — azul info por padrão, acento configurável |
-| `segmented_selector` | `buttons` | Grade de chips clicáveis (formato, bitrate…) |
-| `output_card` | `cards` | Card de saída — borda colorida, ícone, nome, botão abrir pasta |
-| `labeled_field` | `inputs` | Rótulo + controle + helper + ⓘ opcional |
-| `switch_row` | `inputs` | Switch com cor ativa do tema |
-| `slider_row` | `inputs` | Slider com rótulo + ⓘ opcional |
-| `log_line` | `feedback` | Linha de log monoespaçada com cor por prefixo |
-| `spinner` | `feedback` | Cata-vento animado — retorna `(control, start, stop)` |
-| `summary_card` | `feedback` | Card de resumo ao fim do pipeline |
-| `section_title` | `feedback` | Título de seção de resultados |
-| `section_label` | `layout` | Rótulo de seção simples (sem ⓘ) |
-| `section` | `layout` | Grupo rótulo + controles + ⓘ opcional |
-| `hairline` | `layout` | Divisória fina 1px |
-| `module_scaffold` | `layout` | Layout split form \| painel |
-| `help_icon` | `help` | ⓘ com tooltip estilizado e modal opcional |
-| `help_icon_for` | `help` | Lookup no registro central por chave |
-
-### Ajuda contextual (ⓘ)
-
-O arquivo `src/gui/help_content.py` centraliza todo o conteúdo de ajuda, separado da UI. Cada controle recebe uma **chave** (`"módulo.campo"`) — nenhuma string de ajuda fica espalhada nos formulários.
-
-**Comportamento:**
-- **Hover** → tooltip estilizado (300 ms de delay)
-- **Clique** (apenas quando há texto longo) → `AlertDialog` com título e corpo detalhado
-
-**Chaves disponíveis:**
-
-| Chave | Tooltip | Modal |
-|---|---|---|
-| `transcription.whisper_model` | Visão geral dos modelos | ✅ Tabela completa + nota de hardware |
-| `transcription.beam_size` | Resumo do beam search | ✅ Explicação técnica |
-| `transcription.language` | Quando fixar o idioma | — |
-| `transcription.format` | O que faz o formatter | — |
-| `transcription.analyze` | O que gera a análise | — |
-| `transcription.prompt` | O que é o digest | — |
-| `transcription.model_stage` | Local vs nuvem | — |
-| `video.input` | URL vs arquivo local | — |
-| `video.operation` | Quando usar copy vs reencoding | — |
-| `video.resolution` | Impacto no tamanho do download | — |
-| `video.embed_meta` | O que é embutido | — |
-| `video.codec` | Resumo dos codecs disponíveis | ✅ copy / H.264 / H.265 / VP9 — trade-offs |
-| `video.trim` | Rápido vs frame-preciso | — |
-| `video.crf` | Guia rápido de valores CRF | ✅ 18–28 — qualidade vs tamanho |
-| `video.preset` | Velocidade vs compressão | — |
-| `video.resize` | Aspect ratio e eixo automático | — |
-| `audio.input` | URL vs arquivo local | — |
-| `audio.format` | 'best' vs conversão | — |
-| `audio.bitrate` | Resumo do bitrate | ✅ Quando usar cada valor |
-| `audio.embed_meta` | O que é embutido | — |
-| `audio.denoise` | Spectral gating: quando usar | ✅ Como funciona o algoritmo |
-| `audio.normalize` | EBU R128: alvos por plataforma | ✅ Streaming / broadcast / podcast |
-| `audio.normalize_lufs` | Guia rápido de alvos LUFS | — |
-| `image.input` | URL direta vs arquivo local | — |
-| `image.format` | Lossy vs lossless, AVIF | — |
-| `image.quality` | Quando e quanto comprimir | — |
-| `image.resize` | Modos de redimensionamento | — |
-| `image.crop` | Modos de corte | — |
-| `image.rotate` | Ângulo, flip e EXIF | — |
-| `image.watermark` | Texto vs imagem, opacidade | — |
-| `image.border` | Padding, cor e alpha | — |
-| `image.adjust` | Sliders de ajuste | — |
-| `image.filter` | Tipos de filtro | — |
-| `image.favicon` | Tamanhos e formato .ico | — |
-| `image.contact_sheet` | Grade N→1 | — |
-| `image.rembg_model` | Resumo dos 5 modelos | ✅ Tamanho, uso ideal e onde são baixados |
-| `image.describe_model` | Resumo dos modelos vision | ✅ RAM, velocidade e setup de cada um |
-| `image.describe_prompt` | Como usar o prompt customizado | — |
-| `document.input` | Formatos suportados, URL vs arquivo local | — |
-| `document.operation` | Descrição das 12 operações | — |
-| `document.pages` | Sintaxe de intervalos de página | ✅ Exemplos: `1-3`, `5`, `8-` |
-| `document.image_quality` | Qualidade JPEG para compressão de imagens embutidas | — |
-| `document.watermark` | Marca d'água diagonal — opacidade e posição | — |
-| `document.stamp` | Carimbo em destaque — textos pré-definidos | — |
-| `document.password` | Proteção AES-256 — permissões preservadas | ✅ Detalhes de permissão |
-| `document.dpi` | Resolução de rasterização em DPI | ✅ Qualidade vs tamanho |
-| `document.qr_size` | Tamanho em pixels do QR code gerado | — |
-| `document.analyze_model` | LLM local (Ollama) ou Gemini para análise do texto extraído | — |
-| `library` | O que a Biblioteca reúne e como navegá-la | ✅ Filtros, ações, bridges e CLI |
-
-Para adicionar ajuda a um novo controle: inserir a chave em `HELP_SHORT` (e opcionalmente `HELP_LONG`) e passar `help_key=` para a fábrica correspondente.
-
----
-
-## Estrutura do projeto
+`src/core/` é **puro** (sem Flet) e reutilizável por CLI e GUI; `src/gui/` é a camada Flet; `src/cli/` os subcomandos.
 
 ```text
-mill-tools/
-├── main.py              — entry point CLI
-├── gui.py               — entry point GUI (splash → home → app, maximizado)
-├── src/
-│   ├── transcriber.py · formatter.py · analyzer.py · prompter.py · llm_factory.py · utils.py
-│   ├── core/
-│   │   ├── audio/       — downloader, converter, denoiser, normalizer, info (lógica pura, sem Flet)
-│   │   ├── video/       — downloader (yt-dlp), converter (ffmpeg), info (ffprobe)
-│   │   ├── image/       — downloader, converter, transform, info (Pillow; lógica pura, sem Flet)
-│   │   ├── document/    — processor (pymupdf), converter, qr, info (PdfInfo + render_first_page_png)
-│   │   └── library/     — types (LibraryItem), scanner (output/ → índice), thumbnails (dispatch por kind)
-│   └── gui/
-│       ├── app.py       — NavigationRail (5 tools) + Biblioteca/IA no AppBar + registry + navigate_to
-│       ├── splash.py    — animação de entrada (moinho + fade)
-│       ├── home.py      — Home Screen: 6 cards de módulo (3×2) + moinho animado ao fundo
-│       ├── assets.py    — helpers de imagem (b64, WINDOW_ICON)
-│       ├── events.py    — EventBus, PipelineEvent (com module_id)
-│       ├── settings.py  — persistência em ~/.mill-tools/config.json
-│       ├── workers.py   — pipeline de Transcrição (thread daemon)
-│       ├── help_content.py — registro central de tooltips e modais (HELP_SHORT/LONG)
-│       ├── components/  — input_source.py (URL + FilePicker, allow_multiple, url_hint)
-│       ├── modules/     — base.py + transcription/ · audio/ · video/ · image/ · document/ · library/
-│       │                  (processamento: form_view, worker, view, pipeline_log; library: view + cards, read-only)
-│       ├── theme/       — Design System
-│       │   ├── tokens.py    — Color, Type, Space, Radius, Motion, Layout
-│       │   ├── theme.py     — build_theme() + apply_theme()
-│       │   └── components/  — buttons, inputs, feedback, layout, help, cards
-│       └── views/       — form_view · progress_view · result_view
-├── assets/
-│   ├── logo/            — símbolo e wordmark (SVG/PNG)
-│   └── icons/           — mill.ico, mill-512.png
-├── ollama/              — Modelfiles
-├── docs/                — planos de implementação
-└── output/             — origem do índice da Biblioteca
-    ├── audio/           — source/ (downloads) · processed/ (conversões)
-    ├── image/           — source/ (downloads de URL) · processed/ (processadas)
-    ├── video/           — source/ · processed/
-    ├── document/        — processed/
-    └── transcriptions/  — text/ · analysis/ · digest/
+src/
+├── transcriber · formatter · analyzer · prompter · llm_factory · llm_utils · utils
+├── analysis/      perfis de análise (puro)
+├── cli/           1 módulo por subcomando (audio/video/image/document/library/ai/recipes/data) + bus
+├── core/          PURO — audio · video · image · document · library · rag · recipes · data
+│   └── data/      types · scanner · engine (única fronteira DuckDB) · nl2sql · validate · convert · profile · store
+└── gui/           app (rail + hubs) · home · splash · events · settings · modules/ · theme/ (design system) · views/
 ```
+
+Cada módulo da GUI é uma entrada na lista `MODULES` (`app.py`); o `control` é construído uma vez e a navegação alterna visibilidade num `ft.Stack`. Saídas vão para `output/`, a origem do índice da Biblioteca e do RAG. Detalhes por subsistema vivem nas *skills* do projeto (`.claude/skills/`) e no `CLAUDE.md`.
+
+---
+
+## Testes
+
+```bash
+uv run pytest -m unit            # unitários — rápido, sem ffmpeg/rede/GPU
+uv run pytest -m integration     # integração — requer ffmpeg
+uv run pytest -n auto            # paralelizado (pytest-xdist)
+uv run pytest --cov=src --cov-report=html
+```
+
+**913 testes unitários** (0 falhas); cobertura sobre `src/` (branch on, GUI excluída por não ser testável headless), agregado ~88%. Testes de integração são pulados automaticamente sem `ffmpeg`. Linter: **ruff** — `uv run pytest -m unit` verde + `ruff` limpo antes de qualquer commit.
 
 ---
 
@@ -682,47 +265,8 @@ mill-tools/
 
 ---
 
-## Testes
-
-A suíte cobre `src/core/` (incluindo o RAG local), `src/cli/`, os `pipeline_log` e workers da GUI e o pipeline LLM (`analyzer`/`formatter`/`prompter`) em duas camadas, totalizando **583 testes unitários** (0 falhas); o core do RAG fica em ≥ 98%.
-
-| Camada | Marcador | Requer | O que cobre |
-|---|---|---|---|
-| **Unitários** | `@pytest.mark.unit` | Python puro | Funções puras, parsers, roteamento LLM, settings, mocks de subprocess |
-| **Integração** | `@pytest.mark.integration` | `ffmpeg` no PATH | Conversão/extração real de áudio e vídeo, normalização, denoise, ffprobe, Pillow I/O |
-
-Testes de integração são **pulados automaticamente** em ambientes sem `ffmpeg` (CI, máquinas limpas).
-
-```bash
-# Unitários apenas — rápido, sem ffmpeg (~5s)
-uv run pytest -m unit -v
-
-# Integração apenas — requer ffmpeg
-uv run pytest -m integration -v
-
-# Suíte completa
-uv run pytest -v
-
-# Paralelizada (pytest-xdist)
-uv run pytest -n auto
-
-# Cobertura HTML em htmlcov/
-uv run pytest --cov=src --cov-report=html
-```
-
-Plugins ativos: `pytest-randomly` (ordem aleatória — `--randomly-seed=N` para reproduzir), `pytest-timeout` (60s default), `pytest-clarity` (diffs melhores), `pytest-xdist` (paralelização opcional).
-
----
-
 ## Roadmap
 
-- **Home Screen** ✅ — Tela inicial entre splash e app: cards de módulo, moinho animado ao fundo, botões "Home" e "Splash" no AppBar, transições suavizadas. App abre maximizado.
-- **PR3.1-A** ✅ — Pós-processamento de áudio: redução de ruído (spectral gating, CPU) e normalização de loudness (EBU R128). Sem torch, sem extra.
-- **PR3.1-B** — IA de áudio com torch (extra `[ai-audio]`): DeepFilterNet (denoise neural); Demucs (separação de stems) a avaliar.
-- **PR4** ✅ — Módulo Vídeo: 7 operações (download, convert, trim, compress, resize, extract_audio, thumbnail). CPU-only, fila sequencial, bridge → Transcrição/Áudio.
-- **PR5** ✅ — Módulo Documentos: 12 operações PDF/QR (merge, split, compress, rotate, watermark, stamp, encrypt, extract, pdf-to-images, images-to-pdf, qr, analyze). Core pymupdf, 100% local.
-- **PR5.1** ✅ — OCR: análise de PDFs escaneados via pytesseract (extra `[ocr]`, requer Tesseract no PATH).
-- **PR6** ✅ — Módulo Biblioteca: índice navegável de `output/` (core puro), grade com thumbnails, filtro/busca/ordenação/período, abrir arquivo/pasta, bridges para outros módulos, paginação + auto-refresh e CLI `library list`. Hub no AppBar. Fundação para IA sobre o corpus e receitas encadeadas.
-- **PR6.6** ✅ — Biblioteca: modo lista/tabela + visor in-app de `.md`/`.txt` (ler resultado processado sem reprocessar). Entrada flexível de análise: Transcrição aceita URL + áudio/vídeo local + texto (`.txt`/`.md` pula o Whisper); Documentos→Analisar aceita texto; CLI `transcribe` aceita texto/vídeo local; bridge `.txt` → "Analisar na Transcrição".
-- **PR7** ✅ — Módulo IA (RAG local sobre o corpus): indexação semântica do conteúdo textual (embeddings Ollama `nomic-embed-text`, vector store numpy, incremental por mtime), busca cosseno e resposta com citação de fontes; módulo GUI (hub no AppBar, resposta em Markdown, status/reindexar, prompt library + templates) e CLI `ai index`/`ai "pergunta"`/`--batch`. Embeddings sempre locais; Gemini só opt-in na resposta. Torch-free, só `numpy` de dependência nova.
-- **Futuro** — melhorias no Módulo Imagens (batch rename, upscale); streaming da resposta da IA; IA de áudio com torch (DeepFilterNet/Demucs) num extra opcional.
+Entregue: **Tier 0** (legendas, OCR) · **PR4** Vídeo · **PR5/5.1** Documentos + OCR · **PR6/6.6** Biblioteca + entrada flexível · **PR7/7.2** IA (RAG local) + inspetor de índice · **PR8** Receitas · **PR9** Dados (query-first sobre DuckDB).
+
+A seguir: **PR9.1** gráficos (`plot` via matplotlib) · **PR9.2** encadeamento em estágios · **PR3.1-B** IA de áudio com torch (extra `[ai-audio]`) · melhorias em Imagens (batch rename, upscale) · streaming da resposta da IA.

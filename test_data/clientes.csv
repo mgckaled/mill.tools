@@ -1,0 +1,13 @@
+cliente_id;nome;cidade;vip;email
+1;Márcia Lima;Curitiba;;user1@mail.com
+2;Rafael Müller;Rio de Janeiro;sim;user2@mail.com
+3;João Pereira;Salvador;true;user3@mail.com
+4;Luísa Gonçalves;Curitiba;true;user4@mail.com
+5;Beatriz Araújo;Salvador;sim;
+6;João Pereira;São Paulo;true;user6@mail.com
+3;João Pereira;Salvador;true;user3@mail.com
+8;Márcia Lima;Rio de Janeiro;nao;user8@mail.com
+9;Beatriz Araújo;Rio de Janeiro;talvez;user9@mail.com
+10;Ana Souza;Belo Horizonte;true;user10@mail.com
+11;Márcia Lima;São Paulo;true;user11@mail.com
+12;João Pereira;São Paulo;não;user12@mail.com

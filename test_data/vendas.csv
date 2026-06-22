@@ -1,0 +1,27 @@
+id_venda,data,produto,categoria,valor,cliente_id,cidade
+1,08/01/2026,Camiseta,Casa,23.38,11,Salvador
+2,01/01/2026,Camiseta,Roupas,"R$ 212,81",9,Porto Alegre
+3,2026-01-23,Caneca,Roupas,"203,02",8,Porto Alegre
+4,25/01/2026,caneca,Acessórios,"R$ 286,16",6,Belo Horizonte
+5,2026-01-03,Caderno,Casa,87.13,6,Belo Horizonte
+6,15/01/2026,Garrafa,Acessórios,"285,39",2, Curitiba 
+7,28/01/2026,Garrafa,Casa,"292,85",1,Salvador
+8,28/01/2026,Mochila,Acessórios,,5,Curitiba
+9,2026-01-22,Fone,Casa,69.49,10,Salvador
+10,2026-01-15,Caderno,Papelaria,N/A,11,Salvador
+11,08/01/2026,Mochila,Papelaria,"R$ 244,35",7,Belo Horizonte
+12,23/01/2026,Camiseta,Acessórios,"85,68",7,Salvador
+13,2026-01-24,Caneta,Eletrônicos,"R$ 62,86",7,Porto Alegre
+14,17/01/2026,Teclado,Casa,"R$ 136,27",2,Rio de Janeiro
+15,2026-01-03,Caderno,Acessórios,280.35,10,Curitiba
+16,22/01/2026,Garrafa,Eletrônicos,"R$ 340,31",5,Salvador
+17,06/01/2026,Fone,Papelaria,52.37,9,Rio de Janeiro
+18,27/01/2026,Camiseta,Roupas,306.62,6,Rio de Janeiro
+19,2026-01-04,Caneca,Papelaria,215.65,4,São Paulo
+20,2026-01-24,Mochila,Casa,"R$ 309,13",9,Rio de Janeiro
+21,2026-01-09,Caderno,Roupas,"236,02",9,Salvador
+22,2026-01-21,Mochila,Acessórios,253.84,9,Curitiba
+23,11/01/2026,Camiseta,Eletrônicos,"R$ 98,05",4,São Paulo
+24,08/01/2026,Camiseta,Papelaria,"R$ 252,13",2,Porto Alegre
+25,07/01/2026,Mochila,Eletrônicos,108.29,10,Curitiba
+3,2026-01-23,Caneca,Roupas,"203,02",8,Porto Alegre
