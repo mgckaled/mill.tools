@@ -82,7 +82,14 @@ def run_ai_index(
             def _embed(texts: list[str]):
                 return embedder.embed_texts(texts, model=embed_model)
 
-            build_index(items, store, _embed, progress_cb=_progress)
+            def _card(item):
+                from pathlib import Path
+
+                from src.core.data.datacard import card_for_path
+
+                return card_for_path(Path(item.path))
+
+            build_index(items, store, _embed, progress_cb=_progress, card_fn=_card)
             store.persist(index_dir(), embed_model=embed_model)
 
             added = len(store) - before

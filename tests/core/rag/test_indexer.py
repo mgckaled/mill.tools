@@ -216,6 +216,72 @@ def test_build_index_reports_progress_even_when_skipped(tmp_path):
 
 
 @pytest.mark.unit
+def test_indexable_items_includes_data_kind(tmp_path):
+    from src.core.rag.indexer import indexable_items
+
+    items = [
+        _item(tmp_path / "a.txt", kind="transcription"),
+        _item(tmp_path / "vendas.csv", kind="data"),
+        _item(tmp_path / "book.xlsx", kind="data"),
+        _item(tmp_path / "song.mp3", kind="audio"),
+    ]
+    out = indexable_items(items)
+    # Data items match by kind regardless of suffix; audio is still excluded.
+    assert {it.path.name for it in out} == {"a.txt", "vendas.csv", "book.xlsx"}
+
+
+@pytest.mark.unit
+def test_build_index_uses_card_fn_for_data_items(tmp_path):
+    from src.core.rag.indexer import build_index
+
+    f = tmp_path / "vendas.csv"
+    f.write_text("produto,qtd\nmaca,3\n", encoding="utf-8")
+    emb = _Embedder()
+    # The card_fn replaces "read the file as text" — the indexer embeds the card.
+    store = build_index(
+        [_item(f, kind="data")],
+        _store(),
+        emb,
+        card_fn=lambda item: f"ARQUIVO: {item.path.name} · cartão de dados",
+    )
+    assert len(store) == 1
+    assert store.meta[0].kind == "data"
+    assert "cartão de dados" in store.meta[0].text
+
+
+@pytest.mark.unit
+def test_build_index_skips_data_items_without_card_fn(tmp_path):
+    from src.core.rag.indexer import build_index
+
+    f = tmp_path / "vendas.csv"
+    f.write_text("produto,qtd\nmaca,3\n", encoding="utf-8")
+    emb = _Embedder()
+    # No card_fn → data items produce no text and are not embedded.
+    store = build_index([_item(f, kind="data")], _store(), emb)
+    assert len(store) == 0
+    assert emb.calls == 0
+
+
+@pytest.mark.unit
+def test_build_index_skips_data_item_when_card_fn_raises(tmp_path):
+    from src.core.rag.indexer import build_index
+
+    good = tmp_path / "ok.txt"
+    good.write_text("texto", encoding="utf-8")
+    bad = tmp_path / "broken.csv"
+    bad.write_text("x", encoding="utf-8")
+
+    def _card(item):
+        raise RuntimeError("DuckDB exploded")
+
+    store = build_index(
+        [_item(good), _item(bad, kind="data")], _store(), _Embedder(), card_fn=_card
+    )
+    # The failing data item is skipped; the healthy text item still indexes.
+    assert {m.source_path for m in store.meta} == {str(good)}
+
+
+@pytest.mark.unit
 def test_index_dir_resolves_under_home(monkeypatch, tmp_path):
     from src.core.rag.indexer import index_dir
 

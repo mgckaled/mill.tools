@@ -122,7 +122,14 @@ def _build(embed_model: str) -> None:
         bar.n = current
         bar.refresh()
 
-    build_index(items, store, embed_texts, progress_cb=_progress)
+    def _card(item):
+        from pathlib import Path
+
+        from src.core.data.datacard import card_for_path
+
+        return card_for_path(Path(item.path))
+
+    build_index(items, store, embed_texts, progress_cb=_progress, card_fn=_card)
     bar.close()
     store.persist(index_dir(), embed_model=embed_model)
 

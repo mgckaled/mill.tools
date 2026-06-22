@@ -26,6 +26,10 @@ if TYPE_CHECKING:
 # themselves; for "document" only extracted/OCR text, never the PDFs.
 TEXT_KINDS = {"transcription", "document", "image"}
 TEXT_SUFFIXES = {".txt", ".md"}
+# Data kinds are indexed via a *data card* (a textual description built by
+# ``card_fn``), never by reading the file as text — so they match by kind alone,
+# regardless of suffix (.csv/.json/.parquet/.xlsx).
+DATA_KINDS = {"data"}
 CHUNK_SIZE = 1200
 CHUNK_OVERLAP = 150
 
@@ -44,9 +48,20 @@ def index_dir() -> Path:
     return Path.home() / ".mill-tools" / "rag"
 
 
+def _is_indexable(item: LibraryItem) -> bool:
+    """True if the indexer knows how to embed this item (text or data card)."""
+    if item.kind in TEXT_KINDS and item.suffix in TEXT_SUFFIXES:
+        return True
+    return item.kind in DATA_KINDS
+
+
 def indexable_items(items: list[LibraryItem]) -> list[LibraryItem]:
-    """Filter a scan to the text items the indexer knows how to embed."""
-    return [it for it in items if it.kind in TEXT_KINDS and it.suffix in TEXT_SUFFIXES]
+    """Filter a scan to the items the indexer knows how to embed.
+
+    Text kinds (``.txt``/``.md``) are read directly; data kinds are turned into a
+    textual *data card* by the injected ``card_fn`` (see :func:`build_index`).
+    """
+    return [it for it in items if _is_indexable(it)]
 
 
 def _read_indexable_text(item: LibraryItem) -> str:
@@ -57,14 +72,22 @@ def _read_indexable_text(item: LibraryItem) -> str:
     return raw.strip()
 
 
+def _text_for(item: LibraryItem, card_fn: Callable[[LibraryItem], str] | None) -> str:
+    """Resolve the text to chunk for an item: a data card or the file body."""
+    if item.kind in DATA_KINDS:
+        return card_fn(item) if card_fn is not None else ""
+    return _read_indexable_text(item)
+
+
 def build_index(
     items: list[LibraryItem],
     store: VectorStore,
     embed_fn: Callable[[list[str]], np.ndarray],
     *,
     progress_cb: Callable[[int, int], None] | None = None,
+    card_fn: Callable[[LibraryItem], str] | None = None,
 ) -> VectorStore:
-    """Embed new/changed text items, skip unchanged, drop deleted. Returns store.
+    """Embed new/changed items, skip unchanged, drop deleted. Returns store.
 
     Incremental contract:
     - An item is *unchanged* when ``(path, mtime)`` already exists in the store —
@@ -77,8 +100,10 @@ def build_index(
         items: The full ``scan_library()`` result (filtered internally).
         store: The vector store to grow/refresh in place.
         embed_fn: Maps a list of chunk strings to an (M, D) matrix.
-        progress_cb: Optional ``(current, total)`` callback, one call per text
-            item processed (drives the GUI/CLI progress bar).
+        progress_cb: Optional ``(current, total)`` callback, one call per item
+            processed (drives the GUI/CLI progress bar).
+        card_fn: Builds the textual *data card* for a ``kind="data"`` item. When
+            absent, data items are silently skipped (text kinds still index).
 
     Returns:
         The same ``store``, mutated.
@@ -94,11 +119,21 @@ def build_index(
                 progress_cb(n, total)
             continue
 
+        # Resolve the text first (a data card may hit DuckDB); a failure leaves
+        # any existing chunks intact rather than dropping then failing to re-add.
+        try:
+            text = _text_for(item, card_fn)
+        except Exception as exc:  # bad/locked data file — skip, don't crash index
+            logging.warning("[!] Could not build text for %s: %s", item.path.name, exc)
+            if progress_cb:
+                progress_cb(n, total)
+            continue
+
         store.drop_source(str(item.path))  # changed → replace stale chunks
         chunks = [
             c
             for c in split_text(
-                _read_indexable_text(item),
+                text,
                 chunk_size=CHUNK_SIZE,
                 chunk_overlap=CHUNK_OVERLAP,
             )
