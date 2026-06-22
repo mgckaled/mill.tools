@@ -1,0 +1,85 @@
+"""Tests for NL→SQL translation (LLM mocked via GenericFakeChatModel)."""
+
+import json
+
+import pytest
+from langchain_core.language_models.fake_chat_models import GenericFakeChatModel
+from langchain_core.messages import AIMessage
+
+
+def _fake_llm(*responses: str):
+    """A real Runnable returning canned AIMessages, one per .invoke()."""
+    msgs = iter([AIMessage(content=r) for r in responses])
+    return GenericFakeChatModel(messages=msgs)
+
+
+@pytest.mark.unit
+def test_to_sql_parses_json_object():
+    from src.core.data.nl2sql import to_sql
+
+    payload = json.dumps(
+        {"sql": "SELECT produto FROM vendas", "explicacao": "Lista os produtos."},
+        ensure_ascii=False,
+    )
+    sql, explanation = to_sql(
+        "vendas (3 linhas): produto VARCHAR",
+        "quais produtos existem?",
+        make_llm_fn=lambda *a, **k: _fake_llm(payload),
+    )
+    assert sql == "SELECT produto FROM vendas"
+    assert explanation == "Lista os produtos."
+
+
+@pytest.mark.unit
+def test_to_sql_extracts_from_fenced_block():
+    from src.core.data.nl2sql import to_sql
+
+    response = (
+        "Claro! Aqui está:\n```json\n"
+        '{"sql": "SELECT 1 FROM vendas", "explicacao": "ok"}\n```'
+    )
+    sql, explanation = to_sql(
+        "vendas: a INT",
+        "pergunta",
+        make_llm_fn=lambda *a, **k: _fake_llm(response),
+    )
+    assert sql == "SELECT 1 FROM vendas"
+
+
+@pytest.mark.unit
+def test_to_sql_accepts_bare_sql_fallback():
+    from src.core.data.nl2sql import to_sql
+
+    sql, explanation = to_sql(
+        "vendas: a INT",
+        "pergunta",
+        make_llm_fn=lambda *a, **k: _fake_llm("SELECT a FROM vendas"),
+    )
+    assert sql == "SELECT a FROM vendas"
+    assert explanation == ""
+
+
+@pytest.mark.unit
+def test_to_sql_rejects_non_select_output():
+    from src.core.data.nl2sql import to_sql
+    from src.core.data.validate import UnsafeQueryError
+
+    payload = json.dumps({"sql": "DELETE FROM vendas", "explicacao": "x"})
+    with pytest.raises(UnsafeQueryError):
+        to_sql(
+            "vendas: a INT",
+            "apague tudo",
+            make_llm_fn=lambda *a, **k: _fake_llm(payload),
+        )
+
+
+@pytest.mark.unit
+def test_to_sql_unparseable_output_raises():
+    from src.core.data.nl2sql import NL2SQLError, to_sql
+
+    with pytest.raises(NL2SQLError):
+        to_sql(
+            "vendas: a INT",
+            "pergunta",
+            make_llm_fn=lambda *a, **k: _fake_llm("desculpe, não entendi"),
+        )
