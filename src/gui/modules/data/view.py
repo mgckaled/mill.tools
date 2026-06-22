@@ -429,8 +429,17 @@ def build_data_module(
     # Controls
     # ------------------------------------------------------------------
 
+    def _on_eye(file) -> None:
+        from src.gui.modules.data.preview_modal import open_preview_modal
+
+        open_preview_modal(page, file)
+
     form = build_data_form(
-        page, on_pick=_on_pick, on_preview=_on_preview, on_run=_on_run
+        page,
+        on_pick=_on_pick,
+        on_preview=_on_preview,
+        on_run=_on_run,
+        on_eye=_on_eye,
     )
 
     spinner_img, spinner_start, spinner_stop = spinner()
@@ -617,6 +626,11 @@ def build_data_module(
         on_click=_on_save_recipe,
         accent=Color.log.muted,
     )
+    # Fold saved data files into the RAG catalog (by choice, never automatic).
+    # It indexes output/data/, so it is most useful after a Save.
+    from src.gui.modules.ai.index_button import rag_index_button
+
+    index_btn = rag_index_button(page)
 
     saved_path_text = ft.Text(
         "", size=Type.small.size, color=ft.Colors.ON_SURFACE, expand=True
@@ -676,7 +690,7 @@ def build_data_module(
             controls=[
                 saved_row,
                 ft.Row(
-                    [save_btn, converse_btn, recipe_btn],
+                    [save_btn, converse_btn, recipe_btn, index_btn],
                     spacing=Space.sm,
                     wrap=True,
                 ),

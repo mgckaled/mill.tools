@@ -57,6 +57,7 @@ def build_data_form(
     on_pick: Callable[[list[Path]], None],
     on_preview: Callable[[], None],
     on_run: Callable[[], None],
+    on_eye: Callable[[object], None] | None = None,
 ) -> DataForm:
     """Build the left form panel and return its handles."""
     cfg = settings.load()
@@ -149,6 +150,14 @@ def build_data_form(
                         ],
                         spacing=0,
                         expand=True,
+                    ),
+                    ft.IconButton(
+                        icon=ft.Icons.VISIBILITY_OUTLINED,
+                        icon_size=IconSize.sm,
+                        tooltip="Pré-visualizar e avaliar",
+                        on_click=(lambda _e, _f=file: on_eye(_f)) if on_eye else None,
+                        visible=on_eye is not None,
+                        style=ft.ButtonStyle(mouse_cursor=Cursor.interactive),
                     ),
                     ft.IconButton(
                         icon=ft.Icons.CLOSE,
