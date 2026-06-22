@@ -8,6 +8,7 @@
 ![uv](https://img.shields.io/badge/uv-managed-DE5FE9)
 ![Flet](https://img.shields.io/badge/GUI-Flet%200.85-02569B)
 ![faster-whisper](https://img.shields.io/badge/faster--whisper-GPU-FFB000)
+![Ollama](https://img.shields.io/badge/Ollama-local-000000?logo=ollama&logoColor=white)
 ![DuckDB](https://img.shields.io/badge/DuckDB-embutido-FFF000?logo=duckdb&logoColor=black)
 
 </div>
