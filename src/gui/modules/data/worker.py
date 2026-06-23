@@ -147,24 +147,29 @@ def run_data_save(bus: EventBus, files: list, sql: str, fmt: str, stem: str) -> 
         return False
 
 
-def run_data_index(bus: EventBus, *, embed_model: str) -> bool:
-    """Index the Library (incl. data cards) into the RAG, emitting data events.
+def run_data_index(bus: EventBus, files: list, *, embed_model: str) -> bool:
+    """Index the selected data *files* into the RAG via their data cards.
 
-    Mirrors ``run_ai_index`` but under module_id="data" so the Preview tab can show
-    progress/log in the same shape as the Consulta tab. Incremental: unchanged
-    files are skipped; data files are indexed via their data card.
+    Indexes exactly the files the user is working with (additively, without
+    reconciling away the rest of the index), so a freshly picked/queried file
+    actually lands in the index and shows up in the inspector — regardless of
+    whether it lives under output/. Emits under module_id="data" so the Preview
+    tab shows progress/log in the same shape as the Consulta tab.
 
-    Emits: data_index_start, data_index_progress (current/total), log, data_indexed
-    ({added, total, chunks}), task_done — or task_error on failure.
+    Emits: data_index_start, data_index_progress (current/total), log,
+    data_indexed ({added, total, chunks}), task_done — or task_error on failure.
     """
-    from src.core.library.scanner import scan_library
+    from src.core.library.types import LibraryItem
     from src.core.rag import embedder
-    from src.core.rag.indexer import build_index, indexable_items, index_dir
+    from src.core.rag.indexer import index_dir, index_files
     from src.core.rag.store import VectorStore
 
     emit = make_emitter(bus, _MODULE_ID, "data")
     try:
         emit("data_index_start")
+        if not files:
+            emit("task_error", payload={"message": "Nenhum arquivo para indexar."})
+            return False
         if not embedder.is_available(embed_model):
             emit(
                 "task_error",
@@ -174,9 +179,23 @@ def run_data_index(bus: EventBus, *, embed_model: str) -> bool:
             )
             return False
 
-        items = scan_library()
-        total = len(indexable_items(items))
-        emit("log", payload={"message": f"Indexando {total} documento(s)…"})
+        items: list[LibraryItem] = []
+        for f in files:
+            p = Path(f.path)
+            st = p.stat()
+            items.append(
+                LibraryItem(
+                    path=p,
+                    kind="data",
+                    category="processed",
+                    size_bytes=st.st_size,
+                    modified=st.st_mtime,
+                    stem=p.stem,
+                    suffix=p.suffix.lower(),
+                )
+            )
+        total = len(items)
+        emit("log", payload={"message": f"Indexando {total} arquivo(s) de dados…"})
         store = VectorStore.load(index_dir(), dim=embedder.EMBED_DIM)
         before = len(store)
 
@@ -191,7 +210,7 @@ def run_data_index(bus: EventBus, *, embed_model: str) -> bool:
 
             return card_for_path(Path(item.path))
 
-        build_index(items, store, _embed, progress_cb=_progress, card_fn=_card)
+        index_files(items, store, _embed, progress_cb=_progress, card_fn=_card)
         store.persist(index_dir(), embed_model=embed_model)
 
         added = len(store) - before
@@ -267,9 +286,9 @@ def start_save(
     return _spawn(run_data_save, bus, files, sql, fmt, stem)
 
 
-def start_index(bus: EventBus, *, embed_model: str) -> threading.Thread:
+def start_index(bus: EventBus, files: list, *, embed_model: str) -> threading.Thread:
     """Launch run_data_index in a daemon thread."""
-    return _spawn(run_data_index, bus, embed_model=embed_model)
+    return _spawn(run_data_index, bus, files, embed_model=embed_model)
 
 
 def start_assess(bus: EventBus, file, *, model_name: str) -> threading.Thread:

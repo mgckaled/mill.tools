@@ -282,6 +282,64 @@ def test_build_index_skips_data_item_when_card_fn_raises(tmp_path):
 
 
 @pytest.mark.unit
+def test_index_files_is_additive_no_reconciliation(tmp_path):
+    from src.core.rag.indexer import build_index, index_files
+
+    a = tmp_path / "a.txt"
+    a.write_text("aaa", encoding="utf-8")
+    b = tmp_path / "vendas.csv"
+    b.write_text("produto,qtd\nmaca,3\n", encoding="utf-8")
+
+    store = _store()
+    build_index([_item(a)], store, _Embedder())  # library has 'a'
+    assert {m.source_path for m in store.meta} == {str(a)}
+
+    # Indexing only 'b' must ADD it without dropping 'a' (no reconciliation).
+    index_files(
+        [_item(b, kind="data")],
+        store,
+        _Embedder(),
+        card_fn=lambda item: f"cartão de {item.path.name}",
+    )
+    assert {m.source_path for m in store.meta} == {str(a), str(b)}
+
+
+@pytest.mark.unit
+def test_index_files_reembeds_each_time(tmp_path):
+    from src.core.rag.indexer import index_files
+
+    f = tmp_path / "vendas.csv"
+    f.write_text("produto\nmaca\n", encoding="utf-8")
+    store = _store()
+    emb = _Embedder()
+    card = {"text": "cartão v1"}
+
+    index_files([_item(f, kind="data")], store, emb, card_fn=lambda _i: card["text"])
+    assert emb.calls == 1 and len(store) == 1
+
+    # Same file, asked again → re-embedded (explicit user action, no skip).
+    card["text"] = "cartão v2 mais longo"
+    index_files([_item(f, kind="data")], store, emb, card_fn=lambda _i: card["text"])
+    assert emb.calls == 2
+    assert len(store) == 1  # old chunk replaced
+    assert store.meta[0].text == "cartão v2 mais longo"
+
+
+@pytest.mark.unit
+def test_index_files_skips_failing_card(tmp_path):
+    from src.core.rag.indexer import index_files
+
+    f = tmp_path / "broken.csv"
+    f.write_text("x", encoding="utf-8")
+
+    def _card(_item):
+        raise RuntimeError("DuckDB boom")
+
+    store = index_files([_item(f, kind="data")], _store(), _Embedder(), card_fn=_card)
+    assert len(store) == 0
+
+
+@pytest.mark.unit
 def test_index_dir_resolves_under_home(monkeypatch, tmp_path):
     from src.core.rag.indexer import index_dir
 

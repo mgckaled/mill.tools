@@ -79,6 +79,58 @@ def _text_for(item: LibraryItem, card_fn: Callable[[LibraryItem], str] | None) -
     return _read_indexable_text(item)
 
 
+def index_files(
+    items: list[LibraryItem],
+    store: VectorStore,
+    embed_fn: Callable[[list[str]], np.ndarray],
+    *,
+    progress_cb: Callable[[int, int], None] | None = None,
+    card_fn: Callable[[LibraryItem], str] | None = None,
+) -> VectorStore:
+    """Index a specific set of items into the store — additive, no reconciliation.
+
+    Unlike :func:`build_index`, this never drops sources that are absent from
+    *items* (so it can index a single file the user picked without wiping the
+    rest of the index) and always re-embeds the given files (the user asked for
+    it explicitly). Each item's stale chunks are replaced. Returns the store.
+    """
+    total = len(items)
+    for n, item in enumerate(items, 1):
+        try:
+            text = _text_for(item, card_fn)
+        except Exception as exc:  # bad/locked file — skip, don't crash
+            logging.warning("[!] Could not build text for %s: %s", item.path.name, exc)
+            if progress_cb:
+                progress_cb(n, total)
+            continue
+
+        store.drop_source(str(item.path))  # replace any previous chunks
+        chunks = [
+            c
+            for c in split_text(
+                text, chunk_size=CHUNK_SIZE, chunk_overlap=CHUNK_OVERLAP
+            )
+            if c.strip()
+        ]
+        if chunks:
+            vecs = embed_fn(chunks)
+            metas = [
+                ChunkMeta(
+                    source_path=str(item.path),
+                    kind=item.kind,
+                    mtime=item.modified,
+                    chunk_idx=i,
+                    text=c,
+                )
+                for i, c in enumerate(chunks)
+            ]
+            store.add(vecs, metas)
+            logging.debug("[d] Indexed %s → %d chunk(s)", item.path.name, len(chunks))
+        if progress_cb:
+            progress_cb(n, total)
+    return store
+
+
 def build_index(
     items: list[LibraryItem],
     store: VectorStore,
