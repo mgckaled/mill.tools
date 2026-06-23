@@ -255,14 +255,17 @@ def build_data_module(
         empty_state.visible = False  # gone for good after the first action
         progress_row.visible = True
         progress_bar.value = None
-        # Start the spin, then let the single page.update() below flush the
-        # first rotation — exactly like progress_view (its page.update() comes
-        # *after* _start_spin). The on_animation_end chain then keeps it turning
-        # via control-level img.update()s; the ticker must NOT page.update()
-        # (it would interrupt that animation — see _tick).
+        # CRITICAL (spinner): flush visibility FIRST, then start the spin. The
+        # mill animates only when img.update() reaches a control already mounted
+        # & visible on the client; calling start() before page.update() sends the
+        # first rotation to a still-hidden control → no animation, on_animation_end
+        # never fires, the chain dies. (progress_view gets away with start-then-
+        # update only because its spinner is permanently visible.) After start the
+        # chain self-sustains via scoped img.update()s; the ticker must NOT
+        # page.update() (it would interrupt that animation — see _tick).
+        page.update()
         spinner_start()
         _start_ticker()
-        page.update()
 
     def _end() -> None:
         pipeline_running[0] = False
@@ -407,6 +410,10 @@ def build_data_module(
     def _on_index(_e=None) -> None:
         if pipeline_running[0]:
             return
+        files = form.get_files()
+        if not files:
+            _toast("Selecione um arquivo para indexar.")
+            return
         _action[0] = "index"
         pipeline_running[0] = True
         form.set_running(True)
@@ -414,9 +421,10 @@ def build_data_module(
         preview_prog.control.visible = True
         preview_prog.pbar.value = None
         preview_prog.status.value = "Preparando indexação…"
-        preview_prog.start()
+        # Flush visibility BEFORE start() so the spinner animates (see _begin).
         page.update()
-        start_index(bus, embed_model=embed_model)
+        preview_prog.start()
+        start_index(bus, files, embed_model=embed_model)
 
     def _end_index() -> None:
         pipeline_running[0] = False
@@ -461,11 +469,12 @@ def build_data_module(
         analysis_prog.control.visible = True
         analysis_prog.pbar.value = None
         analysis_prog.status.value = "Avaliando com a IA… 0:00"
+        # Flush visibility BEFORE start() so the spinner animates (see _begin).
+        page.update()
         analysis_prog.start()
         _assess_t0[0] = time.monotonic()
         _assess_ticker_stop.clear()
         page.run_task(_assess_tick)
-        page.update()
         start_assess(bus, file, model_name=form.get_model())
 
     def _end_assess() -> None:
@@ -1113,8 +1122,8 @@ def build_data_module(
         content=ft.Row(
             [
                 ft.Text(
-                    "Catalogue suas saídas em output/data/ no índice da IA "
-                    "(incremental).",
+                    "Adiciona o cartão dos arquivos selecionados ao índice da IA "
+                    "(aparece no hub IA, citável nas respostas).",
                     size=Type.small.size,
                     color=ft.Colors.ON_SURFACE_VARIANT,
                     expand=True,
