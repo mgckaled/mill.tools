@@ -238,9 +238,10 @@ HELP_SHORT: dict[str, str] = {
     ),
     # --- Dados ---
     "data": (
-        "Consulte planilhas e arquivos de dados (CSV, JSON, Parquet, XLSX) com o "
-        "motor DuckDB. Descreva o que quer em português — a IA traduz para SQL "
-        "vendo só os nomes de coluna; o conteúdo das tabelas fica 100% local."
+        "Consulte planilhas e arquivos de dados (CSV, TSV, JSON, Parquet, XLSX) "
+        "com o motor DuckDB. Descreva o que quer em português — a IA traduz para "
+        "SQL vendo só os nomes de coluna; o conteúdo das tabelas fica 100% local. "
+        "Abas: Consulta · Pré-visualização · Análise com IA."
     ),
     # --- Receitas ---
     "recipes": (
@@ -441,6 +442,39 @@ HELP_LONG: dict[str, str] = {
         "passos intermediários — mantém só as saídas finais e as suas entradas.\n\n"
         "Paridade na linha de comando: uv run main.py recipe list / "
         'recipe run "<nome>" <URL_OU_ARQUIVO>.'
+    ),
+    "data": (
+        "O módulo Dados é query-first: toda a composição (juntar, filtrar, "
+        "agrupar, somar, ordenar) vive numa única consulta sobre o motor DuckDB "
+        "(embutido, local, sem servidor). Formatos: CSV, TSV, JSON, Parquet e "
+        "XLSX.\n\n"
+        "Como funciona a divisão de papéis:\n"
+        "• Você descreve em português o que quer; a IA traduz para SQL vendo "
+        "APENAS o esquema (nomes e tipos de coluna) — nunca as linhas.\n"
+        "• O DuckDB abre os arquivos e executa a consulta na sua máquina.\n"
+        "• Com Gemini, só os nomes de coluna saem da máquina; com modelos locais "
+        "(Ollama), nada sai. O conteúdo das tabelas fica 100% local.\n\n"
+        "Privacidade reforçada: somente leitura. Um guard rejeita qualquer SQL "
+        "que não seja SELECT (sem COPY/INSERT/UPDATE/DELETE/ATTACH/PRAGMA) e "
+        "múltiplos comandos.\n\n"
+        "As três abas do painel:\n"
+        "• Consulta — escreva em português (ou SQL na mão), pré-visualize o que "
+        "a IA entendeu (cartão “Entendi assim”, com SQL editável), execute e veja "
+        "o resultado paginado. Em seguida personalize o retorno (renomear "
+        "colunas, escolher formato) e Salvar / Conversar sobre / Salvar como "
+        "Receita / Indexar no RAG.\n"
+        "• Pré-visualização — primeiras linhas de um arquivo-fonte, com o tipo "
+        "inferido de cada coluna no cabeçalho (uma lente de qualidade). XLSX com "
+        "várias abas ganha um seletor de aba. O rodapé indexa suas saídas no RAG.\n"
+        "• Análise com IA — um parecer de qualidade: a IA recebe só esquema + "
+        "resumo estatístico (SUMMARIZE) + amostra de ~10 linhas e aponta tipos "
+        "suspeitos, nomes ruins, duplicatas, valores fora de faixa e problemas de "
+        "estrutura. O parecer fica em cache e é reaproveitado pela indexação.\n\n"
+        "Dica XLSX: números em formato pt-BR (1.234,56) são lidos como texto para "
+        "o arquivo sempre carregar; converta no SQL quando precisar de número.\n\n"
+        "Paridade na linha de comando: uv run main.py data query <arquivos> "
+        '"<pergunta>" [--sql] [--out csv|xlsx|json|parquet] · data convert · '
+        "data profile · data assess <arquivo>."
     ),
 }
 
