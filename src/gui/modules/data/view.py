@@ -24,6 +24,7 @@ import subprocess
 import threading
 import time
 from pathlib import Path
+from types import SimpleNamespace
 from typing import TYPE_CHECKING
 
 import flet as ft
@@ -36,6 +37,8 @@ from src.gui.modules.base import Module
 from src.gui.modules.data.form_view import build_data_form
 from src.gui.modules.data.table_view import build_paginated_table
 from src.gui.modules.data.worker import (
+    start_assess,
+    start_index,
     start_query,
     start_save,
     start_scan,
@@ -78,6 +81,7 @@ def build_data_module(
         nav: List holding [navigate_to] — used by the "Conversar sobre" bridge.
     """
     cfg = settings.load()
+    embed_model = cfg.get("last_embed_model", "nomic-embed-custom")
 
     # Result/query state shared across handlers.
     _result_columns: list[str] = []
@@ -99,6 +103,18 @@ def build_data_module(
         )
         page.snack_bar.open = True
         page.update()
+
+    def _scoped_update(*controls: ft.Control) -> None:
+        """Repaint only these controls — never page.update() while a spinner runs.
+
+        A full page.update() interrupts a spinner's in-flight rotation so its
+        on_animation_end chain never re-fires and the mill stops turning.
+        """
+        for c in controls:
+            try:
+                c.update()
+            except Exception:
+                pass
 
     # ------------------------------------------------------------------
     # Live timer: like the AI hub, a blocking IA invoke() has no honest
@@ -256,6 +272,7 @@ def build_data_module(
         _stop_ticker()
 
     def _show_review(sql: str, explanation: str) -> None:
+        empty_state.visible = False  # SQL mode reaches here without _begin()
         review_card.visible = True
         explanation_text.value = explanation or "Revise e execute a consulta abaixo."
         explanation_text.visible = bool(explanation) or form.get_mode() == "sql"
@@ -384,6 +401,82 @@ def build_data_module(
             logging.debug("[d] explorer select failed for %s: %s", path, exc)
 
     # ------------------------------------------------------------------
+    # Preview-tab indexing (RAG) — footer button + progress/log at the top
+    # ------------------------------------------------------------------
+
+    def _on_index(_e=None) -> None:
+        if pipeline_running[0]:
+            return
+        _action[0] = "index"
+        pipeline_running[0] = True
+        form.set_running(True)
+        preview_index_btn.disabled = True
+        preview_prog.control.visible = True
+        preview_prog.pbar.value = None
+        preview_prog.status.value = "Preparando indexação…"
+        preview_prog.start()
+        page.update()
+        start_index(bus, embed_model=embed_model)
+
+    def _end_index() -> None:
+        pipeline_running[0] = False
+        form.set_running(False)
+        preview_index_btn.disabled = False
+        preview_prog.stop()
+        preview_prog.control.visible = False
+
+    # ------------------------------------------------------------------
+    # Analysis-tab assessment — footer button + live timer/log at the top
+    # ------------------------------------------------------------------
+
+    _assess_t0: list[float] = [0.0]
+    _assess_ticker_stop = threading.Event()
+
+    async def _assess_tick() -> None:
+        while not _assess_ticker_stop.is_set():
+            elapsed = time.monotonic() - _assess_t0[0]
+            analysis_prog.status.value = (
+                f"Avaliando com a IA… {timing.format_clock(elapsed)}"
+            )
+            try:
+                analysis_prog.status.update()
+            except Exception:
+                break
+            await asyncio.sleep(1.0)
+
+    def _on_assess(_e=None) -> None:
+        if pipeline_running[0]:
+            return
+        file = _analysis_file()
+        if file is None:
+            _toast("Selecione um arquivo para avaliar.")
+            return
+        _action[0] = "assess"
+        pipeline_running[0] = True
+        form.set_running(True)
+        assess_btn.disabled = True
+        assess_hint.visible = False
+        assess_md.visible = False
+        assess_status.value = ""
+        analysis_prog.control.visible = True
+        analysis_prog.pbar.value = None
+        analysis_prog.status.value = "Avaliando com a IA… 0:00"
+        analysis_prog.start()
+        _assess_t0[0] = time.monotonic()
+        _assess_ticker_stop.clear()
+        page.run_task(_assess_tick)
+        page.update()
+        start_assess(bus, file, model_name=form.get_model())
+
+    def _end_assess() -> None:
+        pipeline_running[0] = False
+        form.set_running(False)
+        assess_btn.disabled = False
+        _assess_ticker_stop.set()
+        analysis_prog.stop()
+        analysis_prog.control.visible = False
+
+    # ------------------------------------------------------------------
     # Source-file selection (shared by the Preview + Analysis tabs)
     # ------------------------------------------------------------------
 
@@ -409,6 +502,7 @@ def build_data_module(
         preview_content.visible = has
         analysis_empty.visible = not has
         analysis_content.visible = has
+        analysis_footer.visible = has  # "Avaliar" needs a selected file
         # If a source was added while already on the preview/analysis tab, load
         # it now so the tab isn't left blank until the user re-selects.
         if has and _tab[0] == "preview":
@@ -500,46 +594,6 @@ def build_data_module(
             assess_hint.visible = True
             assess_status.value = ""
 
-    async def _run_assessment() -> None:
-        from src.core.data import assess as assess_mod
-        from src.core.data.datacard import sample_to_text
-        from src.core.data.engine import preview as engine_preview
-        from src.core.data.profile import profile_text
-        from src.core.data.scanner import schema_text
-
-        file = _analysis_file()
-        if file is None:
-            return
-        model = form.get_model()
-        assess_btn.disabled = True
-        assess_status.value = "Avaliando…"
-        assess_hint.visible = True
-        assess_hint.value = "Consultando a IA…"
-        assess_md.visible = False
-        page.update()
-
-        def _work() -> str:
-            schema = schema_text([file])
-            prof = profile_text(file.path)
-            sample = sample_to_text(engine_preview(file.path, limit=10))
-            text = assess_mod.assess(schema, prof, sample, model_name=model)
-            assess_mod.save_assessment(file.path, text)  # cache → reused by indexing
-            return text
-
-        try:
-            text = await asyncio.to_thread(_work)
-        except Exception as exc:
-            logging.getLogger(__name__).warning("[!] assessment failed: %s", exc)
-            assess_status.value = ""
-            assess_btn.disabled = False
-            assess_hint.value = f"Não foi possível avaliar: {exc}"
-            page.update()
-            return
-        _show_assessment(text)
-        assess_status.value = ""
-        assess_btn.disabled = False
-        page.update()
-
     def _on_analysis_file_change(_e=None) -> None:
         _load_assessment_cache()
         page.update()
@@ -579,19 +633,69 @@ def build_data_module(
                     nav[0]("ai", {"file": str(out)})
                     return
                 _toast(f"Salvo em output/data/{out.name}", error=False)
+            case "data_index_start":
+                # Scoped update + early return: a full page.update() while the
+                # spinner is animating would interrupt its on_animation_end chain
+                # and stop the mill (same quirk as the Consulta ticker).
+                preview_prog.status.value = "Indexando…"
+                _scoped_update(preview_prog.status)
+                return
+            case "data_index_progress":
+                cur, tot = p.get("current"), p.get("total")
+                preview_prog.pbar.value = (cur / tot) if tot else None
+                preview_prog.status.value = (
+                    f"Indexando {cur}/{tot}…" if tot else "Indexando…"
+                )
+                _scoped_update(preview_prog.pbar, preview_prog.status)
+                return
+            case "data_indexed":
+                _end_index()
+                added = p.get("added", 0)
+                _toast(
+                    f"Índice atualizado: +{added} chunk(s)."
+                    if added
+                    else "Índice já estava atualizado.",
+                    error=False,
+                )
+            case "data_assess_start":
+                analysis_prog.status.value = "Avaliando com a IA…"
+                _scoped_update(analysis_prog.status)
+                return
+            case "data_assessed":
+                _end_assess()
+                _show_assessment(p.get("text", ""))
+                assess_status.value = ""
+            case "log":
+                # Route the worker's log line to the active tab's status (scoped,
+                # to keep the spinner animation alive during indexing).
+                msg = p.get("message", "")
+                if msg and _action[0] == "index":
+                    preview_prog.status.value = msg
+                    _scoped_update(preview_prog.status)
+                return
             case "task_error":
-                # A failed translate has no SQL; a failed query keeps the SQL it
-                # tried, so the IA refinement can reference both.
-                if _action[0] == "translate":
-                    _record_query_time(_pending_model[0], time.monotonic() - _t0[0])
-                _end()
                 message = p.get("message", "Erro.")
-                _last_error[0] = message
-                error_text.value = message
-                # Offer "fix with the IA" only when there are files to re-query.
-                refine_btn.visible = bool(form.get_files())
-                error_box.visible = True
-                _toast(message)
+                if _action[0] == "index":
+                    _end_index()
+                    _toast(message)
+                elif _action[0] == "assess":
+                    _end_assess()
+                    assess_hint.value = f"Não foi possível avaliar: {message}"
+                    assess_hint.visible = True
+                    assess_md.visible = False
+                    _toast(message)
+                else:
+                    # A failed translate has no SQL; a failed query keeps the SQL
+                    # it tried, so the IA refinement can reference both.
+                    if _action[0] == "translate":
+                        _record_query_time(_pending_model[0], time.monotonic() - _t0[0])
+                    _end()
+                    _last_error[0] = message
+                    error_text.value = message
+                    # Offer "fix with the IA" only with files to re-query.
+                    refine_btn.visible = bool(form.get_files())
+                    error_box.visible = True
+                    _toast(message)
             case "task_done":
                 pass  # terminal bookkeeping handled by the specific events above
         page.update()
@@ -633,6 +737,41 @@ def build_data_module(
         spacing=Space.xs,
         visible=False,
     )
+
+    def _make_progress() -> SimpleNamespace:
+        """A self-contained progress block (spinner + status + bar) for a tab.
+
+        Mirrors the Consulta progress_row so the Preview/Análise tabs show their
+        log/progress at the top in the same shape.
+        """
+        img, start, stop = spinner()
+        status = ft.Text(
+            "",
+            size=Type.small.size,
+            color=ft.Colors.PRIMARY,
+            weight=ft.FontWeight.W_500,
+        )
+        pbar = ft.ProgressBar(
+            value=None, color=ft.Colors.PRIMARY, bgcolor=ft.Colors.OUTLINE_VARIANT
+        )
+        control = ft.Column(
+            controls=[
+                ft.Row(
+                    [img, status],
+                    spacing=Space.sm,
+                    vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                ),
+                pbar,
+            ],
+            spacing=Space.xs,
+            visible=False,
+        )
+        return SimpleNamespace(
+            control=control, start=start, stop=stop, status=status, pbar=pbar
+        )
+
+    preview_prog = _make_progress()
+    analysis_prog = _make_progress()
 
     error_text = ft.Text(
         "",
@@ -903,18 +1042,16 @@ def build_data_module(
     )
 
     consulta_scroll = ft.Column(
-        controls=[
-            progress_row,
-            error_box,
-            review_card,
-            ft.Stack([empty_state, result_area], expand=True),
-        ],
+        controls=[progress_row, error_box, review_card, result_area],
         expand=True,
         spacing=Space.sm,
         scroll=ft.ScrollMode.AUTO,
     )
+    # The empty state is a centered overlay (a Stack at the view level, not inside
+    # the scroll), so it centers vertically like the other tabs' empty states.
+    consulta_body = ft.Stack([consulta_scroll, empty_state], expand=True)
     consulta_view = ft.Column(
-        controls=[consulta_scroll, footer],
+        controls=[consulta_body, footer],
         expand=True,
         spacing=Space.sm,
     )
@@ -963,9 +1100,40 @@ def build_data_module(
         "Selecione arquivos para ver as primeiras linhas e o tipo inferido de "
         "cada coluna. A leitura é 100% local.",
     )
+    preview_index_btn = secondary_button(
+        "Indexar no RAG", icon=ft.Icons.STORAGE_OUTLINED
+    )
+    preview_index_btn.on_click = _on_index
+    preview_footer = ft.Container(
+        bgcolor=ft.Colors.SURFACE,
+        border=ft.Border(top=ft.BorderSide(1.5, ft.Colors.OUTLINE_VARIANT)),
+        padding=ft.Padding(
+            left=Space.md, right=Space.md, top=Space.sm, bottom=Space.sm
+        ),
+        content=ft.Row(
+            [
+                ft.Text(
+                    "Catalogue suas saídas em output/data/ no índice da IA "
+                    "(incremental).",
+                    size=Type.small.size,
+                    color=ft.Colors.ON_SURFACE_VARIANT,
+                    expand=True,
+                    no_wrap=False,
+                ),
+                preview_index_btn,
+            ],
+            spacing=Space.sm,
+            vertical_alignment=ft.CrossAxisAlignment.CENTER,
+        ),
+    )
     preview_view = ft.Column(
-        controls=[ft.Stack([preview_empty, preview_content], expand=True)],
+        controls=[
+            preview_prog.control,
+            ft.Stack([preview_empty, preview_content], expand=True),
+            preview_footer,
+        ],
         expand=True,
+        spacing=Space.sm,
         visible=False,
     )
 
@@ -982,7 +1150,7 @@ def build_data_module(
         focused_border_color=ft.Colors.PRIMARY,
     )
     assess_btn = primary_button("Avaliar com a IA", icon=ft.Icons.AUTO_AWESOME_OUTLINED)
-    assess_btn.on_click = lambda _e: page.run_task(_run_assessment)
+    assess_btn.on_click = _on_assess
     assess_status = ft.Text("", size=Type.small.size, color=ft.Colors.PRIMARY)
     assess_hint = ft.Text(
         "A IA examina o esquema, as estatísticas e uma amostra — nunca a tabela "
@@ -1001,7 +1169,7 @@ def build_data_module(
     analysis_content = ft.Column(
         controls=[
             ft.Row(
-                [analysis_file_dd, assess_btn, assess_status],
+                [analysis_file_dd, assess_status],
                 spacing=Space.sm,
                 vertical_alignment=ft.CrossAxisAlignment.CENTER,
                 wrap=True,
@@ -1016,13 +1184,47 @@ def build_data_module(
     )
     analysis_empty = _tab_empty_state(
         ft.Icons.AUTO_AWESOME_OUTLINED,
-        "Avalie seus dados com a IA",
-        "Selecione arquivos e a IA aponta inconsistências de tipo, nomes e "
-        "estrutura — sem enviar as linhas, só esquema e estatísticas.",
+        "Avalie a qualidade dos seus dados com a IA",
+        "Selecione um arquivo e clique em “Avaliar com a IA”. A IA recebe apenas "
+        "o esquema (nomes e tipos de coluna), o resumo estatístico do DuckDB "
+        "(SUMMARIZE: nulos, valores distintos, mín/máx, média) e uma amostra de "
+        "~10 linhas — nunca a tabela inteira. Em troca, aponta em Markdown: "
+        "colunas com tipo suspeito (ex.: número guardado como texto), nomes mal "
+        "escolhidos, possíveis duplicatas, valores fora de faixa ou nulos em "
+        "excesso e problemas de estrutura (cabeçalho deslocado, esquema "
+        "irregular). O parecer fica em cache e é reaproveitado na indexação. "
+        "Com Gemini, só o esquema e as estatísticas saem da máquina.",
+    )
+    analysis_footer = ft.Container(
+        visible=False,
+        bgcolor=ft.Colors.SURFACE,
+        border=ft.Border(top=ft.BorderSide(1.5, ft.Colors.OUTLINE_VARIANT)),
+        padding=ft.Padding(
+            left=Space.md, right=Space.md, top=Space.sm, bottom=Space.sm
+        ),
+        content=ft.Row(
+            [
+                ft.Text(
+                    "A IA vê só esquema + estatísticas + amostra; nunca as linhas.",
+                    size=Type.small.size,
+                    color=ft.Colors.ON_SURFACE_VARIANT,
+                    expand=True,
+                    no_wrap=False,
+                ),
+                assess_btn,
+            ],
+            spacing=Space.sm,
+            vertical_alignment=ft.CrossAxisAlignment.CENTER,
+        ),
     )
     analysis_view = ft.Column(
-        controls=[ft.Stack([analysis_empty, analysis_content], expand=True)],
+        controls=[
+            analysis_prog.control,
+            ft.Stack([analysis_empty, analysis_content], expand=True),
+            analysis_footer,
+        ],
         expand=True,
+        spacing=Space.sm,
         visible=False,
     )
 
