@@ -540,7 +540,10 @@ como os do RAG. Fixtures locais em `tests/core/data/conftest.py` (`csv_sales`,
 - **indexer `kind="data"`** (`tests/core/rag/test_indexer.py`): `build_index(...,
   card_fn=...)` embeda o cartão (não o arquivo); sem `card_fn`, itens de dados
   são pulados; `card_fn` que levanta pula só aquele item; `indexable_items`
-  inclui `kind="data"` por kind (qualquer sufixo).
+  inclui `kind="data"` por kind (qualquer sufixo). **`index_files`** (aditivo,
+  sem reconciliação, usado pelo botão Indexar da aba Pré-visualização): indexar
+  só o arquivo B **não** derruba A já indexado; reembeda a cada chamada (ação
+  explícita, sem skip por mtime); `card_fn` que falha pula só aquele.
 
 ### Mock de `WhisperModel` (faster-whisper) — para testar `transcriber.transcribe`
 
