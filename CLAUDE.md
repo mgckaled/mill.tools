@@ -38,7 +38,7 @@ src/
     └── views/                  — form_view (Transcrição) · progress_view (ProgressPanel) · result_view · file_viewer (visor .md/.txt)
 ```
 
-> Responsabilidade de cada arquivo é derivável do código. Detalhe da CLI → skill `cli`; do design system / eventos de GUI → skill `design-system`; de testes → skill `testing`.
+> Responsabilidade de cada arquivo é derivável do código. **Arquitetura/estrutura, camadas, limites de tamanho/coesão e padrões de decomposição (`blocks/`/`tabs/`/`registry/<módulo>`) → skill `architecture`** (orquestra as demais; usar ao criar módulos, dividir arquivos grandes ou implementar planos do roadmap); detalhe da CLI → skill `cli`; do design system / eventos de GUI → skill `design-system`; de testes → skill `testing`.
 
 ## Sistema de módulos (GUI)
 
@@ -176,6 +176,7 @@ uv run main.py data   convert <arquivo> [--out parquet] | data profile <arquivo>
 - **Idioma do código**: docstrings, logs, comentários e strings internas em **inglês**. Português **só** em labels/textos visíveis da GUI. Há inconsistências históricas — ao tocar um arquivo, corrigir PT→EN em docstrings/logs na mesma passagem.
 - Docstrings em todas as funções/módulos. Logging via handler dedicado — **nunca `print()`** para logs.
 - **Core (`src/core/`) é puro**: sem Flet, reutilizável por CLI e GUI.
+- **Tamanho e coesão de arquivo** (governado pela skill `architecture`): builder de GUI ≤ ~400–500 linhas; módulo de `core/` ≤ ~300–400. Um arquivo = uma responsabilidade. Builder/aba/seção que cresce → extrair via `blocks/`/`tabs/`/`registry/<módulo>` (sub-builder devolve `(controle, refs/handlers)`). Regra "divide-se ao tocar": dividir no momento em que um plano estende o arquivo, não preventivamente.
 - **`subprocess` sempre em modo binário** (`Popen`/`run` sem `text=True`); decodificar manualmente com `.decode('utf-8', errors='replace')`. Em Windows `text=True` herda cp1252 → `UnicodeDecodeError` em saídas UTF-8 do ffmpeg/ffprobe.
 - Linter: **ruff** · Testes: **pytest** (rodar `uv run pytest -m unit` antes de qualquer commit).
 

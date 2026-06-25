@@ -57,7 +57,7 @@ def test_transcribe_accepts_audio_and_video():
 @pytest.mark.unit
 def test_format_adapter_returns_input_path(mocker, tmp_path):
     """transcription.format rewrites in place and returns str → adapter yields [input_path]."""
-    import src.core.recipes.registry as reg
+    import src.core.recipes.registry.transcription as reg
     from src.core.recipes.types import StepContext
 
     mock_fmt = mocker.patch(
@@ -83,7 +83,7 @@ def test_transcribe_adapter_builds_meta_and_reconstructs_subtitles(
     mocker, tmp_path, monkeypatch
 ):
     """transcribe() only returns elapsed time → adapter reconstructs [txt, *subs]."""
-    import src.core.recipes.registry as reg
+    import src.core.recipes.registry.transcription as reg
     import src.utils as utils
     from src.core.recipes.types import StepContext
 
@@ -116,7 +116,7 @@ def test_transcribe_adapter_builds_meta_and_reconstructs_subtitles(
 
 @pytest.mark.unit
 def test_transcribe_adapter_maps_auto_language_to_none(mocker, tmp_path, monkeypatch):
-    import src.core.recipes.registry as reg
+    import src.core.recipes.registry.transcription as reg
     import src.utils as utils
     from src.core.recipes.types import StepContext
 
@@ -300,7 +300,7 @@ def test_data_query_adapter_requires_sql_or_question(mocker, tmp_path):
 
 @pytest.mark.unit
 def test_subtitle_adapter_recovers_video_and_srt_from_context(mocker, tmp_path):
-    import src.core.recipes.registry as reg
+    import src.core.recipes.registry.video as reg
     from src.core.recipes.types import StepContext
 
     mock = mocker.patch(
@@ -324,7 +324,7 @@ def test_subtitle_adapter_recovers_video_and_srt_from_context(mocker, tmp_path):
 
 @pytest.mark.unit
 def test_analyze_adapter_forwards_profile_param(mocker, tmp_path):
-    import src.core.recipes.registry as reg
+    import src.core.recipes.registry.transcription as reg
     from src.core.recipes.types import StepContext
 
     mock = mocker.patch("src.analyzer.analyze", return_value=tmp_path / "o.md")
@@ -341,7 +341,7 @@ def test_analyze_adapter_forwards_profile_param(mocker, tmp_path):
 
 @pytest.mark.unit
 def test_analyze_adapter_defaults_profile_to_default(mocker, tmp_path):
-    import src.core.recipes.registry as reg
+    import src.core.recipes.registry.transcription as reg
     from src.core.recipes.types import StepContext
 
     mock = mocker.patch("src.analyzer.analyze", return_value=tmp_path / "o.md")
@@ -358,7 +358,7 @@ def test_analyze_adapter_defaults_profile_to_default(mocker, tmp_path):
 
 @pytest.mark.unit
 def test_ai_answer_adapter_writes_markdown_with_sources(mocker, tmp_path, monkeypatch):
-    import src.core.recipes.registry as reg
+    import src.core.recipes.registry.ai as reg
     import src.utils as utils
     from src.core.rag.types import AnswerResult
     from src.core.recipes.types import StepContext
@@ -393,7 +393,7 @@ def test_ai_answer_adapter_writes_markdown_with_sources(mocker, tmp_path, monkey
 
 @pytest.mark.unit
 def test_ai_answer_adapter_raises_when_embedder_unavailable(mocker, tmp_path):
-    import src.core.recipes.registry as reg
+    import src.core.recipes.registry.ai as reg
     from src.core.recipes.types import StepContext
 
     mocker.patch("src.core.rag.embedder.is_available", return_value=False)
@@ -412,7 +412,7 @@ def test_ai_answer_adapter_raises_when_embedder_unavailable(mocker, tmp_path):
 
 @pytest.mark.unit
 def test_subtitle_adapter_errors_without_subtitle(tmp_path):
-    import src.core.recipes.registry as reg
+    import src.core.recipes.registry.video as reg
     from src.core.recipes.types import StepContext
 
     ctx = StepContext(

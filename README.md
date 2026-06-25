@@ -209,9 +209,9 @@ output/
 
 ## Modelos
 
-**Whisper** (`--wm`): `tiny` → `large-v3` (mais rápido → mais preciso); `small` é o padrão equilibrado.
+**Whisper (transcrição de áudio)** (`--wm`): `tiny` → `large-v3` (mais rápido → mais preciso); `small` é o padrão equilibrado.
 
-**Ollama** (local, padrão) — customizados via Modelfiles em `ollama/` (CPU-pinned, `num_gpu 0`):
+**Ollama ("gerenciador" modelos open-source)** (local, padrão) — customizados via Modelfiles em `ollama/` (CPU-pinned, `num_gpu 0`):
 
 | Modelo | Papel | Tamanho |
 |---|---|---|
