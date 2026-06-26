@@ -30,6 +30,7 @@ dependencies = [
 [project.optional-dependencies]
 ai-image = ["rembg[cpu]>=2.0.50"]
 ocr = ["pytesseract>=0.3"]
+analysis = ["polars>=1.0", "pandas>=2.0", "pyarrow>=15"]
 
 [dependency-groups]
 dev = [
