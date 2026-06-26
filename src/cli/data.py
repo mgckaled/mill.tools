@@ -15,7 +15,7 @@ import logging
 import sys
 from pathlib import Path
 
-from src.core.data import convert, nl2sql, profile, scanner
+from src.core.data import charts, convert, nl2sql, profile, scanner
 from src.core.data.engine import run_query
 from src.utils import DATA_DIR, setup_logging
 
@@ -97,6 +97,36 @@ def add_data_parser(subparsers) -> None:
     )
     a.add_argument("--verbose", action="store_true", help="Logging DEBUG")
 
+    # plot ------------------------------------------------------------------
+    pl = data_sub.add_parser(
+        "plot", help="Gera um gráfico (PNG) a partir de uma consulta"
+    )
+    pl.add_argument(
+        "files", nargs="+", help="Arquivos de dados (CSV/TSV/JSON/Parquet/XLSX)"
+    )
+    pl.add_argument(
+        "question", help="Pergunta em português (ou a consulta SQL com --sql)"
+    )
+    pl.add_argument(
+        "--sql",
+        action="store_true",
+        help="Trata 'question' como SQL literal e pula a tradução pela IA",
+    )
+    pl.add_argument(
+        "--model",
+        default=nl2sql.DEFAULT_MODEL,
+        help=f"Modelo da tradução PT→SQL (default: {nl2sql.DEFAULT_MODEL})",
+    )
+    pl.add_argument(
+        "--kind",
+        choices=charts.CHART_KINDS,
+        help="Tipo do gráfico (default: sugerido pelo esquema do resultado)",
+    )
+    pl.add_argument("--x", help="Coluna do eixo X (default: sugerida)")
+    pl.add_argument("--y", help="Coluna do eixo Y (default: sugerida)")
+    pl.add_argument("--out", help="Nome do arquivo PNG de saída (default: grafico.png)")
+    pl.add_argument("--verbose", action="store_true", help="Logging DEBUG")
+
     data_p.set_defaults(func=run_data_cli)
 
 
@@ -134,6 +164,25 @@ def _resolve_files(raw: list[str]) -> list[Path]:
     return paths
 
 
+def _resolve_sql(ns: argparse.Namespace, files: list) -> str:
+    """Resolve the SQL to run: the literal ``--sql`` text, or the IA's translation.
+
+    Shared by the ``query`` and ``plot`` ops. Prints the IA's "Entendi assim"
+    explanation (the GUI review card's analogue) and exits on a translation error.
+    """
+    if ns.sql:
+        return ns.question
+    schema = scanner.schema_text(files)
+    try:
+        sql, explanation = nl2sql.to_sql(schema, ns.question, model_name=ns.model)
+    except Exception as exc:
+        logging.error("Falha ao traduzir a pergunta para SQL: %s", exc)
+        sys.exit(1)
+    if explanation:
+        print(f"\nEntendi assim: {explanation}")
+    return sql
+
+
 def _query(ns: argparse.Namespace) -> None:
     """Run the ``data query`` operation."""
     files = scanner.scan_files(_resolve_files(ns.files))
@@ -142,17 +191,7 @@ def _query(ns: argparse.Namespace) -> None:
             f"• {f.path.name} → {f.view_name} ({f.n_rows} linhas, {f.n_cols} colunas)"
         )
 
-    if ns.sql:
-        sql = ns.question
-    else:
-        schema = scanner.schema_text(files)
-        try:
-            sql, explanation = nl2sql.to_sql(schema, ns.question, model_name=ns.model)
-        except Exception as exc:
-            logging.error("Falha ao traduzir a pergunta para SQL: %s", exc)
-            sys.exit(1)
-        if explanation:
-            print(f"\nEntendi assim: {explanation}")
+    sql = _resolve_sql(ns, files)
     print(f"\nSQL:\n{sql}\n")
 
     result = run_query(files, sql, max_rows=ns.limit)
@@ -209,6 +248,51 @@ def _assess(ns: argparse.Namespace) -> None:
     print(text)
 
 
+def _plot(ns: argparse.Namespace) -> None:
+    """Run the ``data plot`` operation — render a chart PNG from a query.
+
+    Consumes the Plano 0 foundation: ``run_query_arrow`` (zero-copy) →
+    ``frames.from_arrow`` → ``frames.to_pandas`` → ``charts.render_png``. The
+    chart kind/x/y come from ``--kind``/``--x``/``--y`` or ``suggest_spec``.
+    """
+    from src.core.data import frames
+    from src.core.data.engine import run_query_arrow
+
+    if not (frames.is_available() and charts.is_available()):
+        logging.error(charts.SETUP_HINT)
+        sys.exit(1)
+
+    files = scanner.scan_files(_resolve_files(ns.files))
+    for f in files:
+        print(
+            f"• {f.path.name} → {f.view_name} ({f.n_rows} linhas, {f.n_cols} colunas)"
+        )
+    sql = _resolve_sql(ns, files)
+    print(f"\nSQL:\n{sql}\n")
+
+    pl_df = frames.from_arrow(run_query_arrow(files, sql))
+    if pl_df.height == 0:
+        logging.error("A consulta não retornou linhas para plotar.")
+        sys.exit(1)
+
+    schema = [(name, str(dtype)) for name, dtype in pl_df.schema.items()]
+    suggested = charts.suggest_spec(schema)
+    spec = charts.ChartSpec(
+        kind=ns.kind or suggested.kind,
+        x=ns.x or suggested.x,
+        y=ns.y or suggested.y,
+    )
+
+    png = charts.render_png(frames.to_pandas(pl_df), spec)
+    out_name = ns.out or "grafico.png"
+    if not out_name.lower().endswith(".png"):
+        out_name += ".png"
+    DATA_DIR.mkdir(parents=True, exist_ok=True)
+    out_path = DATA_DIR / out_name
+    out_path.write_bytes(png)
+    print(f"[✓] Gráfico salvo em: {out_path} ({spec.kind}, x={spec.x}, y={spec.y})")
+
+
 def run_data_cli(ns: argparse.Namespace) -> None:
     """Dispatch the ``data`` subcommand to its operation handler."""
     # Data values often contain non-cp1252 characters; force UTF-8 stdout.
@@ -227,3 +311,5 @@ def run_data_cli(ns: argparse.Namespace) -> None:
         _profile(ns)
     elif op == "assess":
         _assess(ns)
+    elif op == "plot":
+        _plot(ns)

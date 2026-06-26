@@ -198,3 +198,85 @@ def test_run_data_cli_assess_missing_file_exits():
     ns = _parse("assess", "ghost.csv")
     with pytest.raises(SystemExit):
         ns.func(ns)
+
+
+# --- plot --------------------------------------------------------------------
+
+
+@pytest.mark.unit
+def test_plot_parser_flags():
+    ns = _parse(
+        "plot",
+        "a.csv",
+        "vendas por produto",
+        "--kind",
+        "bar",
+        "--x",
+        "produto",
+        "--y",
+        "total",
+        "--out",
+        "g.png",
+    )
+    assert ns.data_op == "plot"
+    assert ns.files == ["a.csv"]
+    assert ns.question == "vendas por produto"
+    assert ns.kind == "bar"
+    assert ns.x == "produto"
+    assert ns.y == "total"
+    assert ns.out == "g.png"
+    assert callable(ns.func)
+
+
+@pytest.mark.unit
+def test_plot_invalid_kind_rejected():
+    with pytest.raises(SystemExit):
+        _parse("plot", "a.csv", "q", "--kind", "pizza")
+
+
+@pytest.mark.unit
+def test_run_data_cli_plot_dispatch(mocker, csv_sales, tmp_path):
+    # Stub the Plano-0 Arrow→pandas chain and the renderer so no real
+    # polars/matplotlib work is needed for the dispatch test.
+    mocker.patch("src.core.data.frames.is_available", return_value=True)
+    mocker.patch("src.cli.data.charts.is_available", return_value=True)
+    fake_df = mocker.MagicMock()
+    fake_df.height = 2
+    fake_df.schema = {"produto": "String", "qtd": "Int64"}
+    mocker.patch("src.core.data.engine.run_query_arrow", return_value="ARROW")
+    mocker.patch("src.core.data.frames.from_arrow", return_value=fake_df)
+    mocker.patch("src.core.data.frames.to_pandas", return_value="PANDAS")
+    mock_render = mocker.patch(
+        "src.cli.data.charts.render_png", return_value=b"\x89PNG\r\n"
+    )
+    mock_to_sql = mocker.patch("src.cli.data.nl2sql.to_sql")  # must NOT be called
+    mocker.patch("src.cli.data.DATA_DIR", tmp_path)
+
+    ns = _parse(
+        "plot", str(csv_sales), "SELECT produto, qtd FROM vendas", "--sql", "--out", "g"
+    )
+    ns.func(ns)
+
+    mock_to_sql.assert_not_called()
+    assert mock_render.called
+    # Suggested spec for (String, Int64) is a bar(produto, qtd).
+    spec = mock_render.call_args.args[1]
+    assert spec.kind == "bar" and spec.x == "produto" and spec.y == "qtd"
+    assert (tmp_path / "g.png").read_bytes() == b"\x89PNG\r\n"  # .png appended
+
+
+@pytest.mark.unit
+def test_run_data_cli_plot_gate_unavailable_exits(mocker, csv_sales):
+    mocker.patch("src.core.data.frames.is_available", return_value=False)
+    ns = _parse("plot", str(csv_sales), "q", "--sql")
+    with pytest.raises(SystemExit):
+        ns.func(ns)
+
+
+@pytest.mark.unit
+def test_run_data_cli_plot_missing_file_exits(mocker):
+    mocker.patch("src.core.data.frames.is_available", return_value=True)
+    mocker.patch("src.cli.data.charts.is_available", return_value=True)
+    ns = _parse("plot", "ghost.csv", "q", "--sql")
+    with pytest.raises(SystemExit):
+        ns.func(ns)
