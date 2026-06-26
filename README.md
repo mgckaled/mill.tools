@@ -36,7 +36,7 @@ Seis **ferramentas** de processamento (NavigationRail) e três **hubs** que oper
 | **Vídeo** | Ferramenta | 8 operações: download, convert, trim, compress, resize, extract-audio, thumbnail e legenda (mux/burn-in). Encoding 100% CPU — sem NVENC |
 | **Imagens** | Ferramenta | 12 operações de manipulação/conversão + IA: remoção de fundo (rembg) e descrição por visão. Visor Antes/Depois |
 | **Documentos** | Ferramenta | 13 operações PDF/QR (merge, split, compress, rotate, watermark, stamp, encrypt, extract, OCR, pdf↔imagens, QR, análise). 100% local via pymupdf |
-| **Dados** | Ferramenta | Consulte CSV/TSV/JSON/Parquet/XLSX em **português** (a IA traduz para SQL vendo só o schema) ou SQL na mão; motor **DuckDB** embutido. Salva o resultado e perfila |
+| **Dados** | Ferramenta | Consulte CSV/TSV/JSON/Parquet/XLSX em **português** (a IA traduz para SQL vendo só o schema) ou SQL na mão; motor **DuckDB** embutido. Salva o resultado, perfila e gera **gráficos** (barras/linha/histograma/dispersão) |
 | **Biblioteca** | Hub | Índice navegável de tudo em `output/`: grade com thumbnails ou lista, filtro/busca/ordenação, abrir arquivo/pasta e reenviar a outro módulo |
 | **IA** | Hub | RAG local sobre o seu acervo: pergunte ao corpus e receba respostas **citando as fontes**. Embeddings sempre locais; Gemini opt-in na resposta |
 | **Receitas** | Hub | Automação: cadeias lineares entre módulos (`URL → áudio → transcrever → analisar`). Presets + construtor com validação ao vivo; lote; CLI `recipe run` |
@@ -104,6 +104,7 @@ ollama pull moondream      && ollama create moondream-custom -f ollama/Modelfile
 ```bash
 uv sync --extra ai-image   # remoção de fundo (Imagens)
 uv sync --extra ocr        # OCR de PDFs escaneados (requer binário Tesseract no PATH)
+uv sync --extra analysis --extra data-plot  # gráficos no módulo Dados (aba Gráfico / data plot)
 ```
 
 > O app base funciona sem os extras; os cards correspondentes desabilitam-se graciosamente quando ausentes.
@@ -154,6 +155,7 @@ uv run main.py data query vendas.csv clientes.csv "total por cliente, do maior p
 uv run main.py data query dados.parquet "SELECT * FROM dados LIMIT 10" --sql
 uv run main.py data convert dados.csv --out parquet
 uv run main.py data profile dados.csv
+uv run main.py data plot vendas.csv "total por produto" --kind bar   # gráfico PNG em output/data/
 
 # Biblioteca — índice de output/ como tabela
 uv run main.py library list --kind audio --since 7d --sort size
@@ -236,7 +238,7 @@ src/
 ├── analysis/      perfis de análise (puro)
 ├── cli/           1 módulo por subcomando (audio/video/image/document/library/ai/recipes/data) + bus
 ├── core/          PURO — audio · video · image · document · library · rag · recipes · data
-│   └── data/      types · scanner · engine (fronteira DuckDB) · frames (fronteira DataFrame, Plano 0) · nl2sql · validate · convert · profile · store
+│   └── data/      types · scanner · engine (fronteira DuckDB) · frames (DataFrame, Plano 0) · charts (matplotlib, Plano 1) · nl2sql · validate · convert · profile · store
 └── gui/           app (rail + hubs) · home · splash · events · settings · modules/ · theme/ (design system) · views/
 ```
 
@@ -253,7 +255,7 @@ uv run pytest -n auto            # paralelizado (pytest-xdist)
 uv run pytest --cov=src --cov-report=html
 ```
 
-**988 testes unitários** (0 falhas); cobertura sobre `src/` (branch on, GUI excluída por não ser testável headless), agregado ~88%. Testes de integração são pulados automaticamente sem `ffmpeg`. Linter: **ruff** — `uv run pytest -m unit` verde + `ruff` limpo antes de qualquer commit.
+**1017 testes unitários** (0 falhas); cobertura sobre `src/` (branch on, GUI excluída por não ser testável headless), agregado ~88%. Testes de integração são pulados automaticamente sem `ffmpeg`. Linter: **ruff** — `uv run pytest -m unit` verde + `ruff` limpo antes de qualquer commit.
 
 ---
 
@@ -268,6 +270,6 @@ uv run pytest --cov=src --cov-report=html
 
 ## Roadmap
 
-Entregue: **Tier 0** (legendas, OCR) · **PR4** Vídeo · **PR5/5.1** Documentos + OCR · **PR6/6.6** Biblioteca + entrada flexível · **PR7/7.2** IA (RAG local) + inspetor de índice · **PR8** Receitas · **PR9** Dados (query-first sobre DuckDB).
+Entregue: **Tier 0** (legendas, OCR) · **PR4** Vídeo · **PR5/5.1** Documentos + OCR · **PR6/6.6** Biblioteca + entrada flexível · **PR7/7.2** IA (RAG local) + inspetor de índice · **PR8** Receitas · **PR9** Dados (query-first sobre DuckDB) · **PR9.1** gráficos no módulo Dados (matplotlib → PNG).
 
-A seguir: **PR9.1** gráficos (`plot` via matplotlib) · **PR9.2** encadeamento em estágios · **PR3.1-B** IA de áudio com torch (extra `[ai-audio]`) · melhorias em Imagens (batch rename, upscale) · streaming da resposta da IA.
+A seguir: **PR9.2** encadeamento em estágios · **PR3.1-B** IA de áudio com torch (extra `[ai-audio]`) · melhorias em Imagens (batch rename, upscale) · streaming da resposta da IA.
