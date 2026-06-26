@@ -1081,6 +1081,9 @@ analysis = [
     { name = "polars" },
     { name = "pyarrow" },
 ]
+data-plot = [
+    { name = "matplotlib" },
+]
 ocr = [
     { name = "pytesseract" },
 ]
@@ -1108,6 +1111,7 @@ requires-dist = [
     { name = "langchain-google-genai", specifier = ">=2.1.0" },
     { name = "langchain-ollama", specifier = ">=0.3.0" },
     { name = "langchain-text-splitters", specifier = ">=0.3.0" },
+    { name = "matplotlib", marker = "extra == 'data-plot'", specifier = ">=3.8" },
     { name = "noisereduce", specifier = ">=3.0" },
     { name = "numpy", specifier = ">=1.26" },
     { name = "pandas", marker = "extra == 'analysis'", specifier = ">=2.0" },
@@ -1125,7 +1129,7 @@ requires-dist = [
     { name = "tqdm", specifier = ">=4.67.3" },
     { name = "yt-dlp", specifier = ">=2026.3.17" },
 ]
-provides-extras = ["ai-image", "ocr", "analysis"]
+provides-extras = ["ai-image", "ocr", "analysis", "data-plot"]
 
 [package.metadata.requires-dev]
 dev = [
