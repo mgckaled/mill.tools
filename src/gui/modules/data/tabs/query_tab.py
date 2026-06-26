@@ -179,6 +179,7 @@ def build_query_tab(ctx: DataViewContext) -> QueryTab:
             return
         ctx.action[0] = "query"
         _last_failed_sql[0] = sql  # remembered so an error can be sent back to the IA
+        ctx.last_sql[0] = sql  # the SQL the Gráfico tab re-runs over the full result
         _begin()
         start_query(ctx.bus, form.get_files(), sql)
 
@@ -369,6 +370,9 @@ def build_query_tab(ctx: DataViewContext) -> QueryTab:
         _end()
         _result_columns[:] = p.get("columns", [])
         _result_rows[:] = p.get("rows", [])
+        # Share the result schema/rows so the Gráfico tab can pre-fill its specs.
+        ctx.last_columns[:] = _result_columns
+        ctx.last_rows[:] = _result_rows
         result_status_text.value = result_status(
             p.get("n_rows", 0), p.get("elapsed", 0), p.get("truncated", False)
         )

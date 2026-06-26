@@ -114,6 +114,11 @@ class DataViewContext:
     form: DataForm
     action: list[str] = field(default_factory=lambda: ["query"])
     tab: list[str] = field(default_factory=lambda: ["consulta"])
+    # Last executed query, shared with the Gráfico tab so it can re-run the SQL
+    # over the full result (not the truncated preview) and pre-fill its controls.
+    last_sql: list[str] = field(default_factory=lambda: [""])
+    last_columns: list[str] = field(default_factory=list)
+    last_rows: list[tuple] = field(default_factory=list)
 
     def toast(self, message: str, *, error: bool = True) -> None:
         """Show a SnackBar (error-colored by default)."""

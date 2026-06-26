@@ -255,6 +255,37 @@ def run_data_assess(bus: EventBus, file, *, model_name: str) -> bool:
         return False
 
 
+def run_data_plot(bus: EventBus, files: list, sql: str, spec, palette) -> bool:
+    """Render a chart PNG from *sql* over *files* and emit ``data_plot_done``.
+
+    Consumes the Plano 0 zero-copy path: run_query_arrow → from_arrow → to_pandas
+    → charts.render_png, off the UI thread. Gated on both extras ([analysis] for
+    the frame, [data-plot] for matplotlib); a missing extra degrades to a
+    task_error carrying the setup hint, mirroring run_data_index's embedder gate.
+
+    Emits: data_plot_start, data_plot_done ({png: bytes}), task_done — or
+    task_error if an extra is missing or the render fails.
+    """
+    from src.core.data import charts, frames
+    from src.core.data.engine import run_query_arrow
+
+    emit = make_emitter(bus, _MODULE_ID, "data")
+    try:
+        emit("data_plot_start")
+        if not (frames.is_available() and charts.is_available()):
+            emit("task_error", payload={"message": charts.SETUP_HINT})
+            return False
+        pdf = frames.to_pandas(frames.from_arrow(run_query_arrow(files, sql)))
+        png = charts.render_png(pdf, spec, palette=palette)
+        emit("data_plot_done", payload={"png": png})
+        emit("task_done", payload={})
+        return True
+    except Exception as exc:
+        logging.getLogger(__name__).warning("[!] Data plot error: %s", exc)
+        emit("task_error", payload={"message": f"Falha ao gerar o gráfico: {exc}"})
+        return False
+
+
 def _spawn(target: Callable, *args, **kwargs) -> threading.Thread:
     """Run *target* in a daemon thread."""
     thread = threading.Thread(target=lambda: target(*args, **kwargs), daemon=True)
@@ -294,3 +325,8 @@ def start_index(bus: EventBus, files: list, *, embed_model: str) -> threading.Th
 def start_assess(bus: EventBus, file, *, model_name: str) -> threading.Thread:
     """Launch run_data_assess in a daemon thread."""
     return _spawn(run_data_assess, bus, file, model_name=model_name)
+
+
+def start_plot(bus: EventBus, files: list, sql: str, spec, palette) -> threading.Thread:
+    """Launch run_data_plot in a daemon thread."""
+    return _spawn(run_data_plot, bus, files, sql, spec, palette)

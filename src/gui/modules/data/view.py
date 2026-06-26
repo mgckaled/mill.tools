@@ -31,6 +31,7 @@ from src.gui.modules.base import Module
 from src.gui.modules.data._state import DataViewContext, is_data_source
 from src.gui.modules.data.form_view import build_data_form
 from src.gui.modules.data.tabs.analysis_tab import build_analysis_tab
+from src.gui.modules.data.tabs.plot_tab import build_plot_tab
 from src.gui.modules.data.tabs.preview_tab import build_preview_tab
 from src.gui.modules.data.tabs.query_tab import build_query_tab
 from src.gui.modules.data.worker import start_scan
@@ -91,6 +92,7 @@ def build_data_module(
     query = build_query_tab(ctx)
     preview = build_preview_tab(ctx)
     analysis = build_analysis_tab(ctx)
+    plot = build_plot_tab(ctx)
 
     # ------------------------------------------------------------------
     # Event subscription (UI thread) — route each event to the owning tab.
@@ -109,6 +111,7 @@ def build_data_module(
                 query.on_sql_ready(p)
             case "data_result":
                 query.on_result(p)
+                plot.on_result_changed()
             case "data_saved":
                 query.on_saved(p)
             case "data_index_start":
@@ -126,6 +129,13 @@ def build_data_module(
                 return
             case "data_assessed":
                 analysis.on_assessed(p)
+            case "data_plot_start":
+                # Scoped update + early return: a page.update() during the
+                # spinner animation would break its on_animation_end chain.
+                plot.on_plot_start(p)
+                return
+            case "data_plot_done":
+                plot.on_plot_done(p)
             case "log":
                 # Route the worker's log line to the active tab's status (scoped,
                 # to keep the spinner animation alive during indexing).
@@ -138,6 +148,8 @@ def build_data_module(
                     preview.on_error(p)
                 elif ctx.action[0] == "assess":
                     analysis.on_error(p)
+                elif ctx.action[0] == "plot":
+                    plot.on_error(p)
                 else:
                     query.on_error(p)
             case "task_done":
@@ -165,15 +177,20 @@ def build_data_module(
     tab_analysis = ft.TextButton(
         "Análise com IA", icon=ft.Icons.AUTO_AWESOME_OUTLINED, style=_tab_style(False)
     )
+    tab_plot = ft.TextButton(
+        "Gráfico", icon=ft.Icons.INSERT_CHART_OUTLINED, style=_tab_style(False)
+    )
 
     def _show_tab(name: str) -> None:
         ctx.tab[0] = name
         query.view.visible = name == "consulta"
         preview.view.visible = name == "preview"
         analysis.view.visible = name == "analysis"
+        plot.view.visible = name == "plot"
         tab_consulta.style = _tab_style(name == "consulta")
         tab_preview.style = _tab_style(name == "preview")
         tab_analysis.style = _tab_style(name == "analysis")
+        tab_plot.style = _tab_style(name == "plot")
         settings.set("last_data_tab", name)
         if name == "consulta":
             query.on_show()
@@ -181,17 +198,24 @@ def build_data_module(
             preview.on_show()
         elif name == "analysis":
             analysis.on_show()
+        elif name == "plot":
+            plot.on_show()
         page.update()
 
     tab_consulta.on_click = lambda _e: _show_tab("consulta")
     tab_preview.on_click = lambda _e: _show_tab("preview")
     tab_analysis.on_click = lambda _e: _show_tab("analysis")
+    tab_plot.on_click = lambda _e: _show_tab("plot")
 
-    body_stack = ft.Stack([query.view, preview.view, analysis.view], expand=True)
+    body_stack = ft.Stack(
+        [query.view, preview.view, analysis.view, plot.view], expand=True
+    )
 
     panel = ft.Column(
         controls=[
-            ft.Row([tab_consulta, tab_preview, tab_analysis], spacing=Space.xs),
+            ft.Row(
+                [tab_consulta, tab_preview, tab_analysis, tab_plot], spacing=Space.xs
+            ),
             hairline(),
             body_stack,
         ],
