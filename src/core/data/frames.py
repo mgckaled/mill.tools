@@ -21,6 +21,7 @@ from src.core.data.types import QueryResult
 if TYPE_CHECKING:  # static typing only — never imported at runtime
     import pandas as pd
     import polars as pl
+    import pyarrow as pa
 
 SETUP_HINT = (
     "Camada de análise indisponível. Instale o extra opcional com "
@@ -51,6 +52,18 @@ def to_polars(result: QueryResult) -> pl.DataFrame:
     import polars as pl
 
     return pl.DataFrame(result.rows, schema=result.columns, orient="row")
+
+
+def from_arrow(table: pa.Table) -> pl.DataFrame:
+    """Wrap a ``pyarrow.Table`` in a Polars DataFrame (zero-copy).
+
+    Paired with ``engine.run_query_arrow``: both Polars and DuckDB use the Arrow
+    columnar format, so the table is consumed by reference — no serialization or
+    per-row Python tuples. Use this path when transforming large results.
+    """
+    import polars as pl
+
+    return pl.from_arrow(table)
 
 
 def to_result(df: pl.DataFrame, *, limit: int | None = None) -> QueryResult:

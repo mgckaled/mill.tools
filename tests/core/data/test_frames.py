@@ -178,3 +178,23 @@ def test_describe_returns_queryresult_with_expected_stats():
     assert stats["min"] == 2
     assert stats["max"] == 5
     assert stats["mean"] == pytest.approx(10 / 3)
+
+
+@pytest.mark.unit
+def test_arrow_path_matches_row_path(csv_sales):
+    """The zero-copy Arrow path produces the same QueryResult as the row path."""
+    pytest.importorskip("pyarrow")
+    from src.core.data import frames
+    from src.core.data.engine import run_query, run_query_arrow
+    from src.core.data.scanner import scan_file
+
+    data_file = scan_file(csv_sales)
+    # Order by every column so both paths return rows in an identical order.
+    sql = f'SELECT * FROM "{data_file.view_name}" ORDER BY produto, qtd, preco'
+
+    row_path = run_query([data_file], sql)
+    arrow_path = frames.to_result(frames.from_arrow(run_query_arrow([data_file], sql)))
+
+    assert arrow_path.columns == row_path.columns
+    assert arrow_path.rows == row_path.rows
+    assert arrow_path.n_rows == row_path.n_rows

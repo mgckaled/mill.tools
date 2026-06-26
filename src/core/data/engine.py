@@ -13,10 +13,13 @@ import logging
 import re
 import time
 from pathlib import Path
-from typing import Callable, Iterable
+from typing import TYPE_CHECKING, Callable, Iterable
 
 from src.core.data.types import ColumnInfo, DataFile, QueryResult
 from src.core.data.validate import ensure_select
+
+if TYPE_CHECKING:  # pyarrow only annotates the Arrow seam; never imported at runtime
+    import pyarrow as pa
 
 # Extensions DuckDB reads natively (CSV/TSV via the CSV reader; JSON/Parquet via
 # their own readers). XLSX needs the ``excel`` extension, loaded on demand.
@@ -347,5 +350,35 @@ def run_query(
             elapsed=elapsed,
             n_rows=len(rows),
         )
+    finally:
+        con.close()
+
+
+def run_query_arrow(
+    files: list[DataFile],
+    sql: str,
+    *,
+    connect_fn: Callable = _connect,
+) -> "pa.Table":
+    """Validate, register the views, execute and return a ``pyarrow.Table``.
+
+    Zero-copy seam to Polars (``frames.from_arrow``): DuckDB emits Arrow record
+    batches the DataFrame layer consumes by reference, skipping the per-row
+    Python tuple materialization that :func:`run_query` does. pyarrow is required
+    only here (via DuckDB's ``to_arrow_table``); callers gate on
+    ``frames.is_available()``, so the engine itself never imports it.
+
+    Raises:
+        UnsafeQueryError: if *sql* is not a single read-only SELECT.
+        DataEngineError: if a file cannot be read or the query fails.
+    """
+    ensure_select(sql)
+    con = connect_fn()
+    try:
+        register_views(con, files)
+        try:
+            return con.execute(sql).to_arrow_table()
+        except Exception as exc:
+            raise DataEngineError(f"Erro ao executar a consulta: {exc}") from exc
     finally:
         con.close()
