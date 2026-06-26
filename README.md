@@ -236,7 +236,7 @@ src/
 ├── analysis/      perfis de análise (puro)
 ├── cli/           1 módulo por subcomando (audio/video/image/document/library/ai/recipes/data) + bus
 ├── core/          PURO — audio · video · image · document · library · rag · recipes · data
-│   └── data/      types · scanner · engine (única fronteira DuckDB) · nl2sql · validate · convert · profile · store
+│   └── data/      types · scanner · engine (fronteira DuckDB) · frames (fronteira DataFrame, Plano 0) · nl2sql · validate · convert · profile · store
 └── gui/           app (rail + hubs) · home · splash · events · settings · modules/ · theme/ (design system) · views/
 ```
 
@@ -253,7 +253,7 @@ uv run pytest -n auto            # paralelizado (pytest-xdist)
 uv run pytest --cov=src --cov-report=html
 ```
 
-**913 testes unitários** (0 falhas); cobertura sobre `src/` (branch on, GUI excluída por não ser testável headless), agregado ~88%. Testes de integração são pulados automaticamente sem `ffmpeg`. Linter: **ruff** — `uv run pytest -m unit` verde + `ruff` limpo antes de qualquer commit.
+**988 testes unitários** (0 falhas); cobertura sobre `src/` (branch on, GUI excluída por não ser testável headless), agregado ~88%. Testes de integração são pulados automaticamente sem `ffmpeg`. Linter: **ruff** — `uv run pytest -m unit` verde + `ruff` limpo antes de qualquer commit.
 
 ---
 

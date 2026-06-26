@@ -159,6 +159,9 @@ Ferramenta entra na `NavigationRail`; hub entra no `AppBar` (excluído de `_RAIL
 - Dependência pesada/opcional → **extra** no `pyproject.toml`, nunca no base. Núcleo clássico de ML: `[ml]`;
   extração de mídia mais pesada: extras próprios (`[ml-audio]`, `[ml-image]`), como `[ai-image]`/`[ocr]` hoje.
 - **Import preguiçoso** sempre (carregar só ao acionar o recurso) — preserva a partida rápida.
+- **Tipar dependência opcional sem importá-la em runtime**: com `from __future__ import annotations`,
+  importe-a sob `if TYPE_CHECKING:` — as anotações nunca são avaliadas e o runtime continua sem o import.
+  Padrão em `core/data/frames.py` e `core/data/engine.py` (polars/pandas/pyarrow do extra `[analysis]`).
 - **Gate** `is_available()` resolve a dependência (pacote + binário/serviço) e o card/flag desabilita com dica.
 - Linhas impossíveis de cobrir sem desinstalar dependências → `# pragma: no cover` (ver skill `testing`).
 
@@ -183,8 +186,13 @@ Para `docs/ROADMAP_ML_DADOS.md`, esta skill é o ponto de partida de cada plano:
 
 - **Plano −1 (refatoração prévia)** — aplicar a seção 4 a `data/view.py` (→ `tabs/`) e `recipes/registry.py`
   (→ `registry/<módulo>.py`); fixar a regra da seção 3 no `CLAUDE.md`. Ver `docs/REFATORACAO_PREVIA.md`.
-- **Planos 0–2 (dados/análise)** — núcleo novo em `core/data/` (camada pandas/Polars) ao lado de `engine.py`;
-  painéis dos hubs como **abas novas** (seção 4), não inflando os builders existentes.
+- **Plano 0 (fundação de dados) ✅** — `core/data/frames.py` é a **única fronteira de DataFrame** (espelha o
+  `engine.py`): Polars no miolo, pandas só na borda (`to_pandas`), handoff **Arrow zero-copy** via
+  `engine.run_query_arrow`. polars/pandas/pyarrow só sob `TYPE_CHECKING` (extra `[analysis]`); o `engine`
+  segue DuckDB-puro e a GUI só fala `QueryResult`. Ver `docs/PLANO_0_FUNDACAO_DADOS.md`.
+- **Planos 1–2 (gráficos/painéis)** — apenas **consomem** o `frames` (gráfico = `to_pandas`→matplotlib→**PNG**
+  num `ft.Image`; painéis sobre `describe`/`QueryResult`); painéis dos hubs como **abas novas** (seção 4),
+  não inflando os builders existentes.
 - **Plano 3 (fundação de ML)** — novo pacote puro `core/ml/` espelhando `core/rag/` (gate, injeção, cache);
   acessor que reusa o `VectorStore` existente.
 - **Planos 4–7** — cada feature pela seção 5; ao tocar `ai/view.py`/`library/view.py`/builder de Receitas,
