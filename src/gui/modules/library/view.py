@@ -25,6 +25,7 @@ from src.core.library.types import (
 from src.gui import settings
 from src.gui.events import PipelineEvent
 from src.gui.modules.base import Module
+from src.gui.modules.library.analytics_panel import build_analytics_panel
 from src.gui.modules.library.cards import (
     ItemCard,
     build_item_card,
@@ -228,7 +229,13 @@ def build_library_module(
         visible=False,
     )
 
-    grid_area = ft.Stack([grid, list_container, empty_state], expand=True)
+    # Analytics dashboard (third mode) — the new panel lives in its own builder
+    # (divide-se ao tocar); view.py only wires it into the mode toggle/Stack.
+    panel_container, _analytics_apply = build_analytics_panel(page)
+
+    grid_area = ft.Stack(
+        [grid, list_container, panel_container, empty_state], expand=True
+    )
 
     # "Load more" — on_click wired after _on_load_more is defined.
     load_more_btn = secondary_button("Carregar mais", icon=ft.Icons.EXPAND_MORE)
@@ -358,6 +365,17 @@ def build_library_module(
         load_more_btn.text = f"Carregar mais ({remaining})"
         empty_state.visible = not items
 
+        if _view_mode[0] == "panel":
+            # The dashboard reflects the whole filtered set (not the paged slice);
+            # paging and thumbnails are irrelevant here.
+            _thumb_gen[0] += 1  # drop any in-flight thumbnail work
+            _analytics_apply(items)
+            panel_container.visible = bool(items)
+            load_more_btn.visible = False
+            grid.visible = False
+            list_container.visible = False
+            return
+
         if _view_mode[0] == "list":
             # Bump the thumbnail generation so any in-flight grid work is dropped
             # (list rows use plain type icons — no thumbnails to generate).
@@ -369,6 +387,7 @@ def build_library_module(
                 for it in visible
             ]
             list_container.visible = bool(visible)
+            panel_container.visible = False
             grid.visible = False
             return
 
@@ -380,6 +399,7 @@ def build_library_module(
         ]
         grid.controls = [c.control for c in cards]
         list_container.visible = False
+        panel_container.visible = False
         grid.visible = bool(visible)
         _spawn_thumbnail_thread(list(zip(visible, cards)))
 
@@ -546,6 +566,12 @@ def build_library_module(
         tooltip="Lista",
         style=ft.ButtonStyle(mouse_cursor=Cursor.btn),
     )
+    panel_btn = ft.IconButton(
+        icon=ft.Icons.ANALYTICS_OUTLINED,
+        icon_size=18,
+        tooltip="Painel",
+        style=ft.ButtonStyle(mouse_cursor=Cursor.btn),
+    )
 
     def _sync_view_buttons() -> None:
         active = _view_mode[0]
@@ -561,6 +587,12 @@ def build_library_module(
         list_btn.icon_color = (
             ft.Colors.PRIMARY if active == "list" else ft.Colors.ON_SURFACE_VARIANT
         )
+        panel_btn.icon = (
+            ft.Icons.ANALYTICS if active == "panel" else ft.Icons.ANALYTICS_OUTLINED
+        )
+        panel_btn.icon_color = (
+            ft.Colors.PRIMARY if active == "panel" else ft.Colors.ON_SURFACE_VARIANT
+        )
 
     def _set_view(mode: str) -> None:
         if mode == _view_mode[0]:
@@ -572,9 +604,10 @@ def build_library_module(
 
     grid_btn.on_click = lambda _e: _set_view("grid")
     list_btn.on_click = lambda _e: _set_view("list")
+    panel_btn.on_click = lambda _e: _set_view("panel")
     _sync_view_buttons()
 
-    view_toggle = ft.Row(controls=[grid_btn, list_btn], spacing=0)
+    view_toggle = ft.Row(controls=[grid_btn, list_btn, panel_btn], spacing=0)
 
     # ------------------------------------------------------------------
     # Header + layout
