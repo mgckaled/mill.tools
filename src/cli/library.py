@@ -70,11 +70,23 @@ def add_library_parser(subparsers) -> None:
     )
     lst.add_argument("--verbose", action="store_true", help="Enable debug logging")
 
+    stats = library_sub.add_parser(
+        "stats", help="Dashboard of the archive (counts, sizes, growth)"
+    )
+    stats.add_argument(
+        "--top",
+        type=int,
+        default=10,
+        metavar="N",
+        help="How many largest files to show (default: 10)",
+    )
+    stats.add_argument("--verbose", action="store_true", help="Enable debug logging")
+
     library_p.set_defaults(func=run_library_cli)
 
 
 def run_library_cli(ns: argparse.Namespace) -> None:
-    """Scan output/, apply the filters and print a table to stdout."""
+    """Dispatch the `library` subcommand: `list` (table) or `stats` (dashboard)."""
     # Output filenames may contain non-cp1252 characters (e.g. fullwidth ｜).
     # On Windows the console defaults to charmap and print() would raise — make
     # stdout UTF-8 and replace anything it still can't encode.
@@ -83,6 +95,14 @@ def run_library_cli(ns: argparse.Namespace) -> None:
     except Exception:
         pass
 
+    if ns.library_op == "stats":
+        _run_stats(ns)
+    else:
+        _run_list(ns)
+
+
+def _run_list(ns: argparse.Namespace) -> None:
+    """Scan output/, apply the filters and print a table to stdout."""
     items = sort_items(
         filter_items(
             scan_library(),
@@ -105,3 +125,31 @@ def run_library_cli(ns: argparse.Namespace) -> None:
             f"{_fmt_size(it.size_bytes):>9}  {modified:<16} {it.path.name}"
         )
     print(f"\n{len(items)} file(s).")
+
+
+def _run_stats(ns: argparse.Namespace) -> None:
+    """Print the archive dashboard: totals, counts by kind, largest, growth."""
+    from src.core.library.analytics import growth_by_period, largest, summary
+
+    items = scan_library()
+    if not items:
+        print("No files found under output/.")
+        return
+
+    s = summary(items)
+    print("Biblioteca")
+    print(f"  Arquivos : {s.total_count}")
+    print(f"  Tamanho  : {_fmt_size(s.total_bytes)}")
+
+    print("\n  por tipo")
+    for kind, count in s.count_by_kind.items():
+        size = _fmt_size(s.bytes_by_kind.get(kind, 0))
+        print(f"    {kind:<14} {count:>4} arquivo(s) · {size:>9}")
+
+    print(f"\n  maiores ({ns.top})")
+    for it in largest(items, ns.top):
+        print(f"    {_fmt_size(it.size_bytes):>9}  {it.kind:<14} {it.path.name}")
+
+    print("\n  crescimento por mês")
+    for label, count, size in growth_by_period(items, "month").rows:
+        print(f"    {label}   {count:>4} arquivo(s) · {_fmt_size(size):>9}")

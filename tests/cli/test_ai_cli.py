@@ -140,13 +140,14 @@ def test_stats_dispatches_to_stats_runner(mocker):
 
 
 @pytest.mark.unit
-def test_stats_runner_prints_summary(tmp_path, monkeypatch, capsys):
+def test_stats_runner_prints_summary(tmp_path, monkeypatch, mocker, capsys):
     import src.core.rag.indexer as indexer
     from src.cli.ai import _stats
 
     rag_dir = tmp_path / "rag"
     _persisted_store(rag_dir, source="alpha.txt")
     monkeypatch.setattr(indexer, "index_dir", lambda: rag_dir)
+    mocker.patch("src.cli.ai._answer_times", return_value={})  # hermetic
 
     _stats()
 
@@ -159,13 +160,58 @@ def test_stats_runner_prints_summary(tmp_path, monkeypatch, capsys):
 
 
 @pytest.mark.unit
-def test_stats_runner_empty_index_prints_hint(tmp_path, monkeypatch, capsys):
+def test_stats_runner_empty_index_prints_hint(tmp_path, monkeypatch, mocker, capsys):
     import src.core.rag.indexer as indexer
     from src.cli.ai import _stats
 
     monkeypatch.setattr(indexer, "index_dir", lambda: tmp_path / "empty")
+    mocker.patch("src.cli.ai._answer_times", return_value={})  # hermetic
     _stats()
     assert "Índice vazio" in capsys.readouterr().out
+
+
+@pytest.mark.unit
+def test_print_model_timings_renders_fastest_first(mocker, capsys):
+    from src.cli.ai import _print_model_timings
+
+    mocker.patch(
+        "src.cli.ai._answer_times",
+        return_value={"slow": [10.0, 20.0], "fast": [1.0, 3.0]},
+    )
+    _print_model_timings()
+    out = capsys.readouterr().out
+    assert "Tempos de resposta por modelo" in out
+    assert out.index("fast") < out.index("slow")  # fastest first
+
+
+@pytest.mark.unit
+def test_print_model_timings_silent_without_history(mocker, capsys):
+    from src.cli.ai import _print_model_timings
+
+    mocker.patch("src.cli.ai._answer_times", return_value={})
+    _print_model_timings()
+    assert capsys.readouterr().out == ""
+
+
+@pytest.mark.unit
+def test_answer_times_reads_config(tmp_path, monkeypatch):
+    from src.cli.ai import _answer_times
+
+    config_dir = tmp_path / ".mill-tools"
+    config_dir.mkdir(parents=True)
+    (config_dir / "config.json").write_text(
+        '{"ai_answer_times": {"m": [1.0, 2.0]}}', encoding="utf-8"
+    )
+    monkeypatch.setattr("pathlib.Path.home", lambda: tmp_path)
+    assert _answer_times() == {"m": [1.0, 2.0]}
+
+
+@pytest.mark.unit
+def test_answer_times_missing_config_returns_empty(tmp_path, monkeypatch):
+    from src.cli.ai import _answer_times
+
+    monkeypatch.setattr("pathlib.Path.home", lambda: tmp_path)
+    assert _answer_times() == {}
 
 
 @pytest.mark.unit

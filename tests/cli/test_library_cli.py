@@ -105,3 +105,36 @@ def test_run_library_cli_empty(mocker, capsys):
     ns = _parse("list")
     ns.func(ns)
     assert "No files found" in capsys.readouterr().out
+
+
+@pytest.mark.unit
+def test_stats_parser_defaults():
+    ns = _parse("stats")
+    assert ns.library_op == "stats"
+    assert ns.top == 10
+    assert callable(ns.func)
+
+
+@pytest.mark.unit
+def test_stats_runner_prints_dashboard(mocker, capsys):
+    items = [
+        _item("a/song.mp3", "audio", size=500, mtime=10.0),
+        _item("b/clip.mp4", "video", size=9000, mtime=20.0),
+    ]
+    mocker.patch("src.cli.library.scan_library", return_value=items)
+    ns = _parse("stats")
+    ns.func(ns)
+    out = capsys.readouterr().out
+    assert "Biblioteca" in out
+    assert "por tipo" in out
+    assert "maiores" in out
+    assert "crescimento por mês" in out
+    assert "clip.mp4" in out  # largest
+
+
+@pytest.mark.unit
+def test_stats_runner_empty(mocker, capsys):
+    mocker.patch("src.cli.library.scan_library", return_value=[])
+    ns = _parse("stats")
+    ns.func(ns)
+    assert "No files found" in capsys.readouterr().out

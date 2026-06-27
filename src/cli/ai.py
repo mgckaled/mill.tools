@@ -141,6 +141,40 @@ def _build(embed_model: str) -> None:
     )
 
 
+def _answer_times() -> dict[str, list[float]]:
+    """Read the per-model answer-time map from ~/.mill-tools/config.json.
+
+    Read directly (not via gui.settings) so the CLI layer never imports the GUI.
+    Returns an empty map when the file is missing or malformed.
+    """
+    import json
+
+    config = Path.home() / ".mill-tools" / "config.json"
+    try:
+        data = json.loads(config.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+    times = data.get("ai_answer_times", {})
+    return times if isinstance(times, dict) else {}
+
+
+def _print_model_timings() -> None:
+    """Print per-model answer timing (count/mean/median/p90), fastest first."""
+    from src.core.rag.analytics import model_timings
+
+    timings = model_timings(_answer_times())
+    if not timings:
+        return
+    print("\nTempos de resposta por modelo (s)")
+    print(f"  {'modelo':<22} {'n':>3} {'média':>7} {'mediana':>8} {'p90':>7}")
+    print(f"  {'-' * 22} {'-' * 3} {'-' * 7} {'-' * 8} {'-' * 7}")
+    for t in timings:
+        print(
+            f"  {t.model:<22} {t.count:>3} {t.mean:>7.1f} "
+            f"{t.median:>8.1f} {t.p90:>7.1f}"
+        )
+
+
 def _stats() -> None:
     """Print a read-only summary of the persisted index (reuses the core)."""
     import time
@@ -152,6 +186,7 @@ def _stats() -> None:
     stats = index_stats(directory)
     if stats.n_chunks == 0:
         print('Índice vazio. Rode "uv run main.py ai index" primeiro.')
+        _print_model_timings()  # timing history can exist without an index
         return
 
     when = (
@@ -178,6 +213,8 @@ def _stats() -> None:
             name = name[: name_w - 1] + "…"
         doc_when = time.strftime("%d/%m/%Y %H:%M", time.localtime(doc.mtime))
         print(f"  {name:<{name_w}} {doc.kind:<13} {doc.n_chunks:>6}  {doc_when}")
+
+    _print_model_timings()
 
 
 def _ask(ns: argparse.Namespace, embed_model: str) -> None:

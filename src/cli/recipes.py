@@ -29,6 +29,9 @@ def add_recipe_parser(subparsers: argparse._SubParsersAction) -> None:
     lst = sub.add_parser("list", help="List built-in and saved recipes")
     lst.add_argument("--verbose", action="store_true", help="Enable debug logging")
 
+    sts = sub.add_parser("stats", help="Show run history (reliability, speed)")
+    sts.add_argument("--verbose", action="store_true", help="Enable debug logging")
+
     run = sub.add_parser("run", help="Run a recipe by name on a URL or local file")
     run.add_argument("name", help="Recipe name (see 'recipe list')")
     run.add_argument("input", help="URL or local file path to feed the first step")
@@ -83,6 +86,31 @@ def _list_recipes() -> None:
         print("\nReceitas salvas:")
         for recipe in saved:
             _print(recipe)
+
+
+def _recipe_stats() -> None:
+    """Print per-recipe reliability/speed from the persisted run history."""
+    from src.core.recipes.history import aggregate, load_runs
+
+    runs = load_runs()
+    if not runs:
+        print("Sem histórico de execução ainda. Rode uma receita primeiro.")
+        return
+
+    print(f"Histórico de receitas ({len(runs)} execução(ões))\n")
+    name_w = 36
+    print(
+        f"  {'receita':<{name_w}} {'execs':>5} {'sucesso':>8} {'média':>8}  mais falha"
+    )
+    print(f"  {'-' * name_w} {'-' * 5} {'-' * 8} {'-' * 8}  {'-' * 12}")
+    for a in aggregate(runs):
+        name = a.recipe_name
+        if len(name) > name_w:
+            name = name[: name_w - 1] + "…"
+        rate = f"{a.success_rate * 100:.0f}%"
+        avg = f"{a.avg_duration:.1f}s"
+        fail = a.most_failing_op or "—"
+        print(f"  {name:<{name_w}} {a.n_runs:>5} {rate:>8} {avg:>8}  {fail}")
 
 
 def _with_model_override(recipe, model: str | None):
@@ -146,6 +174,10 @@ def run_recipe_cli(ns: argparse.Namespace) -> None:
 
     if ns.recipe_op == "list":
         _list_recipes()
+        return
+
+    if ns.recipe_op == "stats":
+        _recipe_stats()
         return
 
     recipe = _find_recipe(ns.name)

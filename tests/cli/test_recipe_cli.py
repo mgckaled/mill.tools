@@ -29,6 +29,40 @@ def test_list_parser():
 
 
 @pytest.mark.unit
+def test_stats_parser():
+    ns = _parse("stats")
+    assert ns.recipe_op == "stats"
+    assert callable(ns.func)
+
+
+@pytest.mark.unit
+def test_stats_runner_no_history(mocker, capsys):
+    mocker.patch("src.core.recipes.history.load_runs", return_value=[])
+    ns = _parse("stats")
+    ns.func(ns)
+    assert "Sem histórico" in capsys.readouterr().out
+
+
+@pytest.mark.unit
+def test_stats_runner_prints_aggregate(mocker, capsys):
+    from src.core.recipes.history import RunRecord
+
+    runs = [
+        RunRecord("Limpar áudio", 0.0, 10.0, 10.0, "ok", 2),
+        RunRecord(
+            "Limpar áudio", 0.0, 20.0, 20.0, "error", 2, failed_op="audio.normalize"
+        ),
+    ]
+    mocker.patch("src.core.recipes.history.load_runs", return_value=runs)
+    ns = _parse("stats")
+    ns.func(ns)
+    out = capsys.readouterr().out
+    assert "Histórico de receitas" in out
+    assert "Limpar áudio" in out
+    assert "audio.normalize" in out
+
+
+@pytest.mark.unit
 def test_run_parser_defaults():
     ns = _parse("run", "My Recipe", "https://youtu.be/x")
     assert ns.recipe_op == "run"
