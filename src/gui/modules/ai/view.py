@@ -26,6 +26,7 @@ import flet as ft
 from src.gui import settings
 from src.gui.events import PipelineEvent
 from src.gui.modules.ai import timing
+from src.gui.modules.ai.analytics_tab import build_analytics_tab
 from src.gui.modules.ai.form_view import build_ai_form
 from src.gui.modules.ai.index_tab import build_index_tab
 from src.gui.modules.ai.pipeline_log import resolve_status
@@ -225,6 +226,8 @@ def build_ai_module(
 
             if stats:
                 index_tab.apply(stats)  # keep the inspector tab in sync
+                times_map = settings.load().get("ai_answer_times", {})
+                analytics_tab.apply(stats, times_map)  # keep the panel in sync
 
             form.set_available(available)
             if not available:
@@ -596,6 +599,10 @@ def build_ai_module(
     index_view = index_tab.control
     index_view.visible = False
 
+    analytics_tab = build_analytics_tab(page)
+    analytics_view = analytics_tab.control
+    analytics_view.visible = False
+
     def _tab_style(active: bool) -> ft.ButtonStyle:
         return ft.ButtonStyle(
             color=ft.Colors.PRIMARY if active else ft.Colors.ON_SURFACE_VARIANT,
@@ -608,16 +615,20 @@ def build_ai_module(
     tab_indice = ft.TextButton(
         "Índice", icon=ft.Icons.INVENTORY_2_OUTLINED, style=_tab_style(False)
     )
+    tab_painel = ft.TextButton(
+        "Painel", icon=ft.Icons.INSIGHTS_OUTLINED, style=_tab_style(False)
+    )
 
     def _show_tab(name: str, *, refresh: bool = True) -> None:
-        is_conv = name == "conversa"
-        conversa_view.visible = is_conv
-        index_view.visible = not is_conv
-        tab_conversa.style = _tab_style(is_conv)
-        tab_indice.style = _tab_style(not is_conv)
+        conversa_view.visible = name == "conversa"
+        index_view.visible = name == "indice"
+        analytics_view.visible = name == "painel"
+        tab_conversa.style = _tab_style(name == "conversa")
+        tab_indice.style = _tab_style(name == "indice")
+        tab_painel.style = _tab_style(name == "painel")
         settings.set("last_ai_tab", name)
-        if not is_conv and refresh:
-            _refresh_status()  # recompute stats → index_tab.apply
+        if name in ("indice", "painel") and refresh:
+            _refresh_status()  # recompute stats → index_tab / analytics_tab.apply
         page.update()
 
     def _reindex_from_index() -> None:
@@ -627,12 +638,13 @@ def build_ai_module(
 
     tab_conversa.on_click = lambda _e: _show_tab("conversa")
     tab_indice.on_click = lambda _e: _show_tab("indice")
+    tab_painel.on_click = lambda _e: _show_tab("painel")
 
-    body_stack = ft.Stack([conversa_view, index_view], expand=True)
+    body_stack = ft.Stack([conversa_view, index_view, analytics_view], expand=True)
 
     panel = ft.Column(
         controls=[
-            ft.Row([tab_conversa, tab_indice], spacing=Space.xs),
+            ft.Row([tab_conversa, tab_indice, tab_painel], spacing=Space.xs),
             hairline(),
             body_stack,
         ],
