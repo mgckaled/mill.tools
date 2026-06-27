@@ -10,6 +10,7 @@
 ![faster-whisper](https://img.shields.io/badge/faster--whisper-GPU-FFB000)
 ![Ollama](https://img.shields.io/badge/Ollama-local-000000?logo=ollama&logoColor=white)
 ![DuckDB](https://img.shields.io/badge/DuckDB-embutido-FFF000?logo=duckdb&logoColor=black)
+![scikit-learn](https://img.shields.io/badge/scikit--learn-ML-F7931E?logo=scikitlearn&logoColor=white)
 
 ![License](https://img.shields.io/badge/license-PolyForm%20Noncommercial%201.0.0-blue)
 ![Coverage](https://img.shields.io/badge/coverage-91%25-brightgreen)
@@ -43,7 +44,7 @@ Seis **ferramentas** de processamento (NavigationRail) e três **hubs** que oper
 | **Documentos** | Ferramenta | 13 operações PDF/QR (merge, split, compress, rotate, watermark, stamp, encrypt, extract, OCR, pdf↔imagens, QR, análise). 100% local via pymupdf |
 | **Dados** | Ferramenta | Consulte CSV/TSV/JSON/Parquet/XLSX em **português** (a IA traduz para SQL vendo só o schema) ou SQL na mão; motor **DuckDB** embutido. Salva o resultado, perfila e gera **gráficos** (barras/linha/histograma/dispersão) |
 | **Biblioteca** | Hub | Índice navegável de tudo em `output/`: grade com thumbnails, lista ou **painel analítico** (acervo por tipo/tamanho/crescimento), filtro/busca/ordenação, abrir arquivo/pasta e reenviar a outro módulo |
-| **IA** | Hub | RAG local sobre o seu acervo: pergunte ao corpus e receba respostas **citando as fontes**. Embeddings sempre locais; Gemini opt-in. **Painel**: saúde do índice + tempo de resposta por modelo |
+| **IA** | Hub | RAG local sobre o seu acervo: pergunte ao corpus e receba respostas **citando as fontes**. Embeddings sempre locais; Gemini opt-in. **Painel**: saúde do índice + tempo de resposta por modelo. **Duplicatas** (`ai dups`): agrupa documentos quase-idênticos por similaridade, reusando o índice |
 | **Receitas** | Hub | Automação: cadeias lineares entre módulos (`URL → áudio → transcrever → analisar`). Presets + construtor com validação ao vivo; lote; **histórico de execução** (confiabilidade/velocidade); CLI `recipe run` |
 
 ---
@@ -55,6 +56,7 @@ Seis **ferramentas** de processamento (NavigationRail) e três **hubs** que oper
 | Transcrição local | [faster-whisper](https://github.com/SYSTRAN/faster-whisper) + ctranslate2, aceleração GPU, **sem PyTorch** |
 | Dados | [DuckDB](https://duckdb.org) embutido (in-process, torch-free); PT→SQL pela IA recebendo só o schema — o conteúdo das tabelas nunca sai da máquina |
 | RAG local | embeddings Ollama (`nomic-embed-text`, CPU), vector store numpy, busca cosseno, resposta com fontes `[n]` |
+| ML local | fundação `core/ml` **torch-free**: acessor de embeddings (mean-pool do índice → vetor por documento) + detecção de duplicatas por cosseno, **em numpy** (reusa o índice do RAG, sem recálculo); [scikit-learn](https://scikit-learn.org) opcional (extra `[ml]`) para os algoritmos futuros |
 | Vídeo | yt-dlp + ffmpeg CPU-only (libx264/libx265/libvpx-vp9) — sem NVENC |
 | Áudio | noisereduce (spectral gating, CPU) + ffmpeg loudnorm (EBU R128, 2 passes); torch-free |
 | Imagens | Pillow + rembg/ONNX Runtime (CPU) para remoção de fundo |
@@ -110,6 +112,7 @@ ollama pull moondream      && ollama create moondream-custom -f ollama/Modelfile
 uv sync --extra ai-image   # remoção de fundo (Imagens)
 uv sync --extra ocr        # OCR de PDFs escaneados (requer binário Tesseract no PATH)
 uv sync --extra analysis --extra data-plot  # gráficos no módulo Dados (aba Gráfico / data plot)
+uv sync --extra ml         # algoritmos de ML (Planos 4/5); a base de ML e `ai dups` já rodam sem ele (numpy)
 ```
 
 > O app base funciona sem os extras; os cards correspondentes desabilitam-se graciosamente quando ausentes.
