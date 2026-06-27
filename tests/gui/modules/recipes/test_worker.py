@@ -10,6 +10,12 @@ import threading
 import pytest
 
 
+@pytest.fixture(autouse=True)
+def _history(mocker):
+    """Never touch the real run-history file; expose the spy to the tests."""
+    return mocker.patch("src.core.recipes.history.append_run")
+
+
 class _Bus:
     def __init__(self):
         self.events = []
@@ -140,6 +146,93 @@ def test_returns_false_when_no_output(mocker):
     )
 
     assert ok is False
+
+
+@pytest.mark.unit
+def test_records_ok_run(mocker, _history):
+    from src.gui.modules.recipes.worker import run_recipe_pipeline
+
+    mocker.patch("src.core.recipes.runner.execute_recipe", side_effect=_fake_execute)
+    run_recipe_pipeline(
+        _Bus(),
+        threading.Event(),
+        recipe=_recipe(),
+        runs=[(["https://x"], "url", "x")],
+        install_log_handler=False,
+    )
+
+    _history.assert_called_once()
+    record = _history.call_args.args[0]
+    assert record.status == "ok"
+    assert record.recipe_name == "R"
+    assert record.n_steps == 1  # len(recipe.steps)
+    assert record.batch_size is None
+    assert record.duration >= 0
+
+
+@pytest.mark.unit
+def test_records_error_with_failed_op(mocker, _history):
+    from src.gui.modules.recipes.worker import run_recipe_pipeline
+
+    def _exec(recipe, inputs, *, initial_kind, emit, cancel_is_set, emit_terminal=True):
+        emit("step_error", {"op": "audio.normalize", "idx": 1, "message": "boom"})
+        emit("task_error", {"message": "Falha"})
+        return []
+
+    mocker.patch("src.core.recipes.runner.execute_recipe", side_effect=_exec)
+    run_recipe_pipeline(
+        _Bus(),
+        threading.Event(),
+        recipe=_recipe(),
+        runs=[(["https://x"], "url", "x")],
+        install_log_handler=False,
+    )
+
+    record = _history.call_args.args[0]
+    assert record.status == "error"
+    assert record.failed_op == "audio.normalize"
+
+
+@pytest.mark.unit
+def test_records_cancelled_run(mocker, _history):
+    from src.gui.modules.recipes.worker import run_recipe_pipeline
+
+    mocker.patch("src.core.recipes.runner.execute_recipe", return_value=[])
+    cancel = threading.Event()
+    cancel.set()  # user cancelled
+    run_recipe_pipeline(
+        _Bus(),
+        cancel,
+        recipe=_recipe(),
+        runs=[(["https://x"], "url", "x")],
+        install_log_handler=False,
+    )
+
+    assert _history.call_args.args[0].status == "cancelled"
+
+
+@pytest.mark.unit
+def test_records_batch_size(mocker, _history):
+    from src.gui.modules.recipes import worker
+
+    def _fake_batch(recipe, runs, *, emit, cancel_is_set):
+        emit("task_done", {"output_paths": ["a.md"]})
+        from pathlib import Path
+
+        return [Path("a.md")]
+
+    mocker.patch(
+        "src.core.recipes.runner.execute_recipe_batch", side_effect=_fake_batch
+    )
+    worker.run_recipe_pipeline(
+        _Bus(),
+        threading.Event(),
+        recipe=_recipe(),
+        runs=[(["a.mp3"], "audio", "a"), (["b.mp3"], "audio", "b")],
+        install_log_handler=False,
+    )
+
+    assert _history.call_args.args[0].batch_size == 2
 
 
 @pytest.mark.unit

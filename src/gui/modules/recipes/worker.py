@@ -14,6 +14,7 @@ import threading
 from pathlib import Path
 from typing import TYPE_CHECKING, Callable
 
+from src.core.recipes import history
 from src.gui.modules._pipeline_runner import _LogScope, make_emitter
 from src.gui.modules.recipes import pipeline_log
 
@@ -68,9 +69,15 @@ def run_recipe_pipeline(
     emit_bus = make_emitter(bus, _MODULE_ID, "recipes")
     produced: set[str] = set()
     finals: set[str] = set()
+    tracker = history.RunTracker(
+        recipe.name,
+        len(recipe.steps),
+        batch_size=len(runs) if len(runs) > 1 else None,
+    )
 
     def _emit(type: str, payload: dict) -> None:
         emit_bus(type, payload=payload)  # raw event — the view/bar consume it
+        tracker.observe(type, payload)  # follow step failures for the run record
         if type == "recipe_start":
             emit_bus(
                 "log",
@@ -103,6 +110,7 @@ def run_recipe_pipeline(
         _LogScope(bus, _MODULE_ID) if install_log_handler else contextlib.nullcontext()
     )
     with scope:
+        final: list = []
         try:
             if len(runs) == 1:
                 inputs, kind, _label = runs[0]
@@ -119,11 +127,27 @@ def run_recipe_pipeline(
                 )
             if clean_intermediates:
                 _clean_intermediates(produced - finals, emit_bus)
-            return bool(final)
         except Exception as exc:  # safety net — execute_recipe already emits task_error
             logging.getLogger(__name__).warning("[!] Recipe error: %s", exc)
             emit_bus("task_error", payload={"message": str(exc)})
-            return False
+            final = []
+        finally:
+            _record_run(tracker, cancelled=cancel_event.is_set(), final=final)
+        return bool(final)
+
+
+def _record_run(tracker: history.RunTracker, *, cancelled: bool, final: list) -> None:
+    """Persist a RunRecord for the finished run. Never breaks the pipeline."""
+    if cancelled:
+        status = history.STATUS_CANCELLED
+    elif final:
+        status = history.STATUS_OK
+    else:
+        status = history.STATUS_ERROR
+    try:
+        history.append_run(tracker.record(status))
+    except Exception as exc:  # persistence is best-effort, never fatal
+        logging.getLogger(__name__).debug("[d] could not record recipe run: %s", exc)
 
 
 def start_recipe_pipeline(

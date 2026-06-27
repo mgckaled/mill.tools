@@ -197,16 +197,30 @@ def run_recipe_cli(ns: argparse.Namespace) -> None:
     recipe = _with_model_override(recipe, ns.model)
 
     from src.cli.bus import CLIEventBus
+    from src.core.recipes import history
     from src.core.recipes.runner import execute_recipe
 
     bus = CLIEventBus()
     cancel = threading.Event()
+    tracker = history.RunTracker(recipe.name, len(recipe.steps))
+    base_emit = _make_emit(bus)
+
+    def emit(type: str, payload: dict) -> None:
+        base_emit(type, payload)
+        tracker.observe(type, payload)
+
     final = execute_recipe(
         recipe,
         [value],
         initial_kind=initial_kind,
-        emit=_make_emit(bus),
+        emit=emit,
         cancel_is_set=cancel.is_set,
     )
+    status = history.STATUS_OK if final else history.STATUS_ERROR
+    try:
+        history.append_run(tracker.record(status))
+    except Exception as exc:  # persistence is best-effort, never fatal
+        logger.debug("[d] could not record recipe run: %s", exc)
+
     if not final:
         sys.exit(1)

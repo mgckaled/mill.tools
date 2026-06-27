@@ -12,6 +12,12 @@ import pytest
 _YT_PRESET = "YouTube → transcrição completa"
 
 
+@pytest.fixture(autouse=True)
+def _history(mocker):
+    """Never touch the real run-history file; expose the spy to the tests."""
+    return mocker.patch("src.core.recipes.history.append_run")
+
+
 def _parse(*argv: str) -> argparse.Namespace:
     from src.cli.recipes import add_recipe_parser
 
@@ -118,6 +124,28 @@ def test_run_dispatches_to_execute_recipe(mocker):
     assert kwargs["initial_kind"] == "url"
     assert callable(kwargs["emit"])
     assert callable(kwargs["cancel_is_set"])
+
+
+@pytest.mark.unit
+def test_run_records_history(mocker, _history):
+    mocker.patch("src.core.recipes.runner.execute_recipe", return_value=[Path("o.md")])
+    ns = _parse("run", _YT_PRESET, "https://youtu.be/x")
+    ns.func(ns)
+
+    _history.assert_called_once()
+    record = _history.call_args.args[0]
+    assert record.status == "ok"
+    assert record.batch_size is None
+
+
+@pytest.mark.unit
+def test_run_records_error_on_empty_result(mocker, _history):
+    mocker.patch("src.core.recipes.runner.execute_recipe", return_value=[])
+    ns = _parse("run", _YT_PRESET, "https://youtu.be/x")
+    with pytest.raises(SystemExit):
+        ns.func(ns)
+
+    assert _history.call_args.args[0].status == "error"
 
 
 @pytest.mark.unit

@@ -12,9 +12,11 @@ from __future__ import annotations
 
 import json
 import logging
+import time
 from collections import Counter, defaultdict
 from dataclasses import asdict, dataclass
 from pathlib import Path
+from typing import Callable
 
 from src.core.data.types import QueryResult
 
@@ -42,6 +44,52 @@ class RunRecord:
     n_steps: int
     failed_op: str | None = None  # the "module.op" that failed (errors only)
     batch_size: int | None = None  # number of inputs in a batch run, else None
+
+
+class RunTracker:
+    """Build a ``RunRecord`` by watching a recipe run's events and the clock.
+
+    Shared by the GUI worker and the CLI so both surfaces record runs the same
+    way (the runner core stays untouched). Construction stamps ``started_at``;
+    ``observe`` follows the per-step failures; the caller decides the final
+    status (it knows whether the run was cancelled / produced output) and calls
+    ``record``. Pure — persistence (``append_run``) is the caller's job. ``now``
+    is injectable so tests get deterministic durations.
+    """
+
+    def __init__(
+        self,
+        recipe_name: str,
+        n_steps: int,
+        *,
+        batch_size: int | None = None,
+        now: Callable[[], float] = time.time,
+    ) -> None:
+        self.recipe_name = recipe_name
+        self.n_steps = n_steps
+        self.batch_size = batch_size
+        self._now = now
+        self.started_at = now()
+        self._failed_op: str | None = None
+
+    def observe(self, event_type: str, payload: dict) -> None:
+        """Track the op of the most recent failing step (ignores other events)."""
+        if event_type == "step_error":
+            self._failed_op = (payload or {}).get("op")
+
+    def record(self, status: str) -> RunRecord:
+        """Finish the record with ``status`` (STATUS_OK | _ERROR | _CANCELLED)."""
+        finished = self._now()
+        return RunRecord(
+            recipe_name=self.recipe_name,
+            started_at=self.started_at,
+            finished_at=finished,
+            duration=finished - self.started_at,
+            status=status,
+            n_steps=self.n_steps,
+            failed_op=self._failed_op if status == STATUS_ERROR else None,
+            batch_size=self.batch_size,
+        )
 
 
 @dataclass(frozen=True, slots=True)

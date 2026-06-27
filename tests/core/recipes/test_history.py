@@ -9,6 +9,7 @@ from src.core.recipes.history import (
     STATUS_ERROR,
     STATUS_OK,
     RunRecord,
+    RunTracker,
     aggregate,
     aggregate_result,
     append_run,
@@ -92,6 +93,51 @@ def test_load_skips_malformed_entries(runs_path):
 # ---------------------------------------------------------------------------
 # aggregate
 # ---------------------------------------------------------------------------
+
+
+# ---------------------------------------------------------------------------
+# RunTracker
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.unit
+def test_run_tracker_records_ok_with_duration():
+    clock = iter([100.0, 130.0])
+    tracker = RunTracker("R", 2, now=lambda: next(clock))
+    record = tracker.record(STATUS_OK)
+
+    assert record.status == STATUS_OK
+    assert record.started_at == 100.0
+    assert record.finished_at == 130.0
+    assert record.duration == 30.0
+    assert record.n_steps == 2
+    assert record.failed_op is None
+    assert record.batch_size is None
+
+
+@pytest.mark.unit
+def test_run_tracker_captures_failed_op_for_error():
+    tracker = RunTracker("R", 1)
+    tracker.observe("step_start", {"op": "audio.download"})
+    tracker.observe("step_error", {"op": "audio.normalize", "message": "x"})
+    record = tracker.record(STATUS_ERROR)
+
+    assert record.status == STATUS_ERROR
+    assert record.failed_op == "audio.normalize"
+
+
+@pytest.mark.unit
+def test_run_tracker_drops_failed_op_when_not_error():
+    tracker = RunTracker("R", 1)
+    tracker.observe("step_error", {"op": "audio.normalize"})
+    # A later success means failed_op is irrelevant — only kept for error status.
+    assert tracker.record(STATUS_OK).failed_op is None
+
+
+@pytest.mark.unit
+def test_run_tracker_batch_size():
+    tracker = RunTracker("R", 3, batch_size=5)
+    assert tracker.record(STATUS_CANCELLED).batch_size == 5
 
 
 @pytest.mark.unit
