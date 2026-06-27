@@ -22,9 +22,11 @@ from src.gui.events import PipelineEvent
 from src.gui.modules.ai.index_button import rag_index_button
 from src.gui.modules.base import Module
 from src.gui.modules.recipes.form_view import build_recipes_form
+from src.gui.modules.recipes.history_tab import build_history_tab
 from src.gui.modules.recipes.pipeline_log import resolve_status
 from src.gui.modules.recipes.worker import start_recipe_pipeline
 from src.gui.theme.components import (
+    Cursor,
     action_button,
     hairline,
     log_line,
@@ -304,8 +306,53 @@ def build_recipes_module(
     )
     session_area = ft.Stack([content_col, empty_state], expand=True)
 
-    panel = ft.Column(
+    # Panel: manual "Execução | Histórico" tabs over a Stack (Flet 0.85 has no
+    # ft.Tabs). Execução is the live run view; Histórico is the run analytics,
+    # reloaded from disk on each switch (the worker records a run per terminal).
+    exec_view = ft.Column(
         controls=[progress_row, hairline(), session_area],
+        expand=True,
+        spacing=Space.sm,
+    )
+
+    history_tab = build_history_tab(page)
+    history_view = history_tab.control
+    history_view.visible = False
+
+    def _tab_style(active: bool) -> ft.ButtonStyle:
+        return ft.ButtonStyle(
+            color=ft.Colors.PRIMARY if active else ft.Colors.ON_SURFACE_VARIANT,
+            mouse_cursor=Cursor.interactive,
+        )
+
+    tab_exec = ft.TextButton(
+        "Execução", icon=ft.Icons.PLAY_ARROW, style=_tab_style(True)
+    )
+    tab_hist = ft.TextButton(
+        "Histórico", icon=ft.Icons.HISTORY, style=_tab_style(False)
+    )
+
+    def _show_tab(name: str) -> None:
+        is_exec = name == "exec"
+        exec_view.visible = is_exec
+        history_view.visible = not is_exec
+        tab_exec.style = _tab_style(is_exec)
+        tab_hist.style = _tab_style(not is_exec)
+        if not is_exec:
+            history_tab.apply()  # reload run history from disk
+        page.update()
+
+    tab_exec.on_click = lambda _e: _show_tab("exec")
+    tab_hist.on_click = lambda _e: _show_tab("hist")
+
+    body_stack = ft.Stack([exec_view, history_view], expand=True)
+
+    panel = ft.Column(
+        controls=[
+            ft.Row([tab_exec, tab_hist], spacing=Space.xs),
+            hairline(),
+            body_stack,
+        ],
         expand=True,
         spacing=Space.sm,
     )
