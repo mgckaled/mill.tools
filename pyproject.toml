@@ -32,6 +32,10 @@ ai-image = ["rembg[cpu]>=2.0.50"]
 ocr = ["pytesseract>=0.3"]
 analysis = ["polars>=1.0", "pandas>=2.0", "pyarrow>=15"]
 data-plot = ["matplotlib>=3.8"]
+# Classic ML core (Plans 4/5): scikit-learn 1.4+ emits Polars/pandas from its
+# transformers (useful to the tabular wave). joblib comes transitively; skops is
+# the documented secure-load upgrade, intentionally not added yet.
+ml = ["scikit-learn>=1.4"]
 
 [dependency-groups]
 dev = [
