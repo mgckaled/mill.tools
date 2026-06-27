@@ -222,35 +222,63 @@ def _rotate_xticks(ax) -> None:
         label.set_horizontalalignment("right")
 
 
+def _numeric(df, col: str):
+    """Coerce a column to float for plotting, with a clear error if it can't.
+
+    DuckDB aggregates (``SUM`` over BIGINT → HUGEINT/DECIMAL) arrive as pandas
+    ``object``/``Decimal`` columns that matplotlib's category machinery
+    mishandles; coercing to float fixes that and turns a non-numeric pick for a
+    numeric axis into a friendly message instead of a cryptic matplotlib error.
+    """
+    try:
+        return df[col].astype(float)
+    except (ValueError, TypeError) as exc:
+        raise ValueError(f"A coluna '{col}' não é numérica.") from exc
+
+
 def _bar(ax, df, spec: ChartSpec, palette: ChartPalette) -> None:
-    x = df[spec.x].astype(str)
     if spec.y:
-        ax.bar(x, df[spec.y], color=palette.accent)
+        labels = [str(v) for v in df[spec.x].tolist()]
+        heights = _numeric(df, spec.y).tolist()
         ax.set_ylabel(spec.y)
     else:  # no y → count occurrences of the x category
-        counts = x.value_counts()
-        ax.bar(counts.index.astype(str), counts.values, color=palette.accent)
+        counts = df[spec.x].astype(str).value_counts()
+        labels = [str(v) for v in counts.index.tolist()]
+        heights = counts.values.tolist()
         ax.set_ylabel("contagem")
+    # Plot against integer positions with explicit tick labels: passing string
+    # categories straight to ax.bar trips matplotlib's category converter on
+    # object/Decimal heights (the dtype DuckDB aggregates land in).
+    positions = list(range(len(labels)))
+    ax.bar(positions, heights, color=palette.accent)
+    ax.set_xticks(positions)
+    ax.set_xticklabels(labels)
     ax.set_xlabel(spec.x)
     _rotate_xticks(ax)
 
 
 def _line(ax, df, spec: ChartSpec, palette: ChartPalette) -> None:
-    ax.plot(df[spec.x], df[spec.y], color=palette.accent, marker="o", markersize=3)
+    ax.plot(
+        df[spec.x], _numeric(df, spec.y), color=palette.accent, marker="o", markersize=3
+    )
     ax.set_xlabel(spec.x)
     ax.set_ylabel(spec.y)
     _rotate_xticks(ax)
 
 
 def _hist(ax, df, spec: ChartSpec, palette: ChartPalette) -> None:
-    ax.hist(df[spec.x].dropna(), bins="auto", color=palette.accent)
+    ax.hist(_numeric(df, spec.x).dropna(), bins="auto", color=palette.accent)
     ax.set_xlabel(spec.x)
     ax.set_ylabel("frequência")
 
 
 def _scatter(ax, df, spec: ChartSpec, palette: ChartPalette) -> None:
     ax.scatter(
-        df[spec.x], df[spec.y], color=palette.accent, alpha=0.75, edgecolors="none"
+        _numeric(df, spec.x),
+        _numeric(df, spec.y),
+        color=palette.accent,
+        alpha=0.75,
+        edgecolors="none",
     )
     ax.set_xlabel(spec.x)
     ax.set_ylabel(spec.y)

@@ -177,6 +177,36 @@ def test_render_png_missing_x_raises():
 
 
 @pytest.mark.unit
+def test_render_png_bar_with_decimal_y():
+    """A SUM(BIGINT) in DuckDB lands as a Decimal/object column — must still render.
+
+    Regression: ax.bar with string x + Decimal heights tripped matplotlib's
+    category converter ("'value' must be an instance of str or bytes, not float").
+    """
+    import decimal
+
+    df = pd.DataFrame(
+        {
+            "categoria": ["a", "b", "c"],
+            "total": [
+                decimal.Decimal("10"),
+                decimal.Decimal("25"),
+                decimal.Decimal("7"),
+            ],
+        }
+    )
+    out = charts.render_png(df, charts.ChartSpec(kind="bar", x="categoria", y="total"))
+    _assert_valid_png(out)
+
+
+@pytest.mark.unit
+def test_render_png_non_numeric_y_raises_friendly_error():
+    df = pd.DataFrame({"categoria": ["a", "b"], "rotulo": ["x", "y"]})
+    with pytest.raises(ValueError, match="não é numérica"):
+        charts.render_png(df, charts.ChartSpec(kind="bar", x="categoria", y="rotulo"))
+
+
+@pytest.mark.unit
 def test_render_png_line_without_y_raises():
     with pytest.raises(ValueError, match="precisa de uma coluna Y"):
         charts.render_png(_df(), charts.ChartSpec(kind="line", x="produto"))
