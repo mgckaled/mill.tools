@@ -402,3 +402,111 @@ def test_batch_runner_reports_no_match_for_kind(tmp_path, monkeypatch, mocker, c
     # No document-kind sources → graceful message, no crash.
     _batch(_parse("resuma", "--batch", "--kind", "document"), "nomic-embed-text")
     assert "Nenhum documento" in capsys.readouterr().out
+
+
+# --- ai dups (Plan 3 — ML foundation proof of life) -------------------------
+
+
+def _persist_two_docs(directory, *, identical: bool) -> None:
+    """Persist a store with two single-chunk documents (identical or orthogonal).
+
+    a.txt is kind=transcription, b.txt is kind=document. When ``identical`` both
+    vectors are all-ones (cosine 1.0 → duplicates); otherwise b.txt is orthogonal
+    to a.txt (cosine 0 → never grouped).
+    """
+    from src.core.rag.store import VectorStore
+    from src.core.rag.types import ChunkMeta
+
+    a_vec = np.ones((1, 768), dtype=np.float32)
+    if identical:
+        b_vec = np.ones((1, 768), dtype=np.float32)
+    else:
+        b_vec = np.zeros((1, 768), dtype=np.float32)
+        b_vec[0, 0] = 1.0  # unit vector orthogonal to all-ones
+
+    store = VectorStore(dim=768)
+    store.add(a_vec, [ChunkMeta("a.txt", "transcription", 1.0, 0, "ctx a")])
+    store.add(b_vec, [ChunkMeta("b.txt", "document", 2.0, 0, "ctx b")])
+    store.persist(directory)
+
+
+@pytest.mark.unit
+def test_dups_command_parses_with_threshold():
+    ns = _parse("dups", "--threshold", "0.8")
+    assert ns.query == "dups"
+    assert ns.threshold == 0.8
+    assert callable(ns.func)
+
+
+@pytest.mark.unit
+def test_dups_default_threshold():
+    ns = _parse("dups")
+    assert ns.threshold == 0.95
+
+
+@pytest.mark.unit
+def test_dups_dispatches_to_dups_runner(mocker):
+    dups = mocker.patch("src.cli.ai._dups")
+    ask = mocker.patch("src.cli.ai._ask")
+
+    ns = _parse("dups")
+    ns.func(ns)
+
+    assert dups.called
+    assert not ask.called
+
+
+@pytest.mark.unit
+def test_dups_groups_identical_documents(tmp_path, monkeypatch, capsys):
+    import src.core.rag.indexer as indexer
+    from src.cli.ai import _dups
+
+    rag_dir = tmp_path / "rag"
+    _persist_two_docs(rag_dir, identical=True)
+    monkeypatch.setattr(indexer, "index_dir", lambda: rag_dir)
+
+    _dups(_parse("dups"))
+
+    out = capsys.readouterr().out
+    assert "grupo" in out.lower()
+    assert "a.txt" in out and "b.txt" in out
+
+
+@pytest.mark.unit
+def test_dups_reports_none_when_distinct(tmp_path, monkeypatch, capsys):
+    import src.core.rag.indexer as indexer
+    from src.cli.ai import _dups
+
+    rag_dir = tmp_path / "rag"
+    _persist_two_docs(rag_dir, identical=False)
+    monkeypatch.setattr(indexer, "index_dir", lambda: rag_dir)
+
+    _dups(_parse("dups"))
+    assert "Nenhuma duplicata" in capsys.readouterr().out
+
+
+@pytest.mark.unit
+def test_dups_scope_filters_by_kind(tmp_path, monkeypatch, capsys):
+    import src.core.rag.indexer as indexer
+    from src.cli.ai import _dups
+
+    rag_dir = tmp_path / "rag"
+    _persist_two_docs(rag_dir, identical=True)  # a=transcription, b=document
+    monkeypatch.setattr(indexer, "index_dir", lambda: rag_dir)
+
+    # Restricting to one kind leaves a single document → no pair to group.
+    _dups(_parse("dups", "--scope", "transcription"))
+    out = capsys.readouterr().out
+    assert "Nenhuma duplicata" in out
+    assert "1 documento" in out
+
+
+@pytest.mark.unit
+def test_dups_exits_when_index_empty(tmp_path, monkeypatch, capsys):
+    import src.core.rag.indexer as indexer
+    from src.cli.ai import _dups
+
+    monkeypatch.setattr(indexer, "index_dir", lambda: tmp_path / "empty")
+    with pytest.raises(SystemExit):
+        _dups(_parse("dups"))
+    assert "Índice vazio" in capsys.readouterr().out

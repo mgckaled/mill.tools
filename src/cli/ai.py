@@ -3,12 +3,15 @@
 Flows behind one positional:
     uv run main.py ai index                       # (re)build the vector index
     uv run main.py ai stats                        # summarize the persisted index
+    uv run main.py ai dups                          # near-duplicate documents (ML)
     uv run main.py ai "what did I say about X?"    # ask the whole corpus
     uv run main.py ai "summarize" --scope path.txt # ask a single document
     uv run main.py ai "..." --model gemini-2.5-flash --k 8
 
 Reuses the same core (scan_library / build_index / retrieve / answer) as the GUI.
 Embeddings are always local (Ollama); only the answer step may use Gemini opt-in.
+``dups`` is read-only over the persisted index (numpy-pure ML foundation, Plan 3):
+no embedder/network needed.
 """
 
 from __future__ import annotations
@@ -24,6 +27,7 @@ import numpy as np
 # Sentinel positionals that trigger maintenance flows instead of a question.
 _INDEX_CMD = "index"
 _STATS_CMD = "stats"
+_DUPS_CMD = "dups"
 
 
 def add_ai_parser(subparsers: argparse._SubParsersAction) -> None:
@@ -34,7 +38,7 @@ def add_ai_parser(subparsers: argparse._SubParsersAction) -> None:
     )
     p.add_argument(
         "query",
-        help='Your question, or "index" to (re)build / "stats" to summarize the index',
+        help='Your question, or "index"/"stats"/"dups" for index maintenance flows',
     )
     p.add_argument(
         "--scope",
@@ -74,6 +78,13 @@ def add_ai_parser(subparsers: argparse._SubParsersAction) -> None:
         choices=["transcription", "document", "image"],
         default=None,
         help="With --batch, restrict to one kind of document",
+    )
+    p.add_argument(
+        "--threshold",
+        type=float,
+        default=0.95,
+        metavar="C",
+        help="With dups, the minimum cosine similarity to group documents (0.95)",
     )
     p.add_argument("--verbose", action="store_true", help="Enable debug logging")
     p.set_defaults(func=run_ai_cli)
@@ -217,6 +228,53 @@ def _stats() -> None:
     _print_model_timings()
 
 
+def _dups(ns: argparse.Namespace) -> None:
+    """Print groups of near-duplicate documents (numpy-pure ML, no embedder).
+
+    Reads the persisted index, pools it into document vectors and groups by
+    cosine similarity. ``--scope`` (when a kind) restricts to one document kind;
+    ``--threshold`` sets the minimum cosine to consider two documents duplicates.
+    """
+    from src.core.ml.dedup import near_duplicates
+    from src.core.ml.features import document_matrix
+    from src.core.ml.types import DocumentMatrix
+    from src.core.rag import embedder
+    from src.core.rag.indexer import index_dir
+    from src.core.rag.store import VectorStore
+
+    store = VectorStore.load(index_dir(), dim=embedder.EMBED_DIM)
+    if len(store) == 0:
+        print('Índice vazio. Rode "uv run main.py ai index" primeiro.')
+        sys.exit(1)
+
+    dm = document_matrix(store)
+    if ns.scope:  # restrict to one kind (a file scope simply won't match a kind)
+        idx = [i for i, k in enumerate(dm.kinds) if k == ns.scope]
+        dm = DocumentMatrix(
+            X=dm.X[idx],
+            source_paths=[dm.source_paths[i] for i in idx],
+            kinds=[dm.kinds[i] for i in idx],
+        )
+
+    groups = near_duplicates(dm, threshold=ns.threshold)
+    if not groups:
+        print(
+            f"Nenhuma duplicata acima de {ns.threshold:.2f} "
+            f"entre {len(dm)} documento(s)."
+        )
+        return
+
+    print(
+        f"{len(groups)} grupo(s) de documentos semelhantes "
+        f"(limiar {ns.threshold:.2f}):\n"
+    )
+    for n, group in enumerate(groups, 1):
+        print(f"Grupo {n} — similaridade mínima {group.score:.3f}")
+        for source in group.source_paths:
+            print(f"  • {Path(source).name}")
+        print()
+
+
 def _ask(ns: argparse.Namespace, embed_model: str) -> None:
     """Retrieve top-k chunks for the question and print a cited answer."""
     from src.core.rag import embedder
@@ -295,6 +353,10 @@ def run_ai_cli(ns: argparse.Namespace) -> None:
 
     if ns.query == _STATS_CMD:  # read-only summary; no embedder needed
         _stats()
+        return
+
+    if ns.query == _DUPS_CMD:  # read-only ML over the persisted index; no embedder
+        _dups(ns)
         return
 
     from src.core.rag import embedder
