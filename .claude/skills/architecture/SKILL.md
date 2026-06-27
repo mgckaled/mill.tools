@@ -190,9 +190,14 @@ Para `docs/ROADMAP_ML_DADOS.md`, esta skill é o ponto de partida de cada plano:
   `engine.py`): Polars no miolo, pandas só na borda (`to_pandas`), handoff **Arrow zero-copy** via
   `engine.run_query_arrow`. polars/pandas/pyarrow só sob `TYPE_CHECKING` (extra `[analysis]`); o `engine`
   segue DuckDB-puro e a GUI só fala `QueryResult`. Ver `docs/PLANO_0_FUNDACAO_DADOS.md`.
-- **Planos 1–2 (gráficos/painéis)** — apenas **consomem** o `frames` (gráfico = `to_pandas`→matplotlib→**PNG**
-  num `ft.Image`; painéis sobre `describe`/`QueryResult`); painéis dos hubs como **abas novas** (seção 4),
-  não inflando os builders existentes.
+- **Plano 1 (gráficos) ✅** — apenas **consome** o `frames` (gráfico = `to_pandas`→matplotlib→**PNG** num `ft.Image`).
+- **Plano 2 (painéis dos hubs) ✅** — núcleos de agregação puros, um por hub (`core/library/analytics.py` ·
+  `core/rag/analytics.py` · `core/recipes/history.py`), devolvendo métricas + `QueryResult`; **números em stdlib**
+  (sem extra), **gráfico opcional** via o helper de GUI `gui/modules/_charts.py` (`QueryResult`→PNG, gated). Painéis
+  como **modo/aba novo** (seção 4), dividindo ao tocar (`library/analytics_panel.py`, `ai/analytics_tab.py`,
+  `recipes/history_tab.py`) — sem inflar os builders. Histórico de Receitas: persistência nova efeito-colateral da
+  **orquestração** (worker/CLI gravam `RunRecord` no evento terminal); o `runner` puro fica intocado.
+  Ver `docs/PLANO_2_PAINEIS_HUBS.md`.
 - **Plano 3 (fundação de ML)** — novo pacote puro `core/ml/` espelhando `core/rag/` (gate, injeção, cache);
   acessor que reusa o `VectorStore` existente.
 - **Planos 4–7** — cada feature pela seção 5; ao tocar `ai/view.py`/`library/view.py`/builder de Receitas,

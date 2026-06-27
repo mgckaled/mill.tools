@@ -11,6 +11,11 @@
 ![Ollama](https://img.shields.io/badge/Ollama-local-000000?logo=ollama&logoColor=white)
 ![DuckDB](https://img.shields.io/badge/DuckDB-embutido-FFF000?logo=duckdb&logoColor=black)
 
+![License](https://img.shields.io/badge/license-PolyForm%20Noncommercial%201.0.0-blue)
+![Coverage](https://img.shields.io/badge/coverage-91%25-brightgreen)
+![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)
+![torch-free](https://img.shields.io/badge/PyTorch-free-success?logo=pytorch&logoColor=white)
+
 </div>
 
 ---
@@ -37,9 +42,9 @@ Seis **ferramentas** de processamento (NavigationRail) e três **hubs** que oper
 | **Imagens** | Ferramenta | 12 operações de manipulação/conversão + IA: remoção de fundo (rembg) e descrição por visão. Visor Antes/Depois |
 | **Documentos** | Ferramenta | 13 operações PDF/QR (merge, split, compress, rotate, watermark, stamp, encrypt, extract, OCR, pdf↔imagens, QR, análise). 100% local via pymupdf |
 | **Dados** | Ferramenta | Consulte CSV/TSV/JSON/Parquet/XLSX em **português** (a IA traduz para SQL vendo só o schema) ou SQL na mão; motor **DuckDB** embutido. Salva o resultado, perfila e gera **gráficos** (barras/linha/histograma/dispersão) |
-| **Biblioteca** | Hub | Índice navegável de tudo em `output/`: grade com thumbnails ou lista, filtro/busca/ordenação, abrir arquivo/pasta e reenviar a outro módulo |
-| **IA** | Hub | RAG local sobre o seu acervo: pergunte ao corpus e receba respostas **citando as fontes**. Embeddings sempre locais; Gemini opt-in na resposta |
-| **Receitas** | Hub | Automação: cadeias lineares entre módulos (`URL → áudio → transcrever → analisar`). Presets + construtor com validação ao vivo; lote; CLI `recipe run` |
+| **Biblioteca** | Hub | Índice navegável de tudo em `output/`: grade com thumbnails, lista ou **painel analítico** (acervo por tipo/tamanho/crescimento), filtro/busca/ordenação, abrir arquivo/pasta e reenviar a outro módulo |
+| **IA** | Hub | RAG local sobre o seu acervo: pergunte ao corpus e receba respostas **citando as fontes**. Embeddings sempre locais; Gemini opt-in. **Painel**: saúde do índice + tempo de resposta por modelo |
+| **Receitas** | Hub | Automação: cadeias lineares entre módulos (`URL → áudio → transcrever → analisar`). Presets + construtor com validação ao vivo; lote; **histórico de execução** (confiabilidade/velocidade); CLI `recipe run` |
 
 ---
 
@@ -78,8 +83,8 @@ DuckDB e a extensão `excel` (XLSX) são embutidos — sem instalação separada
 ## Instalação
 
 ```bash
-git clone https://github.com/your-username/mill-tools
-cd mill-tools
+git clone https://github.com/mgckaled/mill.tools
+cd mill.tools
 uv sync
 ```
 
@@ -157,16 +162,19 @@ uv run main.py data convert dados.csv --out parquet
 uv run main.py data profile dados.csv
 uv run main.py data plot vendas.csv "total por produto" --kind bar   # gráfico PNG em output/data/
 
-# Biblioteca — índice de output/ como tabela
+# Biblioteca — índice de output/ como tabela (+ dashboard do acervo)
 uv run main.py library list --kind audio --since 7d --sort size
+uv run main.py library stats --top 10
 
-# IA — RAG local sobre o corpus (cita fontes)
+# IA — RAG local sobre o corpus (cita fontes); stats inclui timing por modelo
 uv run main.py ai index
 uv run main.py ai "o que eu disse sobre faster-whisper?" --k 8
+uv run main.py ai stats
 
-# Receitas — cadeias nomeadas entre módulos
+# Receitas — cadeias nomeadas entre módulos (+ histórico de execução)
 uv run main.py recipe list
 uv run main.py recipe run "YouTube → transcrição completa" "https://youtu.be/..." --model medium
+uv run main.py recipe stats
 ```
 
 #### Flags da Transcrição
@@ -255,7 +263,7 @@ uv run pytest -n auto            # paralelizado (pytest-xdist)
 uv run pytest --cov=src --cov-report=html
 ```
 
-**1017 testes unitários** (0 falhas); cobertura sobre `src/` (branch on, GUI excluída por não ser testável headless), agregado ~88%. Testes de integração são pulados automaticamente sem `ffmpeg`. Linter: **ruff** — `uv run pytest -m unit` verde + `ruff` limpo antes de qualquer commit.
+**1064 testes unitários** (0 falhas); cobertura sobre `src/` (branch on, GUI excluída por não ser testável headless), agregado ~91%. Testes de integração são pulados automaticamente sem `ffmpeg`. Linter: **ruff** — `uv run pytest -m unit` verde + `ruff` limpo antes de qualquer commit.
 
 ---
 
@@ -270,6 +278,6 @@ uv run pytest --cov=src --cov-report=html
 
 ## Roadmap
 
-Entregue: **Tier 0** (legendas, OCR) · **PR4** Vídeo · **PR5/5.1** Documentos + OCR · **PR6/6.6** Biblioteca + entrada flexível · **PR7/7.2** IA (RAG local) + inspetor de índice · **PR8** Receitas · **PR9** Dados (query-first sobre DuckDB) · **PR9.1** gráficos no módulo Dados (matplotlib → PNG).
+Entregue: **Tier 0** (legendas, OCR) · **PR4** Vídeo · **PR5/5.1** Documentos + OCR · **PR6/6.6** Biblioteca + entrada flexível · **PR7/7.2** IA (RAG local) + inspetor de índice · **PR8** Receitas · **PR9** Dados (query-first sobre DuckDB) · **PR9.1** gráficos no módulo Dados (matplotlib → PNG) · **Plano 2** painéis analíticos nos hubs (acervo da Biblioteca, saúde do índice + timing por modelo na IA, histórico de execução nas Receitas).
 
 A seguir: **PR9.2** encadeamento em estágios · **PR3.1-B** IA de áudio com torch (extra `[ai-audio]`) · melhorias em Imagens (batch rename, upscale) · streaming da resposta da IA.
