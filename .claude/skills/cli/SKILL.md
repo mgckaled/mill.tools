@@ -230,6 +230,7 @@ do Windows).
 ```bash
 uv run main.py ai index                                  # (re)indexa o corpus
 uv run main.py ai stats                                  # resumo do índice (read-only)
+uv run main.py ai dups [--threshold 0.95] [--scope kind] # duplicatas (ML, read-only)
 uv run main.py ai "pergunta?"                            # responde, citando fontes
 uv run main.py ai "resuma" --scope output/.../x.txt      # um documento
 uv run main.py ai "liste as ações" --batch --kind transcription
@@ -239,7 +240,11 @@ uv run main.py ai "..." --model gemini-2.5-flash --k 8
 **Um único positional** `query` (não usa sub-subparser): se for o literal
 `index` → (re)indexa e retorna; se for `stats` → imprime o resumo do índice
 (`_stats()`, **read-only**, reaproveita `src.core.rag.stats.index_stats`, **não**
-toca o embedder/Ollama) e retorna; senão é a pergunta. Reaproveita o core
+toca o embedder/Ollama) e retorna; se for `dups` → imprime grupos de documentos
+quase-idênticos (`_dups()`, **read-only/sem embedder** — fundação de ML do Plano 3:
+`features.document_matrix` faz mean-pool do `VectorStore` e `dedup.near_duplicates`
+agrupa por cosseno; `--scope` aqui é só kind, `--threshold` ajusta o limiar) e
+retorna; senão é a pergunta. Reaproveita o core
 (`scan_library`/`build_index`/`retrieve`/`answer`); **não** usa `CLIEventBus`
 nem `run_*_pipeline` (como `library`). Embeddings **sempre locais** (Ollama);
 Gemini só no passo de resposta. `run_ai_cli` reconfigura `sys.stdout` p/ UTF-8.
@@ -251,7 +256,8 @@ tamanho em disco · atualizado em · local) + tabela por documento
 
 | Flag | Default | Descrição |
 |---|---|---|
-| `query` (posicional) | — | Pergunta, ou `index` para (re)indexar / `stats` para resumir o índice |
+| `query` (posicional) | — | Pergunta, ou `index` (re)indexar / `stats` resumir / `dups` listar duplicatas |
+| `--threshold` | `0.95` | Com `dups`, cosseno mínimo p/ agrupar documentos |
 | `--scope` | (acervo) | Caminho de arquivo (1 doc) **ou** kind (`transcription`/`document`/`image`). `_resolve_scope` resolve path existente → absoluto; senão trata como kind |
 | `--model` | `qwen7b-custom` | Modelo da resposta — Ollama tag ou `gemini-2.5-flash` |
 | `--embed-model` | `nomic-embed-custom` | Modelo de embedding (sempre local, CPU `num_gpu 0`; ver `ollama/Modelfile.nomic`) |

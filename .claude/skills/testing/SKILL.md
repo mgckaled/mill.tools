@@ -513,6 +513,28 @@ fakes via `patch.dict` e injete um `emit`/`cancel_is_set` simples.
   (escreva arquivos reais em `tmp_path`; só os não-finais somem) e retorno
   `False` sem saída/em exceção.
 
+### Core ML (`src/core/ml/`) — numpy-puro; sklearn só no `store` (Plano 3)
+
+Fundação de ML, testável sem rede e (na maior parte) sem o extra `[ml]`:
+
+- **`features`/`dedup` (sem `importorskip`)**: numpy-puros. Construa um
+  `VectorStore` sintético com vetores estreitos (dim 3–8) e `source_path`
+  conhecido; `document_matrix` deve fazer mean-pool por documento (ex.: 2 chunks
+  → média), L2-normalizar quando pedido, preservar **ordem first-seen** e
+  `float32`, e devolver `(0, D)` no store vazio. `load_document_matrix` faz
+  round-trip de um `VectorStore` persistido em `tmp_path` (reusa `store.persist`).
+  `dedup.near_duplicates`: plante linhas idênticas/ortogonais (idêntico → grupo no
+  limiar; ortogonal → não agrupa), cadeia transitiva A≈B≈C → um componente, `score`
+  = menor cosseno par-a-par, `max_docs` excedido → `[]` + warning (`caplog`).
+- **`deps`**: `is_available()` True com sklearn; False via
+  `mocker.patch.dict(sys.modules, {"sklearn": None})` (padrão do `embedder`).
+- **`store` (`importorskip("sklearn")`)**: round-trip `save_model`/`load_model` com
+  um estimador pequeno (`StandardScaler().fit(...)`) em `tmp_path` (`directory=`
+  injetável — não toque `~/.mill-tools`); **mismatch de versão** → `None`
+  (`monkeypatch.setattr(store, "_sklearn_version", lambda: "0.0.0")`); **mismatch de
+  signature** → `None`; sidecar ausente/corrompido e artefato `.joblib` corrompido
+  → `None`.
+
 ### Core Dados (`src/core/data/`) — DuckDB in-process (qualifica como `unit`)
 
 DuckDB roda in-process (sem ffmpeg/rede/GPU), então os testes de dados são `unit`
@@ -703,6 +725,11 @@ O alvo é **≥ 90%** por módulo. Total agregado: **88%** com branch. Estado at
 | `core/rag/indexer.py` | **100%** |
 | `core/rag/chat.py` | **100%** |
 | `core/rag/batch.py` | **100%** |
+| `core/ml/features.py` | **100%** |
+| `core/ml/dedup.py` | **100%** |
+| `core/ml/deps.py` | **100%** |
+| `core/ml/store.py` | **100%** |
+| `core/ml/types.py` | **100%** |
 | `analyzer.py` | 99% |
 | `cli/ai.py` | 98% |
 | `core/rag/store.py` | 98% |

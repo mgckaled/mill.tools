@@ -198,8 +198,12 @@ Para `docs/ROADMAP_ML_DADOS.md`, esta skill é o ponto de partida de cada plano:
   `recipes/history_tab.py`) — sem inflar os builders. Histórico de Receitas: persistência nova efeito-colateral da
   **orquestração** (worker/CLI gravam `RunRecord` no evento terminal); o `runner` puro fica intocado.
   Ver `docs/PLANO_2_PAINEIS_HUBS.md`.
-- **Plano 3 (fundação de ML)** — novo pacote puro `core/ml/` espelhando `core/rag/` (gate, injeção, cache);
-  acessor que reusa o `VectorStore` existente.
+- **Plano 3 (fundação de ML) ✅** — pacote puro `core/ml/` espelhando `core/rag/`: acessor de embeddings
+  (`features.py`, **numpy-puro**) que faz mean-pool do `VectorStore` em vetores de documento (única decisão
+  de pooling/normalização, herdada pelos consumidores); dedup por cosseno (`dedup.py`, prova de vida);
+  gate `[ml]` (`deps.is_available`) e persistência de modelos versionada por `sklearn.__version__`+signature
+  (`store.py`, invalida no mismatch — joblib v1). Acessor/dedup **não** gateiam (só os algoritmos do Plano 4/5).
+  CLI `ai dups`; GUI deferida ao Plano 4. Ver `docs/PLANO_3_FUNDACAO_ML.md`.
 - **Planos 4–7** — cada feature pela seção 5; ao tocar `ai/view.py`/`library/view.py`/builder de Receitas,
   **dividir ao tocar** (seção 3) antes de adicionar a aba/recurso.
 
