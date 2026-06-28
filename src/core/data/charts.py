@@ -37,6 +37,22 @@ class ChartSpec:
     title: str | None = None
 
 
+# Discrete, reasonably distinct colors for categorical scatter (e.g. the semantic
+# map's clusters). Cycled in order; the noise/orphan category is drawn in ``muted``.
+_CATEGORICAL = (
+    "#F4A63C",
+    "#5B9BD5",
+    "#5FCF80",
+    "#E0726B",
+    "#B98CE0",
+    "#4FD0E0",
+    "#E0B84F",
+    "#9CCF5F",
+    "#E07FB0",
+    "#7FA0E0",
+)
+
+
 @dataclass(frozen=True, slots=True)
 class ChartPalette:
     """Chart colors. The GUI injects the dark theme; the core keeps neutral defaults."""
@@ -46,6 +62,7 @@ class ChartPalette:
     accent: str = "#F4A63C"
     grid: str = "#D0D0D0"
     muted: str = "#888888"
+    categorical: tuple[str, ...] = _CATEGORICAL
 
 
 DEFAULT_PALETTE = ChartPalette()
@@ -285,3 +302,99 @@ def _scatter(ax, df, spec: ChartSpec, palette: ChartPalette) -> None:
 
 
 _DRAW = {"bar": _bar, "line": _line, "hist": _hist, "scatter": _scatter}
+
+
+def render_category_scatter(
+    df,
+    *,
+    x: str,
+    y: str,
+    color: str,
+    annotations: list[tuple[float, float, str]] | None = None,
+    title: str | None = None,
+    noise_value: str | None = None,
+    palette: ChartPalette = DEFAULT_PALETTE,
+) -> bytes:
+    """Render a categorical scatter to PNG (e.g. the semantic map) — bytes out.
+
+    Each distinct value of the ``color`` column gets a discrete color from
+    ``palette.categorical`` (first-seen order), with ``noise_value`` (the
+    orphan/noise category) always drawn in ``palette.muted``. Optional
+    ``annotations`` are ``(x, y, text)`` labels (cluster centroids). Like
+    ``render_png`` this is the only matplotlib touchpoint — ``Figure`` +
+    ``FigureCanvasAgg`` (no ``pyplot``), safe off the UI thread.
+
+    Args:
+        df: a pandas DataFrame with the ``x``/``y``/``color`` columns.
+        x, y: numeric coordinate columns.
+        color: the categorical column to color by (e.g. cluster name).
+        annotations: optional centroid labels.
+        title: optional chart title.
+        noise_value: the category drawn muted (orphans); ``None`` to disable.
+        palette: chart colors (the GUI injects the dark theme).
+
+    Raises:
+        ValueError: if *df* is empty or a referenced column is missing.
+    """
+    import io
+
+    from matplotlib.backends.backend_agg import FigureCanvasAgg
+    from matplotlib.figure import Figure
+
+    if df is None or len(df) == 0:
+        raise ValueError("Sem dados para plotar.")
+    missing = [c for c in (x, y, color) if c not in df.columns]
+    if missing:
+        raise ValueError(f"Coluna(s) inexistente(s): {', '.join(missing)}.")
+
+    fig = Figure(figsize=(7.5, 5.0), dpi=110)
+    fig.patch.set_facecolor(palette.bg)
+    canvas = FigureCanvasAgg(fig)
+    ax = fig.add_subplot()
+    _style_axes(ax, palette)
+
+    categories = list(dict.fromkeys(df[color].tolist()))  # distinct, first-seen
+    cycle_i = 0
+    for cat in categories:
+        sub = df[df[color] == cat]
+        if noise_value is not None and cat == noise_value:
+            dot = palette.muted
+        else:
+            dot = palette.categorical[cycle_i % len(palette.categorical)]
+            cycle_i += 1
+        ax.scatter(
+            _numeric(sub, x),
+            _numeric(sub, y),
+            color=dot,
+            label=str(cat),
+            alpha=0.8,
+            edgecolors="none",
+            s=32,
+        )
+
+    for ax_, ay, text in annotations or []:
+        ax.annotate(
+            text,
+            (ax_, ay),
+            color=palette.fg,
+            fontsize=9,
+            fontweight="bold",
+            ha="center",
+            va="center",
+        )
+
+    ax.set_xticks([])
+    ax.set_yticks([])
+    if title:
+        ax.set_title(title, color=palette.fg)
+    if len(categories) <= 12:
+        legend = ax.legend(
+            loc="best", fontsize=8, framealpha=0.2, labelcolor=palette.fg
+        )
+        if legend:
+            legend.get_frame().set_facecolor(palette.bg)
+    fig.tight_layout()
+
+    buf = io.BytesIO()
+    canvas.print_png(buf)
+    return buf.getvalue()

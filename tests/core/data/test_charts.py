@@ -218,6 +218,87 @@ def test_render_png_unknown_kind_raises():
         charts.render_png(_df(), charts.ChartSpec(kind="pizza", x="produto"))
 
 
+# --- render_category_scatter (semantic map, Plano 4A) ------------------------
+
+
+def _scatter_df():
+    return pd.DataFrame(
+        {
+            "x": [0.0, 0.1, 2.0, 2.1, 5.0],
+            "y": [0.0, 0.2, 2.0, 1.9, 5.0],
+            "cluster": ["whisper", "whisper", "duna", "duna", "órfãos"],
+        }
+    )
+
+
+@pytest.mark.unit
+def test_render_category_scatter_produces_valid_png():
+    out = charts.render_category_scatter(
+        _scatter_df(),
+        x="x",
+        y="y",
+        color="cluster",
+        annotations=[(0.05, 0.1, "whisper"), (2.05, 1.95, "duna")],
+        noise_value="órfãos",
+        title="Mapa",
+    )
+    _assert_valid_png(out)
+
+
+@pytest.mark.unit
+def test_render_category_scatter_empty_raises():
+    with pytest.raises(ValueError, match="Sem dados"):
+        charts.render_category_scatter(
+            pd.DataFrame({"x": [], "y": [], "cluster": []}),
+            x="x",
+            y="y",
+            color="cluster",
+        )
+
+
+@pytest.mark.unit
+def test_render_category_scatter_many_categories_skips_legend():
+    # >12 categories → legend is skipped (would be unreadable) but PNG still valid.
+    n = 15
+    df = pd.DataFrame(
+        {
+            "x": list(range(n)),
+            "y": list(range(n)),
+            "cluster": [f"c{i}" for i in range(n)],
+        }
+    )
+    _assert_valid_png(charts.render_category_scatter(df, x="x", y="y", color="cluster"))
+
+
+@pytest.mark.unit
+def test_render_category_scatter_missing_column_raises():
+    with pytest.raises(ValueError, match="inexistente"):
+        charts.render_category_scatter(_scatter_df(), x="x", y="y", color="ghost")
+
+
+@pytest.mark.unit
+def test_render_category_scatter_thread_safe():
+    out1, out2 = [], []
+
+    def _work(sink):
+        sink.append(
+            charts.render_category_scatter(
+                _scatter_df(), x="x", y="y", color="cluster", noise_value="órfãos"
+            )
+        )
+
+    threads = [
+        threading.Thread(target=_work, args=(out1,)),
+        threading.Thread(target=_work, args=(out2,)),
+    ]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+    _assert_valid_png(out1[0])
+    _assert_valid_png(out2[0])
+
+
 @pytest.mark.unit
 def test_render_png_thread_safe_concurrent_renders():
     """Two concurrent renders both yield valid PNGs (proves Figure/Agg, not pyplot)."""

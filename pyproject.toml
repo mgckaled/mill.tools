@@ -36,6 +36,9 @@ data-plot = ["matplotlib>=3.8"]
 # transformers (useful to the tabular wave). joblib comes transitively; skops is
 # the documented secure-load upgrade, intentionally not added yet.
 ml = ["scikit-learn>=1.4"]
+# Optional ML visualization (Plan 4A): UMAP for a nicer semantic-map projection.
+# PCA (the default) needs only [ml]; UMAP pulls numba, so it stays opt-in.
+ml-viz = ["umap-learn>=0.5"]
 
 [dependency-groups]
 dev = [
