@@ -38,3 +38,40 @@ class DuplicateGroup:
 
     source_paths: list[str]  # documents mutually above the threshold
     score: float  # min pairwise cosine within the group (worst-case closeness)
+
+
+@dataclass(frozen=True, slots=True)
+class ClusterResult:
+    """The outcome of clustering the pooled document vectors.
+
+    ``labels[d]`` is the cluster id of document ``d`` (parallel to the
+    ``DocumentMatrix`` rows). HDBSCAN marks outliers/noise with ``-1``, which we
+    reuse as "isolated/orphan content"; ``n_clusters`` and ``n_noise`` exclude
+    and count that label respectively.
+    """
+
+    labels: np.ndarray  # (M,) int; -1 = noise/outlier (HDBSCAN)
+    method: str  # "hdbscan" | "kmeans"
+    n_clusters: int  # distinct labels excluding -1
+    n_noise: int  # count of label == -1
+
+
+@dataclass(frozen=True, slots=True)
+class SemanticMap:
+    """Everything needed to draw and navigate the semantic map of the corpus.
+
+    ``coords`` are the 2D projection of each document; ``labels`` the cluster id;
+    ``cluster_names`` maps a cluster id to its top discriminative terms (c-TF-IDF,
+    excluding ``-1``). ``coords``/``labels``/``source_paths``/``kinds`` are all
+    parallel, one entry per document, in the accessor's first-seen order.
+    """
+
+    coords: np.ndarray  # (M, 2) float32 — 2D projection for the scatter map
+    labels: np.ndarray  # (M,) int — cluster id per document (-1 = orphan)
+    cluster_names: dict[int, list[str]]  # cluster id → top terms (no -1)
+    source_paths: list[str]  # length M, parallel to coords rows
+    kinds: list[str]  # length M, the document kind
+
+    def __len__(self) -> int:
+        """Number of documents on the map (rows in ``coords``)."""
+        return len(self.source_paths)

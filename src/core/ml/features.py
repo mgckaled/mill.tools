@@ -88,6 +88,20 @@ def document_matrix(store: VectorStore, *, l2_normalize: bool = True) -> Documen
     )
 
 
+def document_texts(store: VectorStore) -> list[str]:
+    """Concatenate each document's chunk texts, in the same order as ``document_matrix``.
+
+    Row ``d`` of ``document_matrix(store).X`` and entry ``d`` of this list both
+    describe the same source document (first-seen order), so the c-TF-IDF
+    labeling can pair a cluster's documents with their text without re-deriving
+    the grouping. Chunks of one document are joined with newlines.
+    """
+    texts_by_doc: dict[str, list[str]] = {}
+    for meta in store.meta:
+        texts_by_doc.setdefault(meta.source_path, []).append(meta.text)
+    return ["\n".join(chunks) for chunks in texts_by_doc.values()]
+
+
 def load_document_matrix(
     directory: Path | None = None, *, l2_normalize: bool = True
 ) -> DocumentMatrix:
