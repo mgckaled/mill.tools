@@ -510,3 +510,263 @@ def test_dups_exits_when_index_empty(tmp_path, monkeypatch, capsys):
     with pytest.raises(SystemExit):
         _dups(_parse("dups"))
     assert "Índice vazio" in capsys.readouterr().out
+
+
+# --- ai topics / map / related (Plan 4A — semantic layer) -------------------
+
+
+def _persist_themes(directory) -> None:
+    """Persist a store with two well-separated themes of single-chunk docs."""
+    from src.core.rag.store import VectorStore
+    from src.core.rag.types import ChunkMeta
+
+    rng = np.random.default_rng(0)
+    store = VectorStore(dim=8)
+    for i in range(8):
+        v = np.zeros(8, dtype=np.float32)
+        v[0] = 1.0
+        v += rng.normal(0, 0.02, 8).astype(np.float32)
+        store.add(
+            v[None],
+            [
+                ChunkMeta(
+                    f"whisper_{i}.txt",
+                    "transcription",
+                    1.0,
+                    0,
+                    "whisper gpu transcription audio",
+                )
+            ],
+        )
+    for i in range(8):
+        v = np.zeros(8, dtype=np.float32)
+        v[1] = 1.0
+        v += rng.normal(0, 0.02, 8).astype(np.float32)
+        store.add(
+            v[None],
+            [
+                ChunkMeta(
+                    f"duna_{i}.txt", "document", 2.0, 0, "duna herbert arrakis spice"
+                )
+            ],
+        )
+    store.persist(directory)
+
+
+@pytest.mark.unit
+def test_topics_map_related_parse():
+    assert _parse("topics").query == "topics"
+    m = _parse("map", "--method", "umap", "--out", "x.png")
+    assert m.query == "map" and m.method == "umap" and m.out == "x.png"
+    r = _parse("related", "doc.txt", "--k", "3")
+    assert r.query == "related" and r.target == "doc.txt" and r.k == 3
+
+
+@pytest.mark.unit
+def test_map_default_method_is_pca():
+    assert _parse("map").method == "pca"
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    "cmd,runner",
+    [
+        ("topics", "_topics"),
+        ("map", "_map"),
+        ("related", "_related"),
+    ],
+)
+def test_semantic_commands_dispatch(mocker, cmd, runner):
+    target = mocker.patch(f"src.cli.ai.{runner}")
+    ask = mocker.patch("src.cli.ai._ask")
+    ns = _parse(cmd, *(["doc.txt"] if cmd == "related" else []))
+    ns.func(ns)
+    assert target.called
+    assert not ask.called
+
+
+@pytest.mark.unit
+def test_related_prints_neighbours(tmp_path, monkeypatch, capsys):
+    import src.core.rag.indexer as indexer
+    from src.cli.ai import _related
+
+    rag_dir = tmp_path / "rag"
+    _persist_themes(rag_dir)
+    monkeypatch.setattr(indexer, "index_dir", lambda: rag_dir)
+
+    _related(_parse("related", "whisper_0.txt", "--k", "3"))
+    out = capsys.readouterr().out
+    assert "Relacionados a whisper_0.txt" in out
+    # Its nearest neighbours are other whisper docs, not the duna theme.
+    assert "whisper_" in out
+
+
+@pytest.mark.unit
+def test_related_exits_without_target(tmp_path, monkeypatch, capsys):
+    from src.cli.ai import _related
+
+    with pytest.raises(SystemExit):
+        _related(_parse("related"))
+    assert "Informe o documento" in capsys.readouterr().out
+
+
+@pytest.mark.unit
+def test_related_exits_when_doc_not_found(tmp_path, monkeypatch, capsys):
+    import src.core.rag.indexer as indexer
+    from src.cli.ai import _related
+
+    rag_dir = tmp_path / "rag"
+    _persist_themes(rag_dir)
+    monkeypatch.setattr(indexer, "index_dir", lambda: rag_dir)
+
+    with pytest.raises(SystemExit):
+        _related(_parse("related", "ghost.txt"))
+    assert "não encontrado" in capsys.readouterr().out
+
+
+@pytest.mark.unit
+def test_related_exits_when_index_empty(tmp_path, monkeypatch, capsys):
+    import src.core.rag.indexer as indexer
+    from src.cli.ai import _related
+
+    monkeypatch.setattr(indexer, "index_dir", lambda: tmp_path / "empty")
+    with pytest.raises(SystemExit):
+        _related(_parse("related", "x.txt"))
+    assert "Índice vazio" in capsys.readouterr().out
+
+
+@pytest.mark.unit
+def test_topics_lists_clusters(tmp_path, monkeypatch, capsys):
+    pytest.importorskip("sklearn")
+    import src.core.ml.store as ml_store
+    import src.core.rag.indexer as indexer
+    from src.cli.ai import _topics
+
+    rag_dir = tmp_path / "rag"
+    _persist_themes(rag_dir)
+    monkeypatch.setattr(indexer, "index_dir", lambda: rag_dir)
+    monkeypatch.setattr(ml_store, "model_dir", lambda: tmp_path / "ml")  # isolate cache
+
+    _topics()
+    out = capsys.readouterr().out
+    assert "Tópicos do acervo" in out
+
+
+@pytest.mark.unit
+def test_topics_exits_when_index_empty(tmp_path, monkeypatch, capsys):
+    import src.core.rag.indexer as indexer
+    from src.cli.ai import _topics
+
+    monkeypatch.setattr(indexer, "index_dir", lambda: tmp_path / "empty")
+    with pytest.raises(SystemExit):
+        _topics()
+    assert "Índice vazio" in capsys.readouterr().out
+
+
+@pytest.mark.unit
+def test_related_matches_absolute_path(tmp_path, monkeypatch, capsys):
+    import src.core.rag.indexer as indexer
+    from src.cli.ai import _related
+    from src.core.rag.store import VectorStore
+    from src.core.rag.types import ChunkMeta
+
+    # Store the source under an absolute path so the absolute-match branch hits.
+    abs_a = str((tmp_path / "abs_a.txt").resolve())
+    abs_b = str((tmp_path / "abs_b.txt").resolve())
+    rag_dir = tmp_path / "rag"
+    store = VectorStore(dim=8)
+    store.add(
+        np.ones((1, 8), dtype=np.float32),
+        [ChunkMeta(abs_a, "transcription", 1.0, 0, "a")],
+    )
+    store.add(
+        np.full((1, 8), 0.9, dtype=np.float32),
+        [ChunkMeta(abs_b, "transcription", 1.0, 0, "b")],
+    )
+    store.persist(rag_dir)
+    monkeypatch.setattr(indexer, "index_dir", lambda: rag_dir)
+
+    _related(_parse("related", abs_a))
+    assert "abs_b.txt" in capsys.readouterr().out
+
+
+@pytest.mark.unit
+def test_topics_exits_when_ml_missing(tmp_path, monkeypatch, mocker, capsys):
+    import src.core.rag.indexer as indexer
+    from src.cli.ai import _topics
+
+    rag_dir = tmp_path / "rag"
+    _persist_themes(rag_dir)
+    monkeypatch.setattr(indexer, "index_dir", lambda: rag_dir)
+    mocker.patch("src.core.ml.deps.is_available", return_value=False)
+
+    with pytest.raises(SystemExit):
+        _topics()
+    assert "ML indisponível" in capsys.readouterr().out
+
+
+@pytest.mark.unit
+def test_map_writes_png(tmp_path, monkeypatch, capsys):
+    pytest.importorskip("sklearn")
+    pytest.importorskip("matplotlib")
+    import src.core.ml.store as ml_store
+    import src.core.rag.indexer as indexer
+    from src.cli.ai import _map
+
+    rag_dir = tmp_path / "rag"
+    _persist_themes(rag_dir)
+    monkeypatch.setattr(indexer, "index_dir", lambda: rag_dir)
+    monkeypatch.setattr(ml_store, "model_dir", lambda: tmp_path / "ml")
+
+    out_png = tmp_path / "map.png"
+    _map(_parse("map", "--out", str(out_png)))
+    assert out_png.exists()
+    assert out_png.read_bytes()[:8] == b"\x89PNG\r\n\x1a\n"
+    assert "Mapa salvo" in capsys.readouterr().out
+
+
+@pytest.mark.unit
+def test_map_exits_when_index_empty(tmp_path, monkeypatch, capsys):
+    import src.core.rag.indexer as indexer
+    from src.cli.ai import _map
+
+    monkeypatch.setattr(indexer, "index_dir", lambda: tmp_path / "empty")
+    with pytest.raises(SystemExit):
+        _map(_parse("map"))
+    assert "Índice vazio" in capsys.readouterr().out
+
+
+@pytest.mark.unit
+def test_map_exits_when_chart_extras_missing(tmp_path, monkeypatch, mocker, capsys):
+    import src.core.rag.indexer as indexer
+    from src.cli.ai import _map
+
+    rag_dir = tmp_path / "rag"
+    _persist_themes(rag_dir)
+    monkeypatch.setattr(indexer, "index_dir", lambda: rag_dir)
+    mocker.patch("src.core.data.charts.is_available", return_value=False)
+
+    with pytest.raises(SystemExit):
+        _map(_parse("map"))
+    out = capsys.readouterr().out
+    assert "Gráficos indisponíveis" in out or "extra" in out
+
+
+@pytest.mark.unit
+def test_related_reports_none_for_single_doc(tmp_path, monkeypatch, capsys):
+    import src.core.rag.indexer as indexer
+    from src.cli.ai import _related
+    from src.core.rag.store import VectorStore
+    from src.core.rag.types import ChunkMeta
+
+    rag_dir = tmp_path / "rag"
+    store = VectorStore(dim=8)
+    store.add(
+        np.ones((1, 8), dtype=np.float32),
+        [ChunkMeta("only.txt", "transcription", 1.0, 0, "alone")],
+    )
+    store.persist(rag_dir)
+    monkeypatch.setattr(indexer, "index_dir", lambda: rag_dir)
+
+    _related(_parse("related", "only.txt"))
+    assert "Nenhum documento relacionado" in capsys.readouterr().out

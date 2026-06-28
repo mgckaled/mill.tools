@@ -4,14 +4,18 @@ Flows behind one positional:
     uv run main.py ai index                       # (re)build the vector index
     uv run main.py ai stats                        # summarize the persisted index
     uv run main.py ai dups                          # near-duplicate documents (ML)
+    uv run main.py ai topics                        # cluster the corpus into topics
+    uv run main.py ai map [--method pca|umap]       # render the semantic map PNG
+    uv run main.py ai related <path> [--k N]        # documents similar to one
     uv run main.py ai "what did I say about X?"    # ask the whole corpus
     uv run main.py ai "summarize" --scope path.txt # ask a single document
     uv run main.py ai "..." --model gemini-2.5-flash --k 8
 
 Reuses the same core (scan_library / build_index / retrieve / answer) as the GUI.
 Embeddings are always local (Ollama); only the answer step may use Gemini opt-in.
-``dups`` is read-only over the persisted index (numpy-pure ML foundation, Plan 3):
-no embedder/network needed.
+``dups``/``topics``/``map``/``related`` are read-only over the persisted index
+(the ML layer, Plans 3/4A): no embedder/network needed. ``topics``/``map`` need
+the ``[ml]`` extra; ``related`` is numpy-pure like ``dups``.
 """
 
 from __future__ import annotations
@@ -28,6 +32,9 @@ import numpy as np
 _INDEX_CMD = "index"
 _STATS_CMD = "stats"
 _DUPS_CMD = "dups"
+_TOPICS_CMD = "topics"
+_MAP_CMD = "map"
+_RELATED_CMD = "related"
 
 
 def add_ai_parser(subparsers: argparse._SubParsersAction) -> None:
@@ -38,7 +45,13 @@ def add_ai_parser(subparsers: argparse._SubParsersAction) -> None:
     )
     p.add_argument(
         "query",
-        help='Your question, or "index"/"stats"/"dups" for index maintenance flows',
+        help="Your question, or index/stats/dups/topics/map/related for ML flows",
+    )
+    p.add_argument(
+        "target",
+        nargs="?",
+        default=None,
+        help="With related, the document path to find neighbours for",
     )
     p.add_argument(
         "--scope",
@@ -85,6 +98,17 @@ def add_ai_parser(subparsers: argparse._SubParsersAction) -> None:
         default=0.95,
         metavar="C",
         help="With dups, the minimum cosine similarity to group documents (0.95)",
+    )
+    p.add_argument(
+        "--method",
+        choices=["pca", "umap"],
+        default="pca",
+        help="With map, the 2D projection (pca default; umap needs the [ml-viz] extra)",
+    )
+    p.add_argument(
+        "--out",
+        default=None,
+        help="With map, the output PNG path (default output/data/semantic_map.png)",
     )
     p.add_argument("--verbose", action="store_true", help="Enable debug logging")
     p.set_defaults(func=run_ai_cli)
@@ -275,6 +299,105 @@ def _dups(ns: argparse.Namespace) -> None:
         print()
 
 
+def _semantic_map(store):
+    """Build the cached SemanticMap, exiting with a hint if [ml] is missing."""
+    from src.core.ml import deps
+    from src.core.ml.mapviz import build_semantic_map
+
+    if not deps.is_available():
+        print(f"ML indisponível. {deps.SETUP_HINT}")
+        sys.exit(1)
+    return build_semantic_map(store)
+
+
+def _topics() -> None:
+    """List the discovered topics (clusters): name, size; orphans last."""
+    from collections import Counter
+
+    from src.core.ml.mapviz import cluster_display_name
+    from src.core.rag import embedder
+    from src.core.rag.indexer import index_dir
+    from src.core.rag.store import VectorStore
+
+    store = VectorStore.load(index_dir(), dim=embedder.EMBED_DIM)
+    if len(store) == 0:
+        print('Índice vazio. Rode "uv run main.py ai index" primeiro.')
+        sys.exit(1)
+
+    sm = _semantic_map(store)
+    counts = Counter(int(label) for label in sm.labels)
+    clusters = sorted((c for c in counts if c != -1), key=lambda c: -counts[c])
+    print(f"Tópicos do acervo ({len(sm)} documentos, {len(clusters)} grupos):\n")
+    for c in clusters:
+        print(f"  {counts[c]:>4}  {cluster_display_name(c, sm.cluster_names)}")
+    if counts.get(-1):
+        print(f"  {counts[-1]:>4}  órfãos (isolados)")
+
+
+def _map(ns: argparse.Namespace) -> None:
+    """Render the semantic map PNG to --out (default output/data/semantic_map.png)."""
+    from src.core.data import charts
+    from src.core.ml.mapviz import build_semantic_map, render_semantic_map_png
+    from src.core.rag import embedder
+    from src.core.rag.indexer import index_dir
+    from src.core.rag.store import VectorStore
+    from src.utils import DATA_DIR
+
+    store = VectorStore.load(index_dir(), dim=embedder.EMBED_DIM)
+    if len(store) == 0:
+        print('Índice vazio. Rode "uv run main.py ai index" primeiro.')
+        sys.exit(1)
+    if not charts.is_available():
+        print(charts.SETUP_HINT)
+        sys.exit(1)
+    _semantic_map(store)  # gate [ml] with the shared hint before projecting
+
+    sm = build_semantic_map(store, projection=ns.method)
+    png = render_semantic_map_png(sm, title="Mapa semântico do acervo")
+    out = Path(ns.out) if ns.out else DATA_DIR / "semantic_map.png"
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_bytes(png)
+    print(f"Mapa salvo em {out} ({len(sm)} documentos).")
+
+
+def _resolve_doc_path(target: str, dm) -> str | None:
+    """Match a user-given path to a document in the index (absolute, then basename)."""
+    resolved = str(Path(target).resolve())
+    if resolved in dm.source_paths:
+        return resolved
+    name = Path(target).name
+    matches = [sp for sp in dm.source_paths if Path(sp).name == name]
+    return matches[0] if len(matches) == 1 else None
+
+
+def _related(ns: argparse.Namespace) -> None:
+    """Print the documents most similar to a given one (numpy-pure, no [ml])."""
+    from src.core.ml.features import load_document_matrix
+    from src.core.ml.recommend import related
+    from src.core.rag.indexer import index_dir
+
+    if not ns.target:
+        print("Informe o documento: uv run main.py ai related <arquivo>")
+        sys.exit(1)
+    dm = load_document_matrix(index_dir())
+    if len(dm) == 0:
+        print('Índice vazio. Rode "uv run main.py ai index" primeiro.')
+        sys.exit(1)
+
+    source = _resolve_doc_path(ns.target, dm)
+    if source is None:
+        print(f"Documento não encontrado no índice: {ns.target}")
+        sys.exit(1)
+
+    hits = related(dm, source, k=ns.k)
+    if not hits:
+        print("Nenhum documento relacionado encontrado.")
+        return
+    print(f"Relacionados a {Path(source).name}:\n")
+    for path, score in hits:
+        print(f"  {score:.3f}  {Path(path).name}")
+
+
 def _ask(ns: argparse.Namespace, embed_model: str) -> None:
     """Retrieve top-k chunks for the question and print a cited answer."""
     from src.core.rag import embedder
@@ -357,6 +480,18 @@ def run_ai_cli(ns: argparse.Namespace) -> None:
 
     if ns.query == _DUPS_CMD:  # read-only ML over the persisted index; no embedder
         _dups(ns)
+        return
+
+    if ns.query == _TOPICS_CMD:  # cluster the index into named topics ([ml])
+        _topics()
+        return
+
+    if ns.query == _MAP_CMD:  # render the semantic map PNG ([ml] + chart extras)
+        _map(ns)
+        return
+
+    if ns.query == _RELATED_CMD:  # nearest documents to one (numpy-pure, no [ml])
+        _related(ns)
         return
 
     from src.core.rag import embedder
