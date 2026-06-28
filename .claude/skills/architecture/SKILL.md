@@ -204,7 +204,15 @@ Para `docs/ROADMAP_ML_DADOS.md`, esta skill é o ponto de partida de cada plano:
   gate `[ml]` (`deps.is_available`) e persistência de modelos versionada por `sklearn.__version__`+signature
   (`store.py`, invalida no mismatch — joblib v1). Acessor/dedup **não** gateiam (só os algoritmos do Plano 4/5).
   CLI `ai dups`; GUI deferida ao Plano 4. Ver `docs/PLANO_3_FUNDACAO_ML.md`.
-- **Planos 4–7** — cada feature pela seção 5; ao tocar `ai/view.py`/`library/view.py`/builder de Receitas,
+- **Plano 4A (semântico não-supervisionado) ✅** — só geometria de embeddings, reusa `features.document_matrix`
+  (Plano 3) e o `charts` (Plano 1). Núcleo `core/ml/`: `cluster` (HDBSCAN/k-means), `labeling` (c-TF-IDF),
+  `project` (PCA default / UMAP sob `[ml-viz]`), `recommend` (related/in_corpus, **numpy-puro, sem gate**),
+  `cache` (mapa versionado por `corpus_signature`), `mapviz` (orquestra → PNG). `charts` ganhou
+  `render_category_scatter` (**estendido, não duplicado** — segue a única fronteira matplotlib). GUI: Biblioteca
+  modo **Mapa** (`semantic_map_panel.py`, "divide-se ao tocar" — `view.py` só pluga no Stack) + aviso de
+  fora-de-escopo na IA; CLI `ai topics`/`map`/`related`. Nenhuma dep obrigatória nova (só `[ml-viz]`).
+  Ver `docs/PLANO_4A_SEMANTICO.md`.
+- **Planos 4B–7** — cada feature pela seção 5; ao tocar `ai/view.py`/`library/view.py`/builder de Receitas,
   **dividir ao tocar** (seção 3) antes de adicionar a aba/recurso.
 
 A regra de ouro do roadmap vale também para o código: **pagar uma fundação pequena uma vez (camadas, limites,

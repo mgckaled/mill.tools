@@ -535,6 +535,34 @@ Fundação de ML, testável sem rede e (na maior parte) sem o extra `[ml]`:
   signature** → `None`; sidecar ausente/corrompido e artefato `.joblib` corrompido
   → `None`.
 
+**Plano 4A — semântico (`cluster`/`project`/`labeling`/`recommend`/`cache`/`mapviz`):**
+
+- **`recommend` (sem `importorskip`)**: numpy-puro. `related` — vizinhos plantados no
+  topo, exclui o próprio, respeita `k`, esgota corpus, doc inexistente → `ValueError`;
+  `in_corpus` — acima/abaixo do limiar, store vazio → `(False, 0.0)`.
+- **`cluster`/`labeling`/`project` (`importorskip("sklearn")`)**: blobs sintéticos
+  ortogonais em dim estreita (jitter pequeno) → `n_clusters` esperado; outlier isolado →
+  `-1`/`n_noise`; k-means com `k`; `M<min_cluster_size` → tudo ruído; método inválido /
+  k-means sem `k` / gate off (`mocker.patch(...is_available, return_value=False)`) →
+  erro. c-TF-IDF: vocabulário distinto → termos discriminativos no topo, `-1` ignorado,
+  stopwords removidas, só-stopwords → vazio. PCA: shape `(M,2)`, **determinismo** (duas
+  execuções idênticas via convenção de sinal), pad degenerado (D=1); UMAP →
+  `importorskip("umap")` (pulado sem o extra; `_umap_2d` tem `# pragma: no cover`).
+- **`cache`**: `corpus_signature` estável a reordenação/multiplicidade, muda com mtime;
+  `save_map`/`load_map` round-trip em `tmp_path`; mismatch de signature/versão e arquivos
+  corrompidos (sidecar/npz) → `None`.
+- **`mapviz` (`importorskip("sklearn")`)**: `build_semantic_map` clusteriza+rotula+cacheia
+  (**spy** em `cluster_documents`: 1× com cache, 2× com `use_cache=False`);
+  `cluster_display_name`; `render_semantic_map_png` → PNG válido (Pillow), mapa vazio /
+  charts ausente → erro.
+- **`charts.render_category_scatter`** (`tests/core/data/test_charts.py`): scatter
+  categórico → PNG válido, vazio/coluna inexistente → erro, >12 categorias sem legenda,
+  thread-safe (dois renders concorrentes).
+- **GUI (Plano 4A)**: `semantic_map_panel` por **construct-smoke** (`build_*` com
+  `MagicMock` pega erro de construtor que o import-smoke não pega) + gates (ml/índice
+  vazio); worker da IA marca `low_confidence` quando o query é ortogonal ao acervo
+  (e não quando coberto), via `hits[0].score` sem re-embeddar.
+
 ### Core Dados (`src/core/data/`) — DuckDB in-process (qualifica como `unit`)
 
 DuckDB roda in-process (sem ffmpeg/rede/GPU), então os testes de dados são `unit`
@@ -730,6 +758,12 @@ O alvo é **≥ 90%** por módulo. Total agregado: **88%** com branch. Estado at
 | `core/ml/deps.py` | **100%** |
 | `core/ml/store.py` | **100%** |
 | `core/ml/types.py` | **100%** |
+| `core/ml/recommend.py` | **100%** |
+| `core/ml/cluster.py` | **100%** |
+| `core/ml/labeling.py` | **100%** |
+| `core/ml/cache.py` | **100%** |
+| `core/ml/project.py` | **100%** (UMAP sob `# pragma`) |
+| `core/ml/mapviz.py` | **100%** |
 | `analyzer.py` | 99% |
 | `cli/ai.py` | 98% |
 | `core/rag/store.py` | 98% |

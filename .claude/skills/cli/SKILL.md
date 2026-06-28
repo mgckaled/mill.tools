@@ -231,6 +231,9 @@ do Windows).
 uv run main.py ai index                                  # (re)indexa o corpus
 uv run main.py ai stats                                  # resumo do índice (read-only)
 uv run main.py ai dups [--threshold 0.95] [--scope kind] # duplicatas (ML, read-only)
+uv run main.py ai topics                                 # clusters + rótulos c-TF-IDF ([ml])
+uv run main.py ai map [--method pca|umap] [--out p.png]  # PNG do mapa semântico ([ml])
+uv run main.py ai related <path> [--k 5]                 # vizinhos por cosseno (numpy)
 uv run main.py ai "pergunta?"                            # responde, citando fontes
 uv run main.py ai "resuma" --scope output/.../x.txt      # um documento
 uv run main.py ai "liste as ações" --batch --kind transcription
@@ -244,7 +247,13 @@ toca o embedder/Ollama) e retorna; se for `dups` → imprime grupos de documento
 quase-idênticos (`_dups()`, **read-only/sem embedder** — fundação de ML do Plano 3:
 `features.document_matrix` faz mean-pool do `VectorStore` e `dedup.near_duplicates`
 agrupa por cosseno; `--scope` aqui é só kind, `--threshold` ajusta o limiar) e
-retorna; senão é a pergunta. Reaproveita o core
+retorna; se for `topics`/`map`/`related` → camada semântica do Plano 4A
+(`_topics`/`_map`/`_related`, read-only/sem embedder): `topics` clusteriza e lista
+os grupos com rótulos c-TF-IDF, `map` salva o PNG do mapa em `--out`
+(default `DATA_DIR/semantic_map.png`, `--method pca|umap`), `related <path>` lista
+vizinhos por cosseno (resolve o path por absoluto→basename). topics/map exigem `[ml]`
+(+ extras de gráfico no map); `related` é numpy-puro. Todos retornam; senão é a
+pergunta. Reaproveita o core
 (`scan_library`/`build_index`/`retrieve`/`answer`); **não** usa `CLIEventBus`
 nem `run_*_pipeline` (como `library`). Embeddings **sempre locais** (Ollama);
 Gemini só no passo de resposta. `run_ai_cli` reconfigura `sys.stdout` p/ UTF-8.
@@ -256,8 +265,11 @@ tamanho em disco · atualizado em · local) + tabela por documento
 
 | Flag | Default | Descrição |
 |---|---|---|
-| `query` (posicional) | — | Pergunta, ou `index` (re)indexar / `stats` resumir / `dups` listar duplicatas |
+| `query` (posicional) | — | Pergunta, ou `index`/`stats`/`dups`/`topics`/`map`/`related` (fluxos de ML) |
+| `target` (posicional opcional) | — | Com `related`, o caminho do documento (absoluto ou basename) |
 | `--threshold` | `0.95` | Com `dups`, cosseno mínimo p/ agrupar documentos |
+| `--method` | `pca` | Com `map`, projeção 2D (`pca` / `umap` exige `[ml-viz]`) |
+| `--out` | — | Com `map`, caminho do PNG (default `output/data/semantic_map.png`) |
 | `--scope` | (acervo) | Caminho de arquivo (1 doc) **ou** kind (`transcription`/`document`/`image`). `_resolve_scope` resolve path existente → absoluto; senão trata como kind |
 | `--model` | `qwen7b-custom` | Modelo da resposta — Ollama tag ou `gemini-2.5-flash` |
 | `--embed-model` | `nomic-embed-custom` | Modelo de embedding (sempre local, CPU `num_gpu 0`; ver `ollama/Modelfile.nomic`) |

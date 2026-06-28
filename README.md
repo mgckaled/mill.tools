@@ -13,7 +13,7 @@
 ![scikit-learn](https://img.shields.io/badge/scikit--learn-ML-F7931E?logo=scikitlearn&logoColor=white)
 
 ![License](https://img.shields.io/badge/license-PolyForm%20Noncommercial%201.0.0-blue)
-![Coverage](https://img.shields.io/badge/coverage-91%25-brightgreen)
+![Coverage](https://img.shields.io/badge/coverage-92%25-brightgreen)
 ![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)
 ![torch-free](https://img.shields.io/badge/PyTorch-free-success?logo=pytorch&logoColor=white)
 
@@ -43,8 +43,8 @@ Seis **ferramentas** de processamento (NavigationRail) e três **hubs** que oper
 | **Imagens** | Ferramenta | 12 operações de manipulação/conversão + IA: remoção de fundo (rembg) e descrição por visão. Visor Antes/Depois |
 | **Documentos** | Ferramenta | 13 operações PDF/QR (merge, split, compress, rotate, watermark, stamp, encrypt, extract, OCR, pdf↔imagens, QR, análise). 100% local via pymupdf |
 | **Dados** | Ferramenta | Consulte CSV/TSV/JSON/Parquet/XLSX em **português** (a IA traduz para SQL vendo só o schema) ou SQL na mão; motor **DuckDB** embutido. Salva o resultado, perfila e gera **gráficos** (barras/linha/histograma/dispersão) |
-| **Biblioteca** | Hub | Índice navegável de tudo em `output/`: grade com thumbnails, lista ou **painel analítico** (acervo por tipo/tamanho/crescimento), filtro/busca/ordenação, abrir arquivo/pasta e reenviar a outro módulo |
-| **IA** | Hub | RAG local sobre o seu acervo: pergunte ao corpus e receba respostas **citando as fontes**. Embeddings sempre locais; Gemini opt-in. **Painel**: saúde do índice + tempo de resposta por modelo. **Duplicatas** (`ai dups`): agrupa documentos quase-idênticos por similaridade, reusando o índice |
+| **Biblioteca** | Hub | Índice navegável de tudo em `output/`: grade com thumbnails, lista, **painel analítico** (acervo por tipo/tamanho/crescimento) ou **mapa semântico** (temas do acervo agrupados + relacionados); filtro/busca/ordenação, abrir arquivo/pasta e reenviar a outro módulo |
+| **IA** | Hub | RAG local sobre o seu acervo: pergunte ao corpus e receba respostas **citando as fontes** (com aviso quando o acervo não cobre a pergunta). Embeddings sempre locais; Gemini opt-in. **Painel**: saúde do índice + tempo de resposta por modelo. **ML semântico**: duplicatas (`ai dups`), tópicos automáticos (`ai topics`), mapa semântico (`ai map`) e relacionados (`ai related`) — tudo reusando o índice |
 | **Receitas** | Hub | Automação: cadeias lineares entre módulos (`URL → áudio → transcrever → analisar`). Presets + construtor com validação ao vivo; lote; **histórico de execução** (confiabilidade/velocidade); CLI `recipe run` |
 
 ---
@@ -56,7 +56,7 @@ Seis **ferramentas** de processamento (NavigationRail) e três **hubs** que oper
 | Transcrição local | [faster-whisper](https://github.com/SYSTRAN/faster-whisper) + ctranslate2, aceleração GPU, **sem PyTorch** |
 | Dados | [DuckDB](https://duckdb.org) embutido (in-process, torch-free); PT→SQL pela IA recebendo só o schema — o conteúdo das tabelas nunca sai da máquina |
 | RAG local | embeddings Ollama (`nomic-embed-text`, CPU), vector store numpy, busca cosseno, resposta com fontes `[n]` |
-| ML local | fundação `core/ml` **torch-free**: acessor de embeddings (mean-pool do índice → vetor por documento) + detecção de duplicatas por cosseno, **em numpy** (reusa o índice do RAG, sem recálculo); [scikit-learn](https://scikit-learn.org) opcional (extra `[ml]`) para os algoritmos futuros |
+| ML local | `core/ml` **torch-free** sobre os embeddings do RAG (sem recálculo): duplicatas e relacionados por cosseno (**numpy**); clustering ([HDBSCAN](https://scikit-learn.org)), rótulos de tema (c-TF-IDF) e mapa semântico 2D (PCA) via [scikit-learn](https://scikit-learn.org) (extra `[ml]`); projeção UMAP opcional (extra `[ml-viz]`) |
 | Vídeo | yt-dlp + ffmpeg CPU-only (libx264/libx265/libvpx-vp9) — sem NVENC |
 | Áudio | noisereduce (spectral gating, CPU) + ffmpeg loudnorm (EBU R128, 2 passes); torch-free |
 | Imagens | Pillow + rembg/ONNX Runtime (CPU) para remoção de fundo |
@@ -112,7 +112,8 @@ ollama pull moondream      && ollama create moondream-custom -f ollama/Modelfile
 uv sync --extra ai-image   # remoção de fundo (Imagens)
 uv sync --extra ocr        # OCR de PDFs escaneados (requer binário Tesseract no PATH)
 uv sync --extra analysis --extra data-plot  # gráficos no módulo Dados (aba Gráfico / data plot)
-uv sync --extra ml         # algoritmos de ML (Planos 4/5); a base de ML e `ai dups` já rodam sem ele (numpy)
+uv sync --extra ml         # clustering/tópicos/mapa semântico (Plano 4A); dups/related rodam sem ele (numpy)
+uv sync --extra ml-viz     # projeção UMAP do mapa (opcional, puxa numba; PCA é o default)
 ```
 
 > O app base funciona sem os extras; os cards correspondentes desabilitam-se graciosamente quando ausentes.
@@ -266,7 +267,7 @@ uv run pytest -n auto            # paralelizado (pytest-xdist)
 uv run pytest --cov=src --cov-report=html
 ```
 
-**1099 testes unitários** (0 falhas); cobertura sobre `src/` (branch on, GUI excluída por não ser testável headless), agregado ~91%. Testes de integração são pulados automaticamente sem `ffmpeg`. Linter: **ruff** — `uv run pytest -m unit` verde + `ruff` limpo antes de qualquer commit.
+**1173 testes unitários** (0 falhas); cobertura sobre `src/` (branch on, GUI excluída por não ser testável headless), agregado ~92%. Testes de integração são pulados automaticamente sem `ffmpeg`. Linter: **ruff** — `uv run pytest -m unit` verde + `ruff` limpo antes de qualquer commit.
 
 ---
 
