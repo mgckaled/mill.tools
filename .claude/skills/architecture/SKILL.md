@@ -212,7 +212,16 @@ Para `docs/ROADMAP_ML_DADOS.md`, esta skill é o ponto de partida de cada plano:
   modo **Mapa** (`semantic_map_panel.py`, "divide-se ao tocar" — `view.py` só pluga no Stack) + aviso de
   fora-de-escopo na IA; CLI `ai topics`/`map`/`related`. Nenhuma dep obrigatória nova (só `[ml-viz]`).
   Ver `docs/PLANO_4A_SEMANTICO.md`.
-- **Planos 4B–7** — cada feature pela seção 5; ao tocar `ai/view.py`/`library/view.py`/builder de Receitas,
+- **Plano 4B (supervisionado + textual) ✅** — a camada que precisa de **rótulo** ou de **NLP textual**.
+  `core/ml/classify.py` (zero-shot por protótipo de perfil → supervisionado `LinearSVC`+`CalibratedClassifierCV`
+  conforme rótulos chegam; reusa `features`/`store`). Pacote novo `core/text/` (puro, **independente do
+  `core/ml`**): `keywords` (YAKE), `summarize` (TextRank self-contained sobre `TfidfVectorizer`), `entities`
+  (spaCy NER CNN, gate de pacote+modelo como o Tesseract), `reader`/`lang`. Extra `[nlp]`; resumo/classificação
+  sem dep nova. "Divide-se ao tocar" aplicado: `form_view` fatiado (`form_env`/`profile_section`), Insights como
+  `insights_panel`, auto-tags em `core/library/tags.py` + `filter_items(tag_index=…)`. Rótulo de ouro capturado
+  pelo **worker** (`record_label`), nunca por etapa de rotulagem dedicada. CLI `ai classify/keywords/summary/
+  entities`. Entrega os motores que o **Plano 4C** vai compor. Ver `docs/PLANO_4B_SUPERVISIONADO_TEXTUAL.md`.
+- **Planos 4C–7** — cada feature pela seção 5; ao tocar `ai/view.py`/`library/view.py`/builder de Receitas,
   **dividir ao tocar** (seção 3) antes de adicionar a aba/recurso.
 
 A regra de ouro do roadmap vale também para o código: **pagar uma fundação pequena uma vez (camadas, limites,

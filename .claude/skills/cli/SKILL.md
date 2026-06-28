@@ -234,6 +234,10 @@ uv run main.py ai dups [--threshold 0.95] [--scope kind] # duplicatas (ML, read-
 uv run main.py ai topics                                 # clusters + rótulos c-TF-IDF ([ml])
 uv run main.py ai map [--method pca|umap] [--out p.png]  # PNG do mapa semântico ([ml])
 uv run main.py ai related <path> [--k 5]                 # vizinhos por cosseno (numpy)
+uv run main.py ai classify <path>                        # perfil sugerido + confiança/margem (4B)
+uv run main.py ai keywords <path> [--top 10]             # keyphrases YAKE ([nlp], 4B)
+uv run main.py ai summary <path> [--sentences 5]         # resumo extractivo TextRank ([ml], 4B)
+uv run main.py ai entities <path>                        # entidades spaCy NER ([nlp]+modelo, 4B)
 uv run main.py ai "pergunta?"                            # responde, citando fontes
 uv run main.py ai "resuma" --scope output/.../x.txt      # um documento
 uv run main.py ai "liste as ações" --batch --kind transcription

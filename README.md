@@ -56,7 +56,8 @@ Seis **ferramentas** de processamento (NavigationRail) e três **hubs** que oper
 | Transcrição local | [faster-whisper](https://github.com/SYSTRAN/faster-whisper) + ctranslate2, aceleração GPU, **sem PyTorch** |
 | Dados | [DuckDB](https://duckdb.org) embutido (in-process, torch-free); PT→SQL pela IA recebendo só o schema — o conteúdo das tabelas nunca sai da máquina |
 | RAG local | embeddings Ollama (`nomic-embed-text`, CPU), vector store numpy, busca cosseno, resposta com fontes `[n]` |
-| ML local | `core/ml` **torch-free** sobre os embeddings do RAG (sem recálculo): duplicatas e relacionados por cosseno (**numpy**); clustering ([HDBSCAN](https://scikit-learn.org)), rótulos de tema (c-TF-IDF) e mapa semântico 2D (PCA) via [scikit-learn](https://scikit-learn.org) (extra `[ml]`); projeção UMAP opcional (extra `[ml-viz]`) |
+| ML local | `core/ml` **torch-free** sobre os embeddings do RAG (sem recálculo): duplicatas e relacionados por cosseno (**numpy**); clustering ([HDBSCAN](https://scikit-learn.org)), rótulos de tema (c-TF-IDF) e mapa semântico 2D (PCA) via [scikit-learn](https://scikit-learn.org) (extra `[ml]`); projeção UMAP opcional (extra `[ml-viz]`); **classificação de perfil** zero-shot→supervisionada (`classify`) |
+| NLP textual | `core/text` **torch-free** (extra `[nlp]`): keyphrases ([YAKE](https://github.com/LIAAD/yake)), resumo extractivo (TextRank self-contained, sem nltk) e entidades ([spaCy](https://spacy.io) CNN `pt_core_news_sm`). Auto-sugestão de perfil, aba Insights e auto-tags da Biblioteca |
 | Vídeo | yt-dlp + ffmpeg CPU-only (libx264/libx265/libvpx-vp9) — sem NVENC |
 | Áudio | noisereduce (spectral gating, CPU) + ffmpeg loudnorm (EBU R128, 2 passes); torch-free |
 | Imagens | Pillow + rembg/ONNX Runtime (CPU) para remoção de fundo |
@@ -77,6 +78,7 @@ Seis **ferramentas** de processamento (NavigationRail) e três **hubs** que oper
 | [Ollama](https://ollama.com/download) | Modelos de IA locais (formatação, análise, RAG, PT→SQL) |
 | Chave [Google AI Studio](https://aistudio.google.com/apikey) | Modelos Gemini (opcional) |
 | [Tesseract OCR](https://github.com/UB-Mannheim/tesseract/wiki) + packs `por`/`eng` | OCR de Documentos (extra `[ocr]`) |
+| Modelo spaCy `pt_core_news_sm` (`python -m spacy download …`) | NER do `[nlp]` (download à parte, como o Tesseract) |
 
 DuckDB e a extensão `excel` (XLSX) são embutidos — sem instalação separada.
 
@@ -114,9 +116,12 @@ uv sync --extra ocr        # OCR de PDFs escaneados (requer binário Tesseract n
 uv sync --extra analysis --extra data-plot  # gráficos no módulo Dados (aba Gráfico / data plot)
 uv sync --extra ml         # clustering/tópicos/mapa semântico (Plano 4A); dups/related rodam sem ele (numpy)
 uv sync --extra ml-viz     # projeção UMAP do mapa (opcional, puxa numba; PCA é o default)
+uv sync --extra nlp        # keyphrases (YAKE) + entidades (spaCy NER); ai keywords/entities, Insights, auto-tags
+uv run python -m spacy download pt_core_news_sm  # modelo de NER (download à parte, como o Tesseract)
 ```
 
 > O app base funciona sem os extras; os cards correspondentes desabilitam-se graciosamente quando ausentes.
+> O resumo extractivo (`ai summary` / Insights) e a classificação de perfil usam só o extra `[ml]` — sem dep nova.
 
 ### Google Gemini (opcional, free tier)
 
