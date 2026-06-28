@@ -770,3 +770,212 @@ def test_related_reports_none_for_single_doc(tmp_path, monkeypatch, capsys):
 
     _related(_parse("related", "only.txt"))
     assert "Nenhum documento relacionado" in capsys.readouterr().out
+
+
+# --- ai classify / keywords / summary / entities (Plan 4B) ------------------
+
+
+@pytest.mark.unit
+def test_textual_commands_parse():
+    assert _parse("classify", "doc.txt").target == "doc.txt"
+    s = _parse("summary", "doc.txt", "--sentences", "3")
+    assert s.query == "summary" and s.target == "doc.txt" and s.sentences == 3
+    k = _parse("keywords", "doc.txt", "--top", "7")
+    assert k.query == "keywords" and k.top == 7
+    assert _parse("entities", "doc.txt").query == "entities"
+
+
+@pytest.mark.unit
+def test_textual_default_sentences_and_top():
+    ns = _parse("summary", "doc.txt")
+    assert ns.sentences == 5
+    assert ns.top == 10
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    "cmd,runner",
+    [
+        ("classify", "_classify"),
+        ("keywords", "_keywords"),
+        ("summary", "_summary"),
+        ("entities", "_entities"),
+    ],
+)
+def test_textual_commands_dispatch(mocker, cmd, runner):
+    target = mocker.patch(f"src.cli.ai.{runner}")
+    ask = mocker.patch("src.cli.ai._ask")
+    ns = _parse(cmd, "doc.txt")
+    ns.func(ns)
+    assert target.called
+    assert not ask.called
+
+
+@pytest.mark.unit
+def test_classify_prints_suggested_profile(tmp_path, monkeypatch, mocker, capsys):
+    import src.core.rag.indexer as indexer
+    from src.cli.ai import _classify
+    from src.core.ml.types import Classification
+
+    rag_dir = tmp_path / "rag"
+    _persisted_store(rag_dir, source="aula.txt")
+    monkeypatch.setattr(indexer, "index_dir", lambda: rag_dir)
+    mocker.patch(
+        "src.core.ml.classify.classify",
+        return_value=Classification("lecture", 0.82, 0.30, "zeroshot"),
+    )
+
+    _classify(_parse("classify", "aula.txt"))
+    out = capsys.readouterr().out
+    assert "Aula" in out  # the lecture profile's PT label
+    assert "lecture" in out
+    assert "zero-shot" in out
+
+
+@pytest.mark.unit
+def test_classify_warns_on_low_margin(tmp_path, monkeypatch, mocker, capsys):
+    import src.core.rag.indexer as indexer
+    from src.cli.ai import _classify
+    from src.core.ml.types import Classification
+
+    rag_dir = tmp_path / "rag"
+    _persisted_store(rag_dir, source="x.txt")
+    monkeypatch.setattr(indexer, "index_dir", lambda: rag_dir)
+    mocker.patch(
+        "src.core.ml.classify.classify",
+        return_value=Classification("lecture", 0.40, 0.01, "zeroshot"),
+    )
+
+    _classify(_parse("classify", "x.txt"))
+    assert "incerta" in capsys.readouterr().out
+
+
+@pytest.mark.unit
+def test_classify_exits_without_target(tmp_path, monkeypatch, capsys):
+    from src.cli.ai import _classify
+
+    with pytest.raises(SystemExit):
+        _classify(_parse("classify"))
+    assert "Informe o documento" in capsys.readouterr().out
+
+
+@pytest.mark.unit
+def test_classify_exits_when_doc_not_found(tmp_path, monkeypatch, capsys):
+    import src.core.rag.indexer as indexer
+    from src.cli.ai import _classify
+
+    rag_dir = tmp_path / "rag"
+    _persisted_store(rag_dir, source="present.txt")
+    monkeypatch.setattr(indexer, "index_dir", lambda: rag_dir)
+
+    with pytest.raises(SystemExit):
+        _classify(_parse("classify", "ghost.txt"))
+    assert "não encontrado" in capsys.readouterr().out
+
+
+@pytest.mark.unit
+def test_classify_exits_when_prototypes_need_embedder(
+    tmp_path, monkeypatch, mocker, capsys
+):
+    import src.core.rag.indexer as indexer
+    from src.cli.ai import _classify
+
+    rag_dir = tmp_path / "rag"
+    _persisted_store(rag_dir, source="doc.txt")
+    monkeypatch.setattr(indexer, "index_dir", lambda: rag_dir)
+    mocker.patch(
+        "src.core.ml.classify.classify", side_effect=RuntimeError("not cached")
+    )
+
+    with pytest.raises(SystemExit):
+        _classify(_parse("classify", "doc.txt"))
+    assert "ollama pull" in capsys.readouterr().out
+
+
+@pytest.mark.unit
+def test_keywords_prints_phrases(tmp_path, mocker, capsys):
+    from src.cli.ai import _keywords
+
+    f = tmp_path / "doc.txt"
+    f.write_text("Banco Central e taxa de juros.", encoding="utf-8")
+    mocker.patch("src.core.text.keywords.is_available", return_value=True)
+    mocker.patch(
+        "src.core.text.keywords.keyphrases",
+        return_value=[("banco central", 0.01), ("taxa de juros", 0.03)],
+    )
+
+    _keywords(_parse("keywords", str(f)))
+    out = capsys.readouterr().out
+    assert "banco central" in out
+    assert "0.0100" in out
+
+
+@pytest.mark.unit
+def test_keywords_exits_when_unavailable(tmp_path, mocker, capsys):
+    from src.cli.ai import _keywords
+
+    f = tmp_path / "doc.txt"
+    f.write_text("texto", encoding="utf-8")
+    mocker.patch("src.core.text.keywords.is_available", return_value=False)
+
+    with pytest.raises(SystemExit):
+        _keywords(_parse("keywords", str(f)))
+    assert "nlp" in capsys.readouterr().out
+
+
+@pytest.mark.unit
+def test_textual_exits_when_file_missing(capsys):
+    from src.cli.ai import _summary
+
+    with pytest.raises(SystemExit):
+        _summary(_parse("summary", "/no/such/file.txt"))
+    assert "não encontrado" in capsys.readouterr().out
+
+
+@pytest.mark.unit
+def test_summary_prints_sentences(tmp_path, mocker, capsys):
+    from src.cli.ai import _summary
+
+    f = tmp_path / "doc.txt"
+    f.write_text("Frase um. Frase dois. Frase três.", encoding="utf-8")
+    mocker.patch("src.core.text.summarize.is_available", return_value=True)
+    mocker.patch(
+        "src.core.text.summarize.extractive_summary",
+        return_value=["Frase central."],
+    )
+
+    _summary(_parse("summary", str(f), "--sentences", "1"))
+    out = capsys.readouterr().out
+    assert "Frase central." in out
+    assert "1 frase" in out
+
+
+@pytest.mark.unit
+def test_entities_prints_grouped_by_label(tmp_path, mocker, capsys):
+    from src.cli.ai import _entities
+
+    f = tmp_path / "doc.txt"
+    f.write_text("Maria foi à Petrobras.", encoding="utf-8")
+    mocker.patch("src.core.text.entities.is_available", return_value=True)
+    mocker.patch(
+        "src.core.text.entities.entities",
+        return_value=[("Maria", "PER"), ("Petrobras", "ORG")],
+    )
+
+    _entities(_parse("entities", str(f)))
+    out = capsys.readouterr().out
+    assert "PER: Maria" in out
+    assert "ORG: Petrobras" in out
+
+
+@pytest.mark.unit
+def test_entities_exits_when_model_missing(tmp_path, mocker, capsys):
+    from src.cli.ai import _entities
+
+    f = tmp_path / "doc.txt"
+    f.write_text("Maria foi ao Rio.", encoding="utf-8")
+    mocker.patch("src.core.text.entities.is_available", return_value=False)
+
+    with pytest.raises(SystemExit):
+        _entities(_parse("entities", str(f)))
+    assert "spacy download" in capsys.readouterr().out

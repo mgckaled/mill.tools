@@ -7,6 +7,10 @@ Flows behind one positional:
     uv run main.py ai topics                        # cluster the corpus into topics
     uv run main.py ai map [--method pca|umap]       # render the semantic map PNG
     uv run main.py ai related <path> [--k N]        # documents similar to one
+    uv run main.py ai classify <path>               # suggest the analysis profile
+    uv run main.py ai keywords <path> [--top N]     # YAKE keyphrases
+    uv run main.py ai summary <path> [--sentences N] # extractive TextRank summary
+    uv run main.py ai entities <path>               # spaCy named entities
     uv run main.py ai "what did I say about X?"    # ask the whole corpus
     uv run main.py ai "summarize" --scope path.txt # ask a single document
     uv run main.py ai "..." --model gemini-2.5-flash --k 8
@@ -35,6 +39,11 @@ _DUPS_CMD = "dups"
 _TOPICS_CMD = "topics"
 _MAP_CMD = "map"
 _RELATED_CMD = "related"
+# Plan 4B textual/classification flows — read-only over one document path.
+_CLASSIFY_CMD = "classify"
+_KEYWORDS_CMD = "keywords"
+_SUMMARY_CMD = "summary"
+_ENTITIES_CMD = "entities"
 
 
 def add_ai_parser(subparsers: argparse._SubParsersAction) -> None:
@@ -45,13 +54,16 @@ def add_ai_parser(subparsers: argparse._SubParsersAction) -> None:
     )
     p.add_argument(
         "query",
-        help="Your question, or index/stats/dups/topics/map/related for ML flows",
+        help=(
+            "Your question, or a flow keyword: index/stats/dups/topics/map/"
+            "related/classify/keywords/summary/entities"
+        ),
     )
     p.add_argument(
         "target",
         nargs="?",
         default=None,
-        help="With related, the document path to find neighbours for",
+        help=("Document path — required by related/classify/keywords/summary/entities"),
     )
     p.add_argument(
         "--scope",
@@ -109,6 +121,20 @@ def add_ai_parser(subparsers: argparse._SubParsersAction) -> None:
         "--out",
         default=None,
         help="With map, the output PNG path (default output/data/semantic_map.png)",
+    )
+    p.add_argument(
+        "--sentences",
+        type=int,
+        default=5,
+        metavar="N",
+        help="With summary, how many sentences to keep (default 5)",
+    )
+    p.add_argument(
+        "--top",
+        type=int,
+        default=10,
+        metavar="N",
+        help="With keywords, how many keyphrases to return (default 10)",
     )
     p.add_argument("--verbose", action="store_true", help="Enable debug logging")
     p.set_defaults(func=run_ai_cli)
@@ -398,6 +424,132 @@ def _related(ns: argparse.Namespace) -> None:
         print(f"  {score:.3f}  {Path(path).name}")
 
 
+def _classify(ns: argparse.Namespace) -> None:
+    """Print the suggested analysis profile for an indexed document.
+
+    Reuses the pooled document vectors (no re-embedding of the doc itself); the
+    embedder is only needed the first time, to embed the profile prototypes.
+    """
+    from src.analysis.profiles import get_profile
+    from src.core.ml.classify import classify
+    from src.core.ml.features import load_document_matrix
+    from src.core.rag import embedder
+    from src.core.rag.indexer import index_dir
+
+    if not ns.target:
+        print("Informe o documento: uv run main.py ai classify <arquivo>")
+        sys.exit(1)
+    dm = load_document_matrix(index_dir())
+    if len(dm) == 0:
+        print('Índice vazio. Rode "uv run main.py ai index" primeiro.')
+        sys.exit(1)
+
+    source = _resolve_doc_path(ns.target, dm)
+    if source is None:
+        print(f"Documento não encontrado no índice: {ns.target}")
+        sys.exit(1)
+
+    embed_model = ns.embed_model or embedder.DEFAULT_EMBED_MODEL
+    doc_vec = dm.X[dm.source_paths.index(source)]
+    try:
+        result = classify(
+            doc_vec, embed_fn=lambda t: embedder.embed_texts(t, model=embed_model)
+        )
+    except RuntimeError:
+        print(
+            f"Embedder indisponível (protótipos não cacheados). {embedder.SETUP_HINT}"
+        )
+        sys.exit(1)
+
+    label = get_profile(result.profile_id).label
+    method = "supervisionado" if result.method == "supervised" else "zero-shot"
+    print(f"Perfil sugerido para {Path(source).name}:\n")
+    print(f"  {label}  ({result.profile_id})")
+    print(
+        f"  confiança {result.confidence:.2f} · margem {result.margin:.2f} · {method}"
+    )
+    if result.margin < 0.05:
+        print(
+            "\n  [!] Sugestão incerta — margem baixa entre os dois perfis mais próximos."
+        )
+
+
+def _read_target_text(ns: argparse.Namespace) -> tuple[Path, str] | None:
+    """Resolve --target to an existing path and read its body, or exit."""
+    from src.core.text.reader import read_document_text
+
+    if not ns.target:
+        print(
+            "Informe o documento: uv run main.py ai <keywords|summary|entities> <arquivo>"
+        )
+        sys.exit(1)
+    path = Path(ns.target)
+    if not path.exists():
+        print(f"Arquivo não encontrado: {ns.target}")
+        sys.exit(1)
+    return path, read_document_text(path)
+
+
+def _keywords(ns: argparse.Namespace) -> None:
+    """Print the document's keyphrases (YAKE), best (lowest score) first."""
+    from src.core.text import keywords
+    from src.core.text.lang import detect_lang
+
+    path, text = _read_target_text(ns)
+    if not keywords.is_available():
+        print(keywords.SETUP_HINT)
+        sys.exit(1)
+
+    out = keywords.keyphrases(text, lang=detect_lang(text), top_n=ns.top)
+    if not out:
+        print("Nenhuma palavra-chave extraída.")
+        return
+    print(f"Palavras-chave de {path.name}:\n")
+    for phrase, score in out:
+        print(f"  {score:.4f}  {phrase}")
+
+
+def _summary(ns: argparse.Namespace) -> None:
+    """Print an extractive summary (TextRank) of the document."""
+    from src.core.text import summarize
+
+    path, text = _read_target_text(ns)
+    if not summarize.is_available():
+        print(summarize.SETUP_HINT)
+        sys.exit(1)
+
+    sentences = summarize.extractive_summary(text, sentences=ns.sentences)
+    if not sentences:
+        print("Documento vazio — nada a resumir.")
+        return
+    print(f"Resumo de {path.name} ({len(sentences)} frase(s)):\n")
+    for sentence in sentences:
+        print(f"  • {sentence}")
+
+
+def _entities(ns: argparse.Namespace) -> None:
+    """Print the named entities (spaCy NER) grouped by label."""
+    from src.core.text import entities as ner
+    from src.core.text.lang import detect_lang
+
+    path, text = _read_target_text(ns)
+    lang = detect_lang(text)
+    if not ner.is_available(lang):
+        print(ner.SETUP_HINT)
+        sys.exit(1)
+
+    found = ner.entities(text, lang=lang)
+    if not found:
+        print("Nenhuma entidade encontrada.")
+        return
+    by_label: dict[str, list[str]] = {}
+    for entity_text, label in found:
+        by_label.setdefault(label, []).append(entity_text)
+    print(f"Entidades de {path.name}:\n")
+    for label in sorted(by_label):
+        print(f"  {label}: {', '.join(by_label[label])}")
+
+
 def _ask(ns: argparse.Namespace, embed_model: str) -> None:
     """Retrieve top-k chunks for the question and print a cited answer."""
     from src.core.rag import embedder
@@ -492,6 +644,22 @@ def run_ai_cli(ns: argparse.Namespace) -> None:
 
     if ns.query == _RELATED_CMD:  # nearest documents to one (numpy-pure, no [ml])
         _related(ns)
+        return
+
+    if ns.query == _CLASSIFY_CMD:  # suggest the analysis profile (zero-shot/supervised)
+        _classify(ns)
+        return
+
+    if ns.query == _KEYWORDS_CMD:  # YAKE keyphrases over the document ([nlp])
+        _keywords(ns)
+        return
+
+    if ns.query == _SUMMARY_CMD:  # extractive TextRank summary ([ml])
+        _summary(ns)
+        return
+
+    if ns.query == _ENTITIES_CMD:  # spaCy NER over the document ([nlp] + model)
+        _entities(ns)
         return
 
     from src.core.rag import embedder
