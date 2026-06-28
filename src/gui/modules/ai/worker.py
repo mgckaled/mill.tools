@@ -170,6 +170,21 @@ def run_ai_answer(
 
             t0 = time.monotonic()
             hits = retrieve(query, store, _embed_query, k=k, scope=scope)
+
+            # Out-of-corpus warning (Plano 4A): the best retrieved chunk's cosine
+            # is the corpus's closeness to the question. Below the threshold the
+            # corpus probably does not cover it — flag it so the view can warn
+            # (we still answer; the user decides). No re-embedding: reuse the hit.
+            from src.core.ml.recommend import DEFAULT_IN_CORPUS_THRESHOLD
+
+            best_score = hits[0].score if hits else 0.0
+            low_confidence = best_score < DEFAULT_IN_CORPUS_THRESHOLD
+            if low_confidence:
+                emit(
+                    "log",
+                    payload={"message": pipeline_log.fmt_out_of_scope(best_score)},
+                )
+
             result = _answer(query, hits, model_name=model_name)
             elapsed = time.monotonic() - t0
 
@@ -181,6 +196,8 @@ def run_ai_answer(
                     "sources": [str(s) for s in result.sources],
                     "model_name": model_name,
                     "elapsed": elapsed,
+                    "low_confidence": low_confidence,
+                    "best_score": best_score,
                 },
             )
             emit(

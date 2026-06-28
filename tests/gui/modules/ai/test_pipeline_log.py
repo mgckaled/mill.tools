@@ -69,3 +69,13 @@ def test_resolve_status_unknown_event_is_none():
     from src.gui.modules.ai.pipeline_log import resolve_status
 
     assert resolve_status(_event("log", {"message": "x"})) is None
+
+
+@pytest.mark.unit
+def test_fmt_out_of_scope_mentions_score_and_warning():
+    from src.gui.modules.ai.pipeline_log import fmt_out_of_scope
+
+    line = fmt_out_of_scope(0.21)
+    assert "não cobre" in line
+    assert "0.21" in line
+    assert line.startswith("[!]")

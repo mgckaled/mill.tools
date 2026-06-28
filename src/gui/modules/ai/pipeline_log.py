@@ -45,6 +45,14 @@ def fmt_answer_done(n_sources: int) -> str:
     return f"[✓] Resposta gerada — {n_sources} fonte(s) citada(s)."
 
 
+def fmt_out_of_scope(best_score: float) -> str:
+    """Warning line when the corpus likely does not cover the question (Plano 4A)."""
+    return (
+        f"[!] O acervo provavelmente não cobre bem esta pergunta "
+        f"(proximidade {best_score:.2f}) — a resposta pode ser imprecisa."
+    )
+
+
 # ─── Resolvers (view.py → status line) ────────────────────────────────────────
 
 

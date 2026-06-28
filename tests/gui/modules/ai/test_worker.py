@@ -170,6 +170,50 @@ def test_answer_emits_answer_done_with_sources(tmp_path, monkeypatch, mocker):
     # Timing fields feed the per-model "typical time" estimate in the view.
     assert done["model_name"] == "qwen7b-custom"
     assert done["elapsed"] >= 0.0
+    # Query vector == stored vector → cosine ~1.0 → corpus covers it.
+    assert done["low_confidence"] is False
+
+
+@pytest.mark.unit
+def test_answer_flags_low_confidence_out_of_corpus(tmp_path, monkeypatch, mocker):
+    import src.core.rag.chat as chat
+    import src.core.rag.indexer as indexer
+    from src.core.rag.store import VectorStore
+    from src.core.rag.types import ChunkMeta
+    from src.gui.modules.ai.worker import run_ai_answer
+
+    rag_dir = tmp_path / "rag"
+    store = VectorStore(dim=768)
+    store.add(
+        np.ones((1, 768), dtype=np.float32),
+        [ChunkMeta("doc.txt", "transcription", 1.0, 0, "ctx")],
+    )
+    store.persist(rag_dir)
+    monkeypatch.setattr(indexer, "index_dir", lambda: rag_dir)
+
+    # Query vector orthogonal to the stored all-ones vector → cosine ~0 < 0.35.
+    q = np.zeros(768, dtype=np.float32)
+    q[0] = 1.0
+    mocker.patch("src.core.rag.embedder.is_available", return_value=True)
+    mocker.patch("src.core.rag.embedder.embed_query", return_value=q)
+    mocker.patch.object(chat, "make_llm", return_value=_fake_llm("resposta"))
+
+    bus = _Bus()
+    run_ai_answer(
+        bus,
+        threading.Event(),
+        query="algo fora do acervo?",
+        scope=None,
+        model_name="qwen7b-custom",
+        embed_model="nomic-embed-text",
+        install_log_handler=False,
+    )
+
+    done = bus.payload_of("answer_done")
+    assert done["low_confidence"] is True
+    assert done["best_score"] < 0.35
+    # The warning is also surfaced as a log line.
+    assert any("não cobre" in p.get("message", "") for _, p in bus.events)
 
 
 @pytest.mark.unit

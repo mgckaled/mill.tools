@@ -26,6 +26,7 @@ from src.gui import settings
 from src.gui.events import PipelineEvent
 from src.gui.modules.base import Module
 from src.gui.modules.library.analytics_panel import build_analytics_panel
+from src.gui.modules.library.semantic_map_panel import build_semantic_map_panel
 from src.gui.modules.library.cards import (
     ItemCard,
     build_item_card,
@@ -233,8 +234,12 @@ def build_library_module(
     # (divide-se ao tocar); view.py only wires it into the mode toggle/Stack.
     panel_container, _analytics_apply = build_analytics_panel(page)
 
+    # Semantic map (fourth mode, Plano 4A) — likewise in its own builder.
+    map_container, _map_refresh = build_semantic_map_panel(page)
+
     grid_area = ft.Stack(
-        [grid, list_container, panel_container, empty_state], expand=True
+        [grid, list_container, panel_container, map_container, empty_state],
+        expand=True,
     )
 
     # "Load more" — on_click wired after _on_load_more is defined.
@@ -374,6 +379,20 @@ def build_library_module(
             load_more_btn.visible = False
             grid.visible = False
             list_container.visible = False
+            map_container.visible = False
+            return
+
+        if _view_mode[0] == "map":
+            # The semantic map reads the persisted RAG index (not the Library
+            # filters), so it ignores `items`. refresh() is signature-guarded, so
+            # re-applying on a keystroke is a no-op until the corpus changes.
+            _thumb_gen[0] += 1
+            _map_refresh()
+            map_container.visible = True
+            load_more_btn.visible = False
+            grid.visible = False
+            list_container.visible = False
+            panel_container.visible = False
             return
 
         if _view_mode[0] == "list":
@@ -388,6 +407,7 @@ def build_library_module(
             ]
             list_container.visible = bool(visible)
             panel_container.visible = False
+            map_container.visible = False
             grid.visible = False
             return
 
@@ -400,6 +420,7 @@ def build_library_module(
         grid.controls = [c.control for c in cards]
         list_container.visible = False
         panel_container.visible = False
+        map_container.visible = False
         grid.visible = bool(visible)
         _spawn_thumbnail_thread(list(zip(visible, cards)))
 
@@ -572,6 +593,12 @@ def build_library_module(
         tooltip="Painel",
         style=ft.ButtonStyle(mouse_cursor=Cursor.btn),
     )
+    map_btn = ft.IconButton(
+        icon=ft.Icons.HUB_OUTLINED,
+        icon_size=18,
+        tooltip="Mapa semântico",
+        style=ft.ButtonStyle(mouse_cursor=Cursor.btn),
+    )
 
     def _sync_view_buttons() -> None:
         active = _view_mode[0]
@@ -593,6 +620,10 @@ def build_library_module(
         panel_btn.icon_color = (
             ft.Colors.PRIMARY if active == "panel" else ft.Colors.ON_SURFACE_VARIANT
         )
+        map_btn.icon = ft.Icons.HUB if active == "map" else ft.Icons.HUB_OUTLINED
+        map_btn.icon_color = (
+            ft.Colors.PRIMARY if active == "map" else ft.Colors.ON_SURFACE_VARIANT
+        )
 
     def _set_view(mode: str) -> None:
         if mode == _view_mode[0]:
@@ -605,9 +636,10 @@ def build_library_module(
     grid_btn.on_click = lambda _e: _set_view("grid")
     list_btn.on_click = lambda _e: _set_view("list")
     panel_btn.on_click = lambda _e: _set_view("panel")
+    map_btn.on_click = lambda _e: _set_view("map")
     _sync_view_buttons()
 
-    view_toggle = ft.Row(controls=[grid_btn, list_btn, panel_btn], spacing=0)
+    view_toggle = ft.Row(controls=[grid_btn, list_btn, panel_btn, map_btn], spacing=0)
 
     # ------------------------------------------------------------------
     # Header + layout

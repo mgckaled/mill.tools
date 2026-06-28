@@ -344,7 +344,38 @@ def build_ai_module(
             ),
         )
 
-    def _make_turn(query: str, text: str, sources: list[str]) -> ft.Control:
+    def _scope_warning() -> ft.Control:
+        """A banner shown when the corpus likely does not cover the question."""
+        return ft.Container(
+            bgcolor=Color.dark.surface,
+            border_radius=Radius.md,
+            padding=ft.Padding(
+                left=Space.sm, right=Space.sm, top=Space.xs, bottom=Space.xs
+            ),
+            content=ft.Row(
+                controls=[
+                    ft.Icon(
+                        ft.Icons.WARNING_AMBER_ROUNDED,
+                        size=IconSize.md,
+                        color=ft.Colors.PRIMARY,
+                    ),
+                    ft.Text(
+                        "O acervo provavelmente não cobre bem esta pergunta — "
+                        "a resposta pode ser imprecisa.",
+                        size=Type.caption.size,
+                        color=ft.Colors.ON_SURFACE_VARIANT,
+                        expand=True,
+                        no_wrap=False,
+                    ),
+                ],
+                spacing=Space.xs,
+                vertical_alignment=ft.CrossAxisAlignment.CENTER,
+            ),
+        )
+
+    def _make_turn(
+        query: str, text: str, sources: list[str], *, low_confidence: bool = False
+    ) -> ft.Control:
         controls: list[ft.Control] = [
             ft.Row(
                 controls=[
@@ -366,14 +397,18 @@ def build_ai_module(
                 vertical_alignment=ft.CrossAxisAlignment.START,
             ),
             hairline(),
+        ]
+        if low_confidence:
+            controls.append(_scope_warning())
+        controls.append(
             ft.Markdown(
                 value=text or "_(sem resposta)_",
                 selectable=True,
                 extension_set=ft.MarkdownExtensionSet.GITHUB_WEB,
                 code_theme=ft.MarkdownCodeTheme.ATOM_ONE_DARK,
                 md_style_sheet=_MD_STYLE,
-            ),
-        ]
+            )
+        )
         if sources:
             controls.append(
                 ft.Text(
@@ -402,9 +437,13 @@ def build_ai_module(
             content=ft.Column(controls=controls, spacing=Space.sm),
         )
 
-    def _append_turn(query: str, text: str, sources: list[str]) -> None:
+    def _append_turn(
+        query: str, text: str, sources: list[str], *, low_confidence: bool = False
+    ) -> None:
         empty_state.visible = False
-        session_list.controls.append(_make_turn(query, text, sources))
+        session_list.controls.append(
+            _make_turn(query, text, sources, low_confidence=low_confidence)
+        )
         clear_btn.visible = True
 
     def _clear_conversation(_e=None) -> None:
@@ -439,7 +478,10 @@ def build_ai_module(
                     status_detail.value = msg
             case "answer_done":
                 _append_turn(
-                    p.get("query", ""), p.get("text", ""), p.get("sources", [])
+                    p.get("query", ""),
+                    p.get("text", ""),
+                    p.get("sources", []),
+                    low_confidence=p.get("low_confidence", False),
                 )
                 _record_answer_time(
                     p.get("model_name", _pending_model[0]), p.get("elapsed", 0.0)
