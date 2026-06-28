@@ -41,6 +41,22 @@ class DuplicateGroup:
 
 
 @dataclass(frozen=True, slots=True)
+class Classification:
+    """The predicted analysis profile for a document and its confidence.
+
+    Produced by ``classify``: either a zero-shot nearest-prototype match or, once
+    enough user corrections have accumulated, a trained linear model's prediction.
+    ``margin`` (top-1 minus top-2 score) is the uncertainty signal the GUI shows
+    as "sugestão incerta" when it is small.
+    """
+
+    profile_id: str  # winning analysis-profile id (e.g. "lecture")
+    confidence: float  # top-1 cosine (zero-shot) or calibrated proba (supervised)
+    margin: float  # top1 - top2 score (small = ambiguous)
+    method: str  # "zeroshot" | "supervised"
+
+
+@dataclass(frozen=True, slots=True)
 class ClusterResult:
     """The outcome of clustering the pooled document vectors.
 
