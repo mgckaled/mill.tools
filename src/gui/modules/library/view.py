@@ -13,6 +13,7 @@ from typing import TYPE_CHECKING
 import flet as ft
 
 from src.core.library.scanner import filter_items, scan_library, sort_items
+from src.core.library.tags import is_taggable, tags_for_item
 from src.core.library.thumbnails import thumbnail_for
 from src.core.library.types import (
     KIND_AUDIO,
@@ -166,6 +167,14 @@ def build_library_module(
 
     # How many items are currently revealed (paging cap).
     _shown: list[int] = [_PAGE_SIZE]
+
+    # Content tags (Plan 4B): keyphrases per text item, computed off-thread and
+    # cached on disk. `_tag_index` (path → tags) feeds the search box so a file
+    # surfaces by topic, not only by name; `_visible_cards` lets the tagging
+    # thread fill the tag line of cards currently on screen.
+    _tag_index: dict[str, list[str]] = {}
+    _visible_cards: dict[str, "ItemCard"] = {}
+    _tag_gen: list[int] = [0]
 
     # ------------------------------------------------------------------
     # Grid + count + empty state
@@ -357,6 +366,7 @@ def build_library_module(
                 categories=_active_categories(),
                 query=_query[0] or None,
                 since=_active_since(),
+                tag_index=_tag_index,
             ),
             by=by,
             desc=(by != "name"),
@@ -418,6 +428,14 @@ def build_library_module(
             for it in visible
         ]
         grid.controls = [c.control for c in cards]
+        # Track the on-screen cards so the tagging thread can fill their tag line,
+        # and show any tags already known (cached) for this page immediately.
+        _visible_cards.clear()
+        for it, card in zip(visible, cards):
+            _visible_cards[str(it.path)] = card
+            known = _tag_index.get(str(it.path))
+            if known:
+                card.set_tags(known)
         list_container.visible = False
         panel_container.visible = False
         map_container.visible = False
@@ -453,6 +471,40 @@ def build_library_module(
 
         threading.Thread(target=_worker, daemon=True).start()
 
+    def _spawn_tagging_thread() -> None:
+        """Compute content tags for every text item in one daemon thread.
+
+        Tags are disk-cached by ``(path, mtime)`` so re-runs are cheap. The whole
+        corpus is tagged (not just the visible page) so the search box matches by
+        topic across everything; cards currently on screen get their tag line
+        filled as results arrive. A generation counter drops a stale run.
+        """
+        from src.core.text import keywords
+
+        if not keywords.is_available():
+            return  # no [nlp] extra → no tags; skip the file reads entirely
+        taggable = [it for it in _all_items if is_taggable(it)]
+        if not taggable:
+            return
+        _tag_gen[0] += 1
+        gen = _tag_gen[0]
+
+        def _worker() -> None:
+            for it in taggable:
+                if gen != _tag_gen[0]:
+                    return  # superseded by a newer scan
+                key = str(it.path)
+                tags = _tag_index.get(key)
+                if tags is None:
+                    tags = tags_for_item(it)
+                    _tag_index[key] = tags
+                if tags and gen == _tag_gen[0]:
+                    card = _visible_cards.get(key)
+                    if card is not None:
+                        card.set_tags(tags)  # scoped update, never page.update
+
+        threading.Thread(target=_worker, daemon=True).start()
+
     def _render_from_top() -> None:
         """Reset paging to the first page and rebuild (no page.update)."""
         _shown[0] = _PAGE_SIZE
@@ -478,7 +530,11 @@ def build_library_module(
     def _rescan() -> None:
         nonlocal _all_items
         _all_items = scan_library()
+        # Drop the in-memory tag index so edits/removals are re-read (the on-disk
+        # tag cache keyed by mtime keeps the recompute cheap).
+        _tag_index.clear()
         _render_from_top()
+        _spawn_tagging_thread()
 
     # ------------------------------------------------------------------
     # Kind filter (segmented selector)

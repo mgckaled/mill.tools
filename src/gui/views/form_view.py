@@ -15,15 +15,15 @@ from src.core.audio.converter import AUDIO_EXTENSIONS, VIDEO_EXTENSIONS
 from src.core.io_types import InputItem
 from src.gui import settings
 from src.gui.components.input_source import build_input_source
-from src.gui.components.profile_selector import build_profile_selector
 from src.gui.theme.components import (
     Cursor,
     hairline,
-    help_icon_for,
     section,
     section_label,
 )
 from src.gui.theme.tokens import Space, Type
+from src.gui.views.form_env import read_api_key, write_api_key
+from src.gui.views.profile_section import build_profile_section
 from src.gui.workers import PipelineArgs
 
 # Local file types the Transcription module accepts (without leading dot).
@@ -41,39 +41,6 @@ class FormPanel:
     control: ft.Control
     set_running: Callable[[bool], None]
     fill_from_path: Callable[[str], None]
-
-
-# ---------------------------------------------------------------------------
-# Helpers para .env
-# ---------------------------------------------------------------------------
-
-_ENV_FILE = Path(__file__).resolve().parents[3] / ".env"
-
-
-def _read_api_key() -> str:
-    """Lê GOOGLE_API_KEY do arquivo .env da raiz do projeto."""
-    if not _ENV_FILE.exists():
-        return ""
-    for line in _ENV_FILE.read_text(encoding="utf-8").splitlines():
-        if line.startswith("GOOGLE_API_KEY="):
-            return line.split("=", 1)[1].strip()
-    return ""
-
-
-def _write_api_key(value: str) -> None:
-    """Escreve ou atualiza GOOGLE_API_KEY no arquivo .env."""
-    if not value:
-        return
-    lines = (
-        _ENV_FILE.read_text(encoding="utf-8").splitlines() if _ENV_FILE.exists() else []
-    )
-    key_line = f"GOOGLE_API_KEY={value}"
-    updated = [
-        key_line if line.startswith("GOOGLE_API_KEY=") else line for line in lines
-    ]
-    if not any(line.startswith("GOOGLE_API_KEY=") for line in lines):
-        updated.append(key_line)
-    _ENV_FILE.write_text("\n".join(updated) + "\n", encoding="utf-8")
 
 
 # ---------------------------------------------------------------------------
@@ -96,6 +63,11 @@ def build_form_view(
     # Entrada (URL ou arquivo local: áudio / vídeo / texto)
     # ------------------------------------------------------------------
 
+    # Holds the ProfileSection once built (created later in this function); the
+    # input-change handler references it through this list so it can pre-select
+    # the suggested profile for a text input without a forward reference.
+    _profile_holder: list = []
+
     def _is_text_input(its: list[InputItem]) -> bool:
         """True when the (single) input is a local .txt/.md — skips Whisper."""
         if not its:
@@ -110,6 +82,10 @@ def build_form_view(
         is_text = _is_text_input(its)
         transcribe_section.visible = not is_text
         text_notice.visible = is_text
+        # Plan 4B: a text document may already be in the index — suggest its
+        # analysis profile (off-thread, fully guarded; no-op otherwise).
+        if is_text and _profile_holder:
+            _profile_holder[0].suggest(its[0].value)
         page.update()
 
     input_source = build_input_source(
@@ -256,31 +232,19 @@ def build_form_view(
         value=cfg.get("last_use_analyze", False),
     )
 
-    # Analysis profile (schema/prompt) — grouped icon cards, shown only when on.
-    profile_grid, profile_get_value, _profile_set_value = build_profile_selector(
+    # Analysis profile (schema/prompt) — grouped icon cards + 4B suggestion chip,
+    # shown only when analysis is on. Built via its own module (divide-se ao tocar).
+    profile_panel = build_profile_section(
         page,
-        value=cfg.get("last_analysis_profile", "default"),
-    )
-    _profile_help = help_icon_for("transcription.analysis_profile", page)
-    profile_section = ft.Column(
-        spacing=Space.sm,
+        initial_profile=cfg.get("last_analysis_profile", "default"),
         visible=use_analyze_switch.value,
-        controls=[
-            ft.Row(
-                controls=[
-                    section_label("Tipo de análise"),
-                    ft.Container(expand=True),
-                    *([_profile_help] if _profile_help else []),
-                ],
-                vertical_alignment=ft.CrossAxisAlignment.CENTER,
-            ),
-            profile_grid,
-        ],
     )
+    _profile_holder.append(profile_panel)
+    profile_get_value = profile_panel.get_value
 
     def _on_analyze_toggle(e: ft.ControlEvent) -> None:
         analyzer_model_field.disabled = not use_analyze_switch.value
-        profile_section.visible = use_analyze_switch.value
+        profile_panel.set_visible(use_analyze_switch.value)
         page.update()
 
     use_analyze_switch.on_change = _on_analyze_toggle
@@ -328,7 +292,7 @@ def build_form_view(
     api_key_field = ft.TextField(
         label="Google API Key",
         hint_text="AIza...",
-        value=_read_api_key(),
+        value=read_api_key(),
         password=True,
         can_reveal_password=True,
         expand=True,
@@ -337,7 +301,7 @@ def build_form_view(
     )
 
     def _on_api_key_blur(e: ft.ControlEvent) -> None:
-        _write_api_key(api_key_field.value or "")
+        write_api_key(api_key_field.value or "")
 
     api_key_field.on_blur = _on_api_key_blur
 
@@ -465,7 +429,7 @@ def build_form_view(
                         ),
                         use_analyze_switch,
                         ft.Row(controls=[analyzer_model_field]),
-                        profile_section,
+                        profile_panel.control,
                         hairline(),
                         # --- Prompt-ready ---
                         section(

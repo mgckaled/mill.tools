@@ -213,6 +213,27 @@ def test_filter_items_by_since():
 
 
 @pytest.mark.unit
+def test_filter_items_query_matches_content_tags():
+    from src.core.library.scanner import filter_items
+
+    items = [_item("aula01.txt", "transcription"), _item("aula02.txt", "transcription")]
+    # aula01 is about inflation; the filename says nothing about it.
+    tag_index = {"aula01.txt": ["inflação", "juros"], "aula02.txt": ["bolo", "forno"]}
+    out = filter_items(items, query="inflação", tag_index=tag_index)
+    assert [it.path.name for it in out] == ["aula01.txt"]
+
+
+@pytest.mark.unit
+def test_filter_items_query_still_matches_name_with_tag_index():
+    from src.core.library.scanner import filter_items
+
+    items = [_item("aula01.txt", "transcription"), _item("outro.txt", "transcription")]
+    tag_index = {"aula01.txt": ["x"], "outro.txt": ["y"]}
+    out = filter_items(items, query="aula", tag_index=tag_index)
+    assert [it.path.name for it in out] == ["aula01.txt"]
+
+
+@pytest.mark.unit
 def test_filter_items_combines_predicates():
     from src.core.library.scanner import filter_items
 

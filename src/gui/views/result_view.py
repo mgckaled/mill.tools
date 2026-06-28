@@ -11,6 +11,7 @@ import flet as ft
 
 from src.gui.modules.ai.index_button import rag_index_button
 from src.gui.theme.components import hairline
+from src.gui.views.insights_panel import build_insights_panel
 
 
 def _read(path: Path | None) -> str:
@@ -118,6 +119,24 @@ def build_result_view(
     for i, p in enumerate(panels):
         p.visible = i == 0
 
+    # --- Insights tab (Plan 4B): keyphrases/summary/entities of the transcript ---
+    # Built lazily — the engines run off-thread only when the tab is first opened.
+    _insights_loader: Callable[[], None] | None = None
+    _insights_idx = -1
+    if raw_path is not None:
+        insights_body, _insights_loader = build_insights_panel(page, Path(raw_path))
+        insights_panel = ft.Container(
+            content=insights_body,
+            expand=True,
+            visible=False,
+            padding=ft.Padding(left=12, right=12, top=8, bottom=8),
+        )
+        _insights_idx = len(tab_labels)
+        tab_labels.append("Insights")
+        tab_contents.append("")  # keep parallel for on_copy/index safety
+        tab_paths.append(None)  # no backing file → "Abrir arquivo" stays disabled
+        panels.append(insights_panel)
+
     content_stack = ft.Column(
         controls=panels,
         expand=True,
@@ -153,6 +172,9 @@ def build_result_view(
             )
         # The "Abrir arquivo" shortcut only makes sense for a generated file.
         open_file_btn.disabled = not _path_exists(tab_paths[idx])
+        # First time the Insights tab is shown, compute it off-thread.
+        if idx == _insights_idx and _insights_loader is not None:
+            _insights_loader()
         page.update()
 
     tab_buttons.extend(_make_tab_btn(label, i) for i, label in enumerate(tab_labels))

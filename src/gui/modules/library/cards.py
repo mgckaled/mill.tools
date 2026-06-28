@@ -91,10 +91,13 @@ class ItemCard:
     Attributes:
         control: The Flet control to place in the grid.
         set_thumbnail: Swap the type icon for a preview image (PR6.3 thread).
+        set_tags: Fill the content-tag line (Plan 4B keyphrases), from the
+            tagging thread; an empty list hides the line.
     """
 
     control: ft.Control
     set_thumbnail: Callable[[bytes], None]
+    set_tags: Callable[[list[str]], None]
 
 
 def build_item_card(
@@ -172,6 +175,17 @@ def build_item_card(
         overflow=ft.TextOverflow.ELLIPSIS,
     )
 
+    # Content tags (Plan 4B keyphrases) — filled later by the tagging thread.
+    tags_text = ft.Text(
+        "",
+        size=Type.small.size,
+        color=KIND_ACCENT.get(item.kind, ft.Colors.PRIMARY),
+        italic=True,
+        no_wrap=True,
+        overflow=ft.TextOverflow.ELLIPSIS,
+        visible=False,
+    )
+
     # Only the media area opens the file — this keeps the action buttons'
     # own taps intact (no whole-card GestureDetector swallowing them).
     media_control: ft.Control = media
@@ -190,6 +204,7 @@ def build_item_card(
             vertical_alignment=ft.CrossAxisAlignment.CENTER,
         ),
         meta_text,
+        tags_text,
     ]
 
     if build_actions is not None:
@@ -223,7 +238,21 @@ def build_item_card(
         except RuntimeError:
             pass
 
-    return ItemCard(control=card_inner, set_thumbnail=_set_thumbnail)
+    def _set_tags(tags: list[str]) -> None:
+        """Show the content-tag line (scoped update, from the tagging thread)."""
+        if not tags:
+            return
+        tags_text.value = "  ·  ".join(tags)
+        tags_text.tooltip = tags_text.value
+        tags_text.visible = True
+        try:
+            tags_text.update()
+        except RuntimeError:
+            pass
+
+    return ItemCard(
+        control=card_inner, set_thumbnail=_set_thumbnail, set_tags=_set_tags
+    )
 
 
 # ── List (table) view ─────────────────────────────────────────────────────

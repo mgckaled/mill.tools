@@ -118,8 +118,15 @@ def filter_items(
     categories: set[str] | None = None,
     query: str | None = None,
     since: float | None = None,
+    tag_index: dict[str, list[str]] | None = None,
 ) -> list[LibraryItem]:
-    """Pure filter: by kind set, category set, name substring, and min mtime."""
+    """Pure filter: by kind set, category set, name/tag substring, and min mtime.
+
+    When ``tag_index`` is given (``str(path) → [tag, ...]``, from
+    ``library.tags``), the ``query`` matches a file by its **content tags** as
+    well as its name — so a search surfaces a transcript by topic, not only by
+    filename. The index is optional, so existing callers are unaffected.
+    """
     out = items
     if kinds:
         out = [it for it in out if it.kind in kinds]
@@ -127,7 +134,17 @@ def filter_items(
         out = [it for it in out if it.category in categories]
     if query:
         q = query.casefold()
-        out = [it for it in out if q in it.path.name.casefold()]
+
+        def _matches(it: LibraryItem) -> bool:
+            if q in it.path.name.casefold():
+                return True
+            if tag_index:
+                return any(
+                    q in tag.casefold() for tag in tag_index.get(str(it.path), ())
+                )
+            return False
+
+        out = [it for it in out if _matches(it)]
     if since is not None:
         out = [it for it in out if it.modified >= since]
     return out

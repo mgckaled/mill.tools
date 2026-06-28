@@ -306,6 +306,15 @@ def run_pipeline(
                 profile=args.analysis_profile,
             )
             result.analysis_path = analysis_path
+            # Plan 4B: the profile the user chose for this document is a gold
+            # label. Record it (best-effort) so the supervised classifier can
+            # eventually upgrade the zero-shot suggestion. Never break the run.
+            try:
+                from src.core.ml.classify import record_label
+
+                record_label(str(output_path), args.analysis_profile)
+            except Exception as exc:  # noqa: BLE001 — labelling is non-critical
+                logging.debug("[d] Could not record profile label: %s", exc)
 
         if cancel_event.is_set():
             return result
