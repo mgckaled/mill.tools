@@ -39,6 +39,11 @@ ml = ["scikit-learn>=1.4"]
 # Optional ML visualization (Plan 4A): UMAP for a nicer semantic-map projection.
 # PCA (the default) needs only [ml]; UMAP pulls numba, so it stays opt-in.
 ml-viz = ["umap-learn>=0.5"]
+# Textual NLP engines (Plan 4B): YAKE for keyphrases and spaCy for NER. The
+# extractive summary is self-contained on the [ml] TfidfVectorizer (no dep here).
+# spaCy stays on the CNN models (pt_core_news_sm); the _trf variants would pull
+# torch and are not used. The model itself is a separate download (see README).
+nlp = ["yake>=0.4", "spacy>=3.7"]
 
 [dependency-groups]
 dev = [
