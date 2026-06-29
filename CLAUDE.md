@@ -84,10 +84,11 @@ Download/conversão/processamento via yt-dlp + ffmpeg. 8 operações (download/c
 
 ## Módulo Imagens
 
-Conversão/manipulação + IA, com visor Before/After. 12 operações (convert/resize/crop/rotate/watermark/border/adjust/filter/favicon/contact_sheet/remove_bg/describe). `core/image/transform.py` = 9 funções puras; `background.py` (rembg, lazy, extra `[ai-image]`); `describe.py` (Ollama vision → `.txt`).
+Conversão/manipulação + IA, com visor Before/After. **Toggle "Edição | Descrição IA"** no topo do módulo (abas manuais `visible=` num `Stack`): a Edição tem 11 operações imagem→imagem (convert/resize/crop/rotate/watermark/border/adjust/filter/favicon/contact_sheet/remove_bg); a **Descrição IA** (`describe_tab.py`) isola o `describe` (imagem→texto) — fonte | descrição renderizada em `ft.Markdown`, reusa `build_ai_blocks` e o worker compartilhado (`operation="describe"`). `core/image/transform.py` = 9 funções puras; `background.py` (rembg, lazy, extra `[ai-image]`); `describe.py` (Ollama vision → `.txt`, `num_ctx=8192`; dropdown inclui `gemma3-4b-custom` — multimodal, melhor PT-BR); `exif.py` (controle de EXIF, puro).
 
-- **GUI** (`form_view.py` + `blocks/`): formulário quebrado em blocos `build_X_block(page) → (ft.Column, XRefs)` (`XRefs` = NamedTuple de `get_*`). Card `remove_bg`/`describe` desabilita com tooltip quando o extra falta (padrão **`_UNAVAILABLE`**).
-- **Visor Before/After**: `_single_pane` vs `_before_after_row`, toggle por `visible=`; `_last_input_thumb` preserva o thumb p/ o split após `image_op_done`.
+- **GUI** (`form_view.py` + `blocks/`): formulário quebrado em blocos `build_X_block(page) → (ft.Column, XRefs)` (`XRefs` = NamedTuple de `get_*`). Card `remove_bg` desabilita com tooltip quando o extra falta (padrão **`_UNAVAILABLE`**). Botão **"Ver info"** (seção Entrada) abre `AlertDialog` com dimensões/modo/EXIF (`info.image_info` + `exif.read_summary`).
+- **Visor Before/After** (`preview.py`, extraído de `view.py`): `_single_pane` vs `_before_after_row` por `visible=`; **fundo xadrez** atrás do "Depois" quando a saída tem alfa (`out_mode` RGBA/LA — torna a transparência do `remove_bg` legível); **faixa de metadados** antes→depois (`pipeline_log.fmt_meta_strip`, payload `out_w/out_h/out_mode/out_fmt`); **tira de miniaturas** navegável no lote (`add_batch_item`). Ações no resultado: "Abrir arquivo" + bridge "Ver na Biblioteca" (`view.py` recebe `nav`).
+- **EXIF** (`core/image/exif.py`, puro): `preserve | strip | strip_gps | inject` aplicado como **pós-processo aditivo** na saída (não toca a assinatura das transforms); JPEG re-salva com `quality="keep"`; zera Orientation (transforms já fazem `exif_transpose` → evita rotação dupla); seção fixa no form (`blocks/exif.py`). CLI `image exif <file> [--show] [--strip] [--strip-gps] [--artist] [--copyright] [--description] [--out]`.
 - `LOSSY_FMTS = {"jpg","jpeg","webp"}`. **Saída**: `output/image/source/` · `output/image/processed/`.
 
 ## Módulo Documentos
@@ -174,7 +175,7 @@ uv run main.py <URL>                                   # Transcrição básica (
 uv run main.py transcribe <URL|file.mp4|notas.txt> --format --analyze --profile lecture
 uv run main.py audio   <URL_OR_FILE> [--fmt mp3] [--quality 320] [--denoise] [--normalize]
 uv run main.py video   <download|convert|trim|compress|resize|extract-audio|thumbnail|subtitle> <input> [opções]
-uv run main.py image   <convert|resize|crop|rotate|watermark|border|adjust|filter|favicon|contact-sheet|remove-bg|describe> <input> [opções]
+uv run main.py image   <convert|resize|crop|rotate|watermark|border|adjust|filter|favicon|contact-sheet|remove-bg|describe|exif> <input> [opções]
 uv run main.py document <merge|split|compress|rotate|watermark|stamp|encrypt|extract|ocr|pdf-to-images|images-to-pdf|qr> <input> [opções]
 uv run main.py library list [--kind audio|data] [--since 7d] [--sort size]
 uv run main.py ai index | ai stats | ai dups [--threshold 0.95] [--scope kind] | ai topics | ai map [--method pca|umap] [--out] | ai related <path> [--k 5]
