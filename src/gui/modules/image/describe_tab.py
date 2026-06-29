@@ -134,9 +134,35 @@ def build_describe_tab(
         color=ft.Colors.ON_SURFACE_VARIANT,
         size=Type.input.size,
     )
+
+    def _copy_description(_e) -> None:
+        text = desc_md.value or ""
+        if not text.strip():
+            return
+        page.set_clipboard(text)
+        page.open(ft.SnackBar(content=ft.Text("Descrição copiada."), duration=2000))
+
+    copy_btn = ft.IconButton(
+        icon=ft.Icons.CONTENT_COPY_OUTLINED,
+        icon_size=18,
+        tooltip="Copiar descrição",
+        on_click=_copy_description,
+        visible=False,
+        style=ft.ButtonStyle(mouse_cursor=Cursor.btn),
+    )
+
     desc_pane = ft.Container(
         content=ft.Column(
-            [empty_hint, desc_md], scroll=ft.ScrollMode.AUTO, expand=True
+            [
+                ft.Row(
+                    [ft.Container(expand=True), copy_btn],
+                    alignment=ft.MainAxisAlignment.END,
+                ),
+                empty_hint,
+                desc_md,
+            ],
+            scroll=ft.ScrollMode.AUTO,
+            expand=True,
         ),
         expand=True,
         padding=Space.sm,
@@ -201,6 +227,7 @@ def build_describe_tab(
                 result_img.src = thumb
             desc_md.value = ""
             empty_hint.visible = True
+            copy_btn.visible = False
             status_label.value = "Analisando imagem (Ollama)…"
             status_label.italic = False
             status_label.color = ft.Colors.ON_SURFACE
@@ -211,6 +238,7 @@ def build_describe_tab(
                 try:
                     desc_md.value = Path(out).read_text(encoding="utf-8")
                     empty_hint.visible = False
+                    copy_btn.visible = bool(desc_md.value.strip())
                 except Exception:
                     pass
         elif t == "task_done":

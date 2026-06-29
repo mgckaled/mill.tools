@@ -113,12 +113,13 @@ def build_image_form(
 
         locals_ = [it for it in input_source.get_items() if it.kind == "local"]
         if not locals_:
-            page.snack_bar = ft.SnackBar(
-                content=ft.Text("Selecione uma imagem local para inspecionar."),
-                bgcolor=ft.Colors.ERROR,
+            page.open(
+                ft.SnackBar(
+                    content=ft.Text("Selecione uma imagem local para inspecionar."),
+                    bgcolor=ft.Colors.ERROR,
+                    duration=3000,
+                )
             )
-            page.snack_bar.open = True
-            page.update()
             return
 
         from pathlib import Path

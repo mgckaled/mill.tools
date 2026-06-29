@@ -121,12 +121,13 @@ def build_image_module(
         try:
             os.startfile(out)  # Windows shell open
         except Exception:
-            page.snack_bar = ft.SnackBar(
-                content=ft.Text(f"Não foi possível abrir {os.path.basename(out)}"),
-                bgcolor=ft.Colors.ERROR,
+            page.open(
+                ft.SnackBar(
+                    content=ft.Text(f"Não foi possível abrir {os.path.basename(out)}"),
+                    bgcolor=ft.Colors.ERROR,
+                    duration=3000,
+                )
             )
-            page.snack_bar.open = True
-            page.update()
 
     open_file_btn = action_button(
         "Abrir arquivo",

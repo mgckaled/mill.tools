@@ -178,9 +178,9 @@ HELP_SHORT: dict[str, str] = {
         "1ª execução baixa o modelo."
     ),
     "image.describe_model": (
-        "Modelo Ollama com suporte a visão. moondream-custom: leve e rápido (recomendado). "
-        "llava:7b: mais capaz, mais lento. "
-        "Configure num_thread em ollama/Modelfile.vision."
+        "Modelo Ollama com suporte a visão. moondream-custom: leve e rápido. "
+        "gemma3-4b-custom: melhor qualidade e PT-BR nativo, porém mais lento (CPU). "
+        "llava:7b / minicpm-v: alternativas. Todos rodam localmente."
     ),
     "image.describe_prompt": (
         "Instrução enviada ao modelo. "
@@ -300,11 +300,15 @@ HELP_LONG: dict[str, str] = {
     ),
     "image.describe_model": (
         "Modelos Ollama com suporte a visão:\n\n"
-        "• moondream-custom — leve (~800 MB RAM), rápido. Recomendado.\n"
+        "• moondream-custom — leve (~800 MB RAM), rápido. Bom para uma descrição ágil.\n"
         "  Setup: ollama pull moondream && ollama create moondream-custom -f ollama/Modelfile.vision\n"
+        "• gemma3-4b-custom — melhor qualidade e PT-BR nativo, lê texto na imagem muito melhor;\n"
+        "  multimodal de fábrica (~3,3 GB), porém mais lento na CPU.\n"
+        "  Setup: ollama pull gemma3:4b && ollama create gemma3-4b-custom -f ollama/Modelfile.gemma3-4b\n"
         "• llava:7b — mais capaz e detalhado, requer ~4 GB RAM.\n"
         "• minicpm-v — alternativa leve com bom desempenho em PT-BR.\n\n"
-        "O modelo deve estar instalado no Ollama antes de usar."
+        "A descrição é salva como .txt em output/image/processed/ (indexável no RAG, "
+        "reaproveitável via Biblioteca). O modelo deve estar instalado no Ollama antes de usar."
     ),
     "audio.denoise": (
         "Redução de Ruído — Spectral Gating\n\n"
