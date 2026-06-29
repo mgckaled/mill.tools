@@ -13,6 +13,7 @@ from typing import Callable, NamedTuple
 
 import flet as ft
 
+from src.gui.theme.components import Cursor
 from src.gui.theme.tokens import Color, Radius, Type
 
 # 1×1 px transparent PNG — Flet 0.85 requires src in the Image constructor.
@@ -47,6 +48,7 @@ class PreviewRefs(NamedTuple):
     show_single: Callable[[bytes | None, bool], None]
     show_before_after: Callable[[bytes, bytes, bool], None]
     set_meta: Callable[[str | None], None]
+    add_batch_item: Callable[..., None]
     reset: Callable[[], None]
 
 
@@ -141,6 +143,20 @@ def build_preview() -> PreviewRefs:
         visible=False,
     )
 
+    # ── Batch filmstrip (clickable thumbnails of each processed item) ─────────
+    _strip = ft.Row(spacing=4, scroll=ft.ScrollMode.AUTO)
+    _strip_ctr = ft.Container(content=_strip, height=64, visible=False)
+    _strip_cells: list[ft.Container] = []
+
+    def _select_cell(idx: int) -> None:
+        for i, cell in enumerate(_strip_cells):
+            active = i == idx
+            side = ft.BorderSide(
+                2 if active else 1,
+                ft.Colors.PRIMARY if active else ft.Colors.OUTLINE_VARIANT,
+            )
+            cell.border = ft.Border(left=side, right=side, top=side, bottom=side)
+
     # ── Drive callables ───────────────────────────────────────────────────────
     def _show_placeholder() -> None:
         _single_pane.visible = True
@@ -175,12 +191,57 @@ def build_preview() -> PreviewRefs:
         _meta_label.value = text or ""
         _meta_label.visible = bool(text)
 
+    def _add_batch_item(
+        in_thumb: bytes | None,
+        out_thumb: bytes | None,
+        after_alpha: bool = False,
+        meta_text: str | None = None,
+    ) -> None:
+        """Append a clickable thumbnail; the strip appears once >1 item exists."""
+        thumb = out_thumb or in_thumb
+        if not thumb:
+            return
+        idx = len(_strip_cells)
+        img = ft.Image(thumb, fit=ft.BoxFit.COVER, width=56, height=56)
+
+        def _on_tap(
+            _e, _i=idx, _in=in_thumb, _out=out_thumb, _a=after_alpha, _m=meta_text
+        ) -> None:
+            if _in and _out:
+                _show_before_after(_in, _out, _a)
+            elif _out:
+                _show_single(_out, _a)
+            _set_meta(_m)
+            _select_cell(_i)
+            ctrl = _e.control
+            if ctrl.page:
+                ctrl.page.update()
+
+        side = ft.BorderSide(1, ft.Colors.OUTLINE_VARIANT)
+        cell = ft.Container(
+            content=img,
+            border=ft.Border(left=side, right=side, top=side, bottom=side),
+            border_radius=Radius.sm,
+            clip_behavior=ft.ClipBehavior.ANTI_ALIAS,
+        )
+        _strip_cells.append(cell)
+        _strip.controls.append(
+            ft.GestureDetector(
+                mouse_cursor=Cursor.interactive, content=cell, on_tap=_on_tap
+            )
+        )
+        _select_cell(idx)
+        _strip_ctr.visible = len(_strip_cells) > 1
+
     def _reset() -> None:
         _show_placeholder()
         _set_meta(None)
+        _strip.controls.clear()
+        _strip_cells.clear()
+        _strip_ctr.visible = False
 
     control = ft.Column(
-        [preview_container, _meta_label],
+        [preview_container, _meta_label, _strip_ctr],
         expand=True,
         spacing=4,
     )
@@ -191,5 +252,6 @@ def build_preview() -> PreviewRefs:
         show_single=_show_single,
         show_before_after=_show_before_after,
         set_meta=_set_meta,
+        add_batch_item=_add_batch_item,
         reset=_reset,
     )

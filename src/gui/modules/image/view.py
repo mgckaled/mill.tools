@@ -226,18 +226,18 @@ def build_image_module(
                 preview.show_before_after(in_thumb, out_thumb, after_alpha)
             elif out_thumb:
                 preview.show_single(out_thumb, after_alpha)
-            preview.set_meta(
-                pipeline_log.fmt_meta_strip(
-                    p.get("src_w", 0),
-                    p.get("src_h", 0),
-                    p.get("src_fmt"),
-                    p.get("src_size_bytes", 0),
-                    p.get("out_w", 0),
-                    p.get("out_h", 0),
-                    p.get("out_fmt"),
-                    p.get("out_size_bytes", 0),
-                )
+            meta_text = pipeline_log.fmt_meta_strip(
+                p.get("src_w", 0),
+                p.get("src_h", 0),
+                p.get("src_fmt"),
+                p.get("src_size_bytes", 0),
+                p.get("out_w", 0),
+                p.get("out_h", 0),
+                p.get("out_fmt"),
+                p.get("out_size_bytes", 0),
             )
+            preview.set_meta(meta_text)
+            preview.add_batch_item(in_thumb, out_thumb, after_alpha, meta_text)
             out_path = p.get("output_path")
             if out_path:
                 _last_output_path[0] = out_path
