@@ -25,6 +25,7 @@ from src.gui.modules.image.blocks.rotate import build_rotate_block
 from src.gui.modules.image.blocks.watermark import build_watermark_block
 from src.gui.theme.components import (
     Cursor,
+    action_button,
     hairline,
     section,
 )
@@ -103,6 +104,74 @@ def build_image_form(
         allowed_extensions=_ALLOWED_EXTS,
         on_change=_on_items_change,
         url_hint="URL direta da imagem (unsplash, pexels…)",
+    )
+
+    # ── Inspector ("Ver info": dimensões/modo/EXIF da fonte local) ────────────
+
+    def _show_info_dialog(_e) -> None:
+        from src.core.image.exif import read_summary
+        from src.core.image.info import image_info
+
+        locals_ = [it for it in input_source.get_items() if it.kind == "local"]
+        if not locals_:
+            page.snack_bar = ft.SnackBar(
+                content=ft.Text("Selecione uma imagem local para inspecionar."),
+                bgcolor=ft.Colors.ERROR,
+            )
+            page.snack_bar.open = True
+            page.update()
+            return
+
+        from pathlib import Path
+
+        path = Path(locals_[0].value)
+        lines: list[str] = []
+        try:
+            info = image_info(path)
+            mb = info["size_bytes"] / (1024 * 1024)
+            lines.append(f"**Dimensões:** {info['width']}×{info['height']} px")
+            lines.append(f"**Formato:** {info['format']} · **Modo:** {info['mode']}")
+            lines.append(f"**Tamanho:** {mb:.2f} MB")
+        except Exception:
+            lines.append("_Não foi possível ler o cabeçalho da imagem._")
+
+        summary = read_summary(path)
+        if summary:
+            lines.append("")
+            lines.append("**EXIF**")
+            for key, value in summary.items():
+                lines.append(f"- {key}: {value}")
+        else:
+            lines.append("")
+            lines.append("_Sem metadados EXIF._")
+
+        dlg = ft.AlertDialog(
+            title=ft.Text(
+                path.name, size=Type.heading.size, weight=ft.FontWeight.W_600
+            ),
+            content=ft.Container(
+                content=ft.Column(
+                    [ft.Markdown("\n".join(lines), selectable=True)],
+                    scroll=ft.ScrollMode.AUTO,
+                ),
+                width=480,
+                height=360,
+            ),
+            actions=[
+                ft.TextButton(
+                    "Fechar",
+                    on_click=lambda _e: page.pop_dialog(),
+                    style=ft.ButtonStyle(mouse_cursor=Cursor.btn),
+                )
+            ],
+        )
+        page.show_dialog(dlg)
+
+    info_btn = action_button(
+        "Ver info",
+        icon=ft.Icons.INFO_OUTLINE,
+        on_click=_show_info_dialog,
+        accent=ft.Colors.PRIMARY,
     )
 
     # ── Operation Card Grid ───────────────────────────────────────────────────
@@ -349,6 +418,10 @@ def build_image_form(
                         section(
                             "Entrada",
                             input_source.control,
+                            ft.Row(
+                                [ft.Container(expand=True), info_btn],
+                                alignment=ft.MainAxisAlignment.END,
+                            ),
                             help_key="image.input",
                             page=page,
                         ),
