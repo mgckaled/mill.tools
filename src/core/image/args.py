@@ -25,6 +25,12 @@ class ImageArgs:
     out_fmt: str | None = None
     out_quality: int = 90
 
+    # exif metadata: preserve | strip | strip_gps | inject
+    exif_mode: str = "preserve"
+    exif_artist: str = ""
+    exif_copyright: str = ""
+    exif_description: str = ""
+
     # resize
     resize_mode: str = "contain"
     resize_width: int | None = None

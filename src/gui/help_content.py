@@ -150,6 +150,11 @@ HELP_SHORT: dict[str, str] = {
         "'Preencher alpha' substitui transparência pela cor da borda antes — "
         "necessário para salvar em JPEG."
     ),
+    "image.exif": (
+        "Controla os metadados EXIF da saída. Preservar copia os dados originais; "
+        "Remover GPS tira só a localização; Remover tudo zera os metadados (privacidade); "
+        "Injetar grava Artista/Copyright/Descrição."
+    ),
     "image.adjust": (
         "Sliders de 0.1 a 2.0; 1.0 = sem alteração. "
         "Brilho e Contraste são os mais impactantes. "

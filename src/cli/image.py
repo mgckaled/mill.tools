@@ -17,6 +17,7 @@ Usage:
     uv run main.py image remove-bg FILE [--model u2net]
     uv run main.py image describe FILE [--model moondream-custom]
 """
+
 from __future__ import annotations
 
 import argparse
@@ -32,133 +33,269 @@ def add_image_parser(subparsers: argparse._SubParsersAction) -> None:
     img_p = subparsers.add_parser(
         "image",
         help="Convert, resize, crop, rotate, watermark, adjust, filter, favicon, "
-             "contact sheet, remove background or describe images",
+        "contact sheet, remove background or describe images",
     )
     img_sub = img_p.add_subparsers(dest="image_op", required=True)
 
     def _out_fmt_arg(p: argparse.ArgumentParser) -> None:
-        p.add_argument("--out-fmt", default="preserve", choices=_FMT_OUT_CHOICES,
-                       dest="out_fmt", help="Output format (default: preserve original)")
-        p.add_argument("--out-quality", type=int, default=90, dest="out_quality",
-                       metavar="Q", help="Quality for lossy formats (default 90)")
+        p.add_argument(
+            "--out-fmt",
+            default="preserve",
+            choices=_FMT_OUT_CHOICES,
+            dest="out_fmt",
+            help="Output format (default: preserve original)",
+        )
+        p.add_argument(
+            "--out-quality",
+            type=int,
+            default=90,
+            dest="out_quality",
+            metavar="Q",
+            help="Quality for lossy formats (default 90)",
+        )
 
     # ── convert ───────────────────────────────────────────────────────────────
     cv = img_sub.add_parser("convert", help="Convert image format")
     cv.add_argument("file", help="Image file or URL")
-    cv.add_argument("--fmt", default="jpg", choices=_FMT_CHOICES, help="Target format (default jpg)")
-    cv.add_argument("--quality", type=int, default=90, metavar="Q",
-                    help="Quality for lossy formats 50–100 (default 90)")
+    cv.add_argument(
+        "--fmt", default="jpg", choices=_FMT_CHOICES, help="Target format (default jpg)"
+    )
+    cv.add_argument(
+        "--quality",
+        type=int,
+        default=90,
+        metavar="Q",
+        help="Quality for lossy formats 50–100 (default 90)",
+    )
 
     # ── resize ────────────────────────────────────────────────────────────────
     rs = img_sub.add_parser("resize", help="Resize image")
     rs.add_argument("file", help="Image file or URL")
-    rs.add_argument("--mode", default="contain",
-                    choices=["contain", "exact", "scale_pct"],
-                    help="Resize mode: contain (fit), exact (force), scale_pct (percentage; default contain)")
+    rs.add_argument(
+        "--mode",
+        default="contain",
+        choices=["contain", "exact", "scale_pct"],
+        help="Resize mode: contain (fit), exact (force), scale_pct (percentage; default contain)",
+    )
     rs.add_argument("--width", type=int, default=0, help="Target width px")
     rs.add_argument("--height", type=int, default=0, help="Target height px")
-    rs.add_argument("--scale", type=float, default=100.0, dest="scale_pct",
-                    help="Scale percentage for --mode scale_pct (default 100)")
+    rs.add_argument(
+        "--scale",
+        type=float,
+        default=100.0,
+        dest="scale_pct",
+        help="Scale percentage for --mode scale_pct (default 100)",
+    )
     _out_fmt_arg(rs)
 
     # ── crop ──────────────────────────────────────────────────────────────────
     cr = img_sub.add_parser("crop", help="Crop image")
     cr.add_argument("file", help="Image file or URL")
-    cr.add_argument("--mode", default="manual", choices=["manual", "ratio", "autotrim"],
-                    help="Crop mode (default manual)")
+    cr.add_argument(
+        "--mode",
+        default="manual",
+        choices=["manual", "ratio", "autotrim"],
+        help="Crop mode (default manual)",
+    )
     cr.add_argument("--left", type=int, default=0)
     cr.add_argument("--top", type=int, default=0)
     cr.add_argument("--crop-width", type=int, default=0, dest="crop_width")
     cr.add_argument("--crop-height", type=int, default=0, dest="crop_height")
-    cr.add_argument("--ratio", default="1:1", help="Aspect ratio for --mode ratio (default 1:1)")
-    cr.add_argument("--trim-color", default="#ffffff", dest="trim_color",
-                    help="Background color to trim for autotrim (default #ffffff)")
+    cr.add_argument(
+        "--ratio", default="1:1", help="Aspect ratio for --mode ratio (default 1:1)"
+    )
+    cr.add_argument(
+        "--trim-color",
+        default="#ffffff",
+        dest="trim_color",
+        help="Background color to trim for autotrim (default #ffffff)",
+    )
     _out_fmt_arg(cr)
 
     # ── rotate ────────────────────────────────────────────────────────────────
     ro = img_sub.add_parser("rotate", help="Rotate or flip image")
     ro.add_argument("file", help="Image file or URL")
-    ro.add_argument("--angle", type=int, default=0, choices=[0, 90, 180, 270],
-                    help="Rotation angle in degrees CW (default 0)")
-    ro.add_argument("--flip-h", action="store_true", dest="flip_h", help="Mirror horizontally")
-    ro.add_argument("--flip-v", action="store_true", dest="flip_v", help="Mirror vertically")
-    ro.add_argument("--exif", action="store_true", dest="exif_auto",
-                    help="Auto-correct EXIF orientation")
+    ro.add_argument(
+        "--angle",
+        type=int,
+        default=0,
+        choices=[0, 90, 180, 270],
+        help="Rotation angle in degrees CW (default 0)",
+    )
+    ro.add_argument(
+        "--flip-h", action="store_true", dest="flip_h", help="Mirror horizontally"
+    )
+    ro.add_argument(
+        "--flip-v", action="store_true", dest="flip_v", help="Mirror vertically"
+    )
+    ro.add_argument(
+        "--exif",
+        action="store_true",
+        dest="exif_auto",
+        help="Auto-correct EXIF orientation",
+    )
     _out_fmt_arg(ro)
 
     # ── watermark ─────────────────────────────────────────────────────────────
     wm = img_sub.add_parser("watermark", help="Add text watermark")
     wm.add_argument("file", help="Image file or URL")
     wm.add_argument("--text", default="", help="Watermark text")
-    wm.add_argument("--color", default="#ffffff", dest="wm_color", help="Text color hex (default #ffffff)")
-    wm.add_argument("--size", type=int, default=40, dest="wm_size", help="Font size (default 40)")
-    wm.add_argument("--position", default="bottom-right",
-                    choices=["top-left", "top-right", "center", "bottom-left", "bottom-right"],
-                    help="Watermark position (default bottom-right)")
-    wm.add_argument("--opacity", type=float, default=0.5, help="Opacity 0.0–1.0 (default 0.5)")
+    wm.add_argument(
+        "--color",
+        default="#ffffff",
+        dest="wm_color",
+        help="Text color hex (default #ffffff)",
+    )
+    wm.add_argument(
+        "--size", type=int, default=40, dest="wm_size", help="Font size (default 40)"
+    )
+    wm.add_argument(
+        "--position",
+        default="bottom-right",
+        choices=["top-left", "top-right", "center", "bottom-left", "bottom-right"],
+        help="Watermark position (default bottom-right)",
+    )
+    wm.add_argument(
+        "--opacity", type=float, default=0.5, help="Opacity 0.0–1.0 (default 0.5)"
+    )
     _out_fmt_arg(wm)
 
     # ── border ────────────────────────────────────────────────────────────────
     bd = img_sub.add_parser("border", help="Add border/padding to image")
     bd.add_argument("file", help="Image file or URL")
-    bd.add_argument("--padding", type=int, default=20, help="Border thickness px (default 20)")
-    bd.add_argument("--color", default="#000000", dest="border_color", help="Border color hex (default #000000)")
-    bd.add_argument("--fill-alpha", action="store_true", dest="fill_alpha",
-                    help="Fill transparent areas with border color")
+    bd.add_argument(
+        "--padding", type=int, default=20, help="Border thickness px (default 20)"
+    )
+    bd.add_argument(
+        "--color",
+        default="#000000",
+        dest="border_color",
+        help="Border color hex (default #000000)",
+    )
+    bd.add_argument(
+        "--fill-alpha",
+        action="store_true",
+        dest="fill_alpha",
+        help="Fill transparent areas with border color",
+    )
     _out_fmt_arg(bd)
 
     # ── adjust ────────────────────────────────────────────────────────────────
-    aj = img_sub.add_parser("adjust", help="Adjust brightness, contrast, saturation, sharpness")
+    aj = img_sub.add_parser(
+        "adjust", help="Adjust brightness, contrast, saturation, sharpness"
+    )
     aj.add_argument("file", help="Image file or URL")
-    aj.add_argument("--brightness", type=float, default=1.0, help="Brightness 0.1–2.0 (default 1.0)")
-    aj.add_argument("--contrast", type=float, default=1.0, help="Contrast 0.1–2.0 (default 1.0)")
-    aj.add_argument("--saturation", type=float, default=1.0, dest="saturation",
-                    help="Color saturation 0.1–2.0 (default 1.0)")
-    aj.add_argument("--sharpness", type=float, default=1.0, help="Sharpness 0.1–2.0 (default 1.0)")
+    aj.add_argument(
+        "--brightness", type=float, default=1.0, help="Brightness 0.1–2.0 (default 1.0)"
+    )
+    aj.add_argument(
+        "--contrast", type=float, default=1.0, help="Contrast 0.1–2.0 (default 1.0)"
+    )
+    aj.add_argument(
+        "--saturation",
+        type=float,
+        default=1.0,
+        dest="saturation",
+        help="Color saturation 0.1–2.0 (default 1.0)",
+    )
+    aj.add_argument(
+        "--sharpness", type=float, default=1.0, help="Sharpness 0.1–2.0 (default 1.0)"
+    )
     _out_fmt_arg(aj)
 
     # ── filter ────────────────────────────────────────────────────────────────
     fl = img_sub.add_parser("filter", help="Apply image filter")
     fl.add_argument("file", help="Image file or URL")
-    fl.add_argument("--type", default="blur",
-                    choices=["blur", "sharpen", "autocontrast", "equalize", "grayscale"],
-                    dest="filter_type",
-                    help="Filter type (default blur)")
+    fl.add_argument(
+        "--type",
+        default="blur",
+        choices=["blur", "sharpen", "autocontrast", "equalize", "grayscale"],
+        dest="filter_type",
+        help="Filter type (default blur)",
+    )
     _out_fmt_arg(fl)
 
     # ── favicon ───────────────────────────────────────────────────────────────
     fv = img_sub.add_parser("favicon", help="Generate multi-resolution .ico favicon")
     fv.add_argument("file", help="Image file or URL")
-    fv.add_argument("--sizes", default="16,32,48,64,128,256",
-                    help="Comma-separated sizes in px (default 16,32,48,64,128,256)")
+    fv.add_argument(
+        "--sizes",
+        default="16,32,48,64,128,256",
+        help="Comma-separated sizes in px (default 16,32,48,64,128,256)",
+    )
 
     # ── contact-sheet ─────────────────────────────────────────────────────────
-    cs = img_sub.add_parser("contact-sheet", help="Combine multiple images into a contact sheet")
+    cs = img_sub.add_parser(
+        "contact-sheet", help="Combine multiple images into a contact sheet"
+    )
     cs.add_argument("files", nargs="+", help="Image files or URLs")
     cs.add_argument("--cols", type=int, default=4, help="Number of columns (default 4)")
-    cs.add_argument("--thumb", type=int, default=200, dest="thumb_size",
-                    help="Thumbnail size px (default 200)")
-    cs.add_argument("--gap", type=int, default=10, help="Gap between images px (default 10)")
-    cs.add_argument("--bg-color", default="#ffffff", dest="bg_color",
-                    help="Background color hex (default #ffffff)")
-    cs.add_argument("--out-fmt", default="png", choices=_FMT_CHOICES, dest="out_fmt",
-                    help="Output format (default png)")
+    cs.add_argument(
+        "--thumb",
+        type=int,
+        default=200,
+        dest="thumb_size",
+        help="Thumbnail size px (default 200)",
+    )
+    cs.add_argument(
+        "--gap", type=int, default=10, help="Gap between images px (default 10)"
+    )
+    cs.add_argument(
+        "--bg-color",
+        default="#ffffff",
+        dest="bg_color",
+        help="Background color hex (default #ffffff)",
+    )
+    cs.add_argument(
+        "--out-fmt",
+        default="png",
+        choices=_FMT_CHOICES,
+        dest="out_fmt",
+        help="Output format (default png)",
+    )
     cs.add_argument("--out-quality", type=int, default=90, dest="out_quality")
 
     # ── remove-bg ─────────────────────────────────────────────────────────────
-    rb = img_sub.add_parser("remove-bg", help="Remove image background (requires [ai-image] extra)")
+    rb = img_sub.add_parser(
+        "remove-bg", help="Remove image background (requires [ai-image] extra)"
+    )
     rb.add_argument("file", help="Image file or URL")
-    rb.add_argument("--model", default="u2net",
-                    choices=["u2net", "u2netp", "silueta", "isnet-general-use", "u2net_human_seg"],
-                    help="rembg model (default u2net)")
+    rb.add_argument(
+        "--model",
+        default="u2net",
+        choices=["u2net", "u2netp", "silueta", "isnet-general-use", "u2net_human_seg"],
+        help="rembg model (default u2net)",
+    )
 
     # ── describe ──────────────────────────────────────────────────────────────
     dc = img_sub.add_parser("describe", help="Describe image via Ollama vision model")
     dc.add_argument("file", help="Image file or URL")
-    dc.add_argument("--model", default="moondream-custom",
-                    choices=["moondream-custom", "llava:7b", "minicpm-v"],
-                    help="Vision model (default moondream-custom)")
-    dc.add_argument("--prompt", default="", help="Custom prompt (empty = default PT-BR)")
+    dc.add_argument(
+        "--model",
+        default="moondream-custom",
+        choices=["moondream-custom", "gemma3-4b-custom", "llava:7b", "minicpm-v"],
+        help="Vision model (default moondream-custom)",
+    )
+    dc.add_argument(
+        "--prompt", default="", help="Custom prompt (empty = default PT-BR)"
+    )
+
+    # ── exif ──────────────────────────────────────────────────────────────────
+    ex = img_sub.add_parser("exif", help="Read or edit EXIF metadata")
+    ex.add_argument("file", help="Image file")
+    ex.add_argument("--show", action="store_true", help="Print EXIF summary and exit")
+    ex.add_argument("--strip", action="store_true", help="Remove all metadata")
+    ex.add_argument(
+        "--strip-gps", action="store_true", dest="strip_gps", help="Remove GPS only"
+    )
+    ex.add_argument("--artist", default="", help="Inject Artist tag")
+    ex.add_argument(
+        "--copyright", default="", dest="copyright_", help="Inject Copyright tag"
+    )
+    ex.add_argument("--description", default="", help="Inject ImageDescription tag")
+    ex.add_argument(
+        "--out", default="", help="Output path (default: <stem>_exif<ext> beside input)"
+    )
 
     img_p.add_argument("--verbose", action="store_true", help="Enable debug logging")
     img_p.set_defaults(func=run_image_cli)
@@ -170,8 +307,6 @@ def run_image_cli(ns: argparse.Namespace) -> None:
     Args:
         ns: Parsed argument namespace from add_image_parser.
     """
-    from pathlib import Path
-
     from src.cli.bus import CLIEventBus
     from src.cli.transcription import resolve_input
     from src.core.image.args import ImageArgs
@@ -179,9 +314,14 @@ def run_image_cli(ns: argparse.Namespace) -> None:
     from src.gui.modules.image.worker import run_image_pipeline
     from src.utils import check_dependencies
 
-    check_dependencies()
-
     op = ns.image_op
+
+    # EXIF is a direct metadata read/write — no ffmpeg/yt-dlp, no pipeline.
+    if op == "exif":
+        _run_exif_cli(ns)
+        return
+
+    check_dependencies()
 
     # contact-sheet accepts multiple files
     if op == "contact-sheet":
@@ -271,3 +411,54 @@ def run_image_cli(ns: argparse.Namespace) -> None:
     success = run_image_pipeline(args, bus, cancel, install_log_handler=False)
     if not success:
         sys.exit(1)
+
+
+def _run_exif_cli(ns: argparse.Namespace) -> None:
+    """Read (--show) or write EXIF metadata to a copy of the input image."""
+    import shutil
+    from pathlib import Path
+
+    from src.core.image.exif import apply_to_file, read_summary
+
+    try:
+        sys.stdout.reconfigure(encoding="utf-8")  # filenames/values may be non-cp1252
+    except Exception:
+        pass
+
+    src = Path(ns.file)
+    if not src.exists():
+        print(f"[!] File not found: {src}")
+        sys.exit(1)
+
+    # Pick the write mode from flags; absence of any mutating flag → show summary.
+    if ns.strip:
+        mode = "strip"
+    elif ns.strip_gps:
+        mode = "strip_gps"
+    elif ns.artist or ns.copyright_ or ns.description:
+        mode = "inject"
+    else:
+        mode = "show"
+
+    if ns.show or mode == "show":
+        summary = read_summary(src)
+        if not summary:
+            print("[i] No EXIF metadata found.")
+            return
+        for key, value in summary.items():
+            print(f"{key}: {value}")
+        return
+
+    out = Path(ns.out) if ns.out else src.with_name(f"{src.stem}_exif{src.suffix}")
+    shutil.copy2(src, out)
+    apply_to_file(
+        out,
+        src,
+        mode,
+        {
+            "artist": ns.artist,
+            "copyright": ns.copyright_,
+            "description": ns.description,
+        },
+    )
+    print(f"[✓] EXIF ({mode}) -> {out}")

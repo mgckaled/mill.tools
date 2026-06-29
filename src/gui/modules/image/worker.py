@@ -13,6 +13,7 @@ from src.core.image.background import create_session, is_available, remove_backg
 from src.core.image.converter import convert_image
 from src.core.image.describe import describe_image, save_description
 from src.core.image.downloader import download_image
+from src.core.image.exif import apply_to_file as apply_exif
 from src.core.image.info import thumbnail_bytes
 from src.core.image.transform import (
     add_border,
@@ -343,6 +344,23 @@ def _make_process_item(args: ImageArgs) -> Callable:
             case _:
                 raise ValueError(f"Unknown operation: {op}")
 
+        # EXIF post-process (no-op for formats that can't carry EXIF, e.g. .ico).
+        apply_exif(
+            out_path,
+            src,
+            args.exif_mode,
+            {
+                "artist": args.exif_artist,
+                "copyright": args.exif_copyright,
+                "description": args.exif_description,
+            },
+        )
+        if args.exif_mode != "preserve":
+            emit(
+                "log",
+                payload={"message": pipeline_log.fmt_exif_detail(args.exif_mode)},
+            )
+
         output_thumb = _make_thumb(out_path)
         out_meta = _try_read_meta(out_path)
         emit(
@@ -580,6 +598,16 @@ def _run_batch_rembg(
                 )
 
                 out_path = remove_background(src, IMAGE_PROCESSED_DIR, session)
+                apply_exif(
+                    out_path,
+                    src,
+                    args.exif_mode,
+                    {
+                        "artist": args.exif_artist,
+                        "copyright": args.exif_copyright,
+                        "description": args.exif_description,
+                    },
+                )
                 output_paths.append(str(out_path))
                 out_meta = _try_read_meta(out_path)
                 emit(

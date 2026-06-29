@@ -17,6 +17,7 @@ from src.gui.modules.image.blocks.border import build_border_block
 from src.gui.modules.image.blocks.contact_sheet import build_contact_sheet_block
 from src.gui.modules.image.blocks.convert_fmt import build_fmt_section
 from src.gui.modules.image.blocks.crop import build_crop_block
+from src.gui.modules.image.blocks.exif import build_exif_block
 from src.gui.modules.image.blocks.favicon import build_favicon_block
 from src.gui.modules.image.blocks.filter import build_filter_block
 from src.gui.modules.image.blocks.resize import build_resize_block
@@ -213,6 +214,9 @@ def build_image_form(
 
     fmt_refs = build_fmt_section(page)
 
+    # ── EXIF section (applies to any image→image op) ─────────────────────────
+    exif_block, exif_refs = build_exif_block(page)
+
     # ── Refresh param blocks ──────────────────────────────────────────────────
 
     def _refresh_param_blocks() -> None:
@@ -295,6 +299,11 @@ def build_image_form(
             if op == "describe"
             else "moondream-custom",
             describe_prompt=ai_refs.get_desc_prompt() if op == "describe" else "",
+            # exif
+            exif_mode=exif_refs.get_mode(),
+            exif_artist=exif_refs.get_artist(),
+            exif_copyright=exif_refs.get_copyright(),
+            exif_description=exif_refs.get_description(),
         )
         on_start(args)
 
@@ -310,6 +319,7 @@ def build_image_form(
         for oid, ctr in _card_ctr_refs.items():
             ctr.disabled = running or (oid in _UNAVAILABLE)
         fmt_refs.set_disabled(running)
+        exif_refs.set_disabled(running)
         ai_refs.set_rembg_disabled(running or not _rembg_ok())
         ai_refs.set_desc_disabled(running)
         page.update()
@@ -348,6 +358,8 @@ def build_image_form(
                         params_container,
                         hairline(),
                         fmt_refs.control,
+                        hairline(),
+                        exif_block,
                         hairline(),
                         ft.Row(
                             controls=[start_btn],

@@ -218,6 +218,16 @@ def fmt_filter_detail(filter_type: str) -> str:
     return f"[i] Filtro: {labels.get(filter_type, filter_type)}"
 
 
+def fmt_exif_detail(mode: str) -> str:
+    labels = {
+        "preserve": "Preservar metadados originais",
+        "strip": "Remover todos os metadados",
+        "strip_gps": "Remover localização (GPS)",
+        "inject": "Injetar autoria/copyright",
+    }
+    return f"[i] EXIF: {labels.get(mode, mode)}"
+
+
 def fmt_favicon_detail(sizes: list[int]) -> str:
     sizes_str = ", ".join(str(s) for s in sorted(sizes))
     return f"[i] Favicon .ico — tamanhos: {sizes_str} px"
