@@ -1,4 +1,5 @@
 """Descrição de imagem via Ollama vision (LangChain). Import lazy."""
+
 from __future__ import annotations
 
 import base64
@@ -14,15 +15,18 @@ def is_available() -> bool:
     """True se langchain_ollama instalado (já é dep do projeto)."""
     try:
         from langchain_ollama import ChatOllama  # noqa: F401
+
         return True
     except ImportError:
         return False
 
 
 def describe_image(src: Path, model: str = "moondream-custom", prompt: str = "") -> str:
-    """Envia imagem ao modelo Ollama vision e retorna descrição em texto."""
+    """Send an image to an Ollama vision model and return its text description."""
     from langchain_core.messages import HumanMessage
     from langchain_ollama import ChatOllama
+
+    from src.llm_factory import DEFAULT_OLLAMA_NUM_CTX
 
     with open(src, "rb") as f:
         img_b64 = base64.b64encode(f.read()).decode()
@@ -30,11 +34,18 @@ def describe_image(src: Path, model: str = "moondream-custom", prompt: str = "")
     suffix = src.suffix.lower().lstrip(".")
     mime = "jpeg" if suffix in ("jpg", "jpeg") else suffix
 
-    llm = ChatOllama(model=model)
-    message = HumanMessage(content=[
-        {"type": "text", "text": prompt or _DEFAULT_PROMPT},
-        {"type": "image_url", "image_url": {"url": f"data:image/{mime};base64,{img_b64}"}},
-    ])
+    # Pin num_ctx: Ollama defaults to 2048, too small for the verbose PT prompt
+    # plus the image tokens (a larger VLM like gemma3-4b would truncate the reply).
+    llm = ChatOllama(model=model, num_ctx=DEFAULT_OLLAMA_NUM_CTX)
+    message = HumanMessage(
+        content=[
+            {"type": "text", "text": prompt or _DEFAULT_PROMPT},
+            {
+                "type": "image_url",
+                "image_url": {"url": f"data:image/{mime};base64,{img_b64}"},
+            },
+        ]
+    )
     response = llm.invoke([message])
     return response.content
 

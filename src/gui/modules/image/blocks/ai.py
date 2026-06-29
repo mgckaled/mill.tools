@@ -1,4 +1,5 @@
 """AI operation blocks (remove_bg and describe) for the image module."""
+
 from __future__ import annotations
 
 from typing import Callable, NamedTuple
@@ -6,7 +7,7 @@ from typing import Callable, NamedTuple
 import flet as ft
 
 from src.core.image.background import is_available as _rembg_ok
-from src.gui.theme.components import labeled_field, help_icon_for
+from src.gui.theme.components import labeled_field
 from src.gui.theme.tokens import Layout, Space, Type
 
 
@@ -37,11 +38,11 @@ def build_ai_blocks(page: ft.Page) -> AIRefs:
     )
     rembg_dd = ft.Dropdown(
         options=[
-            ft.dropdown.Option("u2net",             "u2net — geral (padrão)"),
-            ft.dropdown.Option("u2netp",            "u2netp — rápido e leve"),
-            ft.dropdown.Option("silueta",           "silueta — compacto"),
+            ft.dropdown.Option("u2net", "u2net — geral (padrão)"),
+            ft.dropdown.Option("u2netp", "u2netp — rápido e leve"),
+            ft.dropdown.Option("silueta", "silueta — compacto"),
             ft.dropdown.Option("isnet-general-use", "isnet — recortes precisos"),
-            ft.dropdown.Option("u2net_human_seg",   "humano — otimizado para pessoas"),
+            ft.dropdown.Option("u2net_human_seg", "humano — otimizado para pessoas"),
         ],
         value="u2net",
         disabled=not rembg_available,
@@ -71,9 +72,12 @@ def build_ai_blocks(page: ft.Page) -> AIRefs:
 
     desc_dd = ft.Dropdown(
         options=[
-            ft.dropdown.Option("moondream-custom", "moondream-custom"),
-            ft.dropdown.Option("llava:7b",         "llava:7b"),
-            ft.dropdown.Option("minicpm-v",        "minicpm-v"),
+            ft.dropdown.Option("moondream-custom", "moondream-custom — rápido"),
+            ft.dropdown.Option(
+                "gemma3-4b-custom", "gemma3-4b-custom — melhor qualidade (mais lento)"
+            ),
+            ft.dropdown.Option("llava:7b", "llava:7b"),
+            ft.dropdown.Option("minicpm-v", "minicpm-v"),
         ],
         value="moondream-custom",
         border_color=ft.Colors.OUTLINE_VARIANT,
@@ -96,8 +100,12 @@ def build_ai_blocks(page: ft.Page) -> AIRefs:
         visible=False,
         spacing=Space.sm,
         controls=[
-            labeled_field("Modelo vision", desc_dd, help_key="image.describe_model", page=page),
-            labeled_field("Prompt", desc_prompt_tf, help_key="image.describe_prompt", page=page),
+            labeled_field(
+                "Modelo vision", desc_dd, help_key="image.describe_model", page=page
+            ),
+            labeled_field(
+                "Prompt", desc_prompt_tf, help_key="image.describe_prompt", page=page
+            ),
             ft.Text(
                 "Saída: .txt salvo em output/image/processed/",
                 size=Type.small.size,
