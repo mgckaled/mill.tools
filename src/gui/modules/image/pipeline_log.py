@@ -5,6 +5,7 @@ Importado por:
   worker.py  — fmt_* constrói strings para emit("log", ...)
   view.py    — resolve_* traduz PipelineEvent → texto de display
 """
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -17,39 +18,40 @@ if TYPE_CHECKING:
 # ─── Constantes ────────────────────────────────────────────────────────────────
 
 OP_VERBS: dict[str, str] = {
-    "download":      "Baixando",
-    "convert":       "Convertendo",
-    "resize":        "Redimensionando",
-    "crop":          "Cortando",
-    "rotate":        "Rotacionando",
-    "watermark":     "Aplicando marca d'água",
-    "border":        "Adicionando borda",
-    "adjust":        "Ajustando",
-    "filter":        "Aplicando filtro",
-    "favicon":       "Gerando favicon",
+    "download": "Baixando",
+    "convert": "Convertendo",
+    "resize": "Redimensionando",
+    "crop": "Cortando",
+    "rotate": "Rotacionando",
+    "watermark": "Aplicando marca d'água",
+    "border": "Adicionando borda",
+    "adjust": "Ajustando",
+    "filter": "Aplicando filtro",
+    "favicon": "Gerando favicon",
     "contact_sheet": "Montando colagem",
-    "remove_bg":     "Removendo fundo",
-    "describe":      "Analisando",
+    "remove_bg": "Removendo fundo",
+    "describe": "Analisando",
 }
 
 OP_LABELS: dict[str, str] = {
-    "download":      "Baixando...",
-    "convert":       "Convertendo...",
-    "resize":        "Redimensionando...",
-    "crop":          "Cortando...",
-    "rotate":        "Rotacionando...",
-    "watermark":     "Marca d'água...",
-    "border":        "Adicionando borda...",
-    "adjust":        "Ajustando...",
-    "filter":        "Aplicando filtro...",
-    "favicon":       "Gerando favicon...",
+    "download": "Baixando...",
+    "convert": "Convertendo...",
+    "resize": "Redimensionando...",
+    "crop": "Cortando...",
+    "rotate": "Rotacionando...",
+    "watermark": "Marca d'água...",
+    "border": "Adicionando borda...",
+    "adjust": "Ajustando...",
+    "filter": "Aplicando filtro...",
+    "favicon": "Gerando favicon...",
     "contact_sheet": "Montando colagem...",
-    "remove_bg":     "Removendo fundo (ONNX/CPU)...",
-    "describe":      "Analisando imagem (Ollama)…",
+    "remove_bg": "Removendo fundo (ONNX/CPU)...",
+    "describe": "Analisando imagem (Ollama)…",
 }
 
 
 # ─── Helper interno ────────────────────────────────────────────────────────────
+
 
 def _fmt_size(b: int) -> str:
     if b < 1024:
@@ -71,12 +73,46 @@ def _relative_output_dir(path_str: str) -> str:
 
 # ─── Builder genérico ──────────────────────────────────────────────────────────
 
-def fmt_image_info(name: str, width: int, height: int, mode: str, size_bytes: int) -> str:
+
+def fmt_image_info(
+    name: str, width: int, height: int, mode: str, size_bytes: int
+) -> str:
     """[i] nome | WxH px | MODE | tamanho"""
     return f"[i] {name} | {width}×{height} px | {mode} | {_fmt_size(size_bytes)}"
 
 
+def _dims_label(w: int, h: int, fmt: str | None, size_bytes: int) -> str:
+    """'1920×1080 PNG 2.3 MB' — omits unknown parts (zero dims / size)."""
+    parts: list[str] = []
+    if w and h:
+        parts.append(f"{w}×{h}")
+    if fmt:
+        parts.append(fmt.upper())
+    if size_bytes:
+        parts.append(_fmt_size(size_bytes))
+    return " ".join(parts)
+
+
+def fmt_meta_strip(
+    src_w: int,
+    src_h: int,
+    src_fmt: str | None,
+    src_size: int,
+    out_w: int,
+    out_h: int,
+    out_fmt: str | None,
+    out_size: int,
+) -> str:
+    """Before→after metadata line for the viewer, e.g. '1920×1080 PNG 2.3 MB → 800×450 JPG 120 KB'."""
+    left = _dims_label(src_w, src_h, src_fmt, src_size)
+    right = _dims_label(out_w, out_h, out_fmt, out_size)
+    if left and right:
+        return f"{left}  →  {right}"
+    return right or left
+
+
 # ─── Builders por operação ─────────────────────────────────────────────────────
+
 
 def fmt_convert_detail(src_fmt: str | None, tgt_fmt: str) -> str:
     return f"[i] {(src_fmt or '?').upper()} → {tgt_fmt.upper()}"
@@ -139,10 +175,10 @@ def fmt_rotate_detail(angle: int, flip_h: bool, flip_v: bool, exif_auto: bool) -
 
 def fmt_watermark_detail(mode: str, position: str, opacity: float) -> str:
     pos_labels = {
-        "top-left":     "↖ sup-esq",
-        "top-right":    "↗ sup-dir",
-        "center":       "⬤ centro",
-        "bottom-left":  "↙ inf-esq",
+        "top-left": "↖ sup-esq",
+        "top-right": "↗ sup-dir",
+        "center": "⬤ centro",
+        "bottom-left": "↙ inf-esq",
         "bottom-right": "↘ inf-dir",
     }
     pos = pos_labels.get(position, position)
@@ -154,19 +190,30 @@ def fmt_border_detail(padding: int, color: str, fill_alpha: bool) -> str:
     return f"[i] Borda: {padding}px | Cor: {color}{extra}"
 
 
-def fmt_adjust_detail(brightness: float, contrast: float, color: float, sharpness: float) -> str:
-    fields = {"Brilho": brightness, "Contraste": contrast, "Saturação": color, "Nitidez": sharpness}
+def fmt_adjust_detail(
+    brightness: float, contrast: float, color: float, sharpness: float
+) -> str:
+    fields = {
+        "Brilho": brightness,
+        "Contraste": contrast,
+        "Saturação": color,
+        "Nitidez": sharpness,
+    }
     changed = [f"{k}: {v:.1f}" for k, v in fields.items() if abs(v - 1.0) > 0.05]
-    return f"[i] {' | '.join(changed)}" if changed else "[i] Ajustes: todos em 1.0 (sem alteração)"
+    return (
+        f"[i] {' | '.join(changed)}"
+        if changed
+        else "[i] Ajustes: todos em 1.0 (sem alteração)"
+    )
 
 
 def fmt_filter_detail(filter_type: str) -> str:
     labels = {
-        "blur":         "Blur — suavização",
-        "sharpen":      "Sharpen — nitidez",
+        "blur": "Blur — suavização",
+        "sharpen": "Sharpen — nitidez",
         "autocontrast": "Autocontraste — estica histograma",
-        "equalize":     "Equalizar — redistribui histograma",
-        "grayscale":    "Escala de cinza",
+        "equalize": "Equalizar — redistribui histograma",
+        "grayscale": "Escala de cinza",
     }
     return f"[i] Filtro: {labels.get(filter_type, filter_type)}"
 
@@ -176,12 +223,15 @@ def fmt_favicon_detail(sizes: list[int]) -> str:
     return f"[i] Favicon .ico — tamanhos: {sizes_str} px"
 
 
-def fmt_cs_detail(n_items: int, cols: int, thumb_size: int, gap: int, bg_color: str) -> str:
+def fmt_cs_detail(
+    n_items: int, cols: int, thumb_size: int, gap: int, bg_color: str
+) -> str:
     rows = (n_items + cols - 1) // cols
     return f"[i] {n_items} imgs | grade {cols}×{rows} | thumb {thumb_size}px | gap {gap}px | bg {bg_color}"
 
 
 # ─── Builders rembg ───────────────────────────────────────────────────────────
+
 
 def fmt_rembg_loading(model: str) -> str:
     return f"[*] Carregando modelo '{model}' (1ª vez: baixa para ~/.u2net/)…"
@@ -197,6 +247,7 @@ def fmt_rembg_inferring(name: str) -> str:
 
 # ─── Builders describe ────────────────────────────────────────────────────────
 
+
 def fmt_describe_header(model: str, prompt: str) -> str:
     prompt_label = "[padrão PT-BR]" if not prompt.strip() else f'"{prompt}"'
     return f"[i] Modelo: {model} | Prompt: {prompt_label}"
@@ -211,6 +262,7 @@ def fmt_describe_sep_close() -> str:
 
 
 # ─── Resolvers (view.py) ──────────────────────────────────────────────────────
+
 
 def resolve_messages(event: "PipelineEvent") -> list[str]:
     """Traduz um PipelineEvent nas linhas de log a exibir no painel."""
@@ -230,7 +282,11 @@ def resolve_messages(event: "PipelineEvent") -> list[str]:
             name = Path(path).name if path else path
             src_sz = p.get("src_size_bytes", 0)
             out_sz = p.get("out_size_bytes", 0)
-            sz = f" | {_fmt_size(src_sz)} → {_fmt_size(out_sz)}" if src_sz and out_sz else ""
+            sz = (
+                f" | {_fmt_size(src_sz)} → {_fmt_size(out_sz)}"
+                if src_sz and out_sz
+                else ""
+            )
             prefix = f"{idx}/{total} — " if total > 1 else ""
             folder = _relative_output_dir(path)
             return [

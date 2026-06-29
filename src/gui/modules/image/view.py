@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import subprocess
 import threading
 from typing import TYPE_CHECKING
@@ -12,6 +13,7 @@ from src.gui.events import PipelineEvent
 from src.gui.modules.base import Module
 from src.gui.modules.image.form_view import ImageArgs, ImageFormPanel, build_image_form
 from src.gui.modules.image import pipeline_log
+from src.gui.modules.image.preview import build_preview
 from src.gui.modules.image.worker import start_image_pipeline
 from src.gui.theme.tokens import Color, Radius, Space, Type
 from src.gui.theme.components import (
@@ -28,12 +30,8 @@ if TYPE_CHECKING:
 _MODULE_ID = "image"
 _MAX_LOG = 300
 
-# 1×1 px PNG transparente — src obrigatório no Flet 0.85
-_BLANK_PNG = (
-    b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01"
-    b"\x08\x06\x00\x00\x00\x1f\x15\xc4\x89\x00\x00\x00\nIDATx\x9cc\x00\x01"
-    b"\x00\x00\x05\x00\x01\r\n-\xb4\x00\x00\x00\x00IEND\xaeB`\x82"
-)
+# Output modes that carry transparency → show the checkerboard backdrop.
+_ALPHA_MODES = frozenset({"RGBA", "LA", "PA", "RGBa", "La"})
 
 
 def build_image_module(
@@ -41,6 +39,7 @@ def build_image_module(
     bus: "EventBus",
     cancel_event: threading.Event,
     pipeline_running: list[bool],
+    nav: list,
 ) -> Module:
     """Constrói o módulo Imagens — form | Before/After viewer + log compacto.
 
@@ -49,102 +48,17 @@ def build_image_module(
         bus: EventBus compartilhado da aplicação.
         cancel_event: threading.Event para cancelamento.
         pipeline_running: Lista [bool] compartilhada com app.py.
+        nav: Lista [navigate_to] (forward reference) para bridges entre módulos.
     """
 
     # ------------------------------------------------------------------
-    # Visor Before/After
+    # Visor Before/After (extraído para preview.py)
     # ------------------------------------------------------------------
 
     _last_input_thumb: list[bytes | None] = [None]
+    _last_output_path: list[str | None] = [None]
 
-    # Imagens
-    _img_single = ft.Image(_BLANK_PNG, fit=ft.BoxFit.CONTAIN, expand=True)
-    _img_before = ft.Image(_BLANK_PNG, fit=ft.BoxFit.CONTAIN, expand=True)
-    _img_after = ft.Image(_BLANK_PNG, fit=ft.BoxFit.CONTAIN, expand=True)
-
-    # Placeholder
-    _placeholder = ft.Container(
-        content=ft.Text(
-            "Selecione imagens para começar",
-            color=ft.Colors.ON_SURFACE_VARIANT,
-            italic=True,
-            size=Type.input.size,
-        ),
-        alignment=ft.Alignment.CENTER,
-        expand=True,
-        visible=True,
-    )
-
-    # Single pane: placeholder OU imagem única
-    _single_img_ctr = ft.Container(
-        content=_img_single,
-        alignment=ft.Alignment.CENTER,
-        expand=True,
-        visible=False,
-    )
-    _single_pane = ft.Stack(
-        [_placeholder, _single_img_ctr],
-        expand=True,
-    )
-
-    # Before/After pane
-    _before_col = ft.Column(
-        [
-            ft.Text("Antes", size=Type.tiny.size, color=ft.Colors.ON_SURFACE_VARIANT),
-            ft.Container(
-                content=_img_before, expand=True, alignment=ft.Alignment.CENTER
-            ),
-        ],
-        expand=True,
-        spacing=4,
-    )
-    _after_col = ft.Column(
-        [
-            ft.Text("Depois", size=Type.tiny.size, color=ft.Colors.ON_SURFACE_VARIANT),
-            ft.Container(
-                content=_img_after, expand=True, alignment=ft.Alignment.CENTER
-            ),
-        ],
-        expand=True,
-        spacing=4,
-    )
-    _before_after_row = ft.Row(
-        [_before_col, ft.VerticalDivider(width=1), _after_col],
-        expand=True,
-        visible=False,
-    )
-
-    preview_container = ft.Container(
-        content=ft.Row([_single_pane, _before_after_row], expand=True),
-        expand=True,
-        alignment=ft.Alignment.CENTER,
-        border=ft.Border(
-            left=ft.BorderSide(1, ft.Colors.OUTLINE_VARIANT),
-            right=ft.BorderSide(1, ft.Colors.OUTLINE_VARIANT),
-            top=ft.BorderSide(1, ft.Colors.OUTLINE_VARIANT),
-            bottom=ft.BorderSide(1, ft.Colors.OUTLINE_VARIANT),
-        ),
-        border_radius=Radius.sm,
-        bgcolor=Color.dark.surface_variant,
-    )
-
-    def _show_single(thumb: bytes | None = None) -> None:
-        """Mostra single view. thumb=None → placeholder."""
-        _single_pane.visible = True
-        _before_after_row.visible = False
-        if thumb:
-            _img_single.src = thumb
-            _single_img_ctr.visible = True
-            _placeholder.visible = False
-        else:
-            _single_img_ctr.visible = False
-            _placeholder.visible = True
-
-    def _show_before_after(before: bytes, after: bytes) -> None:
-        _single_pane.visible = False
-        _before_after_row.visible = True
-        _img_before.src = before
-        _img_after.src = after
+    preview = build_preview()
 
     # ------------------------------------------------------------------
     # Painel direito — spinner, barra, log
@@ -197,9 +111,44 @@ def build_image_module(
         accent=ft.Colors.PRIMARY,
     )
 
+    def _open_last_file(_e) -> None:
+        out = _last_output_path[0]
+        if not out:
+            return
+        try:
+            os.startfile(out)  # Windows shell open
+        except Exception:
+            page.snack_bar = ft.SnackBar(
+                content=ft.Text(f"Não foi possível abrir {os.path.basename(out)}"),
+                bgcolor=ft.Colors.ERROR,
+            )
+            page.snack_bar.open = True
+            page.update()
+
+    open_file_btn = action_button(
+        "Abrir arquivo",
+        icon=ft.Icons.IMAGE_OUTLINED,
+        on_click=_open_last_file,
+        accent=ft.Colors.PRIMARY,
+    )
+    open_file_btn.visible = False
+
+    def _open_in_library(_e) -> None:
+        out = _last_output_path[0]
+        if nav:
+            nav[0]("library", {"file": out} if out else None)
+
+    library_btn = action_button(
+        "Ver na Biblioteca",
+        icon=ft.Icons.PHOTO_LIBRARY_OUTLINED,
+        on_click=_open_in_library,
+        accent=ft.Colors.PRIMARY,
+    )
+    library_btn.visible = False
+
     right_panel = ft.Column(
         controls=[
-            preview_container,
+            preview.control,
             hairline(),
             ft.Row(
                 controls=[spin_img, stage_label],
@@ -223,7 +172,13 @@ def build_image_module(
                 bgcolor=Color.dark.surface_variant,
             ),
             ft.Row(
-                controls=[open_folder_btn, ft.Container(expand=True), cancel_btn],
+                controls=[
+                    open_folder_btn,
+                    open_file_btn,
+                    library_btn,
+                    ft.Container(expand=True),
+                    cancel_btn,
+                ],
                 spacing=4,
             ),
         ],
@@ -261,15 +216,33 @@ def build_image_module(
         elif t == "image_op_start":
             thumb = p.get("thumb")
             _last_input_thumb[0] = thumb
-            _show_single(thumb)
+            preview.show_single(thumb, False)
 
         elif t == "image_op_done":
             out_thumb = p.get("thumb")
             in_thumb = _last_input_thumb[0]
+            after_alpha = p.get("out_mode", "?") in _ALPHA_MODES
             if in_thumb and out_thumb:
-                _show_before_after(in_thumb, out_thumb)
+                preview.show_before_after(in_thumb, out_thumb, after_alpha)
             elif out_thumb:
-                _show_single(out_thumb)
+                preview.show_single(out_thumb, after_alpha)
+            preview.set_meta(
+                pipeline_log.fmt_meta_strip(
+                    p.get("src_w", 0),
+                    p.get("src_h", 0),
+                    p.get("src_fmt"),
+                    p.get("src_size_bytes", 0),
+                    p.get("out_w", 0),
+                    p.get("out_h", 0),
+                    p.get("out_fmt"),
+                    p.get("out_size_bytes", 0),
+                )
+            )
+            out_path = p.get("output_path")
+            if out_path:
+                _last_output_path[0] = out_path
+                open_file_btn.visible = True
+                library_btn.visible = True
             cur_item = p.get("item_idx", 1)
             tot_items = p.get("total_items", 1)
             progress_bar.value = cur_item / max(tot_items, 1)
@@ -309,8 +282,11 @@ def build_image_module(
         stage_label.value = "Iniciando..."
         stage_label.color = ft.Colors.ON_SURFACE
         stage_label.italic = False
-        _show_single(None)
+        preview.reset()
         _last_input_thumb[0] = None
+        _last_output_path[0] = None
+        open_file_btn.visible = False
+        library_btn.visible = False
         form_panel.set_running(True)
         page.update()
         start_image_pipeline(args, bus, cancel_event, pipeline_running)

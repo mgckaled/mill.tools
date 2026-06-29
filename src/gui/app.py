@@ -200,7 +200,7 @@ def build_app(page: ft.Page, initial_module: str = "transcription") -> None:
     )
     _audio = build_audio_module(page, bus, cancel_event, pipeline_running, nav)
     _video = build_video_module(page, bus, cancel_event, pipeline_running, nav)
-    _image = build_image_module(page, bus, cancel_event, pipeline_running)
+    _image = build_image_module(page, bus, cancel_event, pipeline_running, nav)
     _document = build_document_module(page, bus, cancel_event, pipeline_running)
     _data = build_data_module(page, bus, cancel_event, pipeline_running, nav)
     _library = build_library_module(page, bus, cancel_event, pipeline_running, nav)
