@@ -56,7 +56,6 @@ _OPS: list[tuple[str, str, str]] = [
     ("favicon", ft.Icons.GRID_VIEW, "Favicon"),
     ("contact_sheet", ft.Icons.DASHBOARD_OUTLINED, "Colagem"),
     ("remove_bg", ft.Icons.AUTO_FIX_HIGH, "Remover\nfundo"),
-    ("describe", ft.Icons.DESCRIPTION_OUTLINED, "Descrever"),
 ]
 
 _UNAVAILABLE: dict[str, str] = {}
@@ -277,7 +276,6 @@ def build_image_form(
     _param_blocks["favicon"] = favicon_block
     _param_blocks["contact_sheet"] = cs_block
     _param_blocks["remove_bg"] = ai_refs.rembg_block
-    _param_blocks["describe"] = ai_refs.describe_block
 
     # ── Format section ────────────────────────────────────────────────────────
 

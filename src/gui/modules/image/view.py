@@ -13,10 +13,12 @@ from src.gui.events import PipelineEvent
 from src.gui.modules.base import Module
 from src.gui.modules.image.form_view import ImageArgs, ImageFormPanel, build_image_form
 from src.gui.modules.image import pipeline_log
+from src.gui.modules.image.describe_tab import build_describe_tab
 from src.gui.modules.image.preview import build_preview
 from src.gui.modules.image.worker import start_image_pipeline
 from src.gui.theme.tokens import Color, Radius, Space, Type
 from src.gui.theme.components import (
+    Cursor,
     action_button,
     danger_button,
     hairline,
@@ -57,6 +59,7 @@ def build_image_module(
 
     _last_input_thumb: list[bytes | None] = [None]
     _last_output_path: list[str | None] = [None]
+    _run_mode: list[str] = ["edit"]  # "edit" | "describe" — routes pipeline events
 
     preview = build_preview()
 
@@ -194,6 +197,14 @@ def build_image_module(
         if event.module_id and event.module_id != _MODULE_ID:
             return
 
+        # Describe runs render in the Descrição IA tab, not the edit viewer.
+        if _run_mode[0] == "describe":
+            describe_tab.on_event(event)
+            if event.type in ("task_done", "task_error"):
+                describe_tab.set_running(False)
+            page.update()
+            return
+
         t = event.type
         p = event.payload
 
@@ -274,6 +285,7 @@ def build_image_module(
         if pipeline_running[0]:
             return
         pipeline_running[0] = True
+        _run_mode[0] = "edit"
         cancel_event.clear()
         cancel_btn.disabled = False
         log_list.controls.clear()
@@ -291,13 +303,24 @@ def build_image_module(
         page.update()
         start_image_pipeline(args, bus, cancel_event, pipeline_running)
 
+    def _on_describe_run(args: ImageArgs) -> None:
+        if pipeline_running[0]:
+            return
+        pipeline_running[0] = True
+        _run_mode[0] = "describe"
+        cancel_event.clear()
+        describe_tab.set_running(True)
+        page.update()
+        start_image_pipeline(args, bus, cancel_event, pipeline_running)
+
     # ------------------------------------------------------------------
-    # Painéis + layout
+    # Painéis + layout (toggle Edição | Descrição IA)
     # ------------------------------------------------------------------
 
     form_panel: ImageFormPanel = build_image_form(page, on_start=_on_start)
+    describe_tab = build_describe_tab(page, on_run=_on_describe_run)
 
-    control = ft.Row(
+    edicao_body = ft.Row(
         controls=[
             ft.Container(content=form_panel.control, width=380),
             ft.VerticalDivider(width=2, thickness=1.5, color=ft.Colors.OUTLINE_VARIANT),
@@ -310,6 +333,40 @@ def build_image_module(
         expand=True,
         spacing=0,
         vertical_alignment=ft.CrossAxisAlignment.STRETCH,
+    )
+    describe_tab.control.visible = False
+
+    def _tab_style(active: bool) -> ft.ButtonStyle:
+        return ft.ButtonStyle(
+            color=ft.Colors.PRIMARY if active else ft.Colors.ON_SURFACE_VARIANT,
+            mouse_cursor=Cursor.interactive,
+        )
+
+    tab_edit = ft.TextButton("Edição", icon=ft.Icons.TUNE, style=_tab_style(True))
+    tab_desc = ft.TextButton(
+        "Descrição IA", icon=ft.Icons.AUTO_AWESOME_OUTLINED, style=_tab_style(False)
+    )
+
+    def _show_tab(name: str) -> None:
+        if pipeline_running[0]:
+            return  # don't switch mid-run
+        edicao_body.visible = name == "edit"
+        describe_tab.control.visible = name == "describe"
+        tab_edit.style = _tab_style(name == "edit")
+        tab_desc.style = _tab_style(name == "describe")
+        page.update()
+
+    tab_edit.on_click = lambda _e: _show_tab("edit")
+    tab_desc.on_click = lambda _e: _show_tab("describe")
+
+    control = ft.Column(
+        controls=[
+            ft.Row([tab_edit, tab_desc], spacing=Space.xs),
+            hairline(),
+            ft.Stack([edicao_body, describe_tab.control], expand=True),
+        ],
+        expand=True,
+        spacing=Space.sm,
     )
 
     # ------------------------------------------------------------------
