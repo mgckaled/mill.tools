@@ -80,11 +80,10 @@ def build_audio_module(
             # Carrega o primeiro arquivo de áudio da saída no reprodutor.
             for path_str in payload.get("output_paths", []):
                 if Path(path_str).suffix.lower() in _AUDIO_EXTS:
+                    # Always go through set_compare: with source=None it hides the
+                    # A/B selector (resetting any stale state) and just loads.
                     source = _item_meta.get(path_str, {}).get("source_path")
-                    if source:
-                        player.set_compare(source, path_str)
-                    else:
-                        player.load(path_str)
+                    player.set_compare(source, path_str)
                     break
 
     # ------------------------------------------------------------------
