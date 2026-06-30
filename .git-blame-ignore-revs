@@ -1,0 +1,9 @@
+# Commits que só mudam formatação/estilo (sem alterar semântica).
+# `git blame` os ignora, creditando o commit de lógica original por baixo.
+#
+# Ative localmente uma vez (já versionado no repo, mas o git exige opt-in):
+#   git config blame.ignoreRevsFile .git-blame-ignore-revs
+# GitHub/GitLab respeitam este arquivo automaticamente.
+
+# chore: ruff format global do repositório inteiro (jun/2026)
+2cd54fda0e159efbd47002a4d9439d30166fceab
