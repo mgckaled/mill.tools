@@ -59,6 +59,7 @@ def build_image_module(
 
     _last_input_thumb: list[bytes | None] = [None]
     _last_output_path: list[str | None] = [None]
+    _run_outputs: list[str] = []  # image outputs of the current run (for "Criar PDF")
     _run_mode: list[str] = ["edit"]  # "edit" | "describe" — routes pipeline events
 
     preview = build_preview()
@@ -150,6 +151,37 @@ def build_image_module(
     )
     library_btn.visible = False
 
+    def _create_pdf(_e) -> None:
+        from pathlib import Path
+
+        from src.core.document.converter import images_to_pdf
+        from src.utils import DOCUMENT_PROCESSED_DIR
+
+        paths = [Path(p) for p in _run_outputs]
+        if not paths:
+            return
+        try:
+            out = images_to_pdf(paths, DOCUMENT_PROCESSED_DIR, output_name="imagens")
+            page.show_dialog(
+                ft.SnackBar(content=ft.Text(f"PDF criado: {out.name}"), duration=3000)
+            )
+        except Exception as exc:
+            page.show_dialog(
+                ft.SnackBar(
+                    content=ft.Text(f"Falha ao criar PDF: {exc}"),
+                    bgcolor=ft.Colors.ERROR,
+                    duration=3000,
+                )
+            )
+
+    pdf_btn = action_button(
+        "Criar PDF",
+        icon=ft.Icons.PICTURE_AS_PDF_OUTLINED,
+        on_click=_create_pdf,
+        accent=ft.Colors.PRIMARY,
+    )
+    pdf_btn.visible = False
+
     right_panel = ft.Column(
         controls=[
             preview.control,
@@ -179,6 +211,7 @@ def build_image_module(
                 controls=[
                     open_folder_btn,
                     open_file_btn,
+                    pdf_btn,
                     library_btn,
                     ft.Container(expand=True),
                     cancel_btn,
@@ -255,6 +288,9 @@ def build_image_module(
                 _last_output_path[0] = out_path
                 open_file_btn.visible = True
                 library_btn.visible = True
+                if not out_path.endswith(".txt"):
+                    _run_outputs.append(out_path)
+                    pdf_btn.visible = True
             cur_item = p.get("item_idx", 1)
             tot_items = p.get("total_items", 1)
             progress_bar.value = cur_item / max(tot_items, 1)
@@ -298,8 +334,10 @@ def build_image_module(
         preview.reset()
         _last_input_thumb[0] = None
         _last_output_path[0] = None
+        _run_outputs.clear()
         open_file_btn.visible = False
         library_btn.visible = False
+        pdf_btn.visible = False
         form_panel.set_running(True)
         page.update()
         start_image_pipeline(args, bus, cancel_event, pipeline_running)
