@@ -62,6 +62,7 @@ class ImageArgs:
     wm_path: Path | None = None
     wm_position: str = "bottom-right"
     wm_opacity: float = 0.5
+    wm_rotation: int = 0
 
     # border
     border_padding: int = 20

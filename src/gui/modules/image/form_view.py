@@ -358,6 +358,7 @@ def build_image_form(
             wm_path=wm_refs.get_path(),
             wm_position=wm_refs.get_position(),
             wm_opacity=wm_refs.get_opacity(),
+            wm_rotation=wm_refs.get_rotation(),
             # border
             border_padding=border_refs.get_padding(),
             border_color=border_refs.get_color(),

@@ -271,6 +271,7 @@ def _make_process_item(args: ImageArgs) -> Callable:
                     opacity=args.wm_opacity,
                     out_fmt=args.out_fmt,
                     quality=args.out_quality,
+                    rotation=args.wm_rotation,
                 )
 
             case "border":

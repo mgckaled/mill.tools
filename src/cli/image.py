@@ -153,9 +153,19 @@ def add_image_parser(subparsers: argparse._SubParsersAction) -> None:
     _out_fmt_arg(ro)
 
     # ── watermark ─────────────────────────────────────────────────────────────
-    wm = img_sub.add_parser("watermark", help="Add text watermark")
+    wm = img_sub.add_parser("watermark", help="Add text, image or QR watermark")
     wm.add_argument("file", help="Image file or URL")
-    wm.add_argument("--text", default="", help="Watermark text")
+    wm.add_argument(
+        "--mode",
+        default="text",
+        choices=["text", "image", "qr"],
+        dest="wm_mode",
+        help="Watermark mode (default text). qr/text use --text; image uses --image",
+    )
+    wm.add_argument("--text", default="", help="Watermark text or QR payload")
+    wm.add_argument(
+        "--image", default="", dest="wm_image", help="Logo image path for --mode image"
+    )
     wm.add_argument(
         "--color",
         default="#ffffff",
@@ -168,11 +178,25 @@ def add_image_parser(subparsers: argparse._SubParsersAction) -> None:
     wm.add_argument(
         "--position",
         default="bottom-right",
-        choices=["top-left", "top-right", "center", "bottom-left", "bottom-right"],
-        help="Watermark position (default bottom-right)",
+        choices=[
+            "top-left",
+            "top-center",
+            "top-right",
+            "middle-left",
+            "center",
+            "middle-right",
+            "bottom-left",
+            "bottom-center",
+            "bottom-right",
+            "tile",
+        ],
+        help="Watermark position or 'tile' (default bottom-right)",
     )
     wm.add_argument(
         "--opacity", type=float, default=0.5, help="Opacity 0.0–1.0 (default 0.5)"
+    )
+    wm.add_argument(
+        "--rotation", type=int, default=0, help="Rotation in degrees (default 0)"
     )
     _out_fmt_arg(wm)
 
@@ -419,13 +443,14 @@ def run_image_cli(ns: argparse.Namespace) -> None:
         rotate_flip_v=getattr(ns, "flip_v", False),
         rotate_exif_auto=getattr(ns, "exif_auto", False),
         # watermark
-        wm_mode="text",
+        wm_mode=getattr(ns, "wm_mode", "text"),
         wm_text=getattr(ns, "text", ""),
         wm_text_color=getattr(ns, "wm_color", "#ffffff"),
         wm_text_size=getattr(ns, "wm_size", 40),
-        wm_path=None,
+        wm_path=(Path(ns.wm_image) if getattr(ns, "wm_image", "") else None),
         wm_position=getattr(ns, "position", "bottom-right"),
         wm_opacity=getattr(ns, "opacity", 0.5),
+        wm_rotation=getattr(ns, "rotation", 0),
         # border
         border_padding=getattr(ns, "padding", 20),
         border_color=getattr(ns, "border_color", "#000000"),
