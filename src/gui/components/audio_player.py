@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
+import asyncio
 import io
 import subprocess
 import threading
-import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable
@@ -552,7 +552,11 @@ def build_audio_player(page: ft.Page) -> AudioPlayer:
         labels={"original": "Original", "processed": "Processado"},
         columns=2,
     )[0]
-    compare_row = ft.Container(content=compare_grid, visible=False)
+    # Compact, left-aligned — the A/B toggle shouldn't span the whole player.
+    compare_row = ft.Row(
+        controls=[ft.Container(content=compare_grid, width=240)],
+        visible=False,
+    )
 
     # ------------------------------------------------------------------
     # Painel do player (oculto até load)
@@ -671,25 +675,29 @@ def build_audio_player(page: ft.Page) -> AudioPlayer:
         except Exception:
             pass
 
+    async def _poll() -> None:
+        # Runs on the page's UI event loop (via page.run_task), not a daemon
+        # thread: a daemon thread's page.update() is not flushed to the client
+        # until the next UI-thread update, which made the cursor lag behind the
+        # audio. On the loop each update repaints immediately, keeping the
+        # waveform cursor in sync with playback.
+        try:
+            while _timer_running[0]:
+                state = engine.state
+                _update_display()
+                if state not in ("playing", "loading"):
+                    break
+                await asyncio.sleep(_UI_INTERVAL)
+        finally:
+            _timer_running[0] = False
+
     def _start_polling() -> None:
         if _timer_running[0]:
             return
         _timer_running[0] = True
-
-        def _poll() -> None:
-            # try/finally garante reset de _timer_running mesmo com exceção inesperada,
-            # evitando que o guard impeça novos pollings após falha
-            try:
-                while _timer_running[0]:
-                    state = engine.state
-                    _update_display()
-                    if state not in ("playing", "loading"):
-                        break
-                    time.sleep(_UI_INTERVAL)
-            finally:
-                _timer_running[0] = False
-
-        threading.Thread(target=_poll, daemon=True).start()
+        # run_task uses run_coroutine_threadsafe → safe to call from the
+        # PortAudio callback thread (loop restart) as well as UI handlers.
+        page.run_task(_poll)
 
     def _stop_polling() -> None:
         _timer_running[0] = False
