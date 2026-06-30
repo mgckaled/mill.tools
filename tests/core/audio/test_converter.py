@@ -1,4 +1,5 @@
 """Testes de integração — src/core/audio/converter.py."""
+
 from pathlib import Path
 
 import pytest

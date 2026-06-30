@@ -1,4 +1,5 @@
 """Images-to-PDF operation block — output name field."""
+
 from __future__ import annotations
 
 from typing import Callable, NamedTuple

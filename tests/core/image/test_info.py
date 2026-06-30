@@ -1,4 +1,5 @@
 """Testes unitários — src/core/image/info.py (PIL puro, sem ffmpeg)."""
+
 import io
 
 import pytest

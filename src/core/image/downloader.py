@@ -1,4 +1,5 @@
 """Download de imagens via URL (urllib stdlib)."""
+
 from __future__ import annotations
 
 import io

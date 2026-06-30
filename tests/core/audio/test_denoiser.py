@@ -1,4 +1,5 @@
 """Testes de integração — src/core/audio/denoiser.py."""
+
 import pytest
 
 pytestmark = pytest.mark.integration

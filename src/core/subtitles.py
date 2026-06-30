@@ -8,6 +8,7 @@ Format reference:
 - SubRip (.srt): "HH:MM:SS,mmm" timestamps, blank-line separated blocks.
 - WebVTT (.vtt): "WEBVTT" header, "HH:MM:SS.mmm" timestamps, no index.
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -24,6 +25,7 @@ class SubtitleCue:
         end: End time in seconds.
         text: Caption text. Surrounding whitespace is stripped at serialization.
     """
+
     index: int
     start: float
     end: float

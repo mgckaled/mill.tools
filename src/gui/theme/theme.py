@@ -1,4 +1,5 @@
 """Design System — constrói e aplica ft.Theme à página."""
+
 from __future__ import annotations
 
 import flet as ft
@@ -20,7 +21,7 @@ def _color_scheme(dark: bool) -> ft.ColorScheme:
         # superfícies
         # ATENÇÃO: surface → ft.Colors.SURFACE (painéis/cards, NÃO o fundo da janela)
         # O fundo da página é controlado por page.bgcolor via sync_page_bgcolor().
-        surface=c.surface,              # "#1E1E22" → painéis, cards
+        surface=c.surface,  # "#1E1E22" → painéis, cards
         on_surface=c.text,
         on_surface_variant=c.text_secondary,
         # contornos

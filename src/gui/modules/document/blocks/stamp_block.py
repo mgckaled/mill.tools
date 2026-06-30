@@ -1,12 +1,13 @@
 """Stamp operation block — preset selector + custom text."""
+
 from __future__ import annotations
 
 from typing import Callable, NamedTuple
 
 import flet as ft
 
-from src.gui.theme.components import labeled_field, section_label, segmented_selector
-from src.gui.theme.tokens import Layout, Space, Type
+from src.gui.theme.components import section_label, segmented_selector
+from src.gui.theme.tokens import Layout, Space
 
 _PRESETS = ["PAGO", "RASCUNHO", "CONFIDENCIAL", "Personalizado"]
 
@@ -19,7 +20,10 @@ def build_stamp_block(page: ft.Page) -> tuple[ft.Column, StampRefs]:
     """Build the stamp operation block."""
     _preset_get: list[Callable] = []
     preset_grid, _get_preset, _ = segmented_selector(
-        _PRESETS, "RASCUNHO", page, columns=2,
+        _PRESETS,
+        "RASCUNHO",
+        page,
+        columns=2,
     )
     _preset_get.append(_get_preset)
 

@@ -216,6 +216,8 @@ uv run main.py data   convert <arquivo> [--out parquet] | data profile <arquivo>
 - `yt-dlp`, `ffmpeg`/`ffprobe` — verificados em runtime por `check_dependencies()`.
 - **Tesseract** (opcional, OCR) — extra `[ocr]` + binário com packs `por`/`eng`; resolvido no PATH ou em `C:\Program Files\Tesseract-OCR`.
 
+> **Quirk Windows — pacote corrompido após `uv sync` (lock de `.pyd`)**: um `uv sync` interrompido por **lock do Windows** sobre um `.pyd` (binário em uso por um `python.exe`/GUI ainda aberto, ou bloqueio do Defender) pode deixar um pacote **meio-instalado** — o diretório fica só com o `.pyd`/`.pyi`, **sem o `__init__.py`**, e o `RECORD` do `.dist-info` some. Sintoma: `ImportError: cannot import name 'X' from 'pkg' (unknown location)` (o `pkg.__file__` vira `None`, vira namespace vazio). Já visto com `markupsafe` quebrando `jinja2`/`spacy`. **Fix**: `uv run poe repair <pkg>` (= `uv sync --all-extras --all-groups --reinstall-package <pkg>`) — força reinstalação limpa só daquele pacote sem apagar os extras. **Prevenção**: feche a GUI/`python.exe` antes de rodar `uv sync`.
+
 ## LLM pipeline (Formatter / Analyzer / Prompter)
 
 - **Chunking** (`llm_utils.split_text`): formatter usa separadores por frase; analyzer/prompter os padrão. **Bypass de contexto longo** (`bypass_long_context=True` em analyzer/prompter): Gemini (1M) pula chunking sempre; locais conhecidos pulam **até um teto de chars** — `llm_factory.LONG_CONTEXT_LOCAL_BUDGETS` (`gemma3-4b-custom`: 12000 chars ≈ 3K tokens), bem abaixo do `num_ctx`. Acima do teto, volta a fatiar.

@@ -1,4 +1,5 @@
 """Testes unitários — src/core/image/converter.py (PIL puro, sem ffmpeg)."""
+
 import pytest
 from PIL import Image
 

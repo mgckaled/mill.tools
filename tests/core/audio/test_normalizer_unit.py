@@ -1,4 +1,5 @@
 """Testes unitários — normalize_lufs com subprocess mockado (sem ffmpeg)."""
+
 import pytest
 
 # Stderr de referência com JSON loudnorm válido (bytes, como retornado pelo subprocess)
@@ -19,7 +20,9 @@ _LOUDNORM_STDERR = b"""\
 """
 
 
-def _mock_popen(mocker, returncode: int, stdout: list[bytes] = None, stderr: list[bytes] = None):
+def _mock_popen(
+    mocker, returncode: int, stdout: list[bytes] = None, stderr: list[bytes] = None
+):
     """Cria mock de Popen com stdout/stderr controláveis e returncode fixo."""
     proc = mocker.MagicMock()
     proc.stdout = iter(stdout or [])
@@ -38,7 +41,9 @@ def test_normalize_lufs_stats_none_uses_fallback_af(tmp_path, mocker):
     fake_src.write_bytes(b"")
 
     # Pass 1: stderr sem JSON → stats=None → linha 62 (fallback af) é coberta
-    mocker.patch("subprocess.run", return_value=mocker.Mock(returncode=0, stderr=b"", stdout=b""))
+    mocker.patch(
+        "subprocess.run", return_value=mocker.Mock(returncode=0, stderr=b"", stdout=b"")
+    )
     mock_proc = _mock_popen(mocker, returncode=1)
     mocker.patch("subprocess.Popen", return_value=mock_proc)
 
@@ -55,8 +60,13 @@ def test_normalize_lufs_second_pass_nonzero_raises_runtime_error(tmp_path, mocke
     fake_src = tmp_path / "input.wav"
     fake_src.write_bytes(b"")
 
-    mocker.patch("subprocess.run", return_value=mocker.Mock(returncode=0, stderr=_LOUDNORM_STDERR, stdout=b""))
-    mock_proc = _mock_popen(mocker, returncode=1, stderr=[b"encoder error: codec not found\n"])
+    mocker.patch(
+        "subprocess.run",
+        return_value=mocker.Mock(returncode=0, stderr=_LOUDNORM_STDERR, stdout=b""),
+    )
+    mock_proc = _mock_popen(
+        mocker, returncode=1, stderr=[b"encoder error: codec not found\n"]
+    )
     mocker.patch("subprocess.Popen", return_value=mock_proc)
 
     with pytest.raises(RuntimeError, match="ffmpeg loudnorm retornou 1"):
@@ -64,14 +74,19 @@ def test_normalize_lufs_second_pass_nonzero_raises_runtime_error(tmp_path, mocke
 
 
 @pytest.mark.unit
-def test_normalize_lufs_output_missing_after_success_raises_file_not_found(tmp_path, mocker):
+def test_normalize_lufs_output_missing_after_success_raises_file_not_found(
+    tmp_path, mocker
+):
     """FileNotFoundError é lançado se o arquivo de saída não existir após returncode=0."""
     from src.core.audio.normalizer import normalize_lufs
 
     fake_src = tmp_path / "input.wav"
     fake_src.write_bytes(b"")
 
-    mocker.patch("subprocess.run", return_value=mocker.Mock(returncode=0, stderr=_LOUDNORM_STDERR, stdout=b""))
+    mocker.patch(
+        "subprocess.run",
+        return_value=mocker.Mock(returncode=0, stderr=_LOUDNORM_STDERR, stdout=b""),
+    )
     # returncode=0 mas ffmpeg mockado não cria o arquivo no disco
     mock_proc = _mock_popen(mocker, returncode=0)
     mocker.patch("subprocess.Popen", return_value=mock_proc)
@@ -93,7 +108,7 @@ def test_normalize_lufs_malformed_out_time_us_is_silenced(tmp_path, mocker):
         "subprocess.run",
         side_effect=[
             mocker.Mock(returncode=0, stderr=_LOUDNORM_STDERR, stdout=b""),  # pass 1
-            mocker.Mock(returncode=0, stdout=b"3.0\n", stderr=b""),          # ffprobe
+            mocker.Mock(returncode=0, stdout=b"3.0\n", stderr=b""),  # ffprobe
         ],
     )
     # Stdout com valor malformado → int("INVALIDO") → ValueError → silenciado

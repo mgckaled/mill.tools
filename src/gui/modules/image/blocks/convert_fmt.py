@@ -4,15 +4,21 @@ Manages two sub-sections:
 - _fmt_convert_col: segmented selector + quality slider (convert operation)
 - _fmt_manip_col:   dropdown + quality slider (all manipulation operations)
 """
+
 from __future__ import annotations
 
 from typing import Callable, NamedTuple
 
 import flet as ft
 
-from src.gui.theme.components import hairline, section, section_label, segmented_selector
+from src.gui.theme.components import (
+    hairline,
+    section,
+    section_label,
+    segmented_selector,
+)
 from src.gui.theme.components.sliders import labeled_slider
-from src.gui.theme.tokens import Layout, Space, Type
+from src.gui.theme.tokens import Space, Type
 
 _FMT_OPTIONS = ["jpg", "png", "webp", "avif", "tiff", "bmp", "gif", "ico"]
 _LOSSY_FMTS: frozenset[str] = frozenset({"jpg", "webp"})
@@ -47,8 +53,11 @@ def build_fmt_section(page: ft.Page) -> FmtRefs:
         _update_quality_state(fmt)
 
     fmt_grid, _get_fmt, _set_fmt_disabled = segmented_selector(
-        _FMT_OPTIONS, _current_fmt[0], page,
-        on_change=_on_fmt_change, columns=4,
+        _FMT_OPTIONS,
+        _current_fmt[0],
+        page,
+        on_change=_on_fmt_change,
+        columns=4,
     )
 
     quality_col, quality_slider = labeled_slider(
@@ -94,13 +103,20 @@ def build_fmt_section(page: ft.Page) -> FmtRefs:
     _out_fmt_options = ["preserve"] + _FMT_OPTIONS
     _out_fmt_labels = {
         "preserve": "Preservar original",
-        "jpg": "JPG", "png": "PNG", "webp": "WebP",
-        "avif": "AVIF", "tiff": "TIFF",
-        "bmp": "BMP", "gif": "GIF", "ico": "ICO",
+        "jpg": "JPG",
+        "png": "PNG",
+        "webp": "WebP",
+        "avif": "AVIF",
+        "tiff": "TIFF",
+        "bmp": "BMP",
+        "gif": "GIF",
+        "ico": "ICO",
     }
 
     out_fmt_dd = ft.Dropdown(
-        options=[ft.dropdown.Option(key=k, text=_out_fmt_labels[k]) for k in _out_fmt_options],
+        options=[
+            ft.dropdown.Option(key=k, text=_out_fmt_labels[k]) for k in _out_fmt_options
+        ],
         value="preserve",
         border_color=ft.Colors.OUTLINE_VARIANT,
         focused_border_color=ft.Colors.PRIMARY,
@@ -175,7 +191,9 @@ def build_fmt_section(page: ft.Page) -> FmtRefs:
         set_operation=_set_operation,
         set_disabled=_set_disabled,
         get_fmt=_get_fmt,
-        get_quality=lambda: int(quality_slider.value) if not quality_slider.disabled else 90,
+        get_quality=lambda: (
+            int(quality_slider.value) if not quality_slider.disabled else 90
+        ),
         get_out_fmt=lambda: None if _out_fmt_val[0] == "preserve" else _out_fmt_val[0],
         get_out_quality=lambda: int(out_quality_slider.value),
     )

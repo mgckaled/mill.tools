@@ -1,4 +1,5 @@
 """Unit tests for src/core/image/downloader.py (urllib mockado)."""
+
 import io
 from unittest.mock import MagicMock
 
@@ -53,7 +54,9 @@ def test_download_image_uses_url_filename_when_present(mocker, out_dir):
     assert out.name == "banner.jpg"
 
 
-def test_download_image_falls_back_to_image_ext_when_url_lacks_filename(mocker, out_dir):
+def test_download_image_falls_back_to_image_ext_when_url_lacks_filename(
+    mocker, out_dir
+):
     from src.core.image.downloader import download_image
 
     mocker.patch(

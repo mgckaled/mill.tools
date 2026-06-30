@@ -1,4 +1,5 @@
 """PDF-to-images operation block — format + DPI selectors."""
+
 from __future__ import annotations
 
 from typing import Callable, NamedTuple
@@ -18,7 +19,9 @@ def build_pdf_to_images_block(page: ft.Page) -> tuple[ft.Column, PdfToImagesRefs
     """Build the pdf-to-images operation block."""
     _fmt_get: list[Callable] = []
     fmt_grid, _get_fmt, _ = segmented_selector(
-        ["jpg", "png"], "jpg", page,
+        ["jpg", "png"],
+        "jpg",
+        page,
         labels={"jpg": "JPG", "png": "PNG"},
         columns=2,
     )
@@ -26,7 +29,9 @@ def build_pdf_to_images_block(page: ft.Page) -> tuple[ft.Column, PdfToImagesRefs
 
     _dpi_get: list[Callable] = []
     dpi_grid, _get_dpi, _ = segmented_selector(
-        ["72", "96", "150", "300"], "150", page,
+        ["72", "96", "150", "300"],
+        "150",
+        page,
         labels={"72": "72 dpi", "96": "96 dpi", "150": "150 dpi", "300": "300 dpi"},
         columns=2,
     )
@@ -39,8 +44,11 @@ def build_pdf_to_images_block(page: ft.Page) -> tuple[ft.Column, PdfToImagesRefs
             section_label("Formato"),
             fmt_grid,
             ft.Row(
-                [section_label("Resolução (DPI)"), ft.Container(expand=True),
-                 help_icon_for("document.dpi", page)],
+                [
+                    section_label("Resolução (DPI)"),
+                    ft.Container(expand=True),
+                    help_icon_for("document.dpi", page),
+                ],
                 vertical_alignment=ft.CrossAxisAlignment.CENTER,
             ),
             dpi_grid,

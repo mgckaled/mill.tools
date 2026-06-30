@@ -1,5 +1,4 @@
 """Unit tests for src/formatter.py."""
-from pathlib import Path
 
 import pytest
 
@@ -18,19 +17,25 @@ def _fake_llm(*responses: str):
     """Build a GenericFakeChatModel that yields the given responses in order."""
     from langchain_core.language_models.fake_chat_models import GenericFakeChatModel
     from langchain_core.messages import AIMessage
-    return GenericFakeChatModel(messages=iter([AIMessage(content=r) for r in responses]))
+
+    return GenericFakeChatModel(
+        messages=iter([AIMessage(content=r) for r in responses])
+    )
 
 
 # ── _split_for_format ────────────────────────────────────────────────────────
 
+
 def test_split_for_format_short_text_single_chunk():
     from src.formatter import _split_for_format
+
     chunks = _split_for_format("Short transcription. Only one chunk.")
     assert chunks == ["Short transcription. Only one chunk."]
 
 
 def test_split_for_format_long_text_multiple_chunks():
     from src.formatter import FORMAT_CHUNK_SIZE, _split_for_format
+
     long_text = "Sentence ends here. " * 1000  # ~20000 chars
     chunks = _split_for_format(long_text)
     assert len(chunks) > 1
@@ -39,14 +44,17 @@ def test_split_for_format_long_text_multiple_chunks():
 
 # ── format_transcription ─────────────────────────────────────────────────────
 
+
 def test_format_transcription_missing_file_raises(tmp_path):
     from src.formatter import format_transcription
+
     with pytest.raises(FileNotFoundError):
         format_transcription(tmp_path / "missing.txt")
 
 
 def test_format_transcription_empty_body_returns_none(tmp_path, mocker):
     from src import formatter
+
     mocker.patch.object(formatter, "make_llm")  # never called
     src = tmp_path / "empty.txt"
     src.write_text(_HEADER + "\n   \n", encoding="utf-8")
@@ -56,10 +64,12 @@ def test_format_transcription_empty_body_returns_none(tmp_path, mocker):
 
 def test_format_transcription_single_chunk_writes_back(tmp_path, mocker):
     from src import formatter
+
     src = tmp_path / "t.txt"
     src.write_text(_HEADER + "\n\nfrase um. frase dois. frase tres.", encoding="utf-8")
     mocker.patch.object(
-        formatter, "make_llm",
+        formatter,
+        "make_llm",
         return_value=_fake_llm("frase um.\n\nfrase dois.\n\nfrase tres."),
     )
     out = formatter.format_transcription(src)
@@ -72,11 +82,13 @@ def test_format_transcription_single_chunk_writes_back(tmp_path, mocker):
 
 def test_format_transcription_strips_response_whitespace(tmp_path, mocker):
     from src import formatter
+
     src = tmp_path / "t.txt"
     src.write_text(_HEADER + "\n\nhello world.", encoding="utf-8")
     # LLM returns surrounding whitespace — formatter should strip
     mocker.patch.object(
-        formatter, "make_llm",
+        formatter,
+        "make_llm",
         return_value=_fake_llm("   \n\nhello world.\n\n   "),
     )
     out = formatter.format_transcription(src)
@@ -86,10 +98,12 @@ def test_format_transcription_strips_response_whitespace(tmp_path, mocker):
 
 def test_format_transcription_no_header_just_body(tmp_path, mocker):
     from src import formatter
+
     src = tmp_path / "t.txt"
     src.write_text("just body without separator", encoding="utf-8")
     mocker.patch.object(
-        formatter, "make_llm",
+        formatter,
+        "make_llm",
         return_value=_fake_llm("formatted body"),
     )
     out = formatter.format_transcription(src)
@@ -100,11 +114,13 @@ def test_format_transcription_no_header_just_body(tmp_path, mocker):
 
 def test_format_transcription_empty_llm_response_keeps_body(tmp_path, mocker):
     from src import formatter
+
     src = tmp_path / "t.txt"
     body = "original body content."
     src.write_text(_HEADER + "\n\n" + body, encoding="utf-8")
     mocker.patch.object(
-        formatter, "make_llm",
+        formatter,
+        "make_llm",
         return_value=_fake_llm(""),
     )
     out = formatter.format_transcription(src)
@@ -114,12 +130,15 @@ def test_format_transcription_empty_llm_response_keeps_body(tmp_path, mocker):
 
 def test_format_transcription_emits_lifecycle_events(tmp_path, mocker):
     from src import formatter
+
     src = tmp_path / "t.txt"
     src.write_text(_HEADER + "\n\nhello.", encoding="utf-8")
     mocker.patch.object(formatter, "make_llm", return_value=_fake_llm("hello."))
 
     events: list[tuple[str, str, dict]] = []
-    formatter.format_transcription(src, on_event=lambda t, s, p: events.append((t, s, p)))
+    formatter.format_transcription(
+        src, on_event=lambda t, s, p: events.append((t, s, p))
+    )
 
     types = [e[0] for e in events]
     assert "format_started" in types
@@ -132,13 +151,15 @@ def test_format_transcription_emits_lifecycle_events(tmp_path, mocker):
 
 def test_format_transcription_multiple_chunks_joined_with_blank_line(tmp_path, mocker):
     from src import formatter
+
     src = tmp_path / "t.txt"
     # Build a body large enough to require >1 chunks
     long_body = "Sentence ends here. " * 500  # ~10000 chars > 4500
     src.write_text(_HEADER + "\n\n" + long_body, encoding="utf-8")
     # Provide enough fake responses for whatever chunks the splitter produces
     mocker.patch.object(
-        formatter, "make_llm",
+        formatter,
+        "make_llm",
         return_value=_fake_llm(*["chunk_n"] * 20),
     )
     out = formatter.format_transcription(src)

@@ -1,11 +1,17 @@
 """Watermark operation block — text, opacity, position."""
+
 from __future__ import annotations
 
 from typing import Callable, NamedTuple
 
 import flet as ft
 
-from src.gui.theme.components import labeled_field, section_label, segmented_selector, slider_row
+from src.gui.theme.components import (
+    labeled_field,
+    section_label,
+    segmented_selector,
+    slider_row,
+)
 from src.gui.theme.tokens import Layout, Space
 
 
@@ -32,7 +38,9 @@ def build_watermark_block(page: ft.Page) -> tuple[ft.Column, WatermarkRefs]:
 
     opacity_col = slider_row(
         "Opacidade",
-        0.3, 0.1, 0.9,
+        0.3,
+        0.1,
+        0.9,
         divisions=8,
         on_change=_on_opacity,
     )

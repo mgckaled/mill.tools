@@ -1,11 +1,12 @@
 """Compress operation block — image quality slider."""
+
 from __future__ import annotations
 
 from typing import Callable, NamedTuple
 
 import flet as ft
 
-from src.gui.theme.components import help_icon_for, section_label, slider_row
+from src.gui.theme.components import slider_row
 from src.gui.theme.tokens import Space
 
 
@@ -22,7 +23,9 @@ def build_compress_block(page: ft.Page) -> tuple[ft.Column, CompressRefs]:
 
     quality_col = slider_row(
         "Qualidade da imagem",
-        75, 50, 95,
+        75,
+        50,
+        95,
         divisions=9,
         on_change=_on_change,
         help_key="document.image_quality",

@@ -1,4 +1,5 @@
 """Fábricas de feedback visual: log, títulos, cards de resumo, spinner."""
+
 from __future__ import annotations
 
 import math
@@ -102,7 +103,9 @@ def summary_card(content: ft.Control) -> ft.Container:
         ),
         border_radius=Radius.lg,
         padding=ft.Padding(
-            left=Space.lg, right=Space.lg,
-            top=Space.md, bottom=Space.md,
+            left=Space.lg,
+            right=Space.lg,
+            top=Space.md,
+            bottom=Space.md,
         ),
     )

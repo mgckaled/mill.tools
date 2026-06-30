@@ -76,7 +76,8 @@ class LogEventHandler(logging.Handler):
             if any(msg.startswith(p) for p in self._SUPPRESSED_PREFIXES):
                 return
             self._bus.emit(
-                "log", "system",
+                "log",
+                "system",
                 {"message": msg, "level": record.levelname},
                 module_id=self._module_id,
             )

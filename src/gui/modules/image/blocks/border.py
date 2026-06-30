@@ -1,4 +1,5 @@
 """Border operation block for the image module."""
+
 from __future__ import annotations
 
 from typing import Callable, NamedTuple
@@ -51,7 +52,11 @@ def build_border_block(page: ft.Page) -> tuple[ft.Column, BorderRefs]:
         spacing=Space.sm,
         controls=[
             ft.Row(
-                [section_label("Borda"), ft.Container(expand=True), help_icon_for("image.border", page)],
+                [
+                    section_label("Borda"),
+                    ft.Container(expand=True),
+                    help_icon_for("image.border", page),
+                ],
                 vertical_alignment=ft.CrossAxisAlignment.CENTER,
             ),
             pad_col,

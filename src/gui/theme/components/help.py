@@ -6,6 +6,7 @@ Ponto único de replicação para todos os módulos da GUI:
 
 Importar sempre via: from src.gui.theme.components import help_icon_for
 """
+
 from __future__ import annotations
 
 import flet as ft
@@ -33,17 +34,21 @@ def _make_tooltip(message: str, has_long: bool = False) -> ft.Tooltip:
                 top=ft.BorderSide(1, Color.dark.outline_variant),
                 bottom=ft.BorderSide(1, Color.dark.outline_variant),
             ),
-            shadows=[ft.BoxShadow(
-                blur_radius=10,
-                spread_radius=0,
-                offset=ft.Offset(0, 4),
-                color=ft.Colors.with_opacity(0.35, ft.Colors.BLACK),
-            )],
+            shadows=[
+                ft.BoxShadow(
+                    blur_radius=10,
+                    spread_radius=0,
+                    offset=ft.Offset(0, 4),
+                    color=ft.Colors.with_opacity(0.35, ft.Colors.BLACK),
+                )
+            ],
         ),
         size_constraints=ft.BoxConstraints(max_width=_TOOLTIP_MAX_WIDTH),
         padding=ft.Padding(
-            left=Space.lg, right=Space.lg,
-            top=Space.sm, bottom=Space.sm,
+            left=Space.lg,
+            right=Space.lg,
+            top=Space.sm,
+            bottom=Space.sm,
         ),
         text_style=ft.TextStyle(
             color=ft.Colors.ON_SURFACE,
@@ -63,7 +68,9 @@ def help_icon(
 ) -> ft.Container:
     """ⓘ com tooltip (short) no hover. Se `long` e `page`, clique abre modal detalhado."""
     has_long = long is not None and page is not None
-    icon = ft.Icon(ft.Icons.INFO_OUTLINED, size=size, color=ft.Colors.ON_SURFACE_VARIANT)
+    icon = ft.Icon(
+        ft.Icons.INFO_OUTLINED, size=size, color=ft.Colors.ON_SURFACE_VARIANT
+    )
     box = ft.Container(
         content=icon,
         tooltip=_make_tooltip(short, has_long=has_long),
@@ -72,15 +79,20 @@ def help_icon(
     )
 
     def _hover(e: ft.HoverEvent) -> None:
-        icon.color = ft.Colors.PRIMARY if e.data == "true" else ft.Colors.ON_SURFACE_VARIANT
+        icon.color = (
+            ft.Colors.PRIMARY if e.data == "true" else ft.Colors.ON_SURFACE_VARIANT
+        )
         icon.update()
 
     box.on_hover = _hover
 
     if has_long:
+
         def _open(_e) -> None:
             dlg = ft.AlertDialog(
-                title=ft.Text(short[:60], size=Type.body.size, weight=ft.FontWeight.W_600),
+                title=ft.Text(
+                    short[:60], size=Type.body.size, weight=ft.FontWeight.W_600
+                ),
                 content=ft.Container(
                     content=ft.Text(long, selectable=True),
                     width=420,

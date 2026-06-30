@@ -19,18 +19,18 @@ from src.gui.theme.tokens import Color, Radius, Space, Type
 # Constantes
 # ---------------------------------------------------------------------------
 
-_SAMPLERATE  = 44100
-_CHANNELS    = 2
-_DTYPE       = "float32"
-_UI_INTERVAL = 0.2     # segundos entre atualizações de UI durante reprodução
-_WF_W        = 600     # largura do waveform em pixels (resolução interna da imagem PNG)
-_WF_H        = 120     # altura do waveform em pixels
-_WF_SR_FAST  = 500     # Hz do decode rápido (mono) — suficiente para 600px (≥50 amostras/pixel em 1 min)
+_SAMPLERATE = 44100
+_CHANNELS = 2
+_DTYPE = "float32"
+_UI_INTERVAL = 0.2  # segundos entre atualizações de UI durante reprodução
+_WF_W = 600  # largura do waveform em pixels (resolução interna da imagem PNG)
+_WF_H = 120  # altura do waveform em pixels
+_WF_SR_FAST = 500  # Hz do decode rápido (mono) — suficiente para 600px (≥50 amostras/pixel em 1 min)
 
 # Color.dark.primary = #F4A63C convertido para RGBA
-_WF_PLAYED   = (244, 166,  60, 210)
-_WF_UNPLAYED = ( 80,  80,  95, 150)
-_WF_CURSOR   = (255, 255, 255, 200)
+_WF_PLAYED = (244, 166, 60, 210)
+_WF_UNPLAYED = (80, 80, 95, 150)
+_WF_CURSOR = (255, 255, 255, 200)
 
 # 1×1 px PNG transparente — src aceita bytes diretamente em Flet 0.85
 _BLANK_PNG = (
@@ -44,6 +44,7 @@ _BLANK_PNG = (
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def _fmt_s(seconds: float) -> str:
     """Formata segundos em mm:ss."""
     s = max(0, int(seconds))
@@ -56,12 +57,18 @@ def _decode_via_ffmpeg(path: str) -> np.ndarray:
     Retorna array (n_samples, 2) a 44100 Hz estéreo — usado para playback.
     """
     cmd = [
-        "ffmpeg", "-i", path,
-        "-f", "f32le",
-        "-ar", str(_SAMPLERATE),
-        "-ac", str(_CHANNELS),
+        "ffmpeg",
+        "-i",
+        path,
+        "-f",
+        "f32le",
+        "-ar",
+        str(_SAMPLERATE),
+        "-ac",
+        str(_CHANNELS),
         "pipe:1",
-        "-loglevel", "quiet",
+        "-loglevel",
+        "quiet",
     ]
     result = subprocess.run(cmd, capture_output=True)
     raw = result.stdout
@@ -77,12 +84,18 @@ def _decode_waveform_fast(path: str) -> np.ndarray:
     Retorna array (n_samples, 1) — não usado para playback.
     """
     cmd = [
-        "ffmpeg", "-i", path,
-        "-f", "f32le",
-        "-ar", str(_WF_SR_FAST),
-        "-ac", "1",
+        "ffmpeg",
+        "-i",
+        path,
+        "-f",
+        "f32le",
+        "-ar",
+        str(_WF_SR_FAST),
+        "-ac",
+        "1",
         "pipe:1",
-        "-loglevel", "quiet",
+        "-loglevel",
+        "quiet",
     ]
     result = subprocess.run(cmd, capture_output=True)
     raw = result.stdout
@@ -99,7 +112,7 @@ def _compute_waveform(data: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
     Ambos são calculados uma vez no carregamento e reutilizados em cada tick.
     """
     W, H = _WF_W, _WF_H
-    played   = np.zeros((H, W, 4), dtype=np.uint8)
+    played = np.zeros((H, W, 4), dtype=np.uint8)
     unplayed = np.zeros((H, W, 4), dtype=np.uint8)
 
     n = len(data)
@@ -122,7 +135,7 @@ def _compute_waveform(data: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
     for x in range(n_chunks):
         h = max(2, int(amps[x] * (cy - 2)))
         y0, y1 = cy - h, cy + h
-        played[y0:y1, x]   = _WF_PLAYED
+        played[y0:y1, x] = _WF_PLAYED
         unplayed[y0:y1, x] = _WF_UNPLAYED
 
     return played, unplayed
@@ -131,6 +144,7 @@ def _compute_waveform(data: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
 def _encode_png(arr: np.ndarray) -> bytes:
     """Codifica array RGBA como PNG sem compressão (rápido — ~1ms para _WF_W×_WF_H)."""
     from PIL import Image
+
     buf = io.BytesIO()
     Image.fromarray(arr, "RGBA").save(buf, "PNG", compress_level=0)
     return buf.getvalue()
@@ -140,6 +154,7 @@ def _encode_png(arr: np.ndarray) -> bytes:
 # Motor de reprodução
 # ---------------------------------------------------------------------------
 
+
 class _AudioEngine:
     """Motor de playback baseado em sounddevice.
 
@@ -148,14 +163,14 @@ class _AudioEngine:
     """
 
     def __init__(self) -> None:
-        self._data:   np.ndarray | None = None
-        self._sr:     int  = _SAMPLERATE
-        self._frame:  int  = 0
-        self._stream        = None
+        self._data: np.ndarray | None = None
+        self._sr: int = _SAMPLERATE
+        self._frame: int = 0
+        self._stream = None
         self._volume: float = 1.0
-        self._muted:  bool  = False
-        self.loop:    bool  = False
-        self.state:   str   = "stopped"   # stopped | loading | playing | paused
+        self._muted: bool = False
+        self.loop: bool = False
+        self.state: str = "stopped"  # stopped | loading | playing | paused
         self.on_complete: Callable | None = None
 
     # ------------------------------------------------------------------
@@ -189,10 +204,10 @@ class _AudioEngine:
         def _worker() -> None:
             try:
                 data = _decode_via_ffmpeg(path)
-                self._data  = data
-                self._sr    = _SAMPLERATE
+                self._data = data
+                self._sr = _SAMPLERATE
                 self._frame = 0
-                self.state  = "stopped"
+                self.state = "stopped"
             except Exception:
                 self.state = "stopped"
             finally:
@@ -277,8 +292,8 @@ class _AudioEngine:
         engine = self
 
         def _callback(outdata: np.ndarray, frames: int, _t, _s) -> None:
-            start  = engine._frame
-            end    = min(start + frames, len(engine._data))
+            start = engine._frame
+            end = min(start + frames, len(engine._data))
             actual = end - start
 
             if actual <= 0:
@@ -289,7 +304,7 @@ class _AudioEngine:
                 raise sd.CallbackStop()
 
             chunk = engine._data[start:end]
-            vol   = engine.effective_volume
+            vol = engine.effective_volume
             outdata[:actual] = chunk * vol if vol != 1.0 else chunk
             engine._frame = end
 
@@ -313,6 +328,7 @@ class _AudioEngine:
 # Componente de UI
 # ---------------------------------------------------------------------------
 
+
 @dataclass
 class AudioPlayer:
     """Reprodutor de áudio com controle visual play/pause/seek/skip/loop/volume.
@@ -322,6 +338,7 @@ class AudioPlayer:
                  placeholder até o primeiro load().
         load: Função que recebe caminho de arquivo e inicia o carregamento.
     """
+
     control: ft.Control
     load: Callable[[str], None]
 
@@ -341,10 +358,10 @@ def build_audio_player(page: ft.Page) -> AudioPlayer:
         page: Página Flet (usada em page.update() nos callbacks de UI).
     """
     engine = _AudioEngine()
-    _timer_running:   list[bool]              = [False]
-    _wf_played:       list[np.ndarray | None] = [None]
-    _wf_unplayed:     list[np.ndarray | None] = [None]
-    _load_generation: list[int]               = [0]   # descarta waveform de carga anterior
+    _timer_running: list[bool] = [False]
+    _wf_played: list[np.ndarray | None] = [None]
+    _wf_unplayed: list[np.ndarray | None] = [None]
+    _load_generation: list[int] = [0]  # descarta waveform de carga anterior
 
     # ------------------------------------------------------------------
     # Widgets de informação
@@ -376,8 +393,11 @@ def build_audio_player(page: ft.Page) -> AudioPlayer:
     )
 
     loading_ring = ft.ProgressRing(
-        width=14, height=14, stroke_width=2,
-        color=ft.Colors.PRIMARY, visible=False,
+        width=14,
+        height=14,
+        stroke_width=2,
+        color=ft.Colors.PRIMARY,
+        visible=False,
     )
 
     # ------------------------------------------------------------------
@@ -395,7 +415,7 @@ def build_audio_player(page: ft.Page) -> AudioPlayer:
 
     waveform_gd = ft.GestureDetector(
         content=waveform_img,
-        on_tap_down=None,   # atribuído abaixo após definir o handler
+        on_tap_down=None,  # atribuído abaixo após definir o handler
         expand=True,
     )
 
@@ -458,14 +478,20 @@ def build_audio_player(page: ft.Page) -> AudioPlayer:
         selected=False,
         icon_size=22,
         style=ft.ButtonStyle(
-            color={"selected": ft.Colors.ON_SURFACE_VARIANT, "": ft.Colors.ON_SURFACE_VARIANT},
+            color={
+                "selected": ft.Colors.ON_SURFACE_VARIANT,
+                "": ft.Colors.ON_SURFACE_VARIANT,
+            },
         ),
         tooltip="Mudo",
     )
 
     vol_slider = ft.Slider(
-        min=0.0, max=1.0, value=1.0,
-        width=110, height=24,
+        min=0.0,
+        max=1.0,
+        value=1.0,
+        width=110,
+        height=24,
         active_color=ft.Colors.PRIMARY,
         inactive_color=ft.Colors.OUTLINE_VARIANT,
         thumb_color=ft.Colors.PRIMARY,
@@ -481,7 +507,11 @@ def build_audio_player(page: ft.Page) -> AudioPlayer:
     placeholder_ctr = ft.Container(
         content=ft.Column(
             controls=[
-                ft.Icon(ft.Icons.AUDIO_FILE_OUTLINED, size=36, color=ft.Colors.OUTLINE_VARIANT),
+                ft.Icon(
+                    ft.Icons.AUDIO_FILE_OUTLINED,
+                    size=36,
+                    color=ft.Colors.OUTLINE_VARIANT,
+                ),
                 ft.Text(
                     "Aguardando arquivo de áudio...",
                     size=Type.input.size,
@@ -508,7 +538,11 @@ def build_audio_player(page: ft.Page) -> AudioPlayer:
                 # Linha 1: ícone + nome do arquivo + loading ring + info
                 ft.Row(
                     controls=[
-                        ft.Icon(ft.Icons.AUDIO_FILE_OUTLINED, size=14, color=ft.Colors.PRIMARY),
+                        ft.Icon(
+                            ft.Icons.AUDIO_FILE_OUTLINED,
+                            size=14,
+                            color=ft.Colors.PRIMARY,
+                        ),
                         file_label,
                         loading_ring,
                         info_label,
@@ -571,9 +605,9 @@ def build_audio_player(page: ft.Page) -> AudioPlayer:
         """Gera PNG do waveform com cursor na posição pos_s."""
         if _wf_played[0] is None:
             return _BLANK_PNG
-        W   = _WF_W
+        W = _WF_W
         dur = engine.duration_s
-        cx  = min(int(pos_s / dur * W), W - 1) if dur > 0 else 0
+        cx = min(int(pos_s / dur * W), W - 1) if dur > 0 else 0
 
         img = _wf_unplayed[0].copy()
         if cx > 0:
@@ -589,13 +623,13 @@ def build_audio_player(page: ft.Page) -> AudioPlayer:
 
     def _update_display() -> None:
         """Atualiza ícone play/pause, label de tempo e waveform."""
-        pos   = engine.position_s
-        dur   = engine.duration_s
+        pos = engine.position_s
+        dur = engine.duration_s
         state = engine.state
 
         play_btn.selected = state == "playing"
-        play_btn.tooltip  = "Pausar" if state == "playing" else "Reproduzir"
-        time_label.value  = f"{_fmt_s(pos)} / {_fmt_s(dur)}"
+        play_btn.tooltip = "Pausar" if state == "playing" else "Reproduzir"
+        time_label.value = f"{_fmt_s(pos)} / {_fmt_s(dur)}"
 
         # Waveform isolado em try/except — exceção aqui não mata o polling
         if _wf_played[0] is not None:
@@ -693,6 +727,7 @@ def build_audio_player(page: ft.Page) -> AudioPlayer:
             def _restart() -> None:
                 engine.play()
                 _start_polling()
+
             threading.Thread(target=_restart, daemon=True).start()
         else:
             _stop_polling()
@@ -702,20 +737,20 @@ def build_audio_player(page: ft.Page) -> AudioPlayer:
                 pass
             time_label.value = f"0:00 / {_fmt_s(engine.duration_s)}"
             play_btn.selected = False
-            play_btn.tooltip  = "Reproduzir"
+            play_btn.tooltip = "Reproduzir"
             try:
                 page.update()
             except Exception:
                 pass
 
-    play_btn.on_click       = _on_play_click
-    skip_back_btn.on_click  = _on_skip_back
-    skip_fwd_btn.on_click   = _on_skip_fwd
-    loop_btn.on_click       = _on_loop_click
-    mute_btn.on_click       = _on_mute_click
-    vol_slider.on_change    = _on_vol_change
+    play_btn.on_click = _on_play_click
+    skip_back_btn.on_click = _on_skip_back
+    skip_fwd_btn.on_click = _on_skip_fwd
+    loop_btn.on_click = _on_loop_click
+    mute_btn.on_click = _on_mute_click
+    vol_slider.on_change = _on_vol_change
     waveform_gd.on_tap_down = _on_waveform_tap
-    engine.on_complete      = _on_complete
+    engine.on_complete = _on_complete
 
     # ------------------------------------------------------------------
     # Função pública de carga
@@ -734,21 +769,21 @@ def build_audio_player(page: ft.Page) -> AudioPlayer:
         p = Path(path)
 
         # Reset de UI para estado loading
-        file_label.value       = p.name
-        info_label.value       = ""
-        time_label.value       = "0:00 / 0:00"
-        play_btn.selected      = False
-        play_btn.disabled      = True
+        file_label.value = p.name
+        info_label.value = ""
+        time_label.value = "0:00 / 0:00"
+        play_btn.selected = False
+        play_btn.disabled = True
         skip_back_btn.disabled = True
-        skip_fwd_btn.disabled  = True
-        loading_ring.visible   = True
+        skip_fwd_btn.disabled = True
+        loading_ring.visible = True
         waveform_img.src = _BLANK_PNG
-        _wf_played[0]          = None
-        _wf_unplayed[0]        = None
+        _wf_played[0] = None
+        _wf_unplayed[0] = None
 
         # Transição placeholder → player
         placeholder_ctr.visible = False
-        player_inner.visible    = True
+        player_inner.visible = True
 
         try:
             page.update()
@@ -764,8 +799,8 @@ def build_audio_player(page: ft.Page) -> AudioPlayer:
                 played, unplayed = _compute_waveform(wf_data)
                 if _load_generation[0] != gen:
                     return
-                _wf_played[0]          = played
-                _wf_unplayed[0]        = unplayed
+                _wf_played[0] = played
+                _wf_unplayed[0] = unplayed
                 waveform_img.src = _render_wf(0.0)
                 try:
                     page.update()
@@ -778,13 +813,13 @@ def build_audio_player(page: ft.Page) -> AudioPlayer:
             """Chamado quando o decode completo (44100 Hz estéreo) termina."""
             if _load_generation[0] != gen:
                 return
-            dur    = engine.duration_s
+            dur = engine.duration_s
             sr_str = f"{_SAMPLERATE // 1000}.{(_SAMPLERATE % 1000) // 100}kHz"
-            info_label.value       = f"{_fmt_s(dur)} · {sr_str} · Stereo"
-            play_btn.disabled      = False
+            info_label.value = f"{_fmt_s(dur)} · {sr_str} · Stereo"
+            play_btn.disabled = False
             skip_back_btn.disabled = False
-            skip_fwd_btn.disabled  = False
-            loading_ring.visible   = False
+            skip_fwd_btn.disabled = False
+            loading_ring.visible = False
             try:
                 page.update()
             except Exception:

@@ -76,19 +76,23 @@ def build_audio_module(
         output_paths: list[str] = payload.get("output_paths", [])
 
         if not output_paths:
-            results_col.controls.append(ft.Text(
-                "Nenhum arquivo gerado.",
-                color=ft.Colors.ON_SURFACE_VARIANT,
-                italic=True,
-            ))
+            results_col.controls.append(
+                ft.Text(
+                    "Nenhum arquivo gerado.",
+                    color=ft.Colors.ON_SURFACE_VARIANT,
+                    italic=True,
+                )
+            )
             return
 
-        results_col.controls.append(ft.Text(
-            f"Arquivo(s) gerado(s): {len(output_paths)}",
-            size=Type.input.size,
-            weight=ft.FontWeight.W_500,
-            color=ft.Colors.ON_SURFACE,
-        ))
+        results_col.controls.append(
+            ft.Text(
+                f"Arquivo(s) gerado(s): {len(output_paths)}",
+                size=Type.input.size,
+                weight=ft.FontWeight.W_500,
+                color=ft.Colors.ON_SURFACE,
+            )
+        )
 
         for path_str in output_paths:
             p = Path(path_str)
@@ -97,18 +101,24 @@ def build_audio_module(
     def _make_output_card(p: Path) -> ft.Control:
         suffix = p.suffix.lower()
         is_audio = suffix in {".mp3", ".wav", ".flac", ".ogg", ".opus", ".aac", ".m4a"}
-        icon = ft.Icons.AUDIO_FILE_OUTLINED if is_audio else ft.Icons.VIDEO_FILE_OUTLINED
+        icon = (
+            ft.Icons.AUDIO_FILE_OUTLINED if is_audio else ft.Icons.VIDEO_FILE_OUTLINED
+        )
 
         extra: list[ft.Control] = []
         if is_audio and nav:
+
             def _transcribe(_e, _path=str(p)) -> None:
                 nav[0]("transcription", {"file": _path})
-            extra.append(action_button(
-                "Transcrever",
-                icon=ft.Icons.SUBTITLES_OUTLINED,
-                on_click=_transcribe,
-                accent=Color.log.ok,
-            ))
+
+            extra.append(
+                action_button(
+                    "Transcrever",
+                    icon=ft.Icons.SUBTITLES_OUTLINED,
+                    on_click=_transcribe,
+                    accent=Color.log.ok,
+                )
+            )
 
         return output_card(p, icon=icon, extra_actions=extra)
 

@@ -1,8 +1,6 @@
 """Tests for CLIEventBus event dispatch."""
 
 import pytest
-from io import StringIO
-from unittest.mock import patch
 from src.cli.bus import CLIEventBus
 
 
@@ -11,6 +9,7 @@ def _make_bus() -> CLIEventBus:
 
 
 # ── progress_start / progress_update / task_done ─────────────────────────────
+
 
 @pytest.mark.unit
 def test_progress_start_creates_bar():
@@ -42,6 +41,7 @@ def test_task_done_closes_bar(capsys):
 @pytest.mark.unit
 def test_task_error_closes_bar_and_logs(capsys, caplog):
     import logging
+
     bus = _make_bus()
     bus.emit("progress_start")
     with caplog.at_level(logging.ERROR, logger="src.cli.bus"):
@@ -52,20 +52,25 @@ def test_task_error_closes_bar_and_logs(capsys, caplog):
 
 # ── queue_progress ────────────────────────────────────────────────────────────
 
+
 @pytest.mark.unit
 def test_queue_progress_writes_label(capsys):
     bus = _make_bus()
-    bus.emit("queue_progress", payload={
-        "current_item": 2,
-        "total_items": 5,
-        "item_name": "video.mp4",
-    })
+    bus.emit(
+        "queue_progress",
+        payload={
+            "current_item": 2,
+            "total_items": 5,
+            "item_name": "video.mp4",
+        },
+    )
     out = capsys.readouterr().out
     assert "2/5" in out
     assert "video.mp4" in out
 
 
 # ── log ───────────────────────────────────────────────────────────────────────
+
 
 @pytest.mark.unit
 def test_log_non_mutable_writes_line(capsys):
@@ -95,15 +100,19 @@ def test_mutable_followed_by_non_mutable_adds_newline(capsys):
 
 # ── op_start / op_done ────────────────────────────────────────────────────────
 
+
 @pytest.mark.unit
 def test_audio_op_start_writes_operation(capsys):
     bus = _make_bus()
-    bus.emit("audio_op_start", payload={
-        "operation": "convert",
-        "item_name": "audio.wav",
-        "item_idx": 1,
-        "total": 3,
-    })
+    bus.emit(
+        "audio_op_start",
+        payload={
+            "operation": "convert",
+            "item_name": "audio.wav",
+            "item_idx": 1,
+            "total": 3,
+        },
+    )
     out = capsys.readouterr().out
     assert "convert" in out
     assert "audio.wav" in out
@@ -112,19 +121,23 @@ def test_audio_op_start_writes_operation(capsys):
 @pytest.mark.unit
 def test_audio_op_done_writes_elapsed(capsys):
     bus = _make_bus()
-    bus.emit("audio_op_done", payload={
-        "output_path": "/out/audio.mp3",
-        "elapsed": "2.4s",
-        "item_idx": 1,
-        "total": 1,
-        "src_size_bytes": 1024 * 100,
-        "out_size_bytes": 1024 * 90,
-    })
+    bus.emit(
+        "audio_op_done",
+        payload={
+            "output_path": "/out/audio.mp3",
+            "elapsed": "2.4s",
+            "item_idx": 1,
+            "total": 1,
+            "src_size_bytes": 1024 * 100,
+            "out_size_bytes": 1024 * 90,
+        },
+    )
     out = capsys.readouterr().out
     assert "2.4s" in out
 
 
 # ── ANSI stripping ────────────────────────────────────────────────────────────
+
 
 @pytest.mark.unit
 def test_log_strips_ansi_codes(capsys):

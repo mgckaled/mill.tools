@@ -1,4 +1,5 @@
 """Extract-text operation block — no extra parameters."""
+
 from __future__ import annotations
 
 import flet as ft

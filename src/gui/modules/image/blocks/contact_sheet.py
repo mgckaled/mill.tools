@@ -1,4 +1,5 @@
 """Contact sheet operation block for the image module."""
+
 from __future__ import annotations
 
 from typing import Callable, NamedTuple
@@ -23,15 +24,27 @@ def build_contact_sheet_block(page: ft.Page) -> tuple[ft.Column, ContactSheetRef
     Returns the Column widget and a ContactSheetRefs for value collection.
     """
     cols_col, cols_slider = labeled_slider(
-        label="Colunas", value=4.0, min=1.0, max=10.0, divisions=9,
+        label="Colunas",
+        value=4.0,
+        min=1.0,
+        max=10.0,
+        divisions=9,
         fmt=lambda v: f"{int(v)}",
     )
     thumb_col, thumb_slider = labeled_slider(
-        label="Tamanho das miniaturas (px)", value=200.0, min=50.0, max=500.0, divisions=45,
+        label="Tamanho das miniaturas (px)",
+        value=200.0,
+        min=50.0,
+        max=500.0,
+        divisions=45,
         fmt=lambda v: f"{int(v)}",
     )
     gap_col, gap_slider = labeled_slider(
-        label="Espaçamento (px)", value=10.0, min=0.0, max=50.0, divisions=50,
+        label="Espaçamento (px)",
+        value=10.0,
+        min=0.0,
+        max=50.0,
+        divisions=50,
         fmt=lambda v: f"{int(v)}",
     )
 
@@ -50,7 +63,11 @@ def build_contact_sheet_block(page: ft.Page) -> tuple[ft.Column, ContactSheetRef
         spacing=Space.sm,
         controls=[
             ft.Row(
-                [section_label("Colagem"), ft.Container(expand=True), help_icon_for("image.contact_sheet", page)],
+                [
+                    section_label("Colagem"),
+                    ft.Container(expand=True),
+                    help_icon_for("image.contact_sheet", page),
+                ],
                 vertical_alignment=ft.CrossAxisAlignment.CENTER,
             ),
             cols_col,

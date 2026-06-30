@@ -11,5 +11,5 @@ from dataclasses import dataclass
 class InputItem:
     """Represents a single input item: a remote URL or a local file path."""
 
-    kind: str   # "url" | "local"
+    kind: str  # "url" | "local"
     value: str  # full URL or absolute path

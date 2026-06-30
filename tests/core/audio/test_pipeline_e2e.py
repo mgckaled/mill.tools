@@ -1,4 +1,5 @@
 """Smoke test de integração — pipeline completo: denoise → normalize."""
+
 import pytest
 
 pytestmark = pytest.mark.integration

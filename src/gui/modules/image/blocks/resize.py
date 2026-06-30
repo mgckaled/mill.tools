@@ -1,4 +1,5 @@
 """Resize operation block for the image module."""
+
 from __future__ import annotations
 
 from typing import Callable, NamedTuple
@@ -33,16 +34,20 @@ def build_resize_block(page: ft.Page) -> tuple[ft.Column, ResizeRefs]:
     _mode_get: list[Callable] = []
 
     w_tf = ft.TextField(
-        hint_text="Largura px (opcional)", keyboard_type=ft.KeyboardType.NUMBER,
-        text_size=Type.input.size, height=Layout.field_height,
+        hint_text="Largura px (opcional)",
+        keyboard_type=ft.KeyboardType.NUMBER,
+        text_size=Type.input.size,
+        height=Layout.field_height,
         content_padding=ft.Padding(left=10, right=4, top=0, bottom=0),
         border_color=ft.Colors.OUTLINE_VARIANT,
         focused_border_color=ft.Colors.PRIMARY,
         expand=True,
     )
     h_tf = ft.TextField(
-        hint_text="Altura px (opcional)", keyboard_type=ft.KeyboardType.NUMBER,
-        text_size=Type.input.size, height=Layout.field_height,
+        hint_text="Altura px (opcional)",
+        keyboard_type=ft.KeyboardType.NUMBER,
+        text_size=Type.input.size,
+        height=Layout.field_height,
         content_padding=ft.Padding(left=10, right=4, top=0, bottom=0),
         border_color=ft.Colors.OUTLINE_VARIANT,
         focused_border_color=ft.Colors.PRIMARY,
@@ -51,7 +56,11 @@ def build_resize_block(page: ft.Page) -> tuple[ft.Column, ResizeRefs]:
     wh_row = ft.Row([w_tf, h_tf], spacing=8)
 
     scale_col, scale_slider = labeled_slider(
-        label="Escala", value=100.0, min=1.0, max=400.0, divisions=399,
+        label="Escala",
+        value=100.0,
+        min=1.0,
+        max=400.0,
+        divisions=399,
         fmt=lambda v: f"{int(v)}%",
     )
     scale_col.visible = False
@@ -80,7 +89,11 @@ def build_resize_block(page: ft.Page) -> tuple[ft.Column, ResizeRefs]:
         spacing=Space.sm,
         controls=[
             ft.Row(
-                [section_label("Redimensionar"), ft.Container(expand=True), help_icon_for("image.resize", page)],
+                [
+                    section_label("Redimensionar"),
+                    ft.Container(expand=True),
+                    help_icon_for("image.resize", page),
+                ],
                 vertical_alignment=ft.CrossAxisAlignment.CENTER,
             ),
             section_label("Modo"),

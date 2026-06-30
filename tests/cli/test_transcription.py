@@ -7,6 +7,7 @@ from src.gui.modules._pipeline_runner import item_label
 
 # ── build_output_stem ────────────────────────────────────────────────────────
 
+
 @pytest.mark.unit
 def test_build_output_stem_uses_title():
     meta = {"title": "Test Video | Part 1"}
@@ -53,6 +54,7 @@ def test_build_output_stem_no_spaces_or_invalid_chars():
 
 # ── resolve_input ────────────────────────────────────────────────────────────
 
+
 @pytest.mark.unit
 def test_resolve_input_url():
     kind, value = resolve_input("https://www.youtube.com/watch?v=test123")
@@ -82,6 +84,7 @@ def test_resolve_input_nonexistent_path_treated_as_url():
 
 
 # ── item_label ───────────────────────────────────────────────────────────────
+
 
 @pytest.mark.unit
 def test_item_label_local_returns_filename(tmp_path):

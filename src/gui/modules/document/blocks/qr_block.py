@@ -1,11 +1,17 @@
 """QR code operation block — data input, size slider, format selector."""
+
 from __future__ import annotations
 
 from typing import Callable, NamedTuple
 
 import flet as ft
 
-from src.gui.theme.components import help_icon_for, labeled_field, section_label, segmented_selector, slider_row
+from src.gui.theme.components import (
+    labeled_field,
+    section_label,
+    segmented_selector,
+    slider_row,
+)
 from src.gui.theme.tokens import Layout, Space
 
 
@@ -32,7 +38,9 @@ def build_qr_block(page: ft.Page) -> tuple[ft.Column, QrRefs]:
 
     size_col = slider_row(
         "Tamanho (px)",
-        300, 100, 600,
+        300,
+        100,
+        600,
         divisions=10,
         on_change=_on_size,
         help_key="document.qr_size",
@@ -41,7 +49,9 @@ def build_qr_block(page: ft.Page) -> tuple[ft.Column, QrRefs]:
 
     _fmt_get: list[Callable] = []
     fmt_grid, _get_fmt, _ = segmented_selector(
-        ["png", "jpg"], "png", page,
+        ["png", "jpg"],
+        "png",
+        page,
         labels={"png": "PNG", "jpg": "JPG"},
         columns=2,
     )

@@ -1,4 +1,5 @@
 """Carregamento de assets para uso na GUI (ft.Image e page.window.icon)."""
+
 from __future__ import annotations
 
 from functools import lru_cache

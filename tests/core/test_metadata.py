@@ -4,21 +4,26 @@ from src.core.metadata import format_duration, format_metadata
 
 # ── format_duration ──────────────────────────────────────────────────────────
 
+
 @pytest.mark.unit
-@pytest.mark.parametrize("seconds, expected", [
-    (0,     "00:00:00"),
-    (59,    "00:00:59"),
-    (60,    "00:01:00"),
-    (3599,  "00:59:59"),
-    (3600,  "01:00:00"),
-    (7384,  "02:03:04"),
-    (86400, "24:00:00"),
-])
+@pytest.mark.parametrize(
+    "seconds, expected",
+    [
+        (0, "00:00:00"),
+        (59, "00:00:59"),
+        (60, "00:01:00"),
+        (3599, "00:59:59"),
+        (3600, "01:00:00"),
+        (7384, "02:03:04"),
+        (86400, "24:00:00"),
+    ],
+)
 def test_format_duration(seconds, expected):
     assert format_duration(seconds) == expected
 
 
 # ── format_metadata ──────────────────────────────────────────────────────────
+
 
 @pytest.mark.unit
 def test_format_metadata_contains_required_fields():

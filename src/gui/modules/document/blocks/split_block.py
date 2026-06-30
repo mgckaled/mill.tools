@@ -1,4 +1,5 @@
 """Split operation block — page range input."""
+
 from __future__ import annotations
 
 from typing import Callable, NamedTuple
@@ -27,8 +28,11 @@ def build_split_block(page: ft.Page) -> tuple[ft.Column, SplitRefs]:
         spacing=Space.sm,
         controls=[
             ft.Row(
-                [section_label("Páginas"), ft.Container(expand=True),
-                 help_icon_for("document.pages", page)],
+                [
+                    section_label("Páginas"),
+                    ft.Container(expand=True),
+                    help_icon_for("document.pages", page),
+                ],
                 vertical_alignment=ft.CrossAxisAlignment.CENTER,
             ),
             labeled_field("Intervalo de páginas", pages_field),

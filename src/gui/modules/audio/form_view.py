@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Callable
 
 import flet as ft
@@ -11,12 +11,29 @@ from src.gui import settings
 from src.core.audio.args import AudioArgs
 from src.core.io_types import InputItem
 from src.gui.components.input_source import build_input_source
-from src.gui.theme.components import Cursor, hairline, help_icon_for, section, segmented_selector, switch_row
+from src.gui.theme.components import (
+    Cursor,
+    hairline,
+    help_icon_for,
+    section,
+    segmented_selector,
+    switch_row,
+)
 from src.gui.theme.tokens import Space, Type
 
 _ALLOWED_EXTS = [
-    "mp3", "wav", "flac", "ogg", "opus", "aac", "m4a",
-    "mp4", "mkv", "webm", "avi", "mov",
+    "mp3",
+    "wav",
+    "flac",
+    "ogg",
+    "opus",
+    "aac",
+    "m4a",
+    "mp4",
+    "mkv",
+    "webm",
+    "avi",
+    "mov",
 ]
 
 _FMT_OPTIONS = ["best", "mp3", "m4a", "wav", "ogg", "opus"]
@@ -42,6 +59,7 @@ class AudioFormPanel:
 
 
 # ─── build_audio_form ─────────────────────────────────────────────────────────
+
 
 def build_audio_form(
     page: ft.Page,
@@ -194,8 +212,8 @@ def build_audio_form(
 
     normalize_switch.on_change = _on_normalize_change
 
-    _denoise_icon   = help_icon_for("audio.denoise",    page)
-    _normalize_icon = help_icon_for("audio.normalize",  page)
+    _denoise_icon = help_icon_for("audio.denoise", page)
+    _normalize_icon = help_icon_for("audio.normalize", page)
 
     # ── Botão Iniciar ─────────────────────────────────────────────────────────
 
@@ -211,35 +229,41 @@ def build_audio_form(
         items = input_source.get_items()
         if not items:
             return
-        settings.save({
-            "last_audio_fmt":       _get_fmt(),
-            "last_audio_quality":   _get_quality(),
-            "last_audio_embed_meta": embed_switch.value,
-            "last_audio_denoise":   denoise_switch.value,
-            "last_audio_normalize": normalize_switch.value,
-            "last_audio_lufs":      lufs_values[0],
-        })
-        on_start(AudioArgs(
-            items=items,
-            fmt=_get_fmt(),
-            quality=_get_quality(),
-            embed_meta=bool(embed_switch.value) and _has_url_items[0],
-            denoise=bool(denoise_switch.value),
-            normalize=bool(normalize_switch.value),
-            normalize_target_lufs=lufs_values[0],
-        ))
+        settings.save(
+            {
+                "last_audio_fmt": _get_fmt(),
+                "last_audio_quality": _get_quality(),
+                "last_audio_embed_meta": embed_switch.value,
+                "last_audio_denoise": denoise_switch.value,
+                "last_audio_normalize": normalize_switch.value,
+                "last_audio_lufs": lufs_values[0],
+            }
+        )
+        on_start(
+            AudioArgs(
+                items=items,
+                fmt=_get_fmt(),
+                quality=_get_quality(),
+                embed_meta=bool(embed_switch.value) and _has_url_items[0],
+                denoise=bool(denoise_switch.value),
+                normalize=bool(normalize_switch.value),
+                normalize_target_lufs=lufs_values[0],
+            )
+        )
 
     # ── set_running ───────────────────────────────────────────────────────────
 
     def _set_running(running: bool) -> None:
         start_btn.disabled = running or len(input_source.get_items()) == 0
         start_btn.text = "Executando..." if running else "Iniciar"
-        start_btn.icon = ft.Icons.HOURGLASS_EMPTY if running else ft.Icons.PLAY_ARROW_ROUNDED
+        start_btn.icon = (
+            ft.Icons.HOURGLASS_EMPTY if running else ft.Icons.PLAY_ARROW_ROUNDED
+        )
         input_source.set_enabled(not running)
         _set_fmt_disabled(running)
         _set_quality_disabled(running or _get_fmt() in _NO_BITRATE_FMTS)
         embed_switch.disabled = running
-        denoise_switch.disabled   = running
+        denoise_switch.disabled = running
         normalize_switch.disabled = running
         _set_lufs_disabled(running)
         page.update()
@@ -262,23 +286,30 @@ def build_audio_form(
                     spacing=16,
                     controls=[
                         # ── Entrada ───────────────────────────────────────
-                        section("Entrada", input_source.control,
-                                help_key="audio.input", page=page),
-
+                        section(
+                            "Entrada",
+                            input_source.control,
+                            help_key="audio.input",
+                            page=page,
+                        ),
                         hairline(),
-
                         # ── Formato de saída ──────────────────────────────
-                        section("Formato de saída", fmt_grid,
-                                help_key="audio.format", page=page),
-
+                        section(
+                            "Formato de saída",
+                            fmt_grid,
+                            help_key="audio.format",
+                            page=page,
+                        ),
                         hairline(),
-
                         # ── Bitrate ───────────────────────────────────────
-                        section("Bitrate (kbps)", quality_grid, embed_row,
-                                help_key="audio.bitrate", page=page),
-
+                        section(
+                            "Bitrate (kbps)",
+                            quality_grid,
+                            embed_row,
+                            help_key="audio.bitrate",
+                            page=page,
+                        ),
                         hairline(),
-
                         # ── Pós-processamento ─────────────────────────────
                         section(
                             "Pós-processamento",
@@ -296,9 +327,7 @@ def build_audio_form(
                             ),
                             lufs_block,
                         ),
-
                         hairline(),
-
                         # ── Iniciar ───────────────────────────────────────
                         ft.Row(
                             controls=[start_btn],

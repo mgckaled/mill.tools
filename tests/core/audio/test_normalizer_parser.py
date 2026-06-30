@@ -33,9 +33,16 @@ def test_parse_loudnorm_json_valid():
 def test_parse_loudnorm_json_all_keys_present():
     result = _parse_loudnorm_json(_REAL_STDERR)
     expected_keys = {
-        "input_i", "input_tp", "input_lra", "input_thresh",
-        "output_i", "output_tp", "output_lra", "output_thresh",
-        "normalization_type", "target_offset",
+        "input_i",
+        "input_tp",
+        "input_lra",
+        "input_thresh",
+        "output_i",
+        "output_tp",
+        "output_lra",
+        "output_thresh",
+        "normalization_type",
+        "target_offset",
     }
     assert expected_keys.issubset(result.keys())
 
@@ -62,6 +69,6 @@ def test_parse_loudnorm_json_malformed_json():
 @pytest.mark.unit
 def test_parse_loudnorm_json_partial_block():
     """Bloco JSON abre mas não fecha — deve retornar None."""
-    stderr = "{\n  \"input_i\": \"-18.27\"\n"  # sem fechar
+    stderr = '{\n  "input_i": "-18.27"\n'  # sem fechar
     result = _parse_loudnorm_json(stderr)
     assert result is None

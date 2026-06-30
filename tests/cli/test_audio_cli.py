@@ -1,4 +1,5 @@
 """Tests for CLI audio subcommand argument parsing."""
+
 import argparse
 
 import pytest

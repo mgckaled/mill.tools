@@ -1,4 +1,5 @@
 """Encrypt operation block — password field."""
+
 from __future__ import annotations
 
 from typing import Callable, NamedTuple
@@ -30,8 +31,11 @@ def build_encrypt_block(page: ft.Page) -> tuple[ft.Column, EncryptRefs]:
         spacing=Space.sm,
         controls=[
             ft.Row(
-                [section_label("Criptografar"), ft.Container(expand=True),
-                 help_icon_for("document.password", page)],
+                [
+                    section_label("Criptografar"),
+                    ft.Container(expand=True),
+                    help_icon_for("document.password", page),
+                ],
                 vertical_alignment=ft.CrossAxisAlignment.CENTER,
             ),
             labeled_field("Senha (AES-256)", password_field),

@@ -1,7 +1,7 @@
 [project]
 name = "mill.tools"
 version = "0.1.0"
-description = "Multiferramenta pessoal para processamento de áudio, vídeo e transcrição."
+description = "Multiferramenta pessoal extensível para processamento de áudio, vídeo, imagens, documentos, dados estruturados e transcrição (Whisper local), com GUI desktop (Flet) e CLI. Torch-free."
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
@@ -28,25 +28,38 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-ai-image = ["rembg[cpu]>=2.0.50"]
-ocr = ["pytesseract>=0.3"]
-analysis = ["polars>=1.0", "pandas>=2.0", "pyarrow>=15"]
-data-plot = ["matplotlib>=3.8"]
-# Classic ML core (Plans 4/5): scikit-learn 1.4+ emits Polars/pandas from its
-# transformers (useful to the tabular wave). joblib comes transitively; skops is
-# the documented secure-load upgrade, intentionally not added yet.
+# --- Image / OCR ---
+ai-image = ["rembg[cpu]>=2.0.50"]      # background removal/replacement
+ocr      = ["pytesseract>=0.3"]        # Tesseract OCR (binary is separate)
+
+# --- Data / DataFrame (Plans 0/1) ---
+# Polars over DuckDB (Arrow zero-copy); pandas is the ML/plot border only.
+analysis  = ["polars>=1.0", "pandas>=2.0", "pyarrow>=15"]
+data-plot = ["matplotlib>=3.8"]        # single matplotlib boundary (charts.py)
+
+# --- Classic ML / NLP (Plans 4A/4B) ---
+# scikit-learn 1.4+ emits Polars/pandas from its transformers (useful to the
+# tabular wave). joblib comes transitively; skops is the documented secure-load
+# upgrade, intentionally not added yet.
 ml = ["scikit-learn>=1.4"]
-# Optional ML visualization (Plan 4A): UMAP for a nicer semantic-map projection.
-# PCA (the default) needs only [ml]; UMAP pulls numba, so it stays opt-in.
+# UMAP for a nicer semantic-map projection. PCA (the default) needs only [ml];
+# UMAP pulls numba, so it stays opt-in.
 ml-viz = ["umap-learn>=0.5"]
-# Textual NLP engines (Plan 4B): YAKE for keyphrases and spaCy for NER. The
-# extractive summary is self-contained on the [ml] TfidfVectorizer (no dep here).
-# spaCy stays on the CNN models (pt_core_news_sm); the _trf variants would pull
-# torch and are not used. The model itself is a separate download (see README).
+# YAKE for keyphrases and spaCy for NER. The extractive summary is self-contained
+# on the [ml] TfidfVectorizer (no dep here). spaCy stays on the CNN models
+# (pt_core_news_sm); the _trf variants would pull torch and are not used. The
+# model itself is a separate download (see README).
 nlp = ["yake>=0.4", "spacy>=3.7"]
+
+# --- Meta-extra ---
+# Installs every optional extra at once. With uv, `uv sync --all-extras` does the
+# same without this; kept so `pip install mill.tools[all]` / `--extra all` works.
+all = ["mill.tools[ai-image,ocr,analysis,data-plot,ml,ml-viz,nlp]"]
 
 [dependency-groups]
 dev = [
+    "markupsafe>=3.0",
+    "poethepoet>=0.30",
     "pytest>=9.0.3",
     "pytest-clarity>=1.0.1",
     "pytest-cov>=5.0",
@@ -56,6 +69,26 @@ dev = [
     "pytest-xdist>=3.8.0",
     "ruff>=0.15.14",
 ]
+
+# Task runner (poethepoet). Run with `uv run poe <task>`, e.g. `uv run poe test`.
+# uv has no native task runner; these are the project's everyday shortcuts.
+[tool.poe.tasks]
+gui      = { cmd = "python gui.py", help = "Launch the Flet desktop GUI" }
+cli      = { cmd = "python main.py", help = "Run the CLI (pass subcommand + args)" }
+test     = { cmd = "pytest -m unit", help = "Unit tests (fast, no ffmpeg/net/GPU)" }
+test-all = { cmd = "pytest", help = "Full suite (unit + integration)" }
+cov      = { cmd = "pytest -m unit --cov", help = "Unit tests with coverage report" }
+lint     = { cmd = "ruff check .", help = "Lint with ruff" }
+fix      = { cmd = "ruff check --fix .", help = "Lint and apply safe autofixes" }
+format   = { cmd = "ruff format .", help = "Format with ruff" }
+sync-all = { cmd = "uv sync --all-extras --all-groups", help = "Install ALL extras + dev group" }
+check    = { sequence = ["lint", "test"], help = "Lint then run unit tests (pre-commit gate)" }
+# Repair a half-installed/corrupted package: `uv run poe repair <pkg>`. A `uv sync`
+# interrupted by a Windows lock on a .pyd (python.exe/GUI still open, or Defender)
+# can leave a package with no __init__.py + missing RECORD → `ImportError: cannot
+# import name 'X' from 'pkg' (unknown location)`. This force-reinstalls just that
+# package without dropping extras. The <pkg> arg is appended after the flag.
+repair   = { cmd = "uv sync --all-extras --all-groups --reinstall-package", help = "Reinstall one corrupted package: uv run poe repair <pkg>" }
 
 [tool.ruff.lint]
 # Keep every autofix EXCEPT auto-removal of unused imports (F401). The

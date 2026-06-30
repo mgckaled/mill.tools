@@ -61,7 +61,12 @@ class CLIEventBus:
     def _on_progress_start(self, p: dict) -> None:
         if self._bar is not None:
             self._bar.close()
-        self._bar = tqdm(total=100, unit="%", bar_format="{l_bar}{bar}| {n:.0f}%{postfix}", leave=True)
+        self._bar = tqdm(
+            total=100,
+            unit="%",
+            bar_format="{l_bar}{bar}| {n:.0f}%{postfix}",
+            leave=True,
+        )
         self._last_mutable = False
 
     def _on_progress_update(self, p: dict) -> None:
@@ -141,19 +146,19 @@ class CLIEventBus:
 
     # Map event types to handler methods
     _HANDLERS: dict = {
-        "progress_start":    _on_progress_start,
-        "progress_update":   _on_progress_update,
-        "queue_progress":    _on_queue_progress,
-        "log":               _on_log,
-        "task_done":         _on_task_done,
-        "task_error":        _on_task_error,
+        "progress_start": _on_progress_start,
+        "progress_update": _on_progress_update,
+        "queue_progress": _on_queue_progress,
+        "log": _on_log,
+        "task_done": _on_task_done,
+        "task_error": _on_task_error,
         # Module-specific op events
-        "audio_op_start":    _on_op_start,
-        "audio_op_done":     _on_op_done,
-        "video_op_start":    _on_op_start,
-        "video_op_done":     _on_op_done,
-        "image_op_start":    _on_op_start,
-        "image_op_done":     _on_op_done,
-        "video_op_error":    _on_task_error,
-        "image_op_error":    _on_task_error,
+        "audio_op_start": _on_op_start,
+        "audio_op_done": _on_op_done,
+        "video_op_start": _on_op_start,
+        "video_op_done": _on_op_done,
+        "image_op_start": _on_op_start,
+        "image_op_done": _on_op_done,
+        "video_op_error": _on_task_error,
+        "image_op_error": _on_task_error,
     }

@@ -1,4 +1,5 @@
 """Redução de ruído espectral via noisereduce (spectral gating, CPU-only)."""
+
 from __future__ import annotations
 
 import subprocess
@@ -9,7 +10,8 @@ def is_available() -> bool:
     """True se noisereduce e soundfile estiverem instalados."""
     try:
         import noisereduce  # noqa: F401
-        import soundfile    # noqa: F401
+        import soundfile  # noqa: F401
+
         return True
     except ImportError:
         return False

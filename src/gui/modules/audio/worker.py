@@ -8,8 +8,16 @@ from time import time
 from typing import TYPE_CHECKING, Callable
 
 from src.core.audio.args import AudioArgs
-from src.core.audio.converter import AUDIO_EXTENSIONS, VIDEO_EXTENSIONS, convert_audio, extract_audio
-from src.core.audio.denoiser import denoise as _denoise_audio, is_available as _denoise_available
+from src.core.audio.converter import (
+    AUDIO_EXTENSIONS,
+    VIDEO_EXTENSIONS,
+    convert_audio,
+    extract_audio,
+)
+from src.core.audio.denoiser import (
+    denoise as _denoise_audio,
+    is_available as _denoise_available,
+)
 from src.core.audio.downloader import download_audio
 from src.core.audio.normalizer import normalize_lufs as _normalize_lufs
 from src.gui.modules._pipeline_runner import (
@@ -76,19 +84,25 @@ def _make_process_item(args: AudioArgs) -> Callable:
 
         if item.kind == "url":
             operation = "download"
-            emit("audio_op_start", payload={
-                "operation": operation,
-                "item_name": item_name,
-                "item_idx": idx,
-                "total": total,
-            })
+            emit(
+                "audio_op_start",
+                payload={
+                    "operation": operation,
+                    "item_name": item_name,
+                    "item_idx": idx,
+                    "total": total,
+                },
+            )
 
             def _ydl_hook(d: dict) -> None:
                 if d.get("status") == "downloading":
                     downloaded = d.get("downloaded_bytes", 0) or 0
                     total_b = d.get("total_bytes") or d.get("total_bytes_estimate") or 0
                     if total_b > 0:
-                        emit("progress_update", payload={"current": min(downloaded / total_b, 1.0)})
+                        emit(
+                            "progress_update",
+                            payload={"current": min(downloaded / total_b, 1.0)},
+                        )
                     line = fmt_ydl_progress(d)
                     if line:
                         emit("log", payload={"message": line, "mutable": True})
@@ -113,20 +127,26 @@ def _make_process_item(args: AudioArgs) -> Callable:
             else:
                 raise ValueError(f"Unsupported extension: {suffix} ({item_name})")
 
-            emit("audio_op_start", payload={
-                "operation": operation,
-                "item_name": item_name,
-                "item_idx": idx,
-                "total": total,
-            })
+            emit(
+                "audio_op_start",
+                payload={
+                    "operation": operation,
+                    "item_name": item_name,
+                    "item_idx": idx,
+                    "total": total,
+                },
+            )
 
             def _progress_cb(ratio: float) -> None:
                 emit("progress_update", payload={"current": ratio})
                 if ratio > 0:
-                    emit("log", payload={
-                        "message": pipeline_log.fmt_ffmpeg_progress(ratio),
-                        "mutable": True,
-                    })
+                    emit(
+                        "log",
+                        payload={
+                            "message": pipeline_log.fmt_ffmpeg_progress(ratio),
+                            "mutable": True,
+                        },
+                    )
 
             if operation == "extract":
                 out_path = extract_audio(
@@ -149,55 +169,93 @@ def _make_process_item(args: AudioArgs) -> Callable:
         # ── Post: Denoise ────────────────────────────────────────────────
         if args.denoise:
             if not _denoise_available():
-                emit("log", payload={"message": "[!] noisereduce not installed — skipping denoise."})
+                emit(
+                    "log",
+                    payload={
+                        "message": "[!] noisereduce not installed — skipping denoise."
+                    },
+                )
             else:
-                emit("audio_op_start", payload={
-                    "operation": "denoise",
-                    "item_name": out_path.name,
-                    "item_idx": idx,
-                    "total": total,
-                })
-                emit("log", payload={"message": pipeline_log.fmt_denoise_start(out_path.name)})
-                emit("log", payload={"message": pipeline_log.fmt_denoise_detail(stationary=True)})
+                emit(
+                    "audio_op_start",
+                    payload={
+                        "operation": "denoise",
+                        "item_name": out_path.name,
+                        "item_idx": idx,
+                        "total": total,
+                    },
+                )
+                emit(
+                    "log",
+                    payload={"message": pipeline_log.fmt_denoise_start(out_path.name)},
+                )
+                emit(
+                    "log",
+                    payload={
+                        "message": pipeline_log.fmt_denoise_detail(stationary=True)
+                    },
+                )
                 out_path = _denoise_audio(out_path, AUDIO_PROCESSED_DIR)
 
         # ── Post: Normalize ──────────────────────────────────────────────
         if args.normalize:
-            emit("audio_op_start", payload={
-                "operation": "normalize",
-                "item_name": out_path.name,
-                "item_idx": idx,
-                "total": total,
-            })
-            emit("log", payload={"message": pipeline_log.fmt_normalize_start(out_path.name)})
-            emit("log", payload={"message": pipeline_log.fmt_normalize_detail(args.normalize_target_lufs)})
+            emit(
+                "audio_op_start",
+                payload={
+                    "operation": "normalize",
+                    "item_name": out_path.name,
+                    "item_idx": idx,
+                    "total": total,
+                },
+            )
+            emit(
+                "log",
+                payload={"message": pipeline_log.fmt_normalize_start(out_path.name)},
+            )
+            emit(
+                "log",
+                payload={
+                    "message": pipeline_log.fmt_normalize_detail(
+                        args.normalize_target_lufs
+                    )
+                },
+            )
 
             def _norm_cb(ratio: float) -> None:
                 emit("progress_update", payload={"current": ratio})
                 if ratio > 0:
-                    emit("log", payload={
-                        "message": pipeline_log.fmt_ffmpeg_progress(ratio),
-                        "mutable": True,
-                    })
+                    emit(
+                        "log",
+                        payload={
+                            "message": pipeline_log.fmt_ffmpeg_progress(ratio),
+                            "mutable": True,
+                        },
+                    )
 
             out_path, stats = _normalize_lufs(
                 out_path, AUDIO_PROCESSED_DIR, args.normalize_target_lufs, _norm_cb
             )
 
             if stats:
-                emit("log", payload={"message": pipeline_log.fmt_normalize_measured(stats)})
+                emit(
+                    "log",
+                    payload={"message": pipeline_log.fmt_normalize_measured(stats)},
+                )
             else:
                 emit("log", payload={"message": pipeline_log.fmt_normalize_fallback()})
 
         elapsed = time() - t0
-        emit("audio_op_done", payload={
-            "output_path":    str(out_path),
-            "elapsed":        f"{elapsed:.1f}s",
-            "item_idx":       idx,
-            "total":          total,
-            "src_size_bytes": original_src_size,
-            "out_size_bytes": out_path.stat().st_size,
-        })
+        emit(
+            "audio_op_done",
+            payload={
+                "output_path": str(out_path),
+                "elapsed": f"{elapsed:.1f}s",
+                "item_idx": idx,
+                "total": total,
+                "src_size_bytes": original_src_size,
+                "out_size_bytes": out_path.stat().st_size,
+            },
+        )
         return str(out_path)
 
     return _process_item

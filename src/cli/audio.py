@@ -9,6 +9,7 @@ Usage:
     uv run main.py audio audio.wav [--fmt mp3] [--denoise] [--normalize]
     uv run main.py audio video.mp4 [--fmt mp3]
 """
+
 from __future__ import annotations
 
 import argparse

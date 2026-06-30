@@ -1,4 +1,5 @@
 """Favicon operation block for the image module."""
+
 from __future__ import annotations
 
 from typing import Callable, NamedTuple
@@ -36,7 +37,11 @@ def build_favicon_block(page: ft.Page) -> tuple[ft.Column, FaviconRefs]:
         spacing=Space.sm,
         controls=[
             ft.Row(
-                [section_label("Favicon"), ft.Container(expand=True), help_icon_for("image.favicon", page)],
+                [
+                    section_label("Favicon"),
+                    ft.Container(expand=True),
+                    help_icon_for("image.favicon", page),
+                ],
                 vertical_alignment=ft.CrossAxisAlignment.CENTER,
             ),
             section_label("Tamanhos (.ico multires)"),

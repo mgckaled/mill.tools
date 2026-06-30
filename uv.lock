@@ -1260,6 +1260,18 @@ dependencies = [
 ai-image = [
     { name = "rembg", extra = ["cpu"] },
 ]
+all = [
+    { name = "matplotlib" },
+    { name = "pandas" },
+    { name = "polars" },
+    { name = "pyarrow" },
+    { name = "pytesseract" },
+    { name = "rembg", extra = ["cpu"] },
+    { name = "scikit-learn" },
+    { name = "spacy" },
+    { name = "umap-learn" },
+    { name = "yake" },
+]
 analysis = [
     { name = "pandas" },
     { name = "polars" },
@@ -1284,6 +1296,8 @@ ocr = [
 
 [package.dev-dependencies]
 dev = [
+    { name = "markupsafe" },
+    { name = "poethepoet" },
     { name = "pytest" },
     { name = "pytest-clarity" },
     { name = "pytest-cov" },
@@ -1306,6 +1320,7 @@ requires-dist = [
     { name = "langchain-ollama", specifier = ">=0.3.0" },
     { name = "langchain-text-splitters", specifier = ">=0.3.0" },
     { name = "matplotlib", marker = "extra == 'data-plot'", specifier = ">=3.8" },
+    { name = "mill-tools", extras = ["ai-image", "ocr", "analysis", "data-plot", "ml", "ml-viz", "nlp"], marker = "extra == 'all'" },
     { name = "noisereduce", specifier = ">=3.0" },
     { name = "numpy", specifier = ">=1.26" },
     { name = "pandas", marker = "extra == 'analysis'", specifier = ">=2.0" },
@@ -1327,10 +1342,12 @@ requires-dist = [
     { name = "yake", marker = "extra == 'nlp'", specifier = ">=0.4" },
     { name = "yt-dlp", specifier = ">=2026.3.17" },
 ]
-provides-extras = ["ai-image", "ocr", "analysis", "data-plot", "ml", "ml-viz", "nlp"]
+provides-extras = ["ai-image", "ocr", "analysis", "data-plot", "ml", "ml-viz", "nlp", "all"]
 
 [package.metadata.requires-dev]
 dev = [
+    { name = "markupsafe", specifier = ">=3.0" },
+    { name = "poethepoet", specifier = ">=0.30" },
     { name = "pytest", specifier = ">=9.0.3" },
     { name = "pytest-clarity", specifier = ">=1.0.1" },
     { name = "pytest-cov", specifier = ">=5.0" },
@@ -1665,6 +1682,15 @@ wheels = [
 ]
 
 [[package]]
+name = "pastel"
+version = "0.2.1"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/76/f1/4594f5e0fcddb6953e5b8fe00da8c317b8b41b547e2b3ae2da7512943c62/pastel-0.2.1.tar.gz", hash = "sha256:e6581ac04e973cac858828c6202c1e1e81fee1dc7de7683f3e1ffe0bfd8a573d", size = 7555, upload-time = "2020-09-16T19:21:12.43Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/aa/18/a8444036c6dd65ba3624c63b734d3ba95ba63ace513078e1580590075d21/pastel-0.2.1-py2.py3-none-any.whl", hash = "sha256:4349225fcdf6c2bb34d483e523475de5bb04a5c10ef711263452cb37d7dd4364", size = 5955, upload-time = "2020-09-16T19:21:11.409Z" },
+]
+
+[[package]]
 name = "pillow"
 version = "12.2.0"
 source = { registry = "https://pypi.org/simple" }
@@ -1738,6 +1764,19 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/f9/e2/3e91f31a7d2b083fe6ef3fa267035b518369d9511ffab804f839851d2779/pluggy-1.6.0.tar.gz", hash = "sha256:7dcc130b76258d33b90f61b658791dede3486c3e6bfb003ee5c9bfb396dd22f3", size = 69412, upload-time = "2025-05-15T12:30:07.975Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/54/20/4d324d65cc6d9205fabedc306948156824eb9f0ee1633355a8f7ec5c66bf/pluggy-1.6.0-py3-none-any.whl", hash = "sha256:e920276dd6813095e9377c0bc5566d94c932c33b27a3e3945d8389c374dd4746", size = 20538, upload-time = "2025-05-15T12:30:06.134Z" },
+]
+
+[[package]]
+name = "poethepoet"
+version = "0.47.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "pastel" },
+    { name = "pyyaml" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/8f/ec/0e80a71d3ea9fbbd0f419cd0f33c46bab0a19bbf65dacce96edf72dd09cd/poethepoet-0.47.0.tar.gz", hash = "sha256:8902da95e78ecec6bf1ee37b7c4da3bcf53f2ff89eb0d8a4447c01de4c4f2e6e", size = 145693, upload-time = "2026-06-27T14:00:46.849Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/88/d3/419673fea140c243a8ed35022b92b355787dd565d2318dfab940b2a96b91/poethepoet-0.47.0-py3-none-any.whl", hash = "sha256:b443f38c5c8cd6e2415bcd5922a45c03ab120360ff0d515233ef6279f3f285c3", size = 183561, upload-time = "2026-06-27T14:00:45.031Z" },
 ]
 
 [[package]]

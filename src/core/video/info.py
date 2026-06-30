@@ -1,4 +1,5 @@
 """Inspeção de arquivos de vídeo via ffprobe."""
+
 from __future__ import annotations
 
 import json
@@ -23,14 +24,19 @@ def get_video_info(src: Path) -> VideoInfo:
     try:
         r = subprocess.run(
             [
-                "ffprobe", "-v", "quiet",
-                "-print_format", "json",
-                "-show_streams", "-show_format",
+                "ffprobe",
+                "-v",
+                "quiet",
+                "-print_format",
+                "json",
+                "-show_streams",
+                "-show_format",
                 str(src),
             ],
-            capture_output=True, timeout=15,
+            capture_output=True,
+            timeout=15,
         )
-        data = json.loads(r.stdout.decode('utf-8', errors='replace'))
+        data = json.loads(r.stdout.decode("utf-8", errors="replace"))
         fmt = data.get("format", {})
         streams = data.get("streams", [])
         v = next((s for s in streams if s.get("codec_type") == "video"), {})

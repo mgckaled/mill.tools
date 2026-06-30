@@ -28,22 +28,27 @@ FORMAT_CHUNK_SIZE = 4500
 FORMAT_CHUNK_OVERLAP = 150
 SEPARATOR = "-" * 64
 
-FORMAT_PROMPT = ChatPromptTemplate.from_messages([
-    ("system", (
-        "You receive a raw speech transcription without paragraph breaks. "
-        "Your ONLY task is to insert blank lines between paragraphs at natural topic or idea boundaries.\n\n"
-        "STRICT RULES:\n"
-        "- Output the EXACT same words in the EXACT same order\n"
-        "- Do NOT change, correct, add, or remove any word\n"
-        "- Do NOT fix punctuation or spelling\n"
-        "- Only insert blank lines (two newlines) between paragraphs\n"
-        "- Insert a break where a new topic, idea, or logical section begins\n"
-        "- Keep paragraphs between 3 and 8 sentences\n"
-        "- PRESERVE all [?] markers exactly where they appear — they are quality indicators, not part of the speech\n"
-        "- Output ONLY the formatted text, no explanations or comments"
-    )),
-    ("human", "{text}"),
-])
+FORMAT_PROMPT = ChatPromptTemplate.from_messages(
+    [
+        (
+            "system",
+            (
+                "You receive a raw speech transcription without paragraph breaks. "
+                "Your ONLY task is to insert blank lines between paragraphs at natural topic or idea boundaries.\n\n"
+                "STRICT RULES:\n"
+                "- Output the EXACT same words in the EXACT same order\n"
+                "- Do NOT change, correct, add, or remove any word\n"
+                "- Do NOT fix punctuation or spelling\n"
+                "- Only insert blank lines (two newlines) between paragraphs\n"
+                "- Insert a break where a new topic, idea, or logical section begins\n"
+                "- Keep paragraphs between 3 and 8 sentences\n"
+                "- PRESERVE all [?] markers exactly where they appear — they are quality indicators, not part of the speech\n"
+                "- Output ONLY the formatted text, no explanations or comments"
+            ),
+        ),
+        ("human", "{text}"),
+    ]
+)
 
 
 # Sentence-boundary separators — formatter splits at sentence ends, not paragraph
@@ -93,6 +98,7 @@ def format_transcription(
     Raises:
         FileNotFoundError: If the input file does not exist.
     """
+
     def _emit(type: str, payload: dict = {}) -> None:
         if on_event:
             on_event(type, "format", payload)
@@ -123,7 +129,14 @@ def format_transcription(
     logging.info("[i] %d chunk(s) to format (%d chars total)", len(chunks), len(body))
     for i, chunk in enumerate(chunks, 1):
         logging.debug("[d] Chunk %d/%d: %d chars", i, len(chunks), len(chunk))
-    _emit("format_started", {"filename": input_path.name, "total_chunks": len(chunks), "model_name": model_name})
+    _emit(
+        "format_started",
+        {
+            "filename": input_path.name,
+            "total_chunks": len(chunks),
+            "model_name": model_name,
+        },
+    )
 
     llm = make_llm(model_name=model_name, temperature=0)
     chain = FORMAT_PROMPT | llm
@@ -137,9 +150,16 @@ def format_transcription(
         response = chain.invoke({"text": chunk})
         formatted_chunks.append(response.content.strip())
         chunk_elapsed = time() - t
-        logging.debug("[d] Chunk %d done in %.1fs | output: %d chars",
-                      i, chunk_elapsed, len(response.content))
-        _emit("format_chunk_done", {"i": i, "total": len(chunks), "elapsed": round(chunk_elapsed, 1)})
+        logging.debug(
+            "[d] Chunk %d done in %.1fs | output: %d chars",
+            i,
+            chunk_elapsed,
+            len(response.content),
+        )
+        _emit(
+            "format_chunk_done",
+            {"i": i, "total": len(chunks), "elapsed": round(chunk_elapsed, 1)},
+        )
 
     formatted_body = "\n\n".join(formatted_chunks)
 

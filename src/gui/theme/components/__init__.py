@@ -1,4 +1,5 @@
 """Fábricas de componentes do Design System."""
+
 from src.gui.theme.components.help import (
     help_icon,
     help_icon_for,

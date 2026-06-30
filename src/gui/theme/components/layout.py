@@ -1,4 +1,5 @@
 """Fábricas de layout — scaffold de módulo, seção e divisores."""
+
 from __future__ import annotations
 
 import flet as ft
@@ -8,6 +9,7 @@ from src.gui.theme.tokens import Layout, Space, Type
 
 def _label_row(text: str, help_key: str | None, page: ft.Page | None) -> ft.Control:
     from src.gui.theme.components.help import help_icon_for
+
     label = ft.Text(
         text,
         size=Type.label.size,
@@ -44,8 +46,10 @@ def module_scaffold(form: ft.Control, panel: ft.Control) -> ft.Row:
                 content=panel,
                 expand=True,
                 padding=ft.Padding(
-                    left=Space.md, right=Space.md,
-                    top=Space.sm, bottom=Space.sm,
+                    left=Space.md,
+                    right=Space.md,
+                    top=Space.sm,
+                    bottom=Space.sm,
                 ),
             ),
         ],
@@ -69,5 +73,7 @@ def section(
 def hairline(vertical: bool = False) -> ft.Control:
     """Divisor de 1.5px usando outline_variant do tema."""
     if vertical:
-        return ft.VerticalDivider(width=2, thickness=1.5, color=ft.Colors.OUTLINE_VARIANT)
+        return ft.VerticalDivider(
+            width=2, thickness=1.5, color=ft.Colors.OUTLINE_VARIANT
+        )
     return ft.Divider(height=3, thickness=1.5, color=ft.Colors.OUTLINE_VARIANT)

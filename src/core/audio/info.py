@@ -11,14 +11,18 @@ def get_duration_ffprobe(src: Path) -> float | None:
     try:
         result = subprocess.run(
             [
-                "ffprobe", "-v", "quiet",
-                "-show_entries", "format=duration",
-                "-of", "default=noprint_wrappers=1:nokey=1",
+                "ffprobe",
+                "-v",
+                "quiet",
+                "-show_entries",
+                "format=duration",
+                "-of",
+                "default=noprint_wrappers=1:nokey=1",
                 str(src),
             ],
             capture_output=True,
             timeout=10,
         )
-        return float(result.stdout.decode('utf-8', errors='replace').strip())
+        return float(result.stdout.decode("utf-8", errors="replace").strip())
     except (ValueError, subprocess.TimeoutExpired, FileNotFoundError):
         return None

@@ -1,4 +1,5 @@
 """Fábricas de inputs e controles de formulário."""
+
 from __future__ import annotations
 
 from typing import Callable
@@ -17,6 +18,7 @@ def labeled_field(
 ) -> ft.Column:
     """Rótulo acima do controle com helper opcional abaixo e ⓘ opcional."""
     from src.gui.theme.components.help import help_icon_for
+
     icon = help_icon_for(help_key, page) if help_key else None
     label_text = ft.Text(
         label,
@@ -30,7 +32,8 @@ def labeled_field(
             spacing=Space.xs,
             vertical_alignment=ft.CrossAxisAlignment.CENTER,
         )
-        if icon else label_text
+        if icon
+        else label_text
     )
     items: list[ft.Control] = [label_row, control]
     if helper:
@@ -68,6 +71,7 @@ def slider_row(
 ) -> ft.Column:
     """Rótulo + slider com cor ativa do tema (primary = dourado) e ⓘ opcional."""
     from src.gui.theme.components.help import help_icon_for
+
     icon = help_icon_for(help_key, page) if help_key else None
     label_text = ft.Text(
         label,
@@ -81,7 +85,8 @@ def slider_row(
             spacing=Space.xs,
             vertical_alignment=ft.CrossAxisAlignment.CENTER,
         )
-        if icon else label_text
+        if icon
+        else label_text
     )
     slider = ft.Slider(
         value=value,

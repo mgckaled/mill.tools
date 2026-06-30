@@ -1,4 +1,5 @@
 """Fixtures compartilhadas entre todos os testes."""
+
 import subprocess
 from pathlib import Path
 
@@ -6,14 +7,18 @@ import pytest
 from PIL import Image
 
 
-def _make_rgb_jpg(tmp_path: Path, width: int = 200, height: int = 150, name: str = "sample.jpg") -> Path:
+def _make_rgb_jpg(
+    tmp_path: Path, width: int = 200, height: int = 150, name: str = "sample.jpg"
+) -> Path:
     img = Image.new("RGB", (width, height), color=(100, 150, 200))
     path = tmp_path / name
     img.save(path, format="JPEG", quality=85)
     return path
 
 
-def _make_rgba_png(tmp_path: Path, width: int = 100, height: int = 100, name: str = "sample.png") -> Path:
+def _make_rgba_png(
+    tmp_path: Path, width: int = 100, height: int = 100, name: str = "sample.png"
+) -> Path:
     img = Image.new("RGBA", (width, height), color=(255, 0, 0, 128))
     path = tmp_path / name
     img.save(path, format="PNG")
@@ -44,15 +49,23 @@ def out_dir(tmp_path: Path) -> Path:
 # Fixtures de áudio de sessão — geradas via ffmpeg (sine wave 440 Hz)
 # ---------------------------------------------------------------------------
 
+
 @pytest.fixture(scope="session")
 def sample_wav(tmp_path_factory: pytest.TempPathFactory) -> Path:
     """WAV mono 44100 Hz 3 s — sine wave 440 Hz."""
     out = tmp_path_factory.mktemp("fixtures") / "sample.wav"
     subprocess.run(
         [
-            "ffmpeg", "-y",
-            "-f", "lavfi", "-i", "sine=frequency=440:duration=3",
-            "-ar", "44100", "-ac", "1",
+            "ffmpeg",
+            "-y",
+            "-f",
+            "lavfi",
+            "-i",
+            "sine=frequency=440:duration=3",
+            "-ar",
+            "44100",
+            "-ac",
+            "1",
             str(out),
         ],
         check=True,
@@ -67,10 +80,18 @@ def sample_mp3(tmp_path_factory: pytest.TempPathFactory) -> Path:
     out = tmp_path_factory.mktemp("fixtures") / "sample.mp3"
     subprocess.run(
         [
-            "ffmpeg", "-y",
-            "-f", "lavfi", "-i", "sine=frequency=440:duration=3",
-            "-ar", "44100", "-ac", "1",
-            "-b:a", "128k",
+            "ffmpeg",
+            "-y",
+            "-f",
+            "lavfi",
+            "-i",
+            "sine=frequency=440:duration=3",
+            "-ar",
+            "44100",
+            "-ac",
+            "1",
+            "-b:a",
+            "128k",
             str(out),
         ],
         check=True,
@@ -85,12 +106,28 @@ def sample_mp4(tmp_path_factory: pytest.TempPathFactory) -> Path:
     out = tmp_path_factory.mktemp("fixtures") / "sample.mp4"
     subprocess.run(
         [
-            "ffmpeg", "-y",
-            "-f", "lavfi", "-i", "color=c=blue:size=320x240:rate=25",
-            "-f", "lavfi", "-i", "sine=frequency=440:duration=3",
-            "-t", "3",
-            "-c:v", "libx264", "-preset", "ultrafast", "-crf", "51",
-            "-c:a", "aac", "-b:a", "64k",
+            "ffmpeg",
+            "-y",
+            "-f",
+            "lavfi",
+            "-i",
+            "color=c=blue:size=320x240:rate=25",
+            "-f",
+            "lavfi",
+            "-i",
+            "sine=frequency=440:duration=3",
+            "-t",
+            "3",
+            "-c:v",
+            "libx264",
+            "-preset",
+            "ultrafast",
+            "-crf",
+            "51",
+            "-c:a",
+            "aac",
+            "-b:a",
+            "64k",
             str(out),
         ],
         check=True,
@@ -105,9 +142,16 @@ def sample_wav_stereo(tmp_path_factory: pytest.TempPathFactory) -> Path:
     out = tmp_path_factory.mktemp("fixtures") / "sample_stereo.wav"
     subprocess.run(
         [
-            "ffmpeg", "-y",
-            "-f", "lavfi", "-i", "sine=frequency=440:duration=3",
-            "-ar", "44100", "-ac", "2",
+            "ffmpeg",
+            "-y",
+            "-f",
+            "lavfi",
+            "-i",
+            "sine=frequency=440:duration=3",
+            "-ar",
+            "44100",
+            "-ac",
+            "2",
             str(out),
         ],
         check=True,
@@ -120,17 +164,21 @@ def sample_wav_stereo(tmp_path_factory: pytest.TempPathFactory) -> Path:
 # Fixture de imagem de sessão — gerada via Pillow
 # ---------------------------------------------------------------------------
 
+
 @pytest.fixture(scope="session")
 def session_jpg(tmp_path_factory: pytest.TempPathFactory) -> Path:
     """JPEG RGB 640×480 reutilizável em escopo de sessão."""
     out = tmp_path_factory.mktemp("fixtures") / "session_sample.jpg"
-    Image.new("RGB", (640, 480), color=(80, 120, 200)).save(out, format="JPEG", quality=85)
+    Image.new("RGB", (640, 480), color=(80, 120, 200)).save(
+        out, format="JPEG", quality=85
+    )
     return out
 
 
 # ---------------------------------------------------------------------------
 # Fixtures de PDF de sessão — geradas via pymupdf (importorskip se ausente)
 # ---------------------------------------------------------------------------
+
 
 @pytest.fixture(scope="session")
 def sample_pdf(tmp_path_factory: pytest.TempPathFactory):
@@ -166,8 +214,10 @@ def sample_pdf_with_images(tmp_path_factory: pytest.TempPathFactory, session_jpg
 # Hook: pula testes de integração automaticamente se ffmpeg não estiver no PATH
 # ---------------------------------------------------------------------------
 
+
 def pytest_collection_modifyitems(config, items):
     import shutil
+
     if shutil.which("ffmpeg") is None:
         skip_no_ffmpeg = pytest.mark.skip(reason="ffmpeg não encontrado no PATH")
         for item in items:

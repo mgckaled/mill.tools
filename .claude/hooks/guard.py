@@ -13,6 +13,7 @@ On violation: prints an explanation to stderr and exits 2, which feeds the
 message back to Claude so it self-corrects. Otherwise exits 0. Any internal
 error exits 0 so the hook never breaks the session.
 """
+
 from __future__ import annotations
 
 import json

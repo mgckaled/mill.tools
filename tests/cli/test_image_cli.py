@@ -1,4 +1,5 @@
 """Tests for CLI image subcommand argument parsing."""
+
 import argparse
 
 import pytest
@@ -31,7 +32,9 @@ def test_image_convert_custom_fmt():
 
 @pytest.mark.unit
 def test_image_resize_mode_and_dims():
-    ns = _parse("resize", "photo.jpg", "--mode", "exact", "--width", "1920", "--height", "1080")
+    ns = _parse(
+        "resize", "photo.jpg", "--mode", "exact", "--width", "1920", "--height", "1080"
+    )
     assert ns.mode == "exact"
     assert ns.width == 1920
     assert ns.height == 1080

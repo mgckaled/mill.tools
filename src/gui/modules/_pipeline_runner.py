@@ -15,21 +15,23 @@ from urllib.parse import urlparse
 if TYPE_CHECKING:
     from src.gui.events import EventBus
 
-_ANSI_ESC = re.compile(r'\x1b\[[0-9;]*m')
+_ANSI_ESC = re.compile(r"\x1b\[[0-9;]*m")
 _NOISY_LOGGERS = ("httpx", "httpcore", "yt_dlp", "urllib3")
 
 
 def strip_ansi(s: str) -> str:
     """Strip ANSI escape codes and surrounding whitespace."""
-    return _ANSI_ESC.sub('', s).strip()
+    return _ANSI_ESC.sub("", s).strip()
 
 
 def fmt_ydl_progress(d: dict) -> str:
     """Format a yt-dlp progress dict as a mutable log line (pct | de total | speed | ETA)."""
-    pct   = strip_ansi(d.get("_percent_str") or "")
-    total = strip_ansi(d.get("_total_bytes_str") or d.get("_total_bytes_estimate_str") or "")
+    pct = strip_ansi(d.get("_percent_str") or "")
+    total = strip_ansi(
+        d.get("_total_bytes_str") or d.get("_total_bytes_estimate_str") or ""
+    )
     speed = strip_ansi(d.get("_speed_str") or "")
-    eta   = strip_ansi(d.get("_eta_str") or "")
+    eta = strip_ansi(d.get("_eta_str") or "")
     parts: list[str] = []
     if pct:
         parts.append(pct)
@@ -55,8 +57,10 @@ def item_label(item) -> str:
 
 def make_emitter(bus: "EventBus", module_id: str, default_stage: str) -> Callable:
     """Return an emit helper bound to a specific bus, module and default stage."""
+
     def emit(type: str, stage: str | None = None, payload: dict | None = None) -> None:
         bus.emit(type, stage or default_stage, payload or {}, module_id=module_id)
+
     return emit
 
 
@@ -69,6 +73,7 @@ class _LogScope:
 
     def __init__(self, bus: "EventBus", module_id: str) -> None:
         from src.gui.events import LogEventHandler
+
         self._handler = LogEventHandler(bus, module_id=module_id)
         self._handler.setLevel(logging.INFO)
         self._handler.setFormatter(logging.Formatter("%(message)s"))
@@ -136,11 +141,14 @@ def run_queue_pipeline(
                     emit("task_error", payload={"message": "Cancelado pelo usuário."})
                     return False
 
-                emit("queue_progress", payload={
-                    "current_item": idx,
-                    "total_items": total,
-                    "item_name": item_label(item),
-                })
+                emit(
+                    "queue_progress",
+                    payload={
+                        "current_item": idx,
+                        "total_items": total,
+                        "item_name": item_label(item),
+                    },
+                )
 
                 if stop_on_error:
                     out = process_item(emit, item, idx, total, cancel_event)
@@ -154,10 +162,13 @@ def run_queue_pipeline(
                         logging.getLogger(__name__).warning(
                             "[!] Error on '%s': %s", item_label(item), exc
                         )
-                        emit(error_event, payload={
-                            "item_name": item_label(item),
-                            "message": str(exc),
-                        })
+                        emit(
+                            error_event,
+                            payload={
+                                "item_name": item_label(item),
+                                "message": str(exc),
+                            },
+                        )
                         continue
 
                 if cancel_event.is_set():
@@ -187,6 +198,7 @@ def start_pipeline(
 
     Calls on_finish() after completion regardless of success or error.
     """
+
     def _run() -> None:
         run_fn(args, bus, cancel_event)
         if on_finish:

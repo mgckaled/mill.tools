@@ -1,4 +1,5 @@
 """Normalização de loudness via ffmpeg loudnorm (EBU R128 / ITU-R BS.1770-4)."""
+
 from __future__ import annotations
 
 import json
@@ -10,8 +11,8 @@ from typing import Callable
 from src.core.audio.info import get_duration_ffprobe
 from src.utils import sanitize_filename
 
-_TARGET_TP  = -1.0   # True Peak máximo (dBFS)
-_TARGET_LRA = 11.0   # Loudness Range alvo
+_TARGET_TP = -1.0  # True Peak máximo (dBFS)
+_TARGET_LRA = 11.0  # Loudness Range alvo
 
 
 def normalize_lufs(
@@ -37,15 +38,21 @@ def normalize_lufs(
 
     # Passe 1: medição
     measure_cmd = [
-        "ffmpeg", "-y", "-i", str(src),
-        "-af", (
+        "ffmpeg",
+        "-y",
+        "-i",
+        str(src),
+        "-af",
+        (
             f"loudnorm=I={target_lufs}:TP={_TARGET_TP}"
             f":LRA={_TARGET_LRA}:print_format=json"
         ),
-        "-f", "null", "-",
+        "-f",
+        "null",
+        "-",
     ]
     r = subprocess.run(measure_cmd, capture_output=True)
-    stats = _parse_loudnorm_json(r.stderr.decode('utf-8', errors='replace'))
+    stats = _parse_loudnorm_json(r.stderr.decode("utf-8", errors="replace"))
 
     # Passe 2: aplicação
     if stats:
@@ -62,9 +69,15 @@ def normalize_lufs(
         af = f"loudnorm=I={target_lufs}:TP={_TARGET_TP}:LRA={_TARGET_LRA}"
 
     apply_cmd = [
-        "ffmpeg", "-y", "-i", str(src),
-        "-af", af,
-        "-progress", "pipe:1", "-nostats",
+        "ffmpeg",
+        "-y",
+        "-i",
+        str(src),
+        "-af",
+        af,
+        "-progress",
+        "pipe:1",
+        "-nostats",
         str(out_path),
     ]
 
@@ -75,12 +88,12 @@ def normalize_lufs(
 
     def _drain() -> None:
         for raw in proc.stderr:
-            stderr_lines.append(raw.decode('utf-8', errors='replace').rstrip())
+            stderr_lines.append(raw.decode("utf-8", errors="replace").rstrip())
 
     threading.Thread(target=_drain, daemon=True).start()
 
     for raw in proc.stdout:
-        line = raw.decode('utf-8', errors='replace').strip()
+        line = raw.decode("utf-8", errors="replace").strip()
         if line.startswith("out_time_us=") and progress_cb and total_secs:
             try:
                 ratio = min(int(line.split("=", 1)[1]) / 1_000_000 / total_secs, 1.0)
@@ -105,7 +118,9 @@ def _parse_loudnorm_json(stderr: str) -> dict | None:
     start = next((i for i, ln in enumerate(lines) if ln.strip() == "{"), None)
     if start is None:
         return None
-    end = next((i for i, ln in enumerate(lines[start:], start) if ln.strip() == "}"), None)
+    end = next(
+        (i for i, ln in enumerate(lines[start:], start) if ln.strip() == "}"), None
+    )
     if end is None:
         return None
     try:

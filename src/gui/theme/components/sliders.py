@@ -1,4 +1,5 @@
 """Slider factory with live value label."""
+
 from __future__ import annotations
 
 from typing import Callable

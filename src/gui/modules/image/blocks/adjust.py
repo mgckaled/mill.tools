@@ -1,4 +1,5 @@
 """Adjust operation block for the image module."""
+
 from __future__ import annotations
 
 from typing import Callable, NamedTuple
@@ -23,19 +24,35 @@ def build_adjust_block(page: ft.Page) -> tuple[ft.Column, AdjustRefs]:
     Returns the Column widget and an AdjustRefs for value collection.
     """
     bright_col, bright_slider = labeled_slider(
-        label="Brilho", value=1.0, min=0.1, max=2.0, divisions=19,
+        label="Brilho",
+        value=1.0,
+        min=0.1,
+        max=2.0,
+        divisions=19,
         fmt=lambda v: f"{v:.1f}",
     )
     contrast_col, contrast_slider = labeled_slider(
-        label="Contraste", value=1.0, min=0.1, max=2.0, divisions=19,
+        label="Contraste",
+        value=1.0,
+        min=0.1,
+        max=2.0,
+        divisions=19,
         fmt=lambda v: f"{v:.1f}",
     )
     color_col, color_slider = labeled_slider(
-        label="Saturação", value=1.0, min=0.1, max=2.0, divisions=19,
+        label="Saturação",
+        value=1.0,
+        min=0.1,
+        max=2.0,
+        divisions=19,
         fmt=lambda v: f"{v:.1f}",
     )
     sharpness_col, sharpness_slider = labeled_slider(
-        label="Nitidez", value=1.0, min=0.1, max=2.0, divisions=19,
+        label="Nitidez",
+        value=1.0,
+        min=0.1,
+        max=2.0,
+        divisions=19,
         fmt=lambda v: f"{v:.1f}",
     )
 
@@ -44,7 +61,11 @@ def build_adjust_block(page: ft.Page) -> tuple[ft.Column, AdjustRefs]:
         spacing=Space.sm,
         controls=[
             ft.Row(
-                [section_label("Ajustes"), ft.Container(expand=True), help_icon_for("image.adjust", page)],
+                [
+                    section_label("Ajustes"),
+                    ft.Container(expand=True),
+                    help_icon_for("image.adjust", page),
+                ],
                 vertical_alignment=ft.CrossAxisAlignment.CENTER,
             ),
             bright_col,

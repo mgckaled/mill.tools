@@ -1,4 +1,5 @@
 """Informações e miniatura de imagens via Pillow."""
+
 from __future__ import annotations
 
 import io

@@ -1,4 +1,5 @@
 """Testes de integração — src/core/audio/normalizer.py (pipeline 2-pass loudnorm)."""
+
 import pytest
 
 pytestmark = pytest.mark.integration

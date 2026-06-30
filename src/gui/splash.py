@@ -1,4 +1,5 @@
 """Tela de abertura (splash) do mill.tools — cata-vento + fade de entrada."""
+
 from __future__ import annotations
 
 import asyncio
@@ -10,7 +11,7 @@ import flet as ft
 from src.gui.assets import b64
 from src.gui.theme.tokens import Color, Type
 
-BG   = Color.dark.bg       # fundo do splash = fundo da janela dark
+BG = Color.dark.bg  # fundo do splash = fundo da janela dark
 
 
 def show_splash(page: ft.Page, on_complete: Callable[[], None]) -> None:
@@ -31,8 +32,14 @@ def show_splash(page: ft.Page, on_complete: Callable[[], None]) -> None:
     )
     title = ft.Text(
         spans=[
-            ft.TextSpan("mill", ft.TextStyle(color=ft.Colors.ON_SURFACE, weight=ft.FontWeight.W_600)),
-            ft.TextSpan(".tools", ft.TextStyle(color=ft.Colors.PRIMARY, weight=ft.FontWeight.W_400)),
+            ft.TextSpan(
+                "mill",
+                ft.TextStyle(color=ft.Colors.ON_SURFACE, weight=ft.FontWeight.W_600),
+            ),
+            ft.TextSpan(
+                ".tools",
+                ft.TextStyle(color=ft.Colors.PRIMARY, weight=ft.FontWeight.W_400),
+            ),
         ],
         size=Type.hero.size,
         opacity=0,

@@ -6,6 +6,7 @@ Reads the tool-call JSON from stdin, extracts the edited file path, and runs
 formatter hiccup never interrupts the session. Invoked via `uv run python`,
 so ruff (a dev dependency) is on PATH inside the project venv.
 """
+
 from __future__ import annotations
 
 import json

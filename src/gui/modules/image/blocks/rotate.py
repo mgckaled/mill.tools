@@ -1,4 +1,5 @@
 """Rotate operation block for the image module."""
+
 from __future__ import annotations
 
 from typing import Callable, NamedTuple
@@ -55,7 +56,11 @@ def build_rotate_block(page: ft.Page) -> tuple[ft.Column, RotateRefs]:
         spacing=Space.sm,
         controls=[
             ft.Row(
-                [section_label("Girar"), ft.Container(expand=True), help_icon_for("image.rotate", page)],
+                [
+                    section_label("Girar"),
+                    ft.Container(expand=True),
+                    help_icon_for("image.rotate", page),
+                ],
                 vertical_alignment=ft.CrossAxisAlignment.CENTER,
             ),
             section_label("Ângulo (sentido horário)"),

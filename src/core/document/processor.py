@@ -1,6 +1,7 @@
 """
 processor.py: PDF manipulation — merge, split, compress, rotate, watermark, stamp, encrypt.
 """
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -39,7 +40,7 @@ def _parse_page_ranges(spec: str, total: int) -> list[int]:
         if "-" in part:
             dash_idx = part.index("-")
             start_str = part[:dash_idx].strip()
-            end_str = part[dash_idx + 1:].strip()
+            end_str = part[dash_idx + 1 :].strip()
             start = int(start_str) if start_str else 1
             end = int(end_str) if end_str else total
             if start < 1 or end > total or start > end:

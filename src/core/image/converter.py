@@ -1,4 +1,5 @@
 """Conversão de imagens via Pillow (formato + qualidade)."""
+
 from __future__ import annotations
 
 import logging
@@ -12,27 +13,27 @@ logger = logging.getLogger(__name__)
 LOSSY_FMTS: frozenset[str] = frozenset({"jpg", "jpeg", "webp"})
 
 _PILLOW_FMT: dict[str, str] = {
-    "jpg":  "JPEG",
+    "jpg": "JPEG",
     "jpeg": "JPEG",
-    "png":  "PNG",
+    "png": "PNG",
     "webp": "WEBP",
     "avif": "AVIF",
     "tiff": "TIFF",
-    "bmp":  "BMP",
-    "gif":  "GIF",
-    "ico":  "ICO",
+    "bmp": "BMP",
+    "gif": "GIF",
+    "ico": "ICO",
 }
 
 _OUT_EXT: dict[str, str] = {
-    "jpg":  "jpg",
+    "jpg": "jpg",
     "jpeg": "jpg",  # normaliza para .jpg
-    "png":  "png",
+    "png": "png",
     "webp": "webp",
     "avif": "avif",
     "tiff": "tiff",
-    "bmp":  "bmp",
-    "gif":  "gif",
-    "ico":  "ico",
+    "bmp": "bmp",
+    "gif": "gif",
+    "ico": "ico",
 }
 
 

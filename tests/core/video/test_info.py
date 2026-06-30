@@ -1,4 +1,5 @@
 """Testes de integração — src/core/video/info.py."""
+
 from pathlib import Path
 
 import pytest
