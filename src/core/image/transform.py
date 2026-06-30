@@ -322,6 +322,22 @@ def adjust_image(
     return out_path
 
 
+def apply_filter_im(im: Image.Image, filter_type: str) -> Image.Image:
+    """Apply a named filter to an in-memory image (pure). Reused by previews."""
+    match filter_type:
+        case "blur":
+            return im.filter(ImageFilter.BLUR)
+        case "sharpen":
+            return im.filter(ImageFilter.SHARPEN)
+        case "autocontrast":
+            return ImageOps.autocontrast(_ensure_rgb(im))
+        case "equalize":
+            return ImageOps.equalize(_ensure_rgb(im))
+        case "grayscale":
+            return ImageOps.grayscale(im)
+    return im
+
+
 def apply_filter(
     src: Path,
     out_dir: Path,
@@ -334,17 +350,7 @@ def apply_filter(
     out_path = _out_path(src, out_dir, out_fmt)
     with Image.open(src) as im:
         im = ImageOps.exif_transpose(im)
-        match filter_type:
-            case "blur":
-                im = im.filter(ImageFilter.BLUR)
-            case "sharpen":
-                im = im.filter(ImageFilter.SHARPEN)
-            case "autocontrast":
-                im = ImageOps.autocontrast(_ensure_rgb(im))
-            case "equalize":
-                im = ImageOps.equalize(_ensure_rgb(im))
-            case "grayscale":
-                im = ImageOps.grayscale(im)
+        im = apply_filter_im(im, filter_type)
         _save(im, out_path, out_fmt, quality)
     return out_path
 

@@ -93,10 +93,18 @@ def build_image_form(
 
     # ── InputSource ───────────────────────────────────────────────────────────
 
+    def _trigger_filter_previews(items: list[InputItem] | None = None) -> None:
+        src_items = items if items is not None else input_source.get_items()
+        locals_ = [it for it in src_items if it.kind == "local"]
+        if locals_:
+            filter_refs.render_previews(locals_[0].value)
+
     def _on_items_change(items: list[InputItem]) -> None:
         start_btn.disabled = len(items) == 0
         if start_btn.page:
             start_btn.update()
+        if _current_op[0] == "filter":
+            _trigger_filter_previews(items)
 
     input_source = build_input_source(
         page,
@@ -193,6 +201,8 @@ def build_image_form(
         _refresh_param_blocks()
         fmt_refs.set_operation(op_id)
         page.update()
+        if op_id == "filter":
+            _trigger_filter_previews()
 
     def _make_card(op_id: str, icon_name: str, label: str) -> ft.Container:
         ic = ft.Icon(icon_name, size=24, color=ft.Colors.PRIMARY)
