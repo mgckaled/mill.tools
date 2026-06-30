@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING
 import flet as ft
 
 from src.gui.components.audio_player import build_audio_player
+from src.gui.modules.audio import pipeline_log
 from src.gui.modules.audio.form_view import AudioArgs, AudioFormPanel, build_audio_form
 from src.gui.modules.audio.visualize_tab import build_visualize_tab
 from src.gui.modules.audio.worker import start_audio_pipeline
@@ -38,6 +39,20 @@ def build_audio_module(
         nav: Lista com [navigate_to] — populada após build_app definir navigate_to.
     """
 
+    # Per-item metadata captured from audio_op_done (A/B source + loudness).
+    # Keyed by final output_path → {"source_path", "loudness_stats", ...}.
+    _item_meta: dict[str, dict] = {}
+
+    def _capture_meta(event) -> None:
+        if getattr(event, "module_id", "") != "audio":
+            return
+        if getattr(event, "type", "") == "audio_op_done":
+            out = event.payload.get("output_path")
+            if out:
+                _item_meta[out] = event.payload
+
+    page.pubsub.subscribe(_capture_meta)
+
     # ------------------------------------------------------------------
     # Handlers do ciclo de vida
     # ------------------------------------------------------------------
@@ -47,6 +62,7 @@ def build_audio_module(
             return
         pipeline_running[0] = True
         cancel_event.clear()
+        _item_meta.clear()
         progress_panel.reset()
         form_panel.set_running(True)
         start_audio_pipeline(args, bus, cancel_event)
@@ -61,10 +77,14 @@ def build_audio_module(
         form_panel.set_running(False)
         if not payload.get("error"):
             progress_panel.show_results(payload)
-            # Carrega o primeiro arquivo de áudio da saída no reprodutor
+            # Carrega o primeiro arquivo de áudio da saída no reprodutor.
             for path_str in payload.get("output_paths", []):
                 if Path(path_str).suffix.lower() in _AUDIO_EXTS:
-                    player.load(path_str)
+                    source = _item_meta.get(path_str, {}).get("source_path")
+                    if source:
+                        player.set_compare(source, path_str)
+                    else:
+                        player.load(path_str)
                     break
 
     # ------------------------------------------------------------------
@@ -98,6 +118,35 @@ def build_audio_module(
         for path_str in output_paths:
             p = Path(path_str)
             results_col.controls.append(_make_output_card(p))
+            meta = _item_meta.get(path_str, {})
+            stats = meta.get("loudness_stats")
+            if stats:
+                results_col.controls.append(
+                    _make_loudness_card(stats, meta.get("loudness_target", -14.0))
+                )
+
+    def _make_loudness_card(stats: dict, target: float) -> ft.Control:
+        line = pipeline_log.fmt_loudness_card(stats, target)
+        return ft.Container(
+            margin=ft.Margin(top=0, bottom=4, left=0, right=0),
+            padding=ft.Padding(left=10, right=10, top=6, bottom=6),
+            border_radius=8,
+            bgcolor=ft.Colors.with_opacity(0.06, ft.Colors.PRIMARY),
+            content=ft.Row(
+                [
+                    ft.Icon(ft.Icons.GRAPHIC_EQ, size=14, color=ft.Colors.PRIMARY),
+                    ft.Text(
+                        line,
+                        size=Type.small.size,
+                        color=ft.Colors.ON_SURFACE,
+                        font_family=Type.FONT_MONO,
+                        selectable=True,
+                    ),
+                ],
+                spacing=6,
+                vertical_alignment=ft.CrossAxisAlignment.CENTER,
+            ),
+        )
 
     def _make_output_card(p: Path) -> ft.Control:
         suffix = p.suffix.lower()

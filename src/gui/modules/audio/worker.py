@@ -167,6 +167,8 @@ def _make_process_item(args: AudioArgs) -> Callable:
                 )
 
         original_src_size = out_path.stat().st_size
+        base_path = out_path  # pre-post-processing file (for A/B compare)
+        norm_stats: dict | None = None
 
         # ── Post: Trim silence ───────────────────────────────────────────
         if args.trim_silence:
@@ -310,6 +312,7 @@ def _make_process_item(args: AudioArgs) -> Callable:
             out_path, stats = _normalize_lufs(
                 out_path, AUDIO_PROCESSED_DIR, args.normalize_target_lufs, _norm_cb
             )
+            norm_stats = stats
 
             if stats:
                 emit(
@@ -365,17 +368,22 @@ def _make_process_item(args: AudioArgs) -> Callable:
             )
 
         elapsed = time() - t0
-        emit(
-            "audio_op_done",
-            payload={
-                "output_path": str(out_path),
-                "elapsed": f"{elapsed:.1f}s",
-                "item_idx": idx,
-                "total": total,
-                "src_size_bytes": original_src_size,
-                "out_size_bytes": out_path.stat().st_size,
-            },
-        )
+        done_payload: dict = {
+            "output_path": str(out_path),
+            "elapsed": f"{elapsed:.1f}s",
+            "item_idx": idx,
+            "total": total,
+            "src_size_bytes": original_src_size,
+            "out_size_bytes": out_path.stat().st_size,
+        }
+        # A/B compare: expose the pre-post-processing file when it differs.
+        if out_path != base_path and base_path.exists():
+            done_payload["source_path"] = str(base_path)
+        # Loudness metrics card: surface measured stats vs. target.
+        if norm_stats:
+            done_payload["loudness_stats"] = norm_stats
+            done_payload["loudness_target"] = args.normalize_target_lufs
+        emit("audio_op_done", payload=done_payload)
         return str(out_path)
 
     return _process_item

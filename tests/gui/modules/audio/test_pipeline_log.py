@@ -4,7 +4,16 @@ import pytest
 
 pytestmark = pytest.mark.unit
 
-_ALL_OPS = ["download", "convert", "extract", "denoise", "normalize"]
+_ALL_OPS = [
+    "download",
+    "convert",
+    "extract",
+    "silence",
+    "denoise",
+    "speed",
+    "normalize",
+    "encode",
+]
 
 
 def _make_event(type_: str, payload: dict):
@@ -197,3 +206,29 @@ def test_fmt_normalize_measured_handles_missing_keys():
     out = fmt_normalize_measured({})
     # Missing keys default to "?"
     assert "?" in out
+
+
+def test_fmt_encode_detail_mono_and_rate():
+    from src.gui.modules.audio.pipeline_log import fmt_encode_detail
+
+    out = fmt_encode_detail(1, 16000)
+    assert "mono" in out
+    assert "16 kHz" in out
+    assert "preservados" in fmt_encode_detail(None, None)
+
+
+def test_fmt_loudness_card_formats_ptbr_decimals():
+    from src.gui.modules.audio.pipeline_log import fmt_loudness_card
+
+    stats = {"input_i": "-19.2", "input_tp": "-1.2", "input_lra": "8.4"}
+    line = fmt_loudness_card(stats, -14.0)
+    assert line == "-19,2 → -14,0 LUFS · TP -1,2 dBTP · LRA 8,4 LU"
+
+
+def test_fmt_loudness_card_missing_fields_render_question_mark():
+    from src.gui.modules.audio.pipeline_log import fmt_loudness_card
+
+    line = fmt_loudness_card({}, -16.0)
+    assert "? → -16,0 LUFS" in line
+    assert "TP ?" in line
+    assert "LRA ?" in line

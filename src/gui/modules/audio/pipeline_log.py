@@ -152,6 +152,26 @@ def fmt_normalize_fallback() -> str:
     return "[»] Medição indisponível — usando passo único (menos preciso)"
 
 
+def fmt_loudness_card(stats: dict, target: float) -> str:
+    """Format a one-line loudness summary (measured vs. target), PT-BR decimals.
+
+    Example: ``-19,2 → -14,0 LUFS · TP -1,2 dBTP · LRA 8,4 LU``. Missing fields
+    render as ``?``.
+    """
+
+    def _num(v) -> str:
+        try:
+            return f"{float(v):.1f}".replace(".", ",")
+        except (TypeError, ValueError):
+            return "?"
+
+    il = _num(stats.get("input_i"))
+    tp = _num(stats.get("input_tp"))
+    lra = _num(stats.get("input_lra"))
+    tgt = f"{target:.1f}".replace(".", ",")
+    return f"{il} → {tgt} LUFS · TP {tp} dBTP · LRA {lra} LU"
+
+
 # ─── Resolvers (progress_view.py) ─────────────────────────────────────────────
 
 

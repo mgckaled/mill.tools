@@ -13,6 +13,7 @@ from typing import Callable
 import flet as ft
 import numpy as np
 
+from src.gui.theme.components import segmented_selector
 from src.gui.theme.tokens import Color, Radius, Space, Type
 
 # ---------------------------------------------------------------------------
@@ -337,10 +338,14 @@ class AudioPlayer:
         control: Widget Flet a inserir no layout. Sempre visível — exibe
                  placeholder até o primeiro load().
         load: Função que recebe caminho de arquivo e inicia o carregamento.
+        set_compare: Recebe (original, processed) e habilita o seletor A/B
+                     Original|Processado (só quando ambos existem), carregando
+                     o processado por padrão. Reusa o mesmo motor/waveform.
     """
 
     control: ft.Control
     load: Callable[[str], None]
+    set_compare: Callable[[str | None, str | None], None]
 
 
 def build_audio_player(page: ft.Page) -> AudioPlayer:
@@ -529,6 +534,27 @@ def build_audio_player(page: ft.Page) -> AudioPlayer:
     )
 
     # ------------------------------------------------------------------
+    # Seletor A/B Original | Processado (oculto até set_compare)
+    # ------------------------------------------------------------------
+
+    _compare_paths: dict[str, str | None] = {"original": None, "processed": None}
+
+    def _on_compare_change(which: str) -> None:
+        path = _compare_paths.get(which)
+        if path:
+            _load(path)
+
+    compare_grid = segmented_selector(
+        ["original", "processed"],
+        "processed",
+        page,
+        on_change=_on_compare_change,
+        labels={"original": "Original", "processed": "Processado"},
+        columns=2,
+    )[0]
+    compare_row = ft.Container(content=compare_grid, visible=False)
+
+    # ------------------------------------------------------------------
     # Painel do player (oculto até load)
     # ------------------------------------------------------------------
 
@@ -550,6 +576,8 @@ def build_audio_player(page: ft.Page) -> AudioPlayer:
                     spacing=6,
                     vertical_alignment=ft.CrossAxisAlignment.CENTER,
                 ),
+                # Seletor A/B (oculto até comparar)
+                compare_row,
                 # Waveform clicável
                 waveform_ctr,
                 # Posição
@@ -829,4 +857,23 @@ def build_audio_player(page: ft.Page) -> AudioPlayer:
         threading.Thread(target=_load_waveform, daemon=True).start()
         engine.load(str(p), on_loaded=_on_loaded)
 
-    return AudioPlayer(control=root, load=_load)
+    def _set_compare(original: str | None, processed: str | None) -> None:
+        """Habilita o A/B e carrega o processado por padrão.
+
+        Reusa o motor/waveform existentes (sem segundo render ao vivo): trocar
+        de opção apenas chama _load na fonte escolhida (generation counter
+        descarta a carga anterior).
+        """
+        _compare_paths["original"] = original
+        _compare_paths["processed"] = processed
+        both = bool(original) and bool(processed)
+        compare_row.visible = both
+        if both:
+            try:
+                if compare_row.page:
+                    compare_row.update()
+            except Exception:
+                pass
+        _load(processed or original or "")
+
+    return AudioPlayer(control=root, load=_load, set_compare=_set_compare)
