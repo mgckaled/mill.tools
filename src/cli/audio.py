@@ -119,6 +119,66 @@ def add_audio_parser(subparsers: argparse._SubParsersAction) -> None:
     p.set_defaults(func=run_audio_cli)
 
 
+def add_audio_viz_parser(subparsers: argparse._SubParsersAction) -> None:
+    """Register the 'audio-viz' subcommand (audio → static PNG image)."""
+    p = subparsers.add_parser(
+        "audio-viz",
+        help="Render a static waveform or spectrogram PNG from an audio file",
+    )
+    p.add_argument("input", help="Local audio or video file")
+    p.add_argument(
+        "--spectrogram",
+        action="store_true",
+        help="Render a spectrogram instead of a waveform",
+    )
+    p.add_argument(
+        "--width",
+        type=int,
+        default=1200,
+        metavar="PX",
+        help="Image width (default 1200)",
+    )
+    p.add_argument(
+        "--height",
+        type=int,
+        default=None,
+        metavar="PX",
+        help="Image height (default 240 waveform / 480 spectrogram)",
+    )
+    p.set_defaults(func=run_audio_viz_cli)
+
+
+def run_audio_viz_cli(ns: argparse.Namespace) -> None:
+    """Render a waveform/spectrogram PNG from parsed CLI arguments."""
+    from pathlib import Path
+
+    from src.core.audio.visualize import render_spectrogram_png, render_waveform_png
+    from src.utils import AUDIO_PROCESSED_DIR, check_dependencies
+
+    # Output filenames may contain non-cp1252 characters.
+    try:
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    except Exception:
+        pass
+
+    check_dependencies()
+
+    src = Path(ns.input)
+    if not src.exists():
+        print(f"File not found: {src}")
+        sys.exit(1)
+
+    if ns.spectrogram:
+        out = render_spectrogram_png(
+            src, AUDIO_PROCESSED_DIR, width=ns.width, height=ns.height or 480
+        )
+    else:
+        out = render_waveform_png(
+            src, AUDIO_PROCESSED_DIR, width=ns.width, height=ns.height or 240
+        )
+    print(f"Saved: {out}")
+
+
 def run_audio_cli(ns: argparse.Namespace) -> None:
     """Execute the audio pipeline from parsed CLI arguments.
 

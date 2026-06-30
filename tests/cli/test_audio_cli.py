@@ -4,7 +4,7 @@ import argparse
 
 import pytest
 
-from src.cli.audio import add_audio_parser
+from src.cli.audio import add_audio_parser, add_audio_viz_parser
 
 
 def _parse(*argv: str) -> argparse.Namespace:
@@ -12,6 +12,13 @@ def _parse(*argv: str) -> argparse.Namespace:
     sub = parser.add_subparsers(dest="command", required=True)
     add_audio_parser(sub)
     return parser.parse_args(["audio", *argv])
+
+
+def _parse_viz(*argv: str) -> argparse.Namespace:
+    parser = argparse.ArgumentParser()
+    sub = parser.add_subparsers(dest="command", required=True)
+    add_audio_viz_parser(sub)
+    return parser.parse_args(["audio-viz", *argv])
 
 
 @pytest.mark.unit
@@ -148,6 +155,53 @@ def test_run_audio_cli_passes_tier1_args(mocker):
     assert args.speed_factor == 1.25
     assert args.denoise is True
     assert args.denoise_stationary is False
+
+
+@pytest.mark.unit
+def test_audio_viz_defaults():
+    ns = _parse_viz("song.wav")
+    assert ns.input == "song.wav"
+    assert ns.spectrogram is False
+    assert ns.width == 1200
+    assert ns.height is None
+    assert callable(ns.func)
+
+
+@pytest.mark.unit
+def test_audio_viz_spectrogram_flag():
+    ns = _parse_viz("song.wav", "--spectrogram", "--width", "800", "--height", "300")
+    assert ns.spectrogram is True
+    assert ns.width == 800
+    assert ns.height == 300
+
+
+@pytest.mark.unit
+def test_run_audio_viz_cli_dispatches_waveform(tmp_path, mocker):
+    """Sem --spectrogram, dispara render_waveform_png e imprime o caminho."""
+    mocker.patch("src.utils.check_dependencies")
+    src = tmp_path / "song.wav"
+    src.write_bytes(b"")
+    fake_out = tmp_path / "song_waveform.png"
+    wf = mocker.patch(
+        "src.core.audio.visualize.render_waveform_png", return_value=fake_out
+    )
+    sp = mocker.patch("src.core.audio.visualize.render_spectrogram_png")
+
+    ns = _parse_viz(str(src))
+    ns.func(ns)
+
+    assert wf.called
+    assert not sp.called
+
+
+@pytest.mark.unit
+def test_run_audio_viz_cli_missing_file_exits(tmp_path, mocker):
+    """Arquivo inexistente termina com exit(1)."""
+    mocker.patch("src.utils.check_dependencies")
+    ns = _parse_viz(str(tmp_path / "nope.wav"))
+    with pytest.raises(SystemExit) as exc:
+        ns.func(ns)
+    assert exc.value.code == 1
 
 
 @pytest.mark.unit

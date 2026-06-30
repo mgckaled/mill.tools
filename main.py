@@ -172,14 +172,24 @@ def _subtitle_formats_from_args(args: argparse.Namespace) -> tuple[str, ...]:
 
 
 _NON_TRANSCRIBE_CMDS = frozenset(
-    {"audio", "video", "image", "document", "library", "ai", "recipe", "data"}
+    {
+        "audio",
+        "audio-viz",
+        "video",
+        "image",
+        "document",
+        "library",
+        "ai",
+        "recipe",
+        "data",
+    }
 )
 
 
 def _dispatch_other(cmd: str) -> None:
     """Dispatch audio / video / image / document / library / ai / recipe / data subcommands."""
     from src.cli.ai import add_ai_parser
-    from src.cli.audio import add_audio_parser
+    from src.cli.audio import add_audio_parser, add_audio_viz_parser
     from src.cli.data import add_data_parser
     from src.cli.document import add_document_parser
     from src.cli.image import add_image_parser
@@ -193,6 +203,7 @@ def _dispatch_other(cmd: str) -> None:
     )
     subparsers = parser.add_subparsers(dest="command", required=True)
     add_audio_parser(subparsers)
+    add_audio_viz_parser(subparsers)
     add_video_parser(subparsers)
     add_image_parser(subparsers)
     add_document_parser(subparsers)
