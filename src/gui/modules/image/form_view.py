@@ -321,14 +321,20 @@ def build_image_form(
             resize_width=resize_refs.get_width(),
             resize_height=resize_refs.get_height(),
             resize_scale_pct=resize_refs.get_scale_pct(),
-            # crop
+            # crop (focal mode uses its own ratio selector)
             crop_mode=crop_refs.get_mode(),
             crop_left=crop_refs.get_left(),
             crop_top=crop_refs.get_top(),
             crop_width=crop_refs.get_width(),
             crop_height=crop_refs.get_height(),
-            crop_ratio=crop_refs.get_ratio(),
+            crop_ratio=(
+                crop_refs.get_focal_ratio()
+                if crop_refs.get_mode() == "focal"
+                else crop_refs.get_ratio()
+            ),
             crop_trim_color=crop_refs.get_trim_color(),
+            crop_focal_x=crop_refs.get_focal_x(),
+            crop_focal_y=crop_refs.get_focal_y(),
             # rotate
             rotate_angle=rotate_refs.get_angle(),
             rotate_flip_h=rotate_refs.get_flip_h(),

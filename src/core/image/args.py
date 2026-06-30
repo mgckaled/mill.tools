@@ -45,6 +45,8 @@ class ImageArgs:
     crop_height: int = 0
     crop_ratio: str = "1:1"
     crop_trim_color: str = "#ffffff"
+    crop_focal_x: float = 0.5
+    crop_focal_y: float = 0.5
 
     # rotate
     rotate_angle: int = 0

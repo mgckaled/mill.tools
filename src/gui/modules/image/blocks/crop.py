@@ -1,4 +1,5 @@
 """Crop operation block for the image module."""
+
 from __future__ import annotations
 
 from typing import Callable, NamedTuple
@@ -6,6 +7,7 @@ from typing import Callable, NamedTuple
 import flet as ft
 
 from src.gui.theme.components import help_icon_for, section_label, segmented_selector
+from src.gui.theme.components.sliders import labeled_slider
 from src.gui.theme.tokens import Layout, Space, Type
 
 
@@ -25,6 +27,9 @@ class CropRefs(NamedTuple):
     get_height: Callable[[], int]
     get_ratio: Callable[[], str]
     get_trim_color: Callable[[], str]
+    get_focal_ratio: Callable[[], str]
+    get_focal_x: Callable[[], float]
+    get_focal_y: Callable[[], float]
 
 
 def build_crop_block(page: ft.Page) -> tuple[ft.Column, CropRefs]:
@@ -35,60 +40,119 @@ def build_crop_block(page: ft.Page) -> tuple[ft.Column, CropRefs]:
     _mode_get: list[Callable] = []
 
     left_tf = ft.TextField(
-        hint_text="Esquerda px", value="0", keyboard_type=ft.KeyboardType.NUMBER,
-        text_size=Type.input.size, height=Layout.field_height,
+        hint_text="Esquerda px",
+        value="0",
+        keyboard_type=ft.KeyboardType.NUMBER,
+        text_size=Type.input.size,
+        height=Layout.field_height,
         content_padding=ft.Padding(left=10, right=4, top=0, bottom=0),
-        border_color=ft.Colors.OUTLINE_VARIANT, focused_border_color=ft.Colors.PRIMARY,
+        border_color=ft.Colors.OUTLINE_VARIANT,
+        focused_border_color=ft.Colors.PRIMARY,
         expand=True,
     )
     top_tf = ft.TextField(
-        hint_text="Topo px", value="0", keyboard_type=ft.KeyboardType.NUMBER,
-        text_size=Type.input.size, height=Layout.field_height,
+        hint_text="Topo px",
+        value="0",
+        keyboard_type=ft.KeyboardType.NUMBER,
+        text_size=Type.input.size,
+        height=Layout.field_height,
         content_padding=ft.Padding(left=10, right=4, top=0, bottom=0),
-        border_color=ft.Colors.OUTLINE_VARIANT, focused_border_color=ft.Colors.PRIMARY,
+        border_color=ft.Colors.OUTLINE_VARIANT,
+        focused_border_color=ft.Colors.PRIMARY,
         expand=True,
     )
     w_tf = ft.TextField(
-        hint_text="Largura px (0=até borda)", value="0",
-        keyboard_type=ft.KeyboardType.NUMBER, text_size=Type.input.size, height=Layout.field_height,
+        hint_text="Largura px (0=até borda)",
+        value="0",
+        keyboard_type=ft.KeyboardType.NUMBER,
+        text_size=Type.input.size,
+        height=Layout.field_height,
         content_padding=ft.Padding(left=10, right=4, top=0, bottom=0),
-        border_color=ft.Colors.OUTLINE_VARIANT, focused_border_color=ft.Colors.PRIMARY,
+        border_color=ft.Colors.OUTLINE_VARIANT,
+        focused_border_color=ft.Colors.PRIMARY,
         expand=True,
     )
     h_tf = ft.TextField(
-        hint_text="Altura px (0=até borda)", value="0",
-        keyboard_type=ft.KeyboardType.NUMBER, text_size=Type.input.size, height=Layout.field_height,
+        hint_text="Altura px (0=até borda)",
+        value="0",
+        keyboard_type=ft.KeyboardType.NUMBER,
+        text_size=Type.input.size,
+        height=Layout.field_height,
         content_padding=ft.Padding(left=10, right=4, top=0, bottom=0),
-        border_color=ft.Colors.OUTLINE_VARIANT, focused_border_color=ft.Colors.PRIMARY,
+        border_color=ft.Colors.OUTLINE_VARIANT,
+        focused_border_color=ft.Colors.PRIMARY,
         expand=True,
     )
     trim_color_tf = ft.TextField(
-        value="#ffffff", text_size=Type.input.size, height=Layout.field_height,
+        value="#ffffff",
+        text_size=Type.input.size,
+        height=Layout.field_height,
         content_padding=ft.Padding(left=10, right=4, top=0, bottom=0),
-        border_color=ft.Colors.OUTLINE_VARIANT, focused_border_color=ft.Colors.PRIMARY,
+        border_color=ft.Colors.OUTLINE_VARIANT,
+        focused_border_color=ft.Colors.PRIMARY,
     )
 
-    manual_col = ft.Column([
-        ft.Row([left_tf, top_tf], spacing=8),
-        ft.Row([w_tf, h_tf], spacing=8),
-    ], spacing=Space.sm)
+    manual_col = ft.Column(
+        [
+            ft.Row([left_tf, top_tf], spacing=8),
+            ft.Row([w_tf, h_tf], spacing=8),
+        ],
+        spacing=Space.sm,
+    )
 
     _ratio_get: list[Callable] = []
     ratio_grid, _rget, _rset = segmented_selector(
-        ["1:1", "4:3", "16:9", "3:2"], "1:1", page, columns=4,
+        ["1:1", "4:3", "16:9", "3:2"],
+        "1:1",
+        page,
+        columns=4,
     )
     _ratio_get.append(_rget)
     ratio_col = ft.Column([section_label("Proporção"), ratio_grid], spacing=Space.sm)
 
-    autotrim_col = ft.Column([
-        section_label("Cor de fundo a remover"),
-        trim_color_tf,
-    ], spacing=Space.sm)
+    autotrim_col = ft.Column(
+        [
+            section_label("Cor de fundo a remover"),
+            trim_color_tf,
+        ],
+        spacing=Space.sm,
+    )
+
+    # Smart crop: target ratio + focal point (keeps the subject in frame).
+    _focal_ratio_get: list[Callable] = []
+    focal_ratio_grid, _frget, _frset = segmented_selector(
+        ["1:1", "4:5", "9:16", "16:9", "3:2"],
+        "1:1",
+        page,
+        columns=5,
+    )
+    _focal_ratio_get.append(_frget)
+    fx_col, fx_slider = labeled_slider(
+        label="Ponto focal X",
+        value=50.0,
+        min=0.0,
+        max=100.0,
+        divisions=100,
+        fmt=lambda v: f"{int(v)}%",
+    )
+    fy_col, fy_slider = labeled_slider(
+        label="Ponto focal Y",
+        value=50.0,
+        min=0.0,
+        max=100.0,
+        divisions=100,
+        fmt=lambda v: f"{int(v)}%",
+    )
+    focal_col = ft.Column(
+        [section_label("Proporção"), focal_ratio_grid, fx_col, fy_col],
+        spacing=Space.sm,
+    )
 
     def _on_mode_change(mode: str) -> None:
         manual_col.visible = mode == "manual"
         ratio_col.visible = mode == "ratio"
         autotrim_col.visible = mode == "autotrim"
+        focal_col.visible = mode == "focal"
         try:
             if manual_col.page:
                 manual_col.page.update()
@@ -96,23 +160,33 @@ def build_crop_block(page: ft.Page) -> tuple[ft.Column, CropRefs]:
             pass
 
     mode_grid, _mget, _mset = segmented_selector(
-        ["manual", "ratio", "autotrim"],
+        ["manual", "ratio", "autotrim", "focal"],
         "manual",
         page,
         on_change=_on_mode_change,
-        labels={"manual": "Manual", "ratio": "Proporção", "autotrim": "Auto-trim"},
-        columns=3,
+        labels={
+            "manual": "Manual",
+            "ratio": "Proporção",
+            "autotrim": "Auto-trim",
+            "focal": "Smart",
+        },
+        columns=4,
     )
     _mode_get.append(_mget)
     ratio_col.visible = False
     autotrim_col.visible = False
+    focal_col.visible = False
 
     block = ft.Column(
         visible=False,
         spacing=Space.sm,
         controls=[
             ft.Row(
-                [section_label("Cortar"), ft.Container(expand=True), help_icon_for("image.crop", page)],
+                [
+                    section_label("Cortar"),
+                    ft.Container(expand=True),
+                    help_icon_for("image.crop", page),
+                ],
                 vertical_alignment=ft.CrossAxisAlignment.CENTER,
             ),
             section_label("Modo"),
@@ -120,6 +194,7 @@ def build_crop_block(page: ft.Page) -> tuple[ft.Column, CropRefs]:
             manual_col,
             ratio_col,
             autotrim_col,
+            focal_col,
         ],
     )
 
@@ -131,5 +206,8 @@ def build_crop_block(page: ft.Page) -> tuple[ft.Column, CropRefs]:
         get_height=lambda: _parse_int(h_tf, 0),
         get_ratio=lambda: _ratio_get[0](),
         get_trim_color=lambda: (trim_color_tf.value or "#ffffff").strip(),
+        get_focal_ratio=lambda: _focal_ratio_get[0](),
+        get_focal_x=lambda: fx_slider.value / 100.0,
+        get_focal_y=lambda: fy_slider.value / 100.0,
     )
     return block, refs

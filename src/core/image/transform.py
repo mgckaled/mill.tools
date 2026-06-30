@@ -1,10 +1,19 @@
 """Operações de manipulação de imagens via Pillow (puro, sem Flet)."""
+
 from __future__ import annotations
 
 from datetime import datetime
 from pathlib import Path
 
-from PIL import Image, ImageChops, ImageDraw, ImageEnhance, ImageFilter, ImageFont, ImageOps
+from PIL import (
+    Image,
+    ImageChops,
+    ImageDraw,
+    ImageEnhance,
+    ImageFilter,
+    ImageFont,
+    ImageOps,
+)
 
 from src.core.image.converter import LOSSY_FMTS, _PILLOW_FMT
 
@@ -12,6 +21,7 @@ from src.core.image.converter import LOSSY_FMTS, _PILLOW_FMT
 # ---------------------------------------------------------------------------
 # Helpers internos
 # ---------------------------------------------------------------------------
+
 
 def _out_path(src: Path, out_dir: Path, out_fmt: str | None) -> Path:
     """Caminho de saída sem colisão. out_fmt=None → usa extensão de src."""
@@ -76,6 +86,7 @@ def _ensure_rgb(im: Image.Image) -> Image.Image:
 # Funções públicas
 # ---------------------------------------------------------------------------
 
+
 def resize_image(
     src: Path,
     out_dir: Path,
@@ -120,8 +131,12 @@ def crop_image(
     trim_color: str,
     out_fmt: str | None,
     quality: int,
+    focal_x: float = 0.5,
+    focal_y: float = 0.5,
 ) -> Path:
-    """Recorta src. Modos: manual, ratio, autotrim."""
+    """Recorta src. Modos: manual, ratio, autotrim, focal."""
+    from src.core.image.smart_crop import focal_crop_box
+
     out_path = _out_path(src, out_dir, out_fmt)
     with Image.open(src) as im:
         im = ImageOps.exif_transpose(im)
@@ -149,6 +164,10 @@ def crop_image(
                 bbox = diff.getbbox()
                 if bbox:
                     im = im.crop(bbox)
+            case "focal":
+                rw, rh = (int(x) for x in ratio.split(":"))
+                box = focal_crop_box(im.width, im.height, rw / rh, focal_x, focal_y)
+                im = im.crop(box)
         _save(im, out_path, out_fmt, quality)
     return out_path
 
@@ -179,13 +198,20 @@ def rotate_image(
     return out_path
 
 
-def _wm_coords(iw: int, ih: int, ww: int, wh: int, position: str, margin: int = 10) -> tuple[int, int]:
+def _wm_coords(
+    iw: int, ih: int, ww: int, wh: int, position: str, margin: int = 10
+) -> tuple[int, int]:
     match position:
-        case "top-left":    return margin, margin
-        case "top-right":   return iw - ww - margin, margin
-        case "bottom-left": return margin, ih - wh - margin
-        case "center":      return (iw - ww) // 2, (ih - wh) // 2
-        case _:             return iw - ww - margin, ih - wh - margin  # bottom-right
+        case "top-left":
+            return margin, margin
+        case "top-right":
+            return iw - ww - margin, margin
+        case "bottom-left":
+            return margin, ih - wh - margin
+        case "center":
+            return (iw - ww) // 2, (ih - wh) // 2
+        case _:
+            return iw - ww - margin, ih - wh - margin  # bottom-right
 
 
 def watermark_image(
@@ -309,11 +335,16 @@ def apply_filter(
     with Image.open(src) as im:
         im = ImageOps.exif_transpose(im)
         match filter_type:
-            case "blur":         im = im.filter(ImageFilter.BLUR)
-            case "sharpen":      im = im.filter(ImageFilter.SHARPEN)
-            case "autocontrast": im = ImageOps.autocontrast(_ensure_rgb(im))
-            case "equalize":     im = ImageOps.equalize(_ensure_rgb(im))
-            case "grayscale":    im = ImageOps.grayscale(im)
+            case "blur":
+                im = im.filter(ImageFilter.BLUR)
+            case "sharpen":
+                im = im.filter(ImageFilter.SHARPEN)
+            case "autocontrast":
+                im = ImageOps.autocontrast(_ensure_rgb(im))
+            case "equalize":
+                im = ImageOps.equalize(_ensure_rgb(im))
+            case "grayscale":
+                im = ImageOps.grayscale(im)
         _save(im, out_path, out_fmt, quality)
     return out_path
 
@@ -345,6 +376,7 @@ def make_contact_sheet(
 ) -> Path:
     """Monta grade de miniaturas (N→1). Arquivos inválidos são ignorados."""
     import logging
+
     _log = logging.getLogger(__name__)
 
     ts = datetime.now().strftime("%Y%m%d_%H%M%S")

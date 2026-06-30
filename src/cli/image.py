@@ -94,15 +94,31 @@ def add_image_parser(subparsers: argparse._SubParsersAction) -> None:
     cr.add_argument(
         "--mode",
         default="manual",
-        choices=["manual", "ratio", "autotrim"],
-        help="Crop mode (default manual)",
+        choices=["manual", "ratio", "autotrim", "focal"],
+        help="Crop mode (default manual). focal = smart crop to --ratio around a focal point",
     )
     cr.add_argument("--left", type=int, default=0)
     cr.add_argument("--top", type=int, default=0)
     cr.add_argument("--crop-width", type=int, default=0, dest="crop_width")
     cr.add_argument("--crop-height", type=int, default=0, dest="crop_height")
     cr.add_argument(
-        "--ratio", default="1:1", help="Aspect ratio for --mode ratio (default 1:1)"
+        "--ratio",
+        default="1:1",
+        help="Aspect ratio for --mode ratio/focal (default 1:1)",
+    )
+    cr.add_argument(
+        "--focal-x",
+        type=float,
+        default=0.5,
+        dest="focal_x",
+        help="Focal point X 0.0–1.0 for --mode focal (default 0.5)",
+    )
+    cr.add_argument(
+        "--focal-y",
+        type=float,
+        default=0.5,
+        dest="focal_y",
+        help="Focal point Y 0.0–1.0 for --mode focal (default 0.5)",
     )
     cr.add_argument(
         "--trim-color",
@@ -367,6 +383,8 @@ def run_image_cli(ns: argparse.Namespace) -> None:
         crop_height=getattr(ns, "crop_height", 0),
         crop_ratio=getattr(ns, "ratio", "1:1"),
         crop_trim_color=getattr(ns, "trim_color", "#ffffff"),
+        crop_focal_x=getattr(ns, "focal_x", 0.5),
+        crop_focal_y=getattr(ns, "focal_y", 0.5),
         # rotate
         rotate_angle=getattr(ns, "angle", 0),
         rotate_flip_h=getattr(ns, "flip_h", False),

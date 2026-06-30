@@ -155,6 +155,8 @@ def fmt_crop_detail(
             return f"[i] Proporção {ratio} — maior retângulo centralizado"
         case "autotrim":
             return f"[i] Auto-trim — removendo bordas {trim_color}"
+        case "focal":
+            return f"[i] Smart crop {ratio} centrado no ponto focal"
         case _:
             return f"[i] Corte: {mode}"
 

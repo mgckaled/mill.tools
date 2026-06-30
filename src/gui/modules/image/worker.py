@@ -221,6 +221,8 @@ def _make_process_item(args: ImageArgs) -> Callable:
                     trim_color=args.crop_trim_color,
                     out_fmt=args.out_fmt,
                     quality=args.out_quality,
+                    focal_x=args.crop_focal_x,
+                    focal_y=args.crop_focal_y,
                 )
 
             case "rotate":
