@@ -112,12 +112,19 @@ uv run main.py audio <URL_OR_FILE> [opções]
 | `--fmt` | `mp3` | Formato: mp3/m4a/wav/ogg/opus |
 | `--quality` | `best` | Bitrate kbps ou `best` |
 | `--no-meta` | off | Não embutir capa/metadados |
+| `--mono` | off | Downmix p/ 1 canal (`-ac 1`) no encode final |
+| `--sample-rate` | None | Reamostra (`-ar`): 16000/22050/44100/48000 (16k = Whisper) |
+| `--trim-silence` | off | Remove silêncio início/fim/meio (`silenceremove`) |
+| `--silence-threshold` | `-40.0` | Limiar dBFS (só com `--trim-silence`) |
+| `--silence-min` | `0.5` | Silêncio mínimo em s (só com `--trim-silence`) |
+| `--speed` | `1.0` | Velocidade sem pitch (`atempo`), faixa 0.5–4.0 |
 | `--denoise` | off | Spectral gating pós-conversão |
+| `--denoise-adaptive` | off | Ruído adaptativo (não-estacionário) |
 | `--normalize` | off | Loudnorm EBU R128 pós-conversão |
 | `--lufs` | `-14.0` | Alvo LUFS (só com `--normalize`) |
 | `--verbose` | off | Logging DEBUG |
 
-Auto-detecção de operação: URL → download; vídeo local → extração; áudio → conversão.
+Auto-detecção de operação: URL → download; vídeo local → extração; áudio → conversão. Cadeia de pós-processamento (ordem fixa): silêncio → denoise → velocidade → normalize → encode final (`--mono`/`--sample-rate` + formato).
 
 ---
 

@@ -70,7 +70,9 @@ Whisper + pipeline de IA (Formatação/Análise/Prompt-ready). `InputSource` ún
 - Auto-detecta: URL → download; vídeo local → extração; áudio local → conversão. Formatos `best`/mp3/m4a/wav/ogg/opus + bitrate; `best` sem reencode. Capa/metadados embutidos por padrão (fallback em ogg/opus). Fila sequencial.
 - **Saída**: downloads → `output/audio/source/`; processados → `output/audio/processed/`.
 - **Reprodutor embutido** (`components/audio_player.py`): aparece após o pipeline; sounddevice; seek por clique no waveform. **Waveform — 2 threads**: decode rápido a 500 Hz mono (exibir) + decode completo 44100 estéreo (playback); `_load_generation` descarta cargas antigas; `gapless_playback=True` evita flicker no cursor.
-- **Pós-processamento** (switches encadeáveis): `denoiser.py` (spectral gating noisereduce, salva WAV preservando subtype PCM via `sf.info`+`subtype`); `normalizer.py` (loudnorm 2 passes, alvo −23..−6 LUFS default −14, True Peak ≤ −1 dBFS, retorna `(path, stats)`).
+- **Pós-processamento** (switches encadeáveis, ordem fixa **silêncio → denoise → velocidade → normalize → encode final**): `silence.py` (remoção de silêncio início/fim/meio via `silenceremove`, `stop_periods=-1`; `build_filtergraph` puro); `denoiser.py` (spectral gating noisereduce, modo `stationary` constante/adaptativo exposto na GUI, salva WAV preservando subtype PCM via `sf.info`+`subtype`); `speed.py` (`atempo` sem alterar pitch, `_atempo_chain` puro encadeia estágios p/ respeitar a faixa 0.5–2.0 por estágio, fator 0.5–4.0×); `normalizer.py` (loudnorm 2 passes, alvo −23..−6 LUFS default −14, True Peak ≤ −1 dBFS, retorna `(path, stats)`).
+- **Encode final** (`worker`, op `encode`): conserta o denoise que sempre gravava `.wav` — a cadeia termina num `convert_audio` único para `args.fmt` que também aplica **downmix mono** (`-ac`) e **sample-rate** (`-ar`); só roda se o formato mudou ou se mono/taxa foram pedidos (downloads `best` sem resample não reencodam). `convert_audio` lida com transformação in-place (mp3→mp3 mono) via temp file + `shutil.move`.
+- **Formulário** (`form_view.py` + `blocks/`): fatiado em `blocks/` (`output` formato/bitrate/**canais+taxa** · `denoise` switch+modo · `silence` · `speed` · `normalize` · `presets`). **Presets de uma tecla** (`blocks/presets.py`): "Pronto p/ transcrição" (mono+16 kHz+denoise+silêncio), "Podcast" (denoise+silêncio+−16 LUFS), "Arquivo musical" (preserva tudo, sem normalizar) — chamam setters dos refs dos blocos. `segmented_selector` ganhou `with_setter` (retorna `set_value` programático, retrocompatível) p/ os presets pré-selecionarem canais/taxa.
 - **Quirk Windows (downloader)**: `FFmpegExtractAudio` cria `.temp.<ext>` **no dir do arquivo de entrada** (hardcoded; `paths={"temp"}` não resolve). Solução: rodar download+pós em `tempfile.mkdtemp()` e mover o final via `shutil.move`.
 
 ## Módulo Vídeo
@@ -178,7 +180,7 @@ Fluxo: `show_splash` → `show_home` → `build_app(initial_module)` (`splash.py
 uv run gui.py                                          # GUI desktop
 uv run main.py <URL>                                   # Transcrição básica (legado)
 uv run main.py transcribe <URL|file.mp4|notas.txt> --format --analyze --profile lecture
-uv run main.py audio   <URL_OR_FILE> [--fmt mp3] [--quality 320] [--denoise] [--normalize]
+uv run main.py audio   <URL_OR_FILE> [--fmt mp3] [--quality 320] [--mono] [--sample-rate 16000] [--trim-silence] [--speed 1.25] [--denoise [--denoise-adaptive]] [--normalize [--lufs -16]]
 uv run main.py video   <download|convert|trim|compress|resize|extract-audio|thumbnail|subtitle> <input> [opções]
 uv run main.py image   <convert|resize|crop|rotate|watermark|border|adjust|filter|favicon|contact-sheet|remove-bg|describe|exif|ocr> <input> [opções]
 uv run main.py document <merge|split|compress|rotate|watermark|stamp|encrypt|extract|ocr|pdf-to-images|images-to-pdf|qr> <input> [opções]

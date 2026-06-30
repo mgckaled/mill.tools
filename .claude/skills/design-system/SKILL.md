@@ -227,7 +227,7 @@ sync_page_bgcolor(page)    # chamar sempre que theme_mode mudar
 | `task_error` | `message` | log de erro, para spinner |
 | `log` | `message`, `level`, `mutable: bool` | passthrough colorido; `mutable=True` atualiza a última linha em vez de criar nova (progresso contínuo, ex.: download yt-dlp) |
 
-**Áudio (stage="audio"):** `audio_op_start` (`operation`, `item_name`, `item_idx`, `total`), `audio_op_done` (`output_path`, `elapsed`, `item_idx`, `total`, `src_size_bytes`, `out_size_bytes`). `operation` ∈ {`download`, `convert`, `extract`, `denoise`, `normalize`}.
+**Áudio (stage="audio"):** `audio_op_start` (`operation`, `item_name`, `item_idx`, `total`), `audio_op_done` (`output_path`, `elapsed`, `item_idx`, `total`, `src_size_bytes`, `out_size_bytes`). `operation` ∈ {`download`, `convert`, `extract`, `silence`, `denoise`, `speed`, `normalize`, `encode`}. A cadeia de pós-processamento roda em ordem fixa (silêncio → denoise → velocidade → normalize → **encode** final, que aplica `args.fmt` + mono/sample-rate). O `segmented_selector` aceita `with_setter=True` → retorna um 4º elemento `set_value(opt)` para seleção programática (presets do módulo Áudio); retrocompatível (3-tupla por padrão).
 
 **Vídeo (stage="video"):** `video_op_start` (`operation`, `item_name`, `item_idx`, `total`), `video_op_done` (`output_path`, `elapsed`, `item_idx`, `total`, `src_size_bytes`, `out_size_bytes`), `video_op_error` (`item_name`, `message`). `operation` ∈ {`download`, `convert`, `trim`, `compress`, `resize`, `extract_audio`, `thumbnail`}.
 
