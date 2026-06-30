@@ -378,6 +378,11 @@ def build_image_form(
             cs_bg_color=cs_refs.get_bg_color(),
             # remove_bg
             rembg_model=ai_refs.get_rembg_model() if op == "remove_bg" else "u2net",
+            rembg_bg_mode=ai_refs.get_rembg_bg_mode()
+            if op == "remove_bg"
+            else "transparent",
+            rembg_bg_color=ai_refs.get_rembg_bg_color(),
+            rembg_bg_blur=ai_refs.get_rembg_bg_blur(),
             # describe
             describe_model=ai_refs.get_desc_model()
             if op == "describe"

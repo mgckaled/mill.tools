@@ -7,7 +7,8 @@ from typing import Callable, NamedTuple
 import flet as ft
 
 from src.core.image.background import is_available as _rembg_ok
-from src.gui.theme.components import labeled_field
+from src.gui.theme.components import labeled_field, section_label, segmented_selector
+from src.gui.theme.components.sliders import labeled_slider
 from src.gui.theme.tokens import Layout, Space, Type
 
 
@@ -17,6 +18,9 @@ class AIRefs(NamedTuple):
     set_rembg_disabled: Callable[[bool], None]
     set_desc_disabled: Callable[[bool], None]
     get_rembg_model: Callable[[], str]
+    get_rembg_bg_mode: Callable[[], str]
+    get_rembg_bg_color: Callable[[], str]
+    get_rembg_bg_blur: Callable[[], int]
     get_desc_model: Callable[[], str]
     get_desc_prompt: Callable[[], str]
 
@@ -53,14 +57,58 @@ def build_ai_blocks(page: ft.Page) -> AIRefs:
         content_padding=ft.Padding(left=10, right=4, top=0, bottom=0),
     )
 
+    # Background replacement: keep transparent, or composite over color/blur.
+    bg_color_tf = ft.TextField(
+        value="#ffffff",
+        text_size=Type.input.size,
+        height=Layout.field_height,
+        content_padding=ft.Padding(left=10, right=4, top=0, bottom=0),
+        border_color=ft.Colors.OUTLINE_VARIANT,
+        focused_border_color=ft.Colors.PRIMARY,
+    )
+    bg_color_col = ft.Column(
+        [section_label("Cor de fundo"), bg_color_tf], spacing=Space.xs, visible=False
+    )
+    blur_col, blur_slider = labeled_slider(
+        label="Intensidade do desfoque",
+        value=15.0,
+        min=1.0,
+        max=40.0,
+        divisions=39,
+        fmt=lambda v: f"{int(v)}",
+    )
+    blur_col.visible = False
+
+    def _on_bg_mode(mode: str) -> None:
+        bg_color_col.visible = mode == "color"
+        blur_col.visible = mode == "blur"
+        try:
+            if bg_color_col.page:
+                bg_color_col.page.update()
+        except RuntimeError:
+            pass
+
+    bg_mode_grid, _bg_get, _bg_set = segmented_selector(
+        ["transparent", "color", "blur"],
+        "transparent",
+        page,
+        on_change=_on_bg_mode,
+        labels={"transparent": "Transparente", "color": "Cor", "blur": "Desfoque"},
+        columns=3,
+    )
+
     rembg_block = ft.Column(
         visible=False,
         spacing=Space.sm,
         controls=[
             rembg_warning,
             labeled_field("Modelo", rembg_dd, help_key="image.rembg_model", page=page),
+            section_label("Fundo"),
+            bg_mode_grid,
+            bg_color_col,
+            blur_col,
             ft.Text(
-                "Saída: sempre PNG com transparência",
+                "Saída: PNG (transparente preserva o alpha)",
                 size=Type.small.size,
                 color=ft.Colors.ON_SURFACE_VARIANT,
                 italic=True,
@@ -115,12 +163,20 @@ def build_ai_blocks(page: ft.Page) -> AIRefs:
         ],
     )
 
+    def _set_rembg_disabled(d: bool) -> None:
+        rembg_dd.disabled = d
+        bg_color_tf.disabled = d
+        _bg_set(d)
+
     return AIRefs(
         rembg_block=rembg_block,
         describe_block=describe_block,
-        set_rembg_disabled=lambda d: setattr(rembg_dd, "disabled", d),
+        set_rembg_disabled=_set_rembg_disabled,
         set_desc_disabled=lambda d: setattr(desc_dd, "disabled", d),
         get_rembg_model=lambda: rembg_dd.value or "u2net",
+        get_rembg_bg_mode=lambda: _bg_get(),
+        get_rembg_bg_color=lambda: (bg_color_tf.value or "#ffffff").strip(),
+        get_rembg_bg_blur=lambda: int(blur_slider.value),
         get_desc_model=lambda: desc_dd.value or "moondream-custom",
         get_desc_prompt=lambda: (desc_prompt_tf.value or "").strip(),
     )

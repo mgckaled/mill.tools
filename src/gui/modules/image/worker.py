@@ -9,7 +9,7 @@ from time import time
 from typing import TYPE_CHECKING, Callable
 
 from src.core.image.args import ImageArgs
-from src.core.image.background import create_session, is_available, remove_background
+from src.core.image.background import create_session, is_available, replace_background
 from src.core.image.converter import convert_image
 from src.core.image.describe import describe_image, save_description
 from src.core.image.downloader import download_image
@@ -599,7 +599,15 @@ def _run_batch_rembg(
                     payload={"message": pipeline_log.fmt_rembg_inferring(src.name)},
                 )
 
-                out_path = remove_background(src, IMAGE_PROCESSED_DIR, session)
+                out_path = replace_background(
+                    src,
+                    IMAGE_PROCESSED_DIR,
+                    session,
+                    bg_mode=args.rembg_bg_mode,
+                    bg_color=args.rembg_bg_color,
+                    bg_blur=args.rembg_bg_blur,
+                    bg_image=args.rembg_bg_image,
+                )
                 apply_exif(
                     out_path,
                     src,

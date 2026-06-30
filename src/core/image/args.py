@@ -88,6 +88,10 @@ class ImageArgs:
 
     # remove_bg
     rembg_model: str = "u2net"
+    rembg_bg_mode: str = "transparent"  # transparent | color | blur | image
+    rembg_bg_color: str = "#ffffff"
+    rembg_bg_blur: int = 15
+    rembg_bg_image: Path | None = None
 
     # describe
     describe_model: str = "moondream-custom"

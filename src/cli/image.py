@@ -282,6 +282,32 @@ def add_image_parser(subparsers: argparse._SubParsersAction) -> None:
         choices=["u2net", "u2netp", "silueta", "isnet-general-use", "u2net_human_seg"],
         help="rembg model (default u2net)",
     )
+    rb.add_argument(
+        "--bg-mode",
+        default="transparent",
+        choices=["transparent", "color", "blur", "image"],
+        dest="bg_mode",
+        help="Background after cutout (default transparent)",
+    )
+    rb.add_argument(
+        "--bg-color",
+        default="#ffffff",
+        dest="bg_color",
+        help="Solid background color for --bg-mode color (default #ffffff)",
+    )
+    rb.add_argument(
+        "--bg-blur",
+        type=int,
+        default=15,
+        dest="bg_blur",
+        help="Blur radius for --bg-mode blur (default 15)",
+    )
+    rb.add_argument(
+        "--bg-image",
+        default="",
+        dest="bg_image",
+        help="Background image path for --bg-mode image",
+    )
 
     # ── describe ──────────────────────────────────────────────────────────────
     dc = img_sub.add_parser("describe", help="Describe image via Ollama vision model")
@@ -323,6 +349,8 @@ def run_image_cli(ns: argparse.Namespace) -> None:
     Args:
         ns: Parsed argument namespace from add_image_parser.
     """
+    from pathlib import Path
+
     from src.cli.bus import CLIEventBus
     from src.cli.transcription import resolve_input
     from src.core.image.args import ImageArgs
@@ -418,6 +446,10 @@ def run_image_cli(ns: argparse.Namespace) -> None:
         cs_bg_color=getattr(ns, "bg_color", "#ffffff"),
         # remove_bg
         rembg_model=getattr(ns, "model", "u2net"),
+        rembg_bg_mode=getattr(ns, "bg_mode", "transparent"),
+        rembg_bg_color=getattr(ns, "bg_color", "#ffffff"),
+        rembg_bg_blur=getattr(ns, "bg_blur", 15),
+        rembg_bg_image=(Path(ns.bg_image) if getattr(ns, "bg_image", "") else None),
         # describe
         describe_model=getattr(ns, "model", "moondream-custom"),
         describe_prompt=getattr(ns, "prompt", ""),
