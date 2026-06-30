@@ -38,7 +38,7 @@ Seis **ferramentas** de processamento (NavigationRail) e três **hubs** que oper
 | Módulo | Tipo | Descrição |
 |---|---|---|
 | **Transcrição** | Ferramenta | Whisper local (GPU) sobre URL, áudio/vídeo local ou texto; pós-processamento por IA: parágrafos, análise estruturada e digest. Um `.txt`/`.md` pula o Whisper e vai direto à IA |
-| **Áudio** | Ferramenta | Download (yt-dlp), conversão e extração de faixas em fila; pós-processamento encadeável: remoção de silêncio, denoise (spectral gating), velocidade sem pitch (`atempo`), normalização de loudness (EBU R128), downmix mono e reamostragem; **presets de uma tecla** (Transcrição/Podcast/Música) |
+| **Áudio** | Ferramenta | Download (yt-dlp), conversão e extração de faixas em fila; pós-processamento encadeável: remoção de silêncio, denoise (spectral gating), velocidade sem pitch (`atempo`), normalização de loudness (EBU R128), downmix mono e reamostragem; **presets de uma tecla** (Transcrição/Podcast/Música); reprodutor com **A/B antes/depois**; aba **Visualizar** (waveform/espectrograma PNG) |
 | **Vídeo** | Ferramenta | 8 operações: download, convert, trim, compress, resize, extract-audio, thumbnail e legenda (mux/burn-in). Encoding 100% CPU — sem NVENC |
 | **Imagens** | Ferramenta | Conversão/manipulação + IA, com toggle **Edição \| Descrição IA**. Edição: convert, resize, **smart crop** (ponto focal), rotate, **watermark** (texto/imagem/QR, 9-grid, tiling, rotação), border, adjust, **grade de filtros**, favicon, colagem, **remoção/troca de fundo** (rembg) e **OCR** (Tesseract). Controle de **EXIF** (privacidade/copyright), visor Antes/Depois (xadrez de transparência, metadados, lote navegável), bridge **imagem→PDF**. Descrição por visão (gemma3-4b) em aba própria com Markdown |
 | **Documentos** | Ferramenta | 13 operações PDF/QR (merge, split, compress, rotate, watermark, stamp, encrypt, extract, OCR, pdf↔imagens, QR, análise). 100% local via pymupdf |
@@ -155,6 +155,8 @@ uv run main.py audio <URL|arquivo> --fmt mp3 --quality 320 --denoise --normalize
 uv run main.py audio aula.mp4 --mono --sample-rate 16000 --trim-silence
 # Estudo acelerado: 1,5× sem alterar o tom
 uv run main.py audio podcast.mp3 --speed 1.5
+# Visualização — waveform/espectrograma PNG
+uv run main.py audio-viz musica.mp3 --spectrogram
 
 # Vídeo — download | convert | trim | compress | resize | extract-audio | thumbnail | subtitle
 uv run main.py video download <URL> --quality 1080 --container mp4

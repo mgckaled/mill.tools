@@ -128,6 +128,22 @@ Auto-detecção de operação: URL → download; vídeo local → extração; á
 
 ---
 
+## Subcomando `audio-viz`
+
+```bash
+uv run main.py audio-viz <arquivo> [--spectrogram] [--width 1200] [--height PX]
+```
+
+Áudio → imagem (não passa pela fila do `audio`). `add_audio_viz_parser`/`run_audio_viz_cli` em `cli/audio.py`; reusa `core/audio/visualize.py` direto (sem `CLIEventBus`), stdout em UTF-8. Default waveform (`showwavespic`); `--spectrogram` usa `showspectrumpic`. Saída PNG em `output/audio/processed/`.
+
+| Flag | Default | Descrição |
+|---|---|---|
+| `--spectrogram` | off | Espectrograma em vez de waveform |
+| `--width` | `1200` | Largura em px |
+| `--height` | 240 wf / 480 spec | Altura em px |
+
+---
+
 ## Subcomando `video`
 
 ```bash
