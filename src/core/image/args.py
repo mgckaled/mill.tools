@@ -97,3 +97,6 @@ class ImageArgs:
     # describe
     describe_model: str = "moondream-custom"
     describe_prompt: str = ""
+
+    # ocr
+    ocr_lang: str = "por"

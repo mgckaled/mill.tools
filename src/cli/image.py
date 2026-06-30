@@ -363,6 +363,16 @@ def add_image_parser(subparsers: argparse._SubParsersAction) -> None:
         "--out", default="", help="Output path (default: <stem>_exif<ext> beside input)"
     )
 
+    # ── ocr ───────────────────────────────────────────────────────────────────
+    oc = img_sub.add_parser("ocr", help="Extract text from an image via Tesseract")
+    oc.add_argument("file", help="Image file or URL")
+    oc.add_argument(
+        "--lang",
+        default="por",
+        choices=["por", "eng", "por+eng", "spa"],
+        help="OCR language (default por)",
+    )
+
     img_p.add_argument("--verbose", action="store_true", help="Enable debug logging")
     img_p.set_defaults(func=run_image_cli)
 
@@ -478,6 +488,8 @@ def run_image_cli(ns: argparse.Namespace) -> None:
         # describe
         describe_model=getattr(ns, "model", "moondream-custom"),
         describe_prompt=getattr(ns, "prompt", ""),
+        # ocr
+        ocr_lang=getattr(ns, "lang", "por"),
     )
 
     bus = CLIEventBus()

@@ -81,6 +81,10 @@ def run_image_pipeline(
         return _run_batch_describe(
             args, cancel_event, emit, bus, install_log_handler=install_log_handler
         )
+    if args.operation == "ocr":
+        return _run_batch_ocr(
+            args, cancel_event, emit, bus, install_log_handler=install_log_handler
+        )
 
     # Standard ops: run_queue_pipeline manages its own LogScope
     return run_queue_pipeline(
@@ -748,6 +752,108 @@ def _run_batch_describe(
                         emit("log", payload={"message": line})
 
                 emit("log", payload={"message": pipeline_log.fmt_describe_sep_close()})
+                emit(
+                    "image_op_done",
+                    payload={
+                        "output_path": str(out_path),
+                        "thumb": None,
+                        "elapsed": f"{time() - t0:.1f}s",
+                        "item_idx": idx,
+                        "total_items": total,
+                        "src_size_bytes": src.stat().st_size,
+                        "out_size_bytes": out_path.stat().st_size,
+                    },
+                )
+
+            except Exception as exc:
+                failed_count += 1
+                logger.warning("[!] Error on '%s': %s", item_name, exc)
+                emit(
+                    "image_op_error",
+                    payload={"item_name": item_name, "message": str(exc)},
+                )
+
+            if cancel_event.is_set():
+                emit("task_error", payload={"message": "Cancelado."})
+                return False
+
+        emit(
+            "task_done",
+            payload={"output_paths": output_paths, "failed_count": failed_count},
+        )
+        return len(output_paths) > 0
+
+
+def _run_batch_ocr(
+    args: ImageArgs,
+    cancel_event: threading.Event,
+    emit: Callable,
+    bus: "EventBus",
+    *,
+    install_log_handler: bool = True,
+) -> bool:
+    """Extract text from each image via Tesseract and save a .txt output."""
+    from contextlib import nullcontext
+
+    from src.core.image.ocr import is_available, ocr_image
+
+    if not is_available():
+        emit(
+            "task_error",
+            payload={
+                "message": "Tesseract não encontrado. Instale o extra [ocr] e o binário."
+            },
+        )
+        return False
+
+    ctx = _LogScope(bus, _MODULE_ID) if install_log_handler else nullcontext()
+    with ctx:
+        emit("progress_start")
+        output_paths: list[str] = []
+        failed_count = 0
+        total = len(args.items)
+
+        for idx, item in enumerate(args.items, 1):
+            if cancel_event.is_set():
+                emit("task_error", payload={"message": "Cancelado."})
+                return False
+
+            item_name = item_label(item)
+            emit(
+                "queue_progress",
+                payload={
+                    "current_item": idx,
+                    "total_items": total,
+                    "item_name": item_name,
+                },
+            )
+            t0 = time()
+
+            try:
+                src = (
+                    Path(item.value)
+                    if item.kind == "local"
+                    else download_image(item.value, IMAGE_SOURCE_DIR)
+                )
+                emit(
+                    "image_op_start",
+                    payload={
+                        "operation": "ocr",
+                        "item_name": src.name,
+                        "thumb": _make_thumb(src),
+                        "item_idx": idx,
+                        "total_items": total,
+                    },
+                )
+                emit(
+                    "log", payload={"message": f"[~] OCR ({args.ocr_lang}): {src.name}"}
+                )
+
+                out_path, words = ocr_image(
+                    src, IMAGE_PROCESSED_DIR, lang=args.ocr_lang
+                )
+                output_paths.append(str(out_path))
+                emit("log", payload={"message": f"[i] {words} palavra(s) extraída(s)."})
                 emit(
                     "image_op_done",
                     payload={

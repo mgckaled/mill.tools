@@ -155,6 +155,10 @@ HELP_SHORT: dict[str, str] = {
         "Remover GPS tira só a localização; Remover tudo zera os metadados (privacidade); "
         "Injetar grava Artista/Copyright/Descrição."
     ),
+    "image.ocr": (
+        "Extrai texto da imagem via Tesseract e salva um .txt indexável no RAG. "
+        "Escolha o idioma (ou combine por+eng). Requer o extra [ocr] e o binário do Tesseract."
+    ),
     "image.adjust": (
         "Sliders de 0.1 a 2.0; 1.0 = sem alteração. "
         "Brilho e Contraste são os mais impactantes. "

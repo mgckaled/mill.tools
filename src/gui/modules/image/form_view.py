@@ -8,6 +8,7 @@ from typing import Callable
 import flet as ft
 
 from src.core.image.background import is_available as _rembg_ok
+from src.core.image.ocr import is_available as _ocr_ok
 from src.core.image.args import ImageArgs
 from src.core.io_types import InputItem
 from src.gui.components.input_source import build_input_source
@@ -19,6 +20,7 @@ from src.gui.modules.image.blocks.convert_fmt import build_fmt_section
 from src.gui.modules.image.blocks.crop import build_crop_block
 from src.gui.modules.image.blocks.exif import build_exif_block
 from src.gui.modules.image.blocks.favicon import build_favicon_block
+from src.gui.modules.image.blocks.ocr import build_ocr_block
 from src.gui.modules.image.blocks.filter import build_filter_block
 from src.gui.modules.image.blocks.resize import build_resize_block
 from src.gui.modules.image.blocks.rotate import build_rotate_block
@@ -56,11 +58,14 @@ _OPS: list[tuple[str, str, str]] = [
     ("favicon", ft.Icons.GRID_VIEW, "Favicon"),
     ("contact_sheet", ft.Icons.DASHBOARD_OUTLINED, "Colagem"),
     ("remove_bg", ft.Icons.AUTO_FIX_HIGH, "Remover\nfundo"),
+    ("ocr", ft.Icons.TEXT_FIELDS, "OCR"),
 ]
 
 _UNAVAILABLE: dict[str, str] = {}
 if not _rembg_ok():
     _UNAVAILABLE["remove_bg"] = "Instale com: uv sync --extra ai-image"
+if not _ocr_ok():
+    _UNAVAILABLE["ocr"] = "Instale o extra [ocr] + binário do Tesseract"
 
 
 @dataclass
@@ -275,6 +280,7 @@ def build_image_form(
     favicon_block, favicon_refs = build_favicon_block(page)
     cs_block, cs_refs = build_contact_sheet_block(page)
     ai_refs = build_ai_blocks(page)
+    ocr_refs = build_ocr_block(page)
 
     _param_blocks["convert"] = ft.Column(visible=False, spacing=0)
     _param_blocks["resize"] = resize_block
@@ -287,6 +293,7 @@ def build_image_form(
     _param_blocks["favicon"] = favicon_block
     _param_blocks["contact_sheet"] = cs_block
     _param_blocks["remove_bg"] = ai_refs.rembg_block
+    _param_blocks["ocr"] = ocr_refs.block
 
     # ── Format section ────────────────────────────────────────────────────────
 
@@ -389,6 +396,8 @@ def build_image_form(
             if op == "describe"
             else "moondream-custom",
             describe_prompt=ai_refs.get_desc_prompt() if op == "describe" else "",
+            # ocr
+            ocr_lang=ocr_refs.get_lang(),
             # exif
             exif_mode=exif_refs.get_mode(),
             exif_artist=exif_refs.get_artist(),
@@ -412,6 +421,7 @@ def build_image_form(
         exif_refs.set_disabled(running)
         ai_refs.set_rembg_disabled(running or not _rembg_ok())
         ai_refs.set_desc_disabled(running)
+        ocr_refs.set_disabled(running or not _ocr_ok())
         page.update()
 
     # ── fill_from_path (bridge on_mount) ──────────────────────────────────────

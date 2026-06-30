@@ -31,6 +31,7 @@ OP_VERBS: dict[str, str] = {
     "contact_sheet": "Montando colagem",
     "remove_bg": "Removendo fundo",
     "describe": "Analisando",
+    "ocr": "Extraindo texto",
 }
 
 OP_LABELS: dict[str, str] = {
@@ -47,6 +48,7 @@ OP_LABELS: dict[str, str] = {
     "contact_sheet": "Montando colagem...",
     "remove_bg": "Removendo fundo (ONNX/CPU)...",
     "describe": "Analisando imagem (Ollama)…",
+    "ocr": "Extraindo texto (Tesseract)…",
 }
 
 
