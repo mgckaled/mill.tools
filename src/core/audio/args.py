@@ -22,6 +22,7 @@ class AudioArgs:
     trim_silence: bool = False
     silence_threshold_db: float = -40.0
     silence_min_s: float = 0.5
+    speed_factor: float = 1.0  # 1.0 = disabled
     normalize: bool = False
     normalize_target_lufs: float = -14.0
     channels: int | None = None  # 1 = mono; None preserves source

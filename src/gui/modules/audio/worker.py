@@ -21,6 +21,7 @@ from src.core.audio.denoiser import (
 from src.core.audio.downloader import download_audio
 from src.core.audio.normalizer import normalize_lufs as _normalize_lufs
 from src.core.audio.silence import remove_silence
+from src.core.audio.speed import change_speed
 from src.gui.modules._pipeline_runner import (
     fmt_ydl_progress,
     item_label,
@@ -238,6 +239,38 @@ def _make_process_item(args: AudioArgs) -> Callable:
                 out_path = _denoise_audio(
                     out_path, AUDIO_PROCESSED_DIR, stationary=args.denoise_stationary
                 )
+
+        # ── Post: Speed ──────────────────────────────────────────────────
+        if args.speed_factor != 1.0:
+            emit(
+                "audio_op_start",
+                payload={
+                    "operation": "speed",
+                    "item_name": out_path.name,
+                    "item_idx": idx,
+                    "total": total,
+                },
+            )
+            emit(
+                "log",
+                payload={
+                    "message": pipeline_log.fmt_speed_start(
+                        out_path.name, args.speed_factor
+                    )
+                },
+            )
+
+            def _speed_cb(ratio: float) -> None:
+                emit("progress_update", payload={"current": ratio})
+
+            out_path = change_speed(
+                out_path,
+                AUDIO_PROCESSED_DIR,
+                fmt=out_path.suffix.lstrip(".").lower(),
+                factor=args.speed_factor,
+                bitrate=args.quality if args.quality != "best" else None,
+                progress_cb=_speed_cb,
+            )
 
         # ── Post: Normalize ──────────────────────────────────────────────
         if args.normalize:

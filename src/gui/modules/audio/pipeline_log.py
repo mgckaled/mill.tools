@@ -25,6 +25,7 @@ OP_VERBS: dict[str, str] = {
     "extract": "Extraindo áudio",
     "denoise": "Reduzindo ruído",
     "silence": "Removendo silêncio",
+    "speed": "Ajustando velocidade",
     "normalize": "Normalizando volume",
     "encode": "Reencodando saída",
 }
@@ -35,6 +36,7 @@ OP_LABELS: dict[str, str] = {
     "extract": "Extraindo áudio...",
     "denoise": "Reduzindo ruído (spectral)...",
     "silence": "Removendo silêncio...",
+    "speed": "Ajustando velocidade...",
     "normalize": "Normalizando (loudnorm — 2 passes)...",
     "encode": "Reencodando saída...",
 }
@@ -94,6 +96,13 @@ def fmt_silence_start(name: str) -> str:
 
 def fmt_silence_detail(threshold_db: float, min_silence_s: float) -> str:
     return f"[i] Limiar: {threshold_db:.0f} dB | Silêncio mínimo: {min_silence_s:.1f}s"
+
+
+# ─── Builders — speed ─────────────────────────────────────────────────────────
+
+
+def fmt_speed_start(name: str, factor: float) -> str:
+    return f"[*] Ajustando velocidade ({factor:g}×): {name}…"
 
 
 # ─── Builders — encode final ──────────────────────────────────────────────────

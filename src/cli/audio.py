@@ -93,6 +93,13 @@ def add_audio_parser(subparsers: argparse._SubParsersAction) -> None:
         help="Minimum silence duration to cut for --trim-silence (default 0.5)",
     )
     p.add_argument(
+        "--speed",
+        type=float,
+        default=1.0,
+        metavar="FACTOR",
+        help="Change speed without pitch shift, e.g. 1.25 (range 0.5-4.0; default 1.0)",
+    )
+    p.add_argument(
         "--normalize",
         action="store_true",
         help="Normalize loudness to EBU R128 target after the main operation",
@@ -139,6 +146,7 @@ def run_audio_cli(ns: argparse.Namespace) -> None:
         trim_silence=ns.trim_silence,
         silence_threshold_db=ns.silence_threshold,
         silence_min_s=ns.silence_min,
+        speed_factor=ns.speed,
         normalize=ns.normalize,
         normalize_target_lufs=ns.lufs,
         channels=1 if ns.mono else None,
