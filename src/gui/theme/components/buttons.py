@@ -116,11 +116,15 @@ def segmented_selector(
     on_change: Callable[[str], None] | None = None,
     columns: int = 3,
     labels: dict[str, str] | None = None,
-) -> tuple[ft.Column, Callable[[], str], Callable[[bool], None]]:
+    with_setter: bool = False,
+) -> tuple:
     """Grade N×columns de chips clicáveis com cores do DS.
 
     Returns:
-        (control, get_value, set_disabled)
+        (control, get_value, set_disabled) by default; when ``with_setter`` is
+        True, a 4th element ``set_value(opt)`` is appended for programmatic
+        selection (e.g. presets), which updates the chips without firing
+        ``on_change``.
     """
     _selected: list[str] = [value]
     _disabled: list[bool] = [False]
@@ -208,4 +212,20 @@ def segmented_selector(
         _disabled[0] = disabled
         grid.opacity = 0.4 if disabled else 1.0
 
+    def _set_value(opt: str) -> None:
+        if opt not in _ctrs or opt == _selected[0]:
+            return
+        prev = _selected[0]
+        _selected[0] = opt
+        _ctrs[prev].border = _border(False)
+        _ctrs[prev].bgcolor = _bgcolor(False)
+        _texts[prev].color = _text_color(False)
+        _ctrs[opt].border = _border(True)
+        _ctrs[opt].bgcolor = _bgcolor(True)
+        _texts[opt].color = _text_color(True)
+        if grid.page:
+            grid.update()
+
+    if with_setter:
+        return grid, _get_value, _set_disabled, _set_value
     return grid, _get_value, _set_disabled

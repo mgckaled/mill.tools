@@ -73,6 +73,18 @@ HELP_SHORT: dict[str, str] = {
         "Alvo de loudness integrado. −14 LUFS: streaming (Spotify/YouTube). "
         "−23 LUFS: broadcast. −16 a −18 LUFS: podcasts."
     ),
+    "audio.channels": (
+        "Mono reduz o arquivo pela metade e acelera a transcrição. "
+        "16 kHz é a taxa nativa do Whisper — ideal para 'Pronto p/ transcrição'."
+    ),
+    "audio.trim_silence": (
+        "Remove silêncio do início, fim e meio do áudio via ffmpeg silenceremove. "
+        "Útil para limpar aulas e podcasts antes de transcrever."
+    ),
+    "audio.speed": (
+        "Acelera/desacelera sem alterar o tom (atempo). 1,25–1,5× corta o tempo "
+        "de transcrição proporcionalmente."
+    ),
     # --- Vídeo ---
     "video.input": (
         "Cole a URL do vídeo ou selecione um arquivo local. "

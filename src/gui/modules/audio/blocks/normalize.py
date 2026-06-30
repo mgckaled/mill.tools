@@ -13,6 +13,8 @@ from src.gui.theme.tokens import Space, Type
 class NormalizeRefs(NamedTuple):
     get_normalize: Callable[[], bool]
     get_target_lufs: Callable[[], float]
+    set_normalize: Callable[[bool], None]
+    set_target_lufs: Callable[[float], None]
     set_disabled: Callable[[bool], None]
 
 
@@ -103,6 +105,23 @@ def build_normalize_block(page: ft.Page, cfg: dict) -> tuple[ft.Control, Normali
         ],
     )
 
+    def _set_normalize(value: bool) -> None:
+        normalize_switch.value = value
+        lufs_block.visible = value
+        if normalize_switch.page:
+            normalize_switch.update()
+        if lufs_block.page:
+            lufs_block.update()
+
+    def _set_target_lufs(value: float) -> None:
+        lufs_values[0] = value
+        _lufs_ctl.value = value
+        _lufs_value_text.value = f"{value:.0f} LUFS"
+        if _lufs_ctl.page:
+            _lufs_ctl.update()
+        if _lufs_value_text.page:
+            _lufs_value_text.update()
+
     def _set_disabled(running: bool) -> None:
         normalize_switch.disabled = running
         _lufs_ctl.disabled = running
@@ -110,6 +129,8 @@ def build_normalize_block(page: ft.Page, cfg: dict) -> tuple[ft.Control, Normali
     refs = NormalizeRefs(
         get_normalize=lambda: bool(normalize_switch.value),
         get_target_lufs=lambda: lufs_values[0],
+        set_normalize=_set_normalize,
+        set_target_lufs=_set_target_lufs,
         set_disabled=_set_disabled,
     )
     return control, refs
