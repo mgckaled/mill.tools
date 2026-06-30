@@ -13,6 +13,7 @@ import asyncio
 import logging
 import os
 import subprocess
+import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable
@@ -20,7 +21,9 @@ from typing import Callable
 import flet as ft
 
 from src.core.io_types import InputItem
+from src.gui import settings
 from src.gui.components.input_source import build_input_source
+from src.gui.modules.ai import timing
 from src.gui.theme.components import (
     Cursor,
     action_button,
@@ -210,8 +213,29 @@ def build_visualize_tab(page: ft.Page, nav: list) -> VisualizeTab:
         spacing=8,
     )
 
-    # ── Generate (off-thread) ─────────────────────────────────────────────────
-    async def _render() -> None:
+    # ── Generate (off-thread) with live timer + typical estimate ──────────────
+    _viz_t0 = [0.0]
+    _ticker_on = [False]
+
+    def _compose_status(elapsed: float, typical: float | None, kind: str) -> str:
+        label = "espectrograma" if kind == "spectrogram" else "waveform"
+        line = f"Gerando {label}… {timing.format_clock(elapsed)}"
+        if typical and typical > 0:
+            line += f" · ~{int(round(typical))}s (típico)"
+        return line
+
+    async def _tick(typical: float | None, kind: str) -> None:
+        # Runs on the UI event loop (page.run_task) — each tick repaints.
+        while _ticker_on[0]:
+            elapsed = time.monotonic() - _viz_t0[0]
+            status_label.value = _compose_status(elapsed, typical, kind)
+            try:
+                page.update()
+            except Exception:
+                break
+            await asyncio.sleep(1.0)
+
+    async def _render(kind: str) -> None:
         from src.core.audio.visualize import (
             render_spectrogram_png,
             render_waveform_png,
@@ -219,31 +243,35 @@ def build_visualize_tab(page: ft.Page, nav: list) -> VisualizeTab:
 
         locals_ = [it for it in input_source.get_items() if it.kind == "local"]
         if not locals_:
+            _ticker_on[0] = False
             return
         src = Path(locals_[0].value)
-        kind = _get_kind()
         try:
-            if kind == "spectrogram":
-                out = await asyncio.to_thread(
-                    render_spectrogram_png, src, AUDIO_PROCESSED_DIR
-                )
-            else:
-                out = await asyncio.to_thread(
-                    render_waveform_png, src, AUDIO_PROCESSED_DIR
-                )
+            render_fn = (
+                render_spectrogram_png if kind == "spectrogram" else render_waveform_png
+            )
+            out = await asyncio.to_thread(render_fn, src, AUDIO_PROCESSED_DIR)
         except Exception as exc:  # defensive — never break the tab
             logging.getLogger(__name__).warning("[!] audio viz failed: %s", exc)
+            _ticker_on[0] = False
             status_label.value = "Falha ao gerar a imagem."
             _stop_spin()
             _set_running(False)
             page.update()
             return
 
+        elapsed = time.monotonic() - _viz_t0[0]
+        _ticker_on[0] = False
+        # Fold this run's duration into the rolling per-kind history.
+        times_map = dict(settings.load().get("audio_viz_times", {}))
+        times_map[kind] = timing.record_duration(times_map.get(kind, []), elapsed)
+        settings.set("audio_viz_times", times_map)
+
         _last_output[0] = str(out)
         result_img.src = str(out)
         empty_hint.visible = False
         footer.visible = True
-        status_label.value = f"Gerado: {out.name}"
+        status_label.value = f"Gerado: {out.name} ({timing.format_clock(elapsed)})"
         status_label.italic = False
         status_label.color = ft.Colors.ON_SURFACE
         _stop_spin()
@@ -254,14 +282,21 @@ def build_visualize_tab(page: ft.Page, nav: list) -> VisualizeTab:
         locals_ = [it for it in input_source.get_items() if it.kind == "local"]
         if not locals_:
             return
+        kind = _get_kind()
+        typical = timing.average(
+            settings.load().get("audio_viz_times", {}).get(kind, [])
+        )
         _set_running(True)
-        status_label.value = "Gerando imagem…"
+        _viz_t0[0] = time.monotonic()
+        _ticker_on[0] = True
+        status_label.value = _compose_status(0, typical, kind)
         status_label.italic = False
         status_label.color = ft.Colors.ON_SURFACE
         # Golden rule: show the "running" state first, then start the spinner.
         page.update()
         _start_spin()
-        page.run_task(_render)
+        page.run_task(_tick, typical, kind)
+        page.run_task(_render, kind)
 
     gen_btn.on_click = _on_generate
 
