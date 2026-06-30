@@ -192,10 +192,14 @@ def _make_process_item(args: AudioArgs) -> Callable:
                 emit(
                     "log",
                     payload={
-                        "message": pipeline_log.fmt_denoise_detail(stationary=True)
+                        "message": pipeline_log.fmt_denoise_detail(
+                            stationary=args.denoise_stationary
+                        )
                     },
                 )
-                out_path = _denoise_audio(out_path, AUDIO_PROCESSED_DIR)
+                out_path = _denoise_audio(
+                    out_path, AUDIO_PROCESSED_DIR, stationary=args.denoise_stationary
+                )
 
         # ── Post: Normalize ──────────────────────────────────────────────
         if args.normalize:
@@ -243,6 +247,51 @@ def _make_process_item(args: AudioArgs) -> Callable:
                 )
             else:
                 emit("log", payload={"message": pipeline_log.fmt_normalize_fallback()})
+
+        # ── Post: final encode (fixes denoise .wav output + applies mono/sr) ──
+        # target_fmt mirrors the base operation; "best" keeps the current suffix.
+        target_fmt = (
+            args.fmt if args.fmt != "best" else out_path.suffix.lstrip(".").lower()
+        )
+        needs_fmt_change = out_path.suffix.lstrip(".").lower() != target_fmt.lower()
+        needs_resample = bool(args.channels) or bool(args.sample_rate)
+        if needs_fmt_change or needs_resample:
+            emit(
+                "audio_op_start",
+                payload={
+                    "operation": "encode",
+                    "item_name": out_path.name,
+                    "item_idx": idx,
+                    "total": total,
+                },
+            )
+            emit(
+                "log",
+                payload={
+                    "message": pipeline_log.fmt_encode_start(out_path.name, target_fmt)
+                },
+            )
+            emit(
+                "log",
+                payload={
+                    "message": pipeline_log.fmt_encode_detail(
+                        args.channels, args.sample_rate
+                    )
+                },
+            )
+
+            def _encode_cb(ratio: float) -> None:
+                emit("progress_update", payload={"current": ratio})
+
+            out_path = convert_audio(
+                src=out_path,
+                out_dir=AUDIO_PROCESSED_DIR,
+                fmt=target_fmt,
+                bitrate=args.quality if args.quality != "best" else None,
+                channels=args.channels,
+                sample_rate=args.sample_rate,
+                progress_cb=_encode_cb,
+            )
 
         elapsed = time() - t0
         emit(

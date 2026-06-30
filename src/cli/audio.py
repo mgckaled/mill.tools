@@ -51,6 +51,26 @@ def add_audio_parser(subparsers: argparse._SubParsersAction) -> None:
         help="Apply spectral gating noise reduction after the main operation",
     )
     p.add_argument(
+        "--denoise-adaptive",
+        action="store_true",
+        dest="denoise_adaptive",
+        help="Use adaptive (non-stationary) noise reduction instead of stationary",
+    )
+    p.add_argument(
+        "--mono",
+        action="store_true",
+        help="Downmix output to a single (mono) channel",
+    )
+    p.add_argument(
+        "--sample-rate",
+        type=int,
+        default=None,
+        dest="sample_rate",
+        choices=[16000, 22050, 44100, 48000],
+        metavar="HZ",
+        help="Resample output to the given sample rate (e.g. 16000 for Whisper)",
+    )
+    p.add_argument(
         "--normalize",
         action="store_true",
         help="Normalize loudness to EBU R128 target after the main operation",
@@ -93,8 +113,11 @@ def run_audio_cli(ns: argparse.Namespace) -> None:
         quality=ns.quality,
         embed_meta=not ns.no_meta,
         denoise=ns.denoise,
+        denoise_stationary=not ns.denoise_adaptive,
         normalize=ns.normalize,
         normalize_target_lufs=ns.lufs,
+        channels=1 if ns.mono else None,
+        sample_rate=ns.sample_rate,
     )
 
     bus = CLIEventBus()

@@ -25,6 +25,7 @@ OP_VERBS: dict[str, str] = {
     "extract": "Extraindo áudio",
     "denoise": "Reduzindo ruído",
     "normalize": "Normalizando volume",
+    "encode": "Reencodando saída",
 }
 
 OP_LABELS: dict[str, str] = {
@@ -33,6 +34,7 @@ OP_LABELS: dict[str, str] = {
     "extract": "Extraindo áudio...",
     "denoise": "Reduzindo ruído (spectral)...",
     "normalize": "Normalizando (loudnorm — 2 passes)...",
+    "encode": "Reencodando saída...",
 }
 
 
@@ -79,6 +81,27 @@ def fmt_denoise_start(name: str) -> str:
 def fmt_denoise_detail(stationary: bool) -> str:
     mode = "estacionário (rápido)" if stationary else "adaptativo (mais lento)"
     return f"[i] Modo: {mode}"
+
+
+# ─── Builders — encode final ──────────────────────────────────────────────────
+
+
+def fmt_encode_start(name: str, fmt: str) -> str:
+    return f"[*] Reencodando para .{fmt}: {name}…"
+
+
+def fmt_encode_detail(channels: int | None, sample_rate: int | None) -> str:
+    parts: list[str] = []
+    parts.append(
+        "mono"
+        if channels == 1
+        else f"{channels} canais"
+        if channels
+        else "canais preservados"
+    )
+    if sample_rate:
+        parts.append(f"{sample_rate / 1000:.0f} kHz")
+    return f"[i] Saída: {' · '.join(parts)}"
 
 
 # ─── Builders — normalize ─────────────────────────────────────────────────────
