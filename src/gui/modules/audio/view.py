@@ -10,10 +10,11 @@ import flet as ft
 
 from src.gui.components.audio_player import build_audio_player
 from src.gui.modules.audio.form_view import AudioArgs, AudioFormPanel, build_audio_form
+from src.gui.modules.audio.visualize_tab import build_visualize_tab
 from src.gui.modules.audio.worker import start_audio_pipeline
 from src.gui.modules.base import Module
-from src.gui.theme.components import action_button, hairline, output_card
-from src.gui.theme.tokens import Color, Type
+from src.gui.theme.components import Cursor, action_button, hairline, output_card
+from src.gui.theme.tokens import Color, Space, Type
 from src.gui.views.progress_view import ProgressPanel, build_progress_view
 
 if TYPE_CHECKING:
@@ -152,10 +153,10 @@ def build_audio_module(
     )
 
     # ------------------------------------------------------------------
-    # Layout split form | right_panel
+    # Layout: toggle Converter | Visualizar (Stack com visible=)
     # ------------------------------------------------------------------
 
-    control = ft.Row(
+    converter_body = ft.Row(
         controls=[
             ft.Container(content=form_panel.control, width=380),
             ft.VerticalDivider(width=2, thickness=1.5, color=ft.Colors.OUTLINE_VARIANT),
@@ -168,6 +169,44 @@ def build_audio_module(
         expand=True,
         spacing=0,
         vertical_alignment=ft.CrossAxisAlignment.STRETCH,
+    )
+
+    visualize_tab = build_visualize_tab(page, nav)
+    visualize_tab.control.visible = False
+
+    def _tab_style(active: bool) -> ft.ButtonStyle:
+        return ft.ButtonStyle(
+            color=ft.Colors.PRIMARY if active else ft.Colors.ON_SURFACE_VARIANT,
+            mouse_cursor=Cursor.interactive,
+        )
+
+    tab_conv = ft.TextButton(
+        "Converter", icon=ft.Icons.GRAPHIC_EQ, style=_tab_style(True)
+    )
+    tab_viz = ft.TextButton(
+        "Visualizar", icon=ft.Icons.INSIGHTS_OUTLINED, style=_tab_style(False)
+    )
+
+    def _show_tab(name: str) -> None:
+        if pipeline_running[0]:
+            return  # don't switch mid-run
+        converter_body.visible = name == "converter"
+        visualize_tab.control.visible = name == "visualize"
+        tab_conv.style = _tab_style(name == "converter")
+        tab_viz.style = _tab_style(name == "visualize")
+        page.update()
+
+    tab_conv.on_click = lambda _e: _show_tab("converter")
+    tab_viz.on_click = lambda _e: _show_tab("visualize")
+
+    control = ft.Column(
+        controls=[
+            ft.Row([tab_conv, tab_viz], spacing=Space.xs),
+            hairline(),
+            ft.Stack([converter_body, visualize_tab.control], expand=True),
+        ],
+        expand=True,
+        spacing=Space.sm,
     )
 
     # ------------------------------------------------------------------
