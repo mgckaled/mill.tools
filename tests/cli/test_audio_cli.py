@@ -49,6 +49,56 @@ def test_audio_no_meta():
 
 
 @pytest.mark.unit
+def test_audio_tier1_flag_defaults():
+    """Novas flags do Tier 1 têm os defaults esperados."""
+    ns = _parse("audio.wav")
+    assert ns.denoise_adaptive is False
+    assert ns.mono is False
+    assert ns.sample_rate is None
+    assert ns.trim_silence is False
+    assert ns.silence_threshold == -40.0
+    assert ns.silence_min == 0.5
+    assert ns.speed == 1.0
+
+
+@pytest.mark.unit
+def test_audio_mono_and_sample_rate():
+    ns = _parse("audio.wav", "--mono", "--sample-rate", "16000")
+    assert ns.mono is True
+    assert ns.sample_rate == 16000
+
+
+@pytest.mark.unit
+def test_audio_trim_silence_options():
+    ns = _parse(
+        "lecture.mp3",
+        "--trim-silence",
+        "--silence-threshold",
+        "-35",
+        "--silence-min",
+        "1.0",
+    )
+    assert ns.trim_silence is True
+    assert ns.silence_threshold == -35.0
+    assert ns.silence_min == 1.0
+
+
+@pytest.mark.unit
+def test_audio_speed_and_denoise_adaptive():
+    ns = _parse("lesson.wav", "--speed", "1.5", "--denoise", "--denoise-adaptive")
+    assert ns.speed == 1.5
+    assert ns.denoise is True
+    assert ns.denoise_adaptive is True
+
+
+@pytest.mark.unit
+def test_audio_invalid_sample_rate_rejected():
+    """--sample-rate fora do choices deve falhar no parser."""
+    with pytest.raises(SystemExit):
+        _parse("audio.wav", "--sample-rate", "12345")
+
+
+@pytest.mark.unit
 def test_audio_func_is_callable():
     ns = _parse("https://youtu.be/abc")
     assert callable(ns.func)
@@ -69,6 +119,35 @@ def test_run_audio_cli_dispatches_to_pipeline(mocker):
     assert args.fmt == "wav"
     assert args.normalize is True
     assert args.normalize_target_lufs == -16.0
+
+
+@pytest.mark.unit
+def test_run_audio_cli_passes_tier1_args(mocker):
+    """As flags do Tier 1 chegam ao AudioArgs do pipeline."""
+    mocker.patch("src.utils.check_dependencies")
+    mock_pipeline = mocker.patch(
+        "src.gui.modules.audio.worker.run_audio_pipeline",
+        return_value=True,
+    )
+    ns = _parse(
+        "lesson.wav",
+        "--mono",
+        "--sample-rate",
+        "16000",
+        "--trim-silence",
+        "--speed",
+        "1.25",
+        "--denoise",
+        "--denoise-adaptive",
+    )
+    ns.func(ns)
+    args = mock_pipeline.call_args.args[0]
+    assert args.channels == 1
+    assert args.sample_rate == 16000
+    assert args.trim_silence is True
+    assert args.speed_factor == 1.25
+    assert args.denoise is True
+    assert args.denoise_stationary is False
 
 
 @pytest.mark.unit
