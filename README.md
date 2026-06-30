@@ -40,7 +40,7 @@ Seis **ferramentas** de processamento (NavigationRail) e três **hubs** que oper
 | **Transcrição** | Ferramenta | Whisper local (GPU) sobre URL, áudio/vídeo local ou texto; pós-processamento por IA: parágrafos, análise estruturada e digest. Um `.txt`/`.md` pula o Whisper e vai direto à IA |
 | **Áudio** | Ferramenta | Download (yt-dlp), conversão e extração de faixas em fila; pós-processamento opcional: denoise (spectral gating) + normalização de loudness (EBU R128) |
 | **Vídeo** | Ferramenta | 8 operações: download, convert, trim, compress, resize, extract-audio, thumbnail e legenda (mux/burn-in). Encoding 100% CPU — sem NVENC |
-| **Imagens** | Ferramenta | 12 operações de manipulação/conversão + IA: remoção de fundo (rembg) e descrição por visão. Visor Antes/Depois |
+| **Imagens** | Ferramenta | Conversão/manipulação + IA, com toggle **Edição \| Descrição IA**. Edição: convert, resize, **smart crop** (ponto focal), rotate, **watermark** (texto/imagem/QR, 9-grid, tiling, rotação), border, adjust, **grade de filtros**, favicon, colagem, **remoção/troca de fundo** (rembg) e **OCR** (Tesseract). Controle de **EXIF** (privacidade/copyright), visor Antes/Depois (xadrez de transparência, metadados, lote navegável), bridge **imagem→PDF**. Descrição por visão (gemma3-4b) em aba própria com Markdown |
 | **Documentos** | Ferramenta | 13 operações PDF/QR (merge, split, compress, rotate, watermark, stamp, encrypt, extract, OCR, pdf↔imagens, QR, análise). 100% local via pymupdf |
 | **Dados** | Ferramenta | Consulte CSV/TSV/JSON/Parquet/XLSX em **português** (a IA traduz para SQL vendo só o schema) ou SQL na mão; motor **DuckDB** embutido. Salva o resultado, perfila e gera **gráficos** (barras/linha/histograma/dispersão) |
 | **Biblioteca** | Hub | Índice navegável de tudo em `output/`: grade com thumbnails, lista, **painel analítico** (acervo por tipo/tamanho/crescimento) ou **mapa semântico** (temas do acervo agrupados + relacionados); filtro/busca/ordenação, abrir arquivo/pasta e reenviar a outro módulo |
@@ -60,7 +60,7 @@ Seis **ferramentas** de processamento (NavigationRail) e três **hubs** que oper
 | NLP textual | `core/text` **torch-free** (extra `[nlp]`): keyphrases ([YAKE](https://github.com/LIAAD/yake)), resumo extractivo (TextRank self-contained, sem nltk) e entidades ([spaCy](https://spacy.io) CNN `pt_core_news_sm`). Auto-sugestão de perfil, aba Insights e auto-tags da Biblioteca |
 | Vídeo | yt-dlp + ffmpeg CPU-only (libx264/libx265/libvpx-vp9) — sem NVENC |
 | Áudio | noisereduce (spectral gating, CPU) + ffmpeg loudnorm (EBU R128, 2 passes); torch-free |
-| Imagens | Pillow + rembg/ONNX Runtime (CPU) para remoção de fundo |
+| Imagens | Pillow (transforms, EXIF, smart crop, watermark/QR, filtros) + rembg/ONNX (CPU) para remoção/troca de fundo; OCR via Tesseract (extra `[ocr]`); descrição por visão via Ollama (`gemma3-4b`) |
 | Documentos | [pymupdf](https://pymupdf.readthedocs.io) (PDF) + Tesseract (OCR híbrido, opcional) |
 | Interface | [Flet 0.85](https://flet.dev) (Flutter desktop) com log em tempo real, design system próprio e ajuda contextual (ⓘ) |
 | IA | Ollama local por padrão; Gemini opt-in por prefixo de modelo (`gemini-*`) |
@@ -156,9 +156,13 @@ uv run main.py audio <URL|arquivo> --fmt mp3 --quality 320 --denoise --normalize
 uv run main.py video download <URL> --quality 1080 --container mp4
 uv run main.py video subtitle video.mp4 --subs legenda.srt --mode soft
 
-# Imagens — convert | resize | crop | rotate | watermark | border | adjust | filter | favicon | contact-sheet | remove-bg | describe
+# Imagens — convert | resize | crop | rotate | watermark | border | adjust | filter | favicon | contact-sheet | remove-bg | describe | exif | ocr
 uv run main.py image convert photo.jpg --fmt webp --quality 85
-uv run main.py image remove-bg photo.png --model u2net
+uv run main.py image crop photo.jpg --mode focal --ratio 1:1 --focal-x 0.5 --focal-y 0.35
+uv run main.py image watermark photo.jpg --mode qr --text "https://mill.tools" --position bottom-right
+uv run main.py image remove-bg photo.png --model u2net --bg-mode blur --bg-blur 20
+uv run main.py image exif photo.jpg --strip-gps          # privacidade (remove localização)
+uv run main.py image ocr captura.png --lang por          # texto → .txt indexável no RAG
 
 # Documentos — merge | split | compress | rotate | watermark | stamp | encrypt | extract | ocr | pdf-to-images | images-to-pdf | qr
 uv run main.py document split doc.pdf --pages "1-3,5,8-"
@@ -272,7 +276,7 @@ uv run pytest -n auto            # paralelizado (pytest-xdist)
 uv run pytest --cov=src --cov-report=html
 ```
 
-**1173 testes unitários** (0 falhas); cobertura sobre `src/` (branch on, GUI excluída por não ser testável headless), agregado ~92%. Testes de integração são pulados automaticamente sem `ffmpeg`. Linter: **ruff** — `uv run pytest -m unit` verde + `ruff` limpo antes de qualquer commit.
+**1255 testes unitários** (0 falhas); cobertura sobre `src/` (branch on, GUI excluída por não ser testável headless), agregado ~92%. Testes de integração são pulados automaticamente sem `ffmpeg`. Linter: **ruff** — `uv run pytest -m unit` verde + `ruff` limpo antes de qualquer commit.
 
 ---
 
@@ -289,4 +293,6 @@ uv run pytest --cov=src --cov-report=html
 
 Entregue: **Tier 0** (legendas, OCR) · **PR4** Vídeo · **PR5/5.1** Documentos + OCR · **PR6/6.6** Biblioteca + entrada flexível · **PR7/7.2** IA (RAG local) + inspetor de índice · **PR8** Receitas · **PR9** Dados (query-first sobre DuckDB) · **PR9.1** gráficos no módulo Dados (matplotlib → PNG) · **Plano 2** painéis analíticos nos hubs (acervo da Biblioteca, saúde do índice + timing por modelo na IA, histórico de execução nas Receitas).
 
-A seguir: **PR9.2** encadeamento em estágios · **PR3.1-B** IA de áudio com torch (extra `[ai-audio]`) · melhorias em Imagens (batch rename, upscale) · streaming da resposta da IA.
+Também entregue — **módulo Imagens (Tier 1+2)**: visor polido (xadrez de transparência, faixa de metadados, tira de lote), controle de **EXIF** (CLI/GUI), aba **Descrição IA** (gemma3-4b vision), inspetor de metadados, **smart crop** por ponto focal, **grade de filtros**, **background replacement** (cor/desfoque/imagem), **watermark avançado** (9-grid/tiling/rotação/QR), **OCR** de imagem e bridge **imagem→PDF**.
+
+A seguir: **PR9.2** encadeamento em estágios · **PR3.1-B** IA de áudio com torch (extra `[ai-audio]`) · mais melhorias em Imagens (batch rename, upscale ONNX, HEIC) · streaming da resposta da IA.

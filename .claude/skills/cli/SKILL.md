@@ -156,18 +156,20 @@ Usa sub-subparsers. `ns.image_op` contém a operação (com hífen, ex: `"contac
 |---|---|
 | `convert` | `--fmt jpg`, `--quality 90` |
 | `resize` | `--mode contain/exact/scale_pct`, `--width`, `--height`, `--scale` |
-| `crop` | `--mode manual/ratio/autotrim`, `--ratio 16:9`, `--trim-color` |
+| `crop` | `--mode manual/ratio/autotrim/focal`, `--ratio 16:9`, `--trim-color`, `--focal-x`, `--focal-y` (modo `focal` = smart crop) |
 | `rotate` | `--angle 0/90/180/270`, `--flip-h`, `--flip-v`, `--exif` |
-| `watermark` | `--text "texto"`, `--color`, `--size`, `--position`, `--opacity` |
+| `watermark` | `--mode text/image/qr`, `--text "texto/payload"`, `--image logo.png`, `--color`, `--size`, `--position` (9-grid \| `tile`), `--opacity`, `--rotation` |
 | `border` | `--padding 20`, `--color #000000`, `--fill-alpha` |
 | `adjust` | `--brightness`, `--contrast`, `--saturation`, `--sharpness` |
 | `filter` | `--type blur/sharpen/autocontrast/equalize/grayscale` |
 | `favicon` | `--sizes 16,32,48,64,128,256` |
 | `contact-sheet` | `files…`, `--cols 4`, `--thumb 200`, `--gap 10`, `--bg-color` |
-| `remove-bg` | `--model u2net/u2netp/silueta/isnet-general-use/u2net_human_seg` |
-| `describe` | `--model moondream-custom/llava:7b/minicpm-v`, `--prompt` |
+| `remove-bg` | `--model u2net/…`, `--bg-mode transparent/color/blur/image`, `--bg-color`, `--bg-blur`, `--bg-image` |
+| `describe` | `--model moondream-custom/gemma3-4b-custom/llava:7b/minicpm-v`, `--prompt` |
+| `exif` | `--show` \| `--strip` \| `--strip-gps` \| `--artist`/`--copyright`/`--description` (inject), `--out` (read/write direto, sem pipeline) |
+| `ocr` | `--lang por/eng/por+eng/spa` (Tesseract → `<stem>_ocr.txt`, indexável no RAG) |
 
-Todos (exceto `favicon`, `describe`, `contact-sheet`) aceitam `--out-fmt` e `--out-quality`.
+Todos (exceto `favicon`, `describe`, `contact-sheet`, `exif`, `ocr`) aceitam `--out-fmt` e `--out-quality`. `exif` é direto sobre o core (não passa pelo pipeline/`check_dependencies`).
 
 ---
 

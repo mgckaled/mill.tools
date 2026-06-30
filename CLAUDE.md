@@ -84,11 +84,16 @@ Download/conversão/processamento via yt-dlp + ffmpeg. 8 operações (download/c
 
 ## Módulo Imagens
 
-Conversão/manipulação + IA, com visor Before/After. **Toggle "Edição | Descrição IA"** no topo do módulo (abas manuais `visible=` num `Stack`): a Edição tem 11 operações imagem→imagem (convert/resize/crop/rotate/watermark/border/adjust/filter/favicon/contact_sheet/remove_bg); a **Descrição IA** (`describe_tab.py`) isola o `describe` (imagem→texto) — fonte | descrição renderizada em `ft.Markdown`, reusa `build_ai_blocks` e o worker compartilhado (`operation="describe"`). `core/image/transform.py` = 9 funções puras; `background.py` (rembg, lazy, extra `[ai-image]`); `describe.py` (Ollama vision → `.txt`, `num_ctx=8192`; dropdown inclui `gemma3-4b-custom` — multimodal, melhor PT-BR); `exif.py` (controle de EXIF, puro).
+Conversão/manipulação + IA, com visor Before/After. **Toggle "Edição | Descrição IA"** no topo do módulo (abas manuais `visible=` num `Stack`): a Edição tem 12 operações imagem→{imagem|texto} (convert/resize/crop/rotate/watermark/border/adjust/filter/favicon/contact_sheet/remove_bg/**ocr**); a **Descrição IA** (`describe_tab.py`) isola o `describe` (imagem→texto) — fonte | descrição em `ft.Markdown` (ícone de copiar), reusa `build_ai_blocks` e o worker compartilhado (`operation="describe"`). `core/image/transform.py` = funções puras Pillow; `background.py` (rembg + **background replacement**, extra `[ai-image]`); `describe.py` (Ollama vision → `.txt`, `num_ctx=8192`; dropdown inclui `gemma3-4b-custom`); `exif.py`/`smart_crop.py`/`filter_previews.py`/`ocr.py` (puros).
 
-- **GUI** (`form_view.py` + `blocks/`): formulário quebrado em blocos `build_X_block(page) → (ft.Column, XRefs)` (`XRefs` = NamedTuple de `get_*`). Card `remove_bg` desabilita com tooltip quando o extra falta (padrão **`_UNAVAILABLE`**). Botão **"Ver info"** (seção Entrada) abre `AlertDialog` com dimensões/modo/EXIF (`info.image_info` + `exif.read_summary`).
-- **Visor Before/After** (`preview.py`, extraído de `view.py`): `_single_pane` vs `_before_after_row` por `visible=`; **fundo xadrez** atrás do "Depois" quando a saída tem alfa (`out_mode` RGBA/LA — torna a transparência do `remove_bg` legível); **faixa de metadados** antes→depois (`pipeline_log.fmt_meta_strip`, payload `out_w/out_h/out_mode/out_fmt`); **tira de miniaturas** navegável no lote (`add_batch_item`). Ações no resultado: "Abrir arquivo" + bridge "Ver na Biblioteca" (`view.py` recebe `nav`).
-- **EXIF** (`core/image/exif.py`, puro): `preserve | strip | strip_gps | inject` aplicado como **pós-processo aditivo** na saída (não toca a assinatura das transforms); JPEG re-salva com `quality="keep"`; zera Orientation (transforms já fazem `exif_transpose` → evita rotação dupla); seção fixa no form (`blocks/exif.py`). CLI `image exif <file> [--show] [--strip] [--strip-gps] [--artist] [--copyright] [--description] [--out]`.
+- **GUI** (`form_view.py` + `blocks/`): formulário quebrado em blocos `build_X_block(page) → (ft.Column, XRefs)`. Cards `remove_bg`/`ocr` desabilitam com tooltip quando o extra falta (padrão **`_UNAVAILABLE`**). Botão **"Ver info"** (seção Entrada) abre diálogo com dimensões/modo/EXIF (`info.image_info` + `exif.read_summary`). **Quirk Flet 0.85.2**: `page.open` não existe — usar `page.show_dialog(...)` p/ diálogos **e** SnackBars (SnackBar é `DialogControl`); fechar = `page.pop_dialog()`.
+- **Visor Before/After** (`preview.py`, extraído de `view.py`): **fundo xadrez** atrás do "Depois" quando a saída tem alfa (`out_mode` RGBA/LA — torna a transparência legível); **faixa de metadados** antes→depois (`fmt_meta_strip`, payload `out_w/out_h/out_mode/out_fmt`); **tira de miniaturas** navegável no lote (`add_batch_item`). Ações no rodapé: "Abrir arquivo", **"Criar PDF"** (`images_to_pdf` sobre as saídas do run), bridge "Ver na Biblioteca" (`view.py` recebe `nav`).
+- **EXIF** (`exif.py`): `preserve | strip | strip_gps | inject` como **pós-processo aditivo** na saída (não toca a assinatura das transforms); JPEG re-salva com `quality="keep"`; zera Orientation (transforms já fazem `exif_transpose`); seção fixa (`blocks/exif.py`). CLI `image exif`.
+- **Smart crop** (`smart_crop.py::focal_crop_box`, puro): modo `focal` do crop — recorta p/ uma proporção alvo mantendo o ponto focal (sliders X/Y) enquadrado.
+- **Grade de filtros** (`filter_previews.py` + `blocks/filter.py`): grade clicável de previews (cada filtro aplicado a um thumbnail), gerada off-thread (`page.run_task` + `to_thread`) ao ativar a operação/trocar a fonte. `transform.apply_filter_im` é o motor puro reusado.
+- **Background replacement** (`background.py::replace_background`): reusa a máscara do rembg p/ trocar o fundo por cor/desfoque (efeito retrato)/imagem; `remove_background` delega (modo transparent).
+- **Watermark avançado** (`transform.watermark_image`): 9-grid + `tile`, rotação, e modos texto/imagem/**QR** (`_qr_rgba` reusa `qrcode`); stamp RGBA reutilizável (`_build_wm_stamp`).
+- **OCR** (`ocr.py::ocr_image`): reusa o Tesseract do `[ocr]` (`_resolve_tesseract_cmd`/`is_available` de `core/document/ocr`); saída `<stem>_ocr.txt` indexável no RAG. Worker: modo curto `_run_batch_ocr`. CLI `image ocr --lang`.
 - `LOSSY_FMTS = {"jpg","jpeg","webp"}`. **Saída**: `output/image/source/` · `output/image/processed/`.
 
 ## Módulo Documentos
@@ -175,7 +180,7 @@ uv run main.py <URL>                                   # Transcrição básica (
 uv run main.py transcribe <URL|file.mp4|notas.txt> --format --analyze --profile lecture
 uv run main.py audio   <URL_OR_FILE> [--fmt mp3] [--quality 320] [--denoise] [--normalize]
 uv run main.py video   <download|convert|trim|compress|resize|extract-audio|thumbnail|subtitle> <input> [opções]
-uv run main.py image   <convert|resize|crop|rotate|watermark|border|adjust|filter|favicon|contact-sheet|remove-bg|describe|exif> <input> [opções]
+uv run main.py image   <convert|resize|crop|rotate|watermark|border|adjust|filter|favicon|contact-sheet|remove-bg|describe|exif|ocr> <input> [opções]
 uv run main.py document <merge|split|compress|rotate|watermark|stamp|encrypt|extract|ocr|pdf-to-images|images-to-pdf|qr> <input> [opções]
 uv run main.py library list [--kind audio|data] [--since 7d] [--sort size]
 uv run main.py ai index | ai stats | ai dups [--threshold 0.95] [--scope kind] | ai topics | ai map [--method pca|umap] [--out] | ai related <path> [--k 5]
@@ -262,6 +267,7 @@ Modelos custom CPU-pinned (`num_gpu 0`); Modelfiles minimalistas (sem `SYSTEM`/`
 | `ft.Image` updates frequentes | `gapless_playback=True` mantém o frame anterior visível — evita flicker (cursor de waveform) |
 | `Container.on_hover` coberto | **não dispara** quando o Container é totalmente coberto por outra região de mouse. Para hover **e** tap no mesmo card, usar **um único** `ft.GestureDetector` com `on_enter`/`on_exit` (+ `on_tap`) — ver `home.py` |
 | `control.update()` de thread daemon | **não repinta** até o próximo `page.update()` da UI thread — um cronômetro/ticker em `threading.Thread` parece travado. Para atualização periódica viva, rodar no event loop da UI via `page.run_task` (corotina async com `await asyncio.sleep`) — ver `ai/view.py`, `home.py`, `library.py` |
+| `page.open(...)` | **não existe** no 0.85.2 (`AttributeError` em runtime, no handler). Diálogos **e** SnackBars (SnackBar é `DialogControl`) vão por `page.show_dialog(...)`; fechar = `page.pop_dialog()`. Nunca `page.snack_bar=`/`page.dialog=`. Há usos latentes de `page.open` no repo (não exercitados) |
 
 ### Modelos nos dropdowns de Transcrição
 
