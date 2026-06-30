@@ -90,8 +90,11 @@ def help_icon(
 
         def _open(_e) -> None:
             dlg = ft.AlertDialog(
-                title=ft.Text(
-                    short[:60], size=Type.body.size, weight=ft.FontWeight.W_600
+                title=ft.Container(
+                    content=ft.Text(
+                        short, size=Type.body.size, weight=ft.FontWeight.W_600
+                    ),
+                    width=420,
                 ),
                 content=ft.Container(
                     content=ft.Text(long, selectable=True),

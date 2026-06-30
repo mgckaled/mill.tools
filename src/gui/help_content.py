@@ -30,7 +30,9 @@ HELP_SHORT: dict[str, str] = {
     "transcription.analysis_profile": (
         "Perfil de análise: troca o esquema de campos e o prompt conforme o tipo "
         "de conteúdo (aula, entrevista, tutorial, reunião…). Não altera o "
-        "formulário, só o que é extraído. 'Geral' mantém o esquema padrão."
+        "formulário, só o que é extraído. 'Geral' mantém o esquema padrão. "
+        "Ao escolher um texto já indexado, a IA pré-seleciona o perfil mais "
+        "provável (chip 'Sugerido: ...') — você pode aceitar ou trocar."
     ),
     "transcription.prompt": (
         "Cria uma versão condensada (~40%) da transcrição, "
@@ -146,7 +148,9 @@ HELP_SHORT: dict[str, str] = {
     "image.crop": (
         "Manual: define região em px (0 = até a borda). "
         "Proporção: recorta o maior retângulo da proporção escolhida, centralizado. "
-        "Auto-trim: remove bordas da cor indicada."
+        "Auto-trim: remove bordas da cor indicada. "
+        "Smart: recorta para uma proporção alvo mantendo um ponto focal "
+        "(sliders X/Y) sempre enquadrado."
     ),
     "image.rotate": (
         "Ângulo em múltiplos de 90°. EXIF auto corrige a orientação registrada pela câmera. "
@@ -155,7 +159,9 @@ HELP_SHORT: dict[str, str] = {
     "image.watermark": (
         "Texto: fonte embutida, sem dependência do sistema. "
         "Imagem: sobreposição redimensionada a 25% da largura. "
-        "Opacidade 0 = invisível, 100 = sólida."
+        "QR Code: gera e aplica um QR a partir do texto/URL informado. "
+        "Posição: grade 3×3 ou 'tile' (repete em mosaico). "
+        "Opacidade 0 = invisível, 100 = sólida; rotação em graus."
     ),
     "image.border": (
         "Adiciona borda sólida em torno da imagem. "
@@ -231,9 +237,10 @@ HELP_SHORT: dict[str, str] = {
     ),
     # --- Biblioteca ---
     "library": (
-        "Reúne tudo que você já gerou — áudio, vídeo, imagens, transcrições e "
-        "documentos — num só lugar. Filtre por tipo, busque por nome, reabra "
-        "arquivos ou reenvie uma saída para outro módulo num clique."
+        "Reúne tudo que você já gerou — áudio, vídeo, imagens, transcrições, "
+        "documentos e dados — num só lugar. Filtre por tipo, busque por nome "
+        "ou tag, reabra arquivos ou reenvie uma saída para outro módulo num "
+        "clique. Tem também um Painel de estatísticas e um Mapa semântico."
     ),
     # --- IA ---
     "ai.scope": (
@@ -255,14 +262,15 @@ HELP_SHORT: dict[str, str] = {
     ),
     "ai": (
         "Converse com o seu próprio acervo — RAG 100% local. Indexa transcrições, "
-        "textos de PDF e descrições de imagem e responde citando as fontes."
+        "textos de PDF, descrições de imagem e cartões de dados, e responde "
+        "citando as fontes."
     ),
     # --- Dados ---
     "data": (
         "Consulte planilhas e arquivos de dados (CSV, TSV, JSON, Parquet, XLSX) "
         "com o motor DuckDB. Descreva o que quer em português — a IA traduz para "
         "SQL vendo só os nomes de coluna; o conteúdo das tabelas fica 100% local. "
-        "Abas: Consulta · Pré-visualização · Análise com IA."
+        "Abas: Consulta · Pré-visualização · Análise com IA · Gráfico."
     ),
     # --- Receitas ---
     "recipes": (
@@ -330,8 +338,11 @@ HELP_LONG: dict[str, str] = {
         "Redução de Ruído — Spectral Gating\n\n"
         "Analisa o espectro do áudio e atenua as frequências que se comportam como ruído "
         "estacionário. Bom para ventiladores, ar-condicionado, hum de fio e chiado de fita.\n\n"
-        "A saída é sempre WAV para não perder qualidade no passo intermediário.\n\n"
-        "Requer: uv add noisereduce soundfile (ou uv sync após atualizar pyproject.toml)."
+        "Tipo de ruído: 'Constante' assume um perfil de ruído fixo ao longo do "
+        "áudio (mais rápido); 'Variável' reestima o perfil continuamente, útil "
+        "quando o ruído de fundo muda de intensidade.\n\n"
+        "A saída é sempre WAV para não perder qualidade no passo intermediário. "
+        "Roda 100% na CPU (noisereduce + soundfile), sem dependência extra para instalar."
     ),
     "audio.normalize": (
         "Normalização de Volume — EBU R128\n\n"
@@ -412,31 +423,45 @@ HELP_LONG: dict[str, str] = {
     "library": (
         "Biblioteca — o índice de tudo que o mill.tools já produziu.\n\n"
         "O que ela mostra:\n"
-        "• Todos os arquivos sob output/ — áudio, vídeo, imagens, transcrições "
-        "e documentos — em cards com miniatura (imagem, 1ª página do PDF ou "
-        "frame do vídeo); áudio e texto usam um ícone do tipo.\n\n"
+        "• Todos os arquivos sob output/ — áudio, vídeo, imagens, transcrições, "
+        "documentos e dados — em cards com miniatura (imagem, 1ª página do PDF "
+        "ou frame do vídeo); áudio e texto usam um ícone do tipo.\n\n"
+        "Quatro modos de visualização:\n"
+        "• Grade e Lista — navegação padrão, com miniaturas.\n"
+        "• Painel — resumo do acervo: contagem e tamanho por tipo, maiores "
+        "arquivos, crescimento por período.\n"
+        "• Mapa — mapa semântico do acervo (clusters de assuntos por "
+        "similaridade de embedding, com tópicos rotulados); clique num "
+        'documento para ver os "Relacionados".\n\n'
         "O que você pode fazer:\n"
         "• Filtrar por tipo e por período (24h, 7 ou 30 dias).\n"
-        "• Buscar por nome e ordenar por data, nome ou tamanho.\n"
+        "• Buscar por nome ou por auto-tag (palavras-chave extraídas do "
+        "texto de cada item) e ordenar por data, nome ou tamanho.\n"
         "• Abrir o arquivo ou a pasta dele no sistema.\n"
         "• Reenviar uma saída para outro módulo num clique — ex.: mandar um "
         "áudio baixado para a Transcrição ou reprocessar uma imagem.\n\n"
         "A lista é recarregada ao abrir a Biblioteca e quando um pipeline "
         "termina. Há paridade na linha de comando: "
-        "uv run main.py library list."
+        "uv run main.py library list / library stats."
     ),
     "ai": (
         "IA / Conteúdo — converse com o seu próprio acervo (RAG local).\n\n"
         "Como funciona:\n"
         "• Indexa o texto que você já produziu — transcrições, análises, "
-        "digests, texto extraído/OCR de PDF e descrições de imagem — em "
-        "vetores de embedding (Ollama, nomic-embed-custom, 100% local, CPU).\n"
+        "digests, texto extraído/OCR de PDF, descrições de imagem e cartões "
+        "de dados (schema + perfil de planilhas/CSV) — em vetores de "
+        "embedding (Ollama, nomic-embed-custom, 100% local, CPU).\n"
         "• Recupera os trechos mais relevantes para a sua pergunta (busca "
         "semântica por similaridade).\n"
         "• Responde com um LLM local (Ollama) ou na nuvem (Gemini, opcional), "
-        "usando apenas o contexto recuperado e citando as fontes [n].\n\n"
+        "usando apenas o contexto recuperado e citando as fontes [n]. Quando a "
+        "pergunta foge do que está indexado, um aviso discreto aparece acima "
+        "da resposta — ela ainda é gerada, você decide se confia.\n\n"
         "Escopo: pergunte ao acervo inteiro, a um tipo (transcrições, "
-        "documentos, descrições de imagem) ou a um único documento.\n\n"
+        "documentos, descrições de imagem, dados) ou a um único documento.\n\n"
+        "Abas do painel: Conversa · Índice (inspetor de documentos/chunks "
+        "indexados) · Painel (saúde do índice e tempo médio de resposta por "
+        "modelo).\n\n"
         "Privacidade: os embeddings são sempre locais. Se você escolher um "
         "modelo Gemini, apenas os trechos recuperados são enviados à nuvem no "
         "passo de resposta.\n\n"
@@ -465,8 +490,12 @@ HELP_LONG: dict[str, str] = {
         "em vez de uma execução consumindo todos.\n"
         '• "Limpar intermediários" apaga, ao fim, os arquivos gerados pelos '
         "passos intermediários — mantém só as saídas finais e as suas entradas.\n\n"
+        "Histórico:\n"
+        "• A aba Histórico mostra taxa de sucesso, duração média e o passo que "
+        "mais falha em cada receita, com gráfico — útil para identificar "
+        "receitas frágeis antes de automatizá-las mais.\n\n"
         "Paridade na linha de comando: uv run main.py recipe list / "
-        'recipe run "<nome>" <URL_OU_ARQUIVO>.'
+        'recipe run "<nome>" <URL_OU_ARQUIVO> / recipe stats.'
     ),
     "data": (
         "O módulo Dados é query-first: toda a composição (juntar, filtrar, "
@@ -482,7 +511,7 @@ HELP_LONG: dict[str, str] = {
         "Privacidade reforçada: somente leitura. Um guard rejeita qualquer SQL "
         "que não seja SELECT (sem COPY/INSERT/UPDATE/DELETE/ATTACH/PRAGMA) e "
         "múltiplos comandos.\n\n"
-        "As três abas do painel:\n"
+        "As quatro abas do painel:\n"
         "• Consulta — escreva em português (ou SQL na mão), pré-visualize o que "
         "a IA entendeu (cartão “Entendi assim”, com SQL editável), execute e veja "
         "o resultado paginado. Em seguida personalize o retorno (renomear "
@@ -494,7 +523,10 @@ HELP_LONG: dict[str, str] = {
         "• Análise com IA — um parecer de qualidade: a IA recebe só esquema + "
         "resumo estatístico (SUMMARIZE) + amostra de ~10 linhas e aponta tipos "
         "suspeitos, nomes ruins, duplicatas, valores fora de faixa e problemas de "
-        "estrutura. O parecer fica em cache e é reaproveitado pela indexação.\n\n"
+        "estrutura. O parecer fica em cache e é reaproveitado pela indexação.\n"
+        "• Gráfico — sugere automaticamente o tipo de gráfico (barra/linha/"
+        "histograma/dispersão) a partir do resultado da consulta; gere e salve "
+        "o PNG em output/data/.\n\n"
         "Dica XLSX: números em formato pt-BR (1.234,56) são lidos como texto para "
         "o arquivo sempre carregar; converta no SQL quando precisar de número.\n\n"
         "Paridade na linha de comando: uv run main.py data query <arquivos> "
