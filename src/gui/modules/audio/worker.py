@@ -20,6 +20,7 @@ from src.core.audio.denoiser import (
 )
 from src.core.audio.downloader import download_audio
 from src.core.audio.normalizer import normalize_lufs as _normalize_lufs
+from src.core.audio.silence import remove_silence
 from src.gui.modules._pipeline_runner import (
     fmt_ydl_progress,
     item_label,
@@ -165,6 +166,43 @@ def _make_process_item(args: AudioArgs) -> Callable:
                 )
 
         original_src_size = out_path.stat().st_size
+
+        # ── Post: Trim silence ───────────────────────────────────────────
+        if args.trim_silence:
+            emit(
+                "audio_op_start",
+                payload={
+                    "operation": "silence",
+                    "item_name": out_path.name,
+                    "item_idx": idx,
+                    "total": total,
+                },
+            )
+            emit(
+                "log",
+                payload={"message": pipeline_log.fmt_silence_start(out_path.name)},
+            )
+            emit(
+                "log",
+                payload={
+                    "message": pipeline_log.fmt_silence_detail(
+                        args.silence_threshold_db, args.silence_min_s
+                    )
+                },
+            )
+
+            def _silence_cb(ratio: float) -> None:
+                emit("progress_update", payload={"current": ratio})
+
+            out_path = remove_silence(
+                out_path,
+                AUDIO_PROCESSED_DIR,
+                fmt=out_path.suffix.lstrip(".").lower(),
+                threshold_db=args.silence_threshold_db,
+                min_silence_s=args.silence_min_s,
+                bitrate=args.quality if args.quality != "best" else None,
+                progress_cb=_silence_cb,
+            )
 
         # ── Post: Denoise ────────────────────────────────────────────────
         if args.denoise:

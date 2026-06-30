@@ -19,6 +19,9 @@ class AudioArgs:
     embed_meta: bool = True
     denoise: bool = False
     denoise_stationary: bool = True
+    trim_silence: bool = False
+    silence_threshold_db: float = -40.0
+    silence_min_s: float = 0.5
     normalize: bool = False
     normalize_target_lufs: float = -14.0
     channels: int | None = None  # 1 = mono; None preserves source

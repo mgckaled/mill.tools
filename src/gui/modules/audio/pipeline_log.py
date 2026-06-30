@@ -24,6 +24,7 @@ OP_VERBS: dict[str, str] = {
     "convert": "Convertendo",
     "extract": "Extraindo áudio",
     "denoise": "Reduzindo ruído",
+    "silence": "Removendo silêncio",
     "normalize": "Normalizando volume",
     "encode": "Reencodando saída",
 }
@@ -33,6 +34,7 @@ OP_LABELS: dict[str, str] = {
     "convert": "Convertendo...",
     "extract": "Extraindo áudio...",
     "denoise": "Reduzindo ruído (spectral)...",
+    "silence": "Removendo silêncio...",
     "normalize": "Normalizando (loudnorm — 2 passes)...",
     "encode": "Reencodando saída...",
 }
@@ -81,6 +83,17 @@ def fmt_denoise_start(name: str) -> str:
 def fmt_denoise_detail(stationary: bool) -> str:
     mode = "estacionário (rápido)" if stationary else "adaptativo (mais lento)"
     return f"[i] Modo: {mode}"
+
+
+# ─── Builders — silence ───────────────────────────────────────────────────────
+
+
+def fmt_silence_start(name: str) -> str:
+    return f"[*] Removendo silêncio: {name}…"
+
+
+def fmt_silence_detail(threshold_db: float, min_silence_s: float) -> str:
+    return f"[i] Limiar: {threshold_db:.0f} dB | Silêncio mínimo: {min_silence_s:.1f}s"
 
 
 # ─── Builders — encode final ──────────────────────────────────────────────────

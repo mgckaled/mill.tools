@@ -71,6 +71,28 @@ def add_audio_parser(subparsers: argparse._SubParsersAction) -> None:
         help="Resample output to the given sample rate (e.g. 16000 for Whisper)",
     )
     p.add_argument(
+        "--trim-silence",
+        action="store_true",
+        dest="trim_silence",
+        help="Remove leading, trailing and internal silence (ffmpeg silenceremove)",
+    )
+    p.add_argument(
+        "--silence-threshold",
+        type=float,
+        default=-40.0,
+        dest="silence_threshold",
+        metavar="DB",
+        help="Silence threshold in dBFS for --trim-silence (default -40.0)",
+    )
+    p.add_argument(
+        "--silence-min",
+        type=float,
+        default=0.5,
+        dest="silence_min",
+        metavar="SECONDS",
+        help="Minimum silence duration to cut for --trim-silence (default 0.5)",
+    )
+    p.add_argument(
         "--normalize",
         action="store_true",
         help="Normalize loudness to EBU R128 target after the main operation",
@@ -114,6 +136,9 @@ def run_audio_cli(ns: argparse.Namespace) -> None:
         embed_meta=not ns.no_meta,
         denoise=ns.denoise,
         denoise_stationary=not ns.denoise_adaptive,
+        trim_silence=ns.trim_silence,
+        silence_threshold_db=ns.silence_threshold,
+        silence_min_s=ns.silence_min,
         normalize=ns.normalize,
         normalize_target_lufs=ns.lufs,
         channels=1 if ns.mono else None,
