@@ -113,7 +113,7 @@ def build_image_form(
 
         locals_ = [it for it in input_source.get_items() if it.kind == "local"]
         if not locals_:
-            page.open(
+            page.show_dialog(
                 ft.SnackBar(
                     content=ft.Text("Selecione uma imagem local para inspecionar."),
                     bgcolor=ft.Colors.ERROR,

@@ -140,7 +140,9 @@ def build_describe_tab(
         if not text.strip():
             return
         page.set_clipboard(text)
-        page.open(ft.SnackBar(content=ft.Text("Descrição copiada."), duration=2000))
+        page.show_dialog(
+            ft.SnackBar(content=ft.Text("Descrição copiada."), duration=2000)
+        )
 
     copy_btn = ft.IconButton(
         icon=ft.Icons.CONTENT_COPY_OUTLINED,

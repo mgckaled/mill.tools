@@ -121,7 +121,7 @@ def build_image_module(
         try:
             os.startfile(out)  # Windows shell open
         except Exception:
-            page.open(
+            page.show_dialog(
                 ft.SnackBar(
                     content=ft.Text(f"Não foi possível abrir {os.path.basename(out)}"),
                     bgcolor=ft.Colors.ERROR,
