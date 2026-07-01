@@ -539,12 +539,15 @@ Fundação de ML, testável sem rede e (na maior parte) sem o extra `[ml]`:
 
 - **`recommend` (sem `importorskip`)**: numpy-puro. `related` — vizinhos plantados no
   topo, exclui o próprio, respeita `k`, esgota corpus, doc inexistente → `ValueError`;
-  `in_corpus` — acima/abaixo do limiar, store vazio → `(False, 0.0)`.
+  reranking por **MMR** (vetores ortogonais com relevância bem separada → reduz a
+  top-k puro; par quase-duplicado + candidato diverso → MMR prefere o diverso ao
+  invés do duplicado); `in_corpus` — acima/abaixo do limiar, store vazio → `(False, 0.0)`.
 - **`cluster`/`labeling`/`project` (`importorskip("sklearn")`)**: blobs sintéticos
   ortogonais em dim estreita (jitter pequeno) → `n_clusters` esperado; outlier isolado →
   `-1`/`n_noise`; k-means com `k`; `M<min_cluster_size` → tudo ruído; método inválido /
   k-means sem `k` / gate off (`mocker.patch(...is_available, return_value=False)`) →
-  erro. c-TF-IDF: vocabulário distinto → termos discriminativos no topo, `-1` ignorado,
+  erro. c-TF-IDF (`ngram_range=(1,3)`, `reduce_frequent_words`): vocabulário distinto →
+  termos discriminativos no topo (inclui frases de até 3 palavras), `-1` ignorado,
   stopwords removidas, só-stopwords → vazio. PCA: shape `(M,2)`, **determinismo** (duas
   execuções idênticas via convenção de sinal), pad degenerado (D=1); UMAP →
   `importorskip("umap")` (pulado sem o extra; `_umap_2d` tem `# pragma: no cover`).

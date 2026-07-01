@@ -37,7 +37,9 @@ Nenhuma capacidade nova nasce aqui — este plano refina a **qualidade e a efici
 A pesquisa técnica (scikit-learn/YAKE/spaCy oficiais + literatura) corrigiu duas suposições da lista original de 7 pontos:
 
 - **HDBSCAN incremental não é viável sem dependência nova.** `prediction_data=True` + `approximate_predict()`/`membership_vector()` existem **apenas** no pacote standalone `hdbscan` (`scikit-learn-contrib/hdbscan`) — a classe `sklearn.cluster.HDBSCAN` (a que o projeto usa, dentro do `[ml]`) só expõe `fit`/`fit_predict`/`dbscan_clustering`, sem predição para pontos novos. Por isso este item vira Tier 4 (fora de escopo desta rodada).
-- **O `dedupFunc` do YAKE não tem opção `"jaccard"`.** As opções reais são `leve` (Levenshtein), `jaro` e `seqm` (sequence matcher) — corrigido no item 2.3.
+- **O `dedupFunc` do YAKE não tem opção `"jaccard"`.** As opções reais são `leve` (Levenshtein), `jaro` e `seqm` (sequence matcher) — corrigido no item 4.3.
+- **Correção adicional, achada só na implementação (não na pesquisa web):** os nomes dos parâmetros do `yake.KeywordExtractor` instalado são **snake_case** (`dedup_lim`/`dedup_func`/`window_size`), não o camelCase (`dedupLim`/`dedupFunc`/`windowsSize`) usado no README da lib — e o construtor tem um `**kwargs` que **engole silenciosamente** nomes errados em vez de dar erro. Verificado por `inspect.signature` direto no pacote instalado antes de codar (item 4.3).
+- **Item 4.5 (EntityRuler) mudou de plano ao implementar.** A hipótese original era hardcodar uma lista de termos de domínio — mas o mill.tools não tem um domínio fixo (o corpus é o que o usuário transcrever). A solução implementada foi um glossário **opcional do usuário** (`~/.mill-tools/entity_glossary.json`), carregado uma única vez no `_load()` (não por chamada — evita o problema do pipeline em cache). Ver 4.5 revisado.
 
 A pesquisa também **confirmou como já correta** uma escolha existente (`CalibratedClassifierCV(method="sigmoid")` em `classify.py` — Tier 4, sem ação) e trouxe um achado **não previsto**: a busca escopada do RAG filtra depois de rankear em vez de antes — um bug de recall real, não cosmético (Tier 1.1).
 
@@ -103,7 +105,9 @@ def _normalized_vectors(self) -> np.ndarray:
 
 ---
 
-## 4. Tier 2 — ganho direto de qualidade
+## 4. Tier 2 — ganho direto de qualidade ✅
+
+**Implementado** (commits `d9ea303`, `e94e06f`, `5e20dff`, `0cadc87`, `3bd136d`). `uv run pytest -m unit` verde (1301 passed) + `ruff` limpo em cada commit.
 
 ### 4.1 MMR (Maximal Marginal Relevance) em `recommend.py` e `summarize.py`
 
@@ -144,21 +148,25 @@ tf = counts / np.where(tokens_per_class == 0, 1, tokens_per_class)
 tf = np.sqrt(tf)  # reduce_frequent_words (BERTopic)
 ```
 
-### 4.3 Parâmetros do YAKE
+### 4.3 Parâmetros do YAKE ✅
 
 **Arquivo:** `src/core/text/keywords.py:51` (`yake.KeywordExtractor(lan=lang, n=ngram, top=top_n)`).
 
-- `dedupLim` (implícito em 0.9, o default) → baixar para ~0.7–0.8: limiar de similaridade de string acima do qual duas frases candidatas são consideradas duplicatas.
-- `dedupFunc` (implícito em `"seqm"`, o default) → manter `"seqm"` (sequence matcher) em vez de tentar `"jaccard"`, que **não existe** nesta API; as opções reais são `leve`/`jaro`/`seqm`.
-- `windowsSize` (implícito em 1) → 2–3: janela de co-ocorrência maior, mais adequada à sintaxe livre do português.
+- `dedup_lim` (implícito em 0.9, o default) → baixar para 0.75: limiar de similaridade de string acima do qual duas frases candidatas são consideradas duplicatas.
+- `dedup_func` (implícito em `"seqm"`, o default) → manter `"seqm"` (sequence matcher) em vez de tentar `"jaccard"`, que **não existe** nesta API; as opções reais são `leve`/`jaro`/`seqm`.
+- `window_size` (implícito em 1) → 2: janela de co-ocorrência maior, mais adequada à sintaxe livre do português.
+
+**Nomes corrigidos na implementação** (ver seção 2): são **snake_case** (`dedup_lim`/`dedup_func`/`window_size`), verificado via `inspect.signature(yake.KeywordExtractor.__init__)` no pacote instalado — o README da lib usa uma grafia camelCase desatualizada, e o construtor tem `**kwargs` que engoliria o nome errado silenciosamente em vez de dar erro.
 
 ```python
 extractor = yake.KeywordExtractor(
-    lan=lang, n=ngram, top=top_n, dedupLim=0.75, dedupFunc="seqm", windowsSize=2
+    lan=lang, n=ngram, top=top_n, dedup_lim=0.75, dedup_func="seqm", window_size=2
 )
 ```
 
-### 4.4 TextRank: `sublinear_tf` + viés de posição
+Teste (`test_extractor_receives_the_tuned_dedup_params`) usa `mocker.patch("yake.KeywordExtractor", wraps=...)` para travar os nomes reais dos kwargs — exatamente para não deixar essa armadilha silenciosa passar batido de novo.
+
+### 4.4 TextRank: `sublinear_tf` + viés de posição ✅
 
 **Arquivo:** `src/core/text/summarize.py:83-106` (`_textrank_scores`).
 
@@ -173,17 +181,28 @@ scores = 0.85 * pagerank_scores + 0.15 * position_bias  # peso a calibrar
 
 LexRank foi cogitado como alternativa (mais robusto a ruído de fala) mas a pesquisa não achou evidência disso — descartado.
 
-### 4.5 spaCy `EntityRuler` para termos de domínio
+### 4.5 spaCy `EntityRuler` — glossário opcional do usuário ✅ (revisado na implementação)
 
 **Arquivo:** `src/core/text/entities.py`.
 
+A hipótese original (hardcodar `DOMAIN_PATTERNS`) foi descartada ao implementar: o mill.tools não tem um domínio fixo — o acervo do RAG é o que o usuário transcrever/analisar (hoje pode ser Duna e vídeos de IA; amanhã, receitas de cozinha) — então não existe uma lista universal que faça sentido cravar no código. A solução implementada é um **glossário opcional lido do disco**, no formato nativo de padrões do `EntityRuler`:
+
 ```python
-if "entity_ruler" not in nlp.pipe_names:
-    ruler = nlp.add_pipe("entity_ruler", before="ner")
-    ruler.add_patterns(DOMAIN_PATTERNS)
+def _load(lang: str) -> Language:
+    if lang not in _NLP_CACHE:
+        import spacy
+        nlp = spacy.load(_model_for(lang))
+        patterns = _load_glossary_patterns()  # ~/.mill-tools/entity_glossary.json
+        if patterns:
+            ruler = nlp.add_pipe("entity_ruler", before="ner")
+            ruler.add_patterns(patterns)
+        _NLP_CACHE[lang] = nlp
+    return _NLP_CACHE[lang]
 ```
 
-Overhead baixo (casamento de padrão, não inferência); `overwrite_ents=False` (default) deixa o ruler complementar o NER estatístico sem sobrescrever — entidades sobrepostas resolvidas por comprimento (mais longa vence). **Único item do Tier 2 que exige trabalho de conteúdo antes do código**: uma lista de termos de domínio (nomes de modelo, siglas técnicas) que o `pt_core_news_sm` erra ou não reconhece — levantar essa lista é pré-requisito, não é uma tarefa de programação.
+Sem o arquivo → nenhum ruler é adicionado, comportamento idêntico a antes. **Restrição real encontrada na implementação**: como o pipeline é um singleton em cache por idioma (`_NLP_CACHE`), o glossário só é lido no **primeiro** carregamento daquele idioma no processo — não dá para reconfigurar por chamada sem invalidar o cache manualmente. Isso não é um problema para o caso de uso (o usuário edita o arquivo e reinicia o app/processo), só uma limitação documentada. `_NER_PIPES` precisou incluir `"entity_ruler"` para o componente não ser desativado pelo `select_pipes(enable=...)` da função `entities()`. Overhead baixo (casamento de padrão, não inferência); `overwrite_ents=False` (default) deixa o ruler complementar o NER estatístico sem sobrescrever.
+
+Sem CLI/GUI para editar o glossário — só o arquivo, documentado no `CLAUDE.md`.
 
 ---
 
@@ -264,10 +283,11 @@ Cada item ganha teste(s) `@pytest.mark.unit` espelhando `tests/core/ml/`/`tests/
 
 - **1.1** ✅ — `test_retriever.py`: escopo restritivo (documento com poucos chunks fora do top global) devolve `k` resultados quando existem `k` chunks naquele escopo; sem regressão no caminho sem escopo. Implementado como `test_retrieve_scope_returns_full_k_even_when_outranked_globally`.
 - **1.2** ✅ — `test_store.py`: resultado de `search()` idêntico antes/depois do cache; cache invalidado após `add()`/`drop_source()` (comparar por identidade do array, não só valor). Implementado como `test_search_caches_normalized_vectors` + `test_add_invalidates_normalized_cache` + `test_drop_source_invalidates_normalized_cache` + os 3 testes de máscara.
-- **2.1** — `test_recommend.py`/`test_summarize.py`: `mmr()` com candidatos sintéticos redundantes → seleção diversificada difere do top-k bruto quando há redundância; com candidatos já diversos, resultado coincide com top-k puro (regressão zero quando não há redundância).
-- **2.2** — `test_labeling.py`: rótulo de cluster sintético com bigrama discriminativo aparece no resultado (não aparecia com `ngram_range=(1,1)`).
-- **2.3** — `test_keywords.py` (`importorskip("yake")`): frases quase-duplicadas não aparecem duas vezes no top-N com os novos parâmetros.
-- **2.4** — `test_summarize.py`: sentença inicial ganha score maior que uma sentença de conteúdo idêntico no meio do texto (efeito do lead bias).
+- **2.1** ✅ — `test_recommend.py`/`test_summarize.py`: `mmr()` com candidatos sintéticos redundantes → seleção diversificada difere do top-k bruto quando há redundância (`test_related_diversifies_near_duplicate_candidates`, `test_diversifies_near_duplicate_sentences`); com candidatos já diversos, resultado coincide com top-k puro (`test_related_matches_plain_top_k_without_redundancy`).
+- **2.2** ✅ — `test_labeling.py`: rótulo de cluster sintético com trigrama discriminativo aparece no resultado (`test_multiword_phrase_can_appear_as_a_label`, não aparecia com `ngram_range=(1,1)`).
+- **2.3** ✅ — `test_keywords.py` (`importorskip("yake")`): `test_extractor_receives_the_tuned_dedup_params` trava os kwargs reais passados ao `KeywordExtractor` (mais confiável que tentar provar deduplicação observando o texto de saída, dado o algoritmo interno da lib).
+- **2.4** ✅ — `test_summarize.py`: sentença inicial ganha score maior que uma sentença de conteúdo idêntico no meio do texto (`test_lead_bias_favors_earlier_sentence_with_equal_content`).
+- **2.5** ✅ (não estava na lista original — item revisado) — `test_entities.py`: `_load_glossary_patterns` com arquivo ausente/malformado/não-lista → `[]`; com o modelo spaCy real instalado, um termo inventado (`"Zyloquark9000"`) só é reconhecido como entidade quando o glossário o injeta (`test_glossary_pattern_adds_entities_the_model_would_miss`) — prova que o ruler está de fato no caminho de execução, não só instanciado.
 - **3.1** — `test_project.py`: `method="tsne"` não lança com N pequeno (perplexity clampada); coordenadas `(M, 2)` float32.
 - **3.2** — `test_cluster.py`: `k=None` com `m` grande escolhe um k plausível (testar com blobs sintéticos de k conhecido); `k=None` com `m` pequeno ainda lança `ValueError` (comportamento preservado).
 
@@ -298,11 +318,11 @@ Não aplicar all-but-the-top (Tier 4.1) como padrão — o risco estatístico em
 |---|---|---|---|---|---|---|
 | 1.1 | Pré-filtro por escopo antes de rankear | `rag/retriever.py`, `rag/store.py` | 1 | Baixo | Baixo | ✅ Implementado |
 | 1.2 | Cache de normalização na busca | `rag/store.py` | 1 | Baixo | Baixo | ✅ Implementado |
-| 2.1 | MMR em recommend + summarize | `ml/recommend.py`, `text/summarize.py` | 2 | Baixo | Baixo-Médio | Pendente |
-| 2.2 | c-TF-IDF ngram(1,3) + sqrt(tf) | `ml/labeling.py` | 2 | Baixo | Baixo | Pendente |
-| 2.3 | YAKE dedupLim/dedupFunc/windowsSize | `text/keywords.py` | 2 | Baixo | Baixo | Pendente |
-| 2.4 | TextRank sublinear_tf + lead bias | `text/summarize.py` | 2 | Baixo | Médio | Pendente |
-| 2.5 | spaCy EntityRuler | `text/entities.py` | 2 | Baixo | Médio (+ conteúdo) | Pendente |
+| 2.1 | MMR em recommend + summarize | `ml/recommend.py`, `text/summarize.py` | 2 | Baixo | Baixo-Médio | ✅ Implementado |
+| 2.2 | c-TF-IDF ngram(1,3) + sqrt(tf) | `ml/labeling.py` | 2 | Baixo | Baixo | ✅ Implementado |
+| 2.3 | YAKE dedup_lim/dedup_func/window_size | `text/keywords.py` | 2 | Baixo | Baixo | ✅ Implementado |
+| 2.4 | TextRank sublinear_tf + lead bias | `text/summarize.py` | 2 | Baixo | Médio | ✅ Implementado |
+| 2.5 | spaCy EntityRuler (glossário opcional, revisado) | `text/entities.py` | 2 | Baixo | Médio (revisado: sem conteúdo hardcoded) | ✅ Implementado |
 | 3.1 | TSNE como 3º método | `ml/project.py` | 3 | Baixo-Médio | Médio | Pendente |
 | 3.2 | Auto-k via silhouette | `ml/cluster.py` | 3 | Médio | Médio | Pendente |
 | 4.1 | All-but-the-top | `ml/features.py` | 4 | Alto | — (não implementado) | Não fazer agora |

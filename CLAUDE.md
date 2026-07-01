@@ -245,7 +245,7 @@ Modelos custom CPU-pinned (`num_gpu 0`); Modelfiles minimalistas (sem `SYSTEM`/`
 - **gemma3-1b-custom**: Gemma 3 1B (32K) — fallback rápido/baixa-RAM (~815 MB); fraco em síntese.
 - **moondream-custom**: vision — descrição de imagens (`Modelfile.vision`).
 
-> **Modelo spaCy (Plano 4B, NER)**: `pt_core_news_sm` é download à parte (não é dep pip limpa), como o Tesseract. Setup: `uv sync --extra nlp && uv run python -m spacy download pt_core_news_sm`. CNN/thinc — **torch-free**; `text.entities.is_available()` checa pacote **e** modelo, e o campo de entidades degrada se faltar. Nunca usar variantes `_trf` (puxam torch).
+> **Modelo spaCy (Plano 4B, NER)**: `pt_core_news_sm` é download à parte (não é dep pip limpa), como o Tesseract. Setup: `uv sync --extra nlp && uv run python -m spacy download pt_core_news_sm`. CNN/thinc — **torch-free**; `text.entities.is_available()` checa pacote **e** modelo, e o campo de entidades degrada se faltar. Nunca usar variantes `_trf` (puxam torch). **Glossário opcional de domínio** (refinamento pós-4B): `~/.mill-tools/entity_glossary.json` — lista de padrões do `EntityRuler` (`[{"label": ..., "pattern": ...}]`), lida uma única vez no primeiro carregamento do pipeline por idioma (é um singleton em cache — não dá para trocar por chamada) e adicionada antes do `ner` estatístico. Sem o arquivo, comportamento idêntico a antes; não há CLI/GUI para editá-lo, só o arquivo.
 - **nomic-embed-custom**: embeddings do RAG — 768-dim, CPU, torch-free. Setup: `ollama pull nomic-embed-text && ollama create nomic-embed-custom -f ollama/Modelfile.nomic`. Alternativas multilíngues (1024-dim, exigem reindexação): `bge-m3`, `mxbai-embed-large`.
 
 ## GUI Desktop (Flet 0.85)
