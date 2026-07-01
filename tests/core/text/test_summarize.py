@@ -61,3 +61,45 @@ def test_gate_raises_when_sklearn_missing(mocker):
         summarize.extractive_summary(
             "uma frase. outra frase. mais uma frase.", sentences=1
         )
+
+
+@pytest.mark.unit
+def test_lead_bias_favors_earlier_sentence_with_equal_content():
+    # Two sentences are literally identical (same content/vocabulary); only
+    # their position in the document differs. Plain TextRank would give them
+    # near-identical scores, but the lead-position prior should still favor
+    # the earlier one.
+    sentences = [
+        "O modelo Whisper transcreve áudio local sem enviar dados à nuvem.",
+        "Frase neutra e isolada que não compartilha vocabulário com as outras.",
+        "O modelo Whisper transcreve áudio local sem enviar dados à nuvem.",
+    ]
+    sim = summarize._sentence_similarity(sentences)
+    scores = summarize._textrank_scores(sim)
+    assert scores[0] > scores[2]
+
+
+@pytest.mark.unit
+def test_sentence_similarity_handles_empty_vocabulary():
+    # Punctuation-only "sentences" leave TfidfVectorizer with no tokens at all
+    # (raises ValueError internally) — must degrade to "no similarity signal"
+    # instead of propagating the error.
+    sim = summarize._sentence_similarity(["...", "??", "!!!"])
+    assert sim.shape == (3, 3)
+    assert (sim == 0).all()
+
+
+@pytest.mark.unit
+def test_diversifies_near_duplicate_sentences():
+    # Two of the three sentences are identical (fully redundant); the third is
+    # distinct. Plain top-k by PageRank alone risks picking both duplicates
+    # (they reinforce each other); MMR should keep only one copy and use the
+    # second slot for the distinct sentence instead.
+    text = (
+        "O Whisper transcreve áudio em texto usando GPU local. "
+        "O Whisper transcreve áudio em texto usando GPU local. "
+        "A ferramenta também gera legendas em SRT e VTT automaticamente."
+    )
+    out = summarize.extractive_summary(text, sentences=2)
+    assert len(out) == 2
+    assert len(set(out)) == 2  # not two copies of the same duplicate sentence

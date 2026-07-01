@@ -3,9 +3,13 @@
 Off-the-shelf TextRank (``sumy``) usually downloads ``nltk`` punkt data at
 runtime, which breaks the app's offline, local-first promise. Instead this builds
 the graph itself: split into sentences with a regex, vectorize them with the
-``[ml]`` ``TfidfVectorizer``, form the sentence-by-sentence cosine similarity
-graph, and rank by power-iteration PageRank. The top sentences are returned **in
-original order** so the summary reads naturally.
+``[ml]`` ``TfidfVectorizer`` (sublinear TF, so a few repeated words don't
+dominate the similarity graph), form the sentence-by-sentence cosine similarity
+graph, rank by power-iteration PageRank blended with a lead-position prior
+(transcripts/articles tend to state the topic up front, which plain TextRank
+ignores), and pick the summary sentences via Maximal Marginal Relevance so two
+near-identical high-scoring sentences don't both make the cut. The result is
+returned **in original order** so the summary reads naturally.
 
 O(S²) in sentences, so the count is capped before building the matrix. No new
 dependency: TF-IDF comes from scikit-learn, already pulled by the ``[ml]`` extra.
@@ -27,6 +31,16 @@ _MAX_SENTENCES = 400
 # (no nltk) — good enough for prose; abbreviations may over-split, which only
 # costs a slightly shorter candidate sentence, never a crash.
 _SENT_BOUNDARY = re.compile(r"(?<=[.!?])\s+")
+
+# MMR (Carbonell & Goldstein, 1998): balances centrality (PageRank score)
+# against redundancy with sentences already picked. Duplicated from
+# core/ml/recommend.py's _mmr — core/text stays independent of core/ml.
+_MMR_LAMBDA = 0.6
+
+# Lead-position prior blended into the PageRank score (Biased/PositionRank-style):
+# plain TextRank ignores sentence position, but transcripts/articles tend to
+# state the topic up front.
+_POSITION_BIAS_WEIGHT = 0.15
 
 
 def is_available() -> bool:
@@ -72,29 +86,73 @@ def extractive_summary(text: str, *, sentences: int = 5, lang: str = "pt") -> li
         return sents
 
     work = sents[:_MAX_SENTENCES]
-    scores = _textrank_scores(work)
-    # Highest-scoring indices, then restored to original order for readability.
-    top = sorted(int(i) for i in np.argsort(scores)[::-1][:sentences])
-    return [work[i] for i in top]
+    sim = _sentence_similarity(work)
+    scores = _textrank_scores(sim)
+    order = _mmr(scores, sim, sentences)
+    # Restored to original order for readability.
+    return [work[i] for i in sorted(order)]
 
 
-def _textrank_scores(sentences: list[str]) -> np.ndarray:
-    """PageRank over the TF-IDF cosine sentence graph (deterministic)."""
+def _mmr(
+    relevance: np.ndarray,
+    similarity: np.ndarray,
+    k: int,
+    *,
+    lambda_: float = _MMR_LAMBDA,
+) -> list[int]:
+    """Greedy Maximal Marginal Relevance selection (see core/ml/recommend.py).
+
+    Picks up to ``k`` indices balancing ``relevance`` against redundancy with
+    already-picked candidates (``similarity``, the pairwise matrix). Ties break
+    by the lowest index for determinism. With no redundancy in the pool, this
+    reduces to plain top-k by relevance.
+    """
+    n = len(relevance)
+    k = min(k, n)
+    selected: list[int] = []
+    remaining = list(range(n))
+    for _ in range(k):
+        if not selected:
+            scores = relevance
+        else:
+            redundancy = similarity[:, selected].max(axis=1)
+            scores = lambda_ * relevance - (1 - lambda_) * redundancy
+        best = max(remaining, key=lambda i: (scores[i], -i))
+        selected.append(best)
+        remaining.remove(best)
+    return selected
+
+
+def _sentence_similarity(sentences: list[str]) -> np.ndarray:
+    """Cosine similarity matrix between sentences via sublinear TF-IDF.
+
+    ``sublinear_tf`` replaces raw term frequency with ``1 + log(tf)`` so a
+    sentence repeating one word doesn't dominate the similarity graph;
+    ``ngram_range=(1, 2)`` lets short shared phrases (not just single words)
+    count towards similarity.
+    """
     from sklearn.feature_extraction.text import TfidfVectorizer
 
     try:
-        tfidf = TfidfVectorizer().fit_transform(sentences)
+        tfidf = TfidfVectorizer(sublinear_tf=True, ngram_range=(1, 2)).fit_transform(
+            sentences
+        )
     except ValueError:
-        # Empty vocabulary (e.g. only punctuation) → uniform importance.
-        return np.ones(len(sentences), dtype=float)
+        # Empty vocabulary (e.g. only punctuation) → no similarity signal.
+        return np.zeros((len(sentences), len(sentences)))
 
     sim = (tfidf @ tfidf.T).toarray()
     np.fill_diagonal(sim, 0.0)
+    return sim
+
+
+def _textrank_scores(sim: np.ndarray) -> np.ndarray:
+    """PageRank over the sentence similarity graph, blended with a lead-position prior."""
+    n = len(sim)
     row_sums = sim.sum(axis=1, keepdims=True)
     row_sums[row_sums == 0.0] = 1.0  # isolated sentence → avoid divide-by-zero
     transition = sim / row_sums
 
-    n = len(sentences)
     scores = np.full(n, 1.0 / n)
     damping = 0.85
     for _ in range(100):
@@ -103,4 +161,10 @@ def _textrank_scores(sentences: list[str]) -> np.ndarray:
             scores = updated
             break
         scores = updated
-    return scores
+
+    # Earlier sentences get a decreasing positional prior (Biased/PositionRank).
+    position_bias = 1.0 / (1.0 + np.arange(n))
+    position_bias /= position_bias.sum()
+    return (
+        1.0 - _POSITION_BIAS_WEIGHT
+    ) * scores + _POSITION_BIAS_WEIGHT * position_bias
