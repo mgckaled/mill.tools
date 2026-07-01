@@ -44,6 +44,23 @@ def test_blank_text_returns_empty():
 
 
 @pytest.mark.unit
+@_MODEL
+def test_handles_text_longer_than_a_single_spacy_chunk():
+    # A full book/long transcription can exceed spaCy's own 1,000,000-char
+    # nlp.max_length guard (E088) if passed in one call. Repeating a short
+    # paragraph past _MAX_CHARS proves entities() chunks instead of crashing,
+    # and still finds + dedupes an entity that repeats across chunks.
+    paragraph = "Maria Silva trabalha na Petrobras. "
+    text = paragraph * 4000
+    assert len(text) > entities._MAX_CHARS
+
+    out = entities.entities(text)
+    names = {t for t, _ in out}
+    assert "Maria Silva" in names
+    assert "Petrobras" in names
+
+
+@pytest.mark.unit
 def test_is_available_false_without_spacy(mocker):
     # Simulate spaCy importable but the model missing.
     mocker.patch("spacy.util.is_package", return_value=False)

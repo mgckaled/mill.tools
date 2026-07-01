@@ -22,6 +22,18 @@ domain terms the CNN model was never trained on. Absent file → no ruler, zero
 behavior change. Because the pipeline is a cached singleton per language
 (below), the glossary is only re-read on the first load of that language in
 the process — not reconfigurable per call.
+
+**Long documents are chunked.** spaCy's own default guard (``nlp.max_length``)
+rejects text over 1,000,000 characters — a full novel or a long transcription
+can exceed that, and its own error message notes the underlying reason: NER
+needs roughly 1GB of temporary memory per 100,000 characters, so raising the
+limit to fit one huge document in a single call would risk exhausting RAM
+rather than just failing loudly. Instead, ``entities()`` splits the text with
+the same ``RecursiveCharacterTextSplitter`` the RAG indexer already uses
+(``llm_utils.split_text``) into windows safely under that ceiling, runs
+``nlp.pipe()`` over them, and merges the (already deduplicated) results — an
+entity split exactly across a chunk boundary can be missed, an acceptable
+trade-off for not risking a memory blowup on the machine's 16GB.
 """
 
 from __future__ import annotations
@@ -30,6 +42,8 @@ import json
 import logging
 from pathlib import Path
 from typing import TYPE_CHECKING
+
+from src.llm_utils import split_text
 
 if TYPE_CHECKING:
     from spacy.language import Language
@@ -52,6 +66,12 @@ _NER_PIPES = ("tok2vec", "transformer", "entity_ruler", "ner")
 _NLP_CACHE: dict[str, Language] = {}
 
 _GLOSSARY_FILE = "entity_glossary.json"
+
+# Chunk well under spaCy's own 1,000,000-char nlp.max_length guard (its error
+# message estimates ~1GB of temporary memory per 100,000 chars) instead of
+# raising the limit to fit one huge document in a single call.
+_MAX_CHARS = 100_000
+_CHUNK_OVERLAP = 200
 
 
 def _glossary_path() -> Path:
@@ -118,7 +138,10 @@ def entities(text: str, *, lang: str = _DEFAULT_LANG) -> list[tuple[str, str]]:
 
     Labels follow the model's scheme (PER/ORG/LOC/MISC, plus DATE/etc. when the
     model emits them). Duplicate ``(text, label)`` pairs are collapsed, keeping
-    first-seen order. Only the ``tok2vec`` + ``ner`` components run.
+    first-seen order (across the whole document, not per chunk). Only the
+    ``tok2vec`` + ``ner`` components run. Text longer than ``_MAX_CHARS`` is
+    split into safely-sized windows first (see the module docstring) — texts
+    that already fit go through unchanged, in a single ``nlp.pipe()`` call.
 
     Raises:
         RuntimeError: if spaCy or the language model is not installed.
@@ -130,14 +153,15 @@ def entities(text: str, *, lang: str = _DEFAULT_LANG) -> list[tuple[str, str]]:
 
     nlp = _load(lang)
     enable = [p for p in _NER_PIPES if p in nlp.pipe_names]
-    with nlp.select_pipes(enable=enable):
-        doc = nlp(text)
+    chunks = split_text(text, chunk_size=_MAX_CHARS, chunk_overlap=_CHUNK_OVERLAP)
 
     seen: set[tuple[str, str]] = set()
     out: list[tuple[str, str]] = []
-    for ent in doc.ents:
-        pair = (ent.text.strip(), ent.label_)
-        if pair[0] and pair not in seen:
-            seen.add(pair)
-            out.append(pair)
+    with nlp.select_pipes(enable=enable):
+        for doc in nlp.pipe(chunks):
+            for ent in doc.ents:
+                pair = (ent.text.strip(), ent.label_)
+                if pair[0] and pair not in seen:
+                    seen.add(pair)
+                    out.append(pair)
     return out
