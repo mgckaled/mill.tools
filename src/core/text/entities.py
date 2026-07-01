@@ -10,11 +10,25 @@ Gate: the spaCy package is a normal ``[nlp]`` dependency, but the *model* is a
 separate download (``python -m spacy download pt_core_news_sm``), exactly like
 the Tesseract binary for OCR — so ``is_available`` checks both, and the GUI/CLI
 disables the entities field when the model is absent instead of crashing.
+
+**Optional user glossary.** mill.tools has no single fixed domain — the RAG
+corpus is whatever the user happens to transcribe/analyze, so there is no
+universal list of proper nouns/jargon to hardcode here. Instead, an optional
+``~/.mill-tools/entity_glossary.json`` (a list of spaCy ``EntityRuler``
+patterns, e.g. ``[{"label": "MISC", "pattern": "Muad'Dib"}]``) is read once
+when the pipeline for a language is first loaded and added as an
+``entity_ruler`` *before* the statistical ``ner`` component, so it can catch
+domain terms the CNN model was never trained on. Absent file → no ruler, zero
+behavior change. Because the pipeline is a cached singleton per language
+(below), the glossary is only re-read on the first load of that language in
+the process — not reconfigurable per call.
 """
 
 from __future__ import annotations
 
+import json
 import logging
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -31,10 +45,32 @@ _MODELS = {"pt": "pt_core_news_sm", "en": "en_core_web_sm"}
 _DEFAULT_LANG = "pt"
 
 # Only these components are needed for NER; everything else is disabled per call.
-_NER_PIPES = ("tok2vec", "transformer", "ner")
+# entity_ruler is included so the optional glossary (if loaded) actually runs.
+_NER_PIPES = ("tok2vec", "transformer", "entity_ruler", "ner")
 
 # Lazy singleton cache: one loaded pipeline per language, reused across calls.
 _NLP_CACHE: dict[str, Language] = {}
+
+_GLOSSARY_FILE = "entity_glossary.json"
+
+
+def _glossary_path() -> Path:
+    """Return the optional user-maintained entity glossary path."""
+    return Path.home() / ".mill-tools" / _GLOSSARY_FILE
+
+
+def _load_glossary_patterns() -> list[dict]:
+    """Read the optional domain glossary (spaCy ``EntityRuler`` pattern format).
+
+    Absent or malformed file yields no patterns — the ruler is only added to
+    the pipeline when there is something to add, so a user who never creates
+    this file sees no behavior change.
+    """
+    try:
+        data = json.loads(_glossary_path().read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return []
+    return data if isinstance(data, list) else []
 
 
 def _model_for(lang: str) -> str:
@@ -63,8 +99,17 @@ def _load(lang: str) -> Language:
     if lang not in _NLP_CACHE:
         import spacy
 
-        _NLP_CACHE[lang] = spacy.load(_model_for(lang))
-        logging.debug("[d] Loaded spaCy model %s", _model_for(lang))
+        nlp = spacy.load(_model_for(lang))
+        patterns = _load_glossary_patterns()
+        if patterns:
+            ruler = nlp.add_pipe("entity_ruler", before="ner")
+            ruler.add_patterns(patterns)
+        _NLP_CACHE[lang] = nlp
+        logging.debug(
+            "[d] Loaded spaCy model %s (glossary patterns: %d)",
+            _model_for(lang),
+            len(patterns),
+        )
     return _NLP_CACHE[lang]
 
 

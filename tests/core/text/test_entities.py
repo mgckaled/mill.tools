@@ -61,3 +61,55 @@ def test_gate_raises_when_model_missing(mocker):
 def test_model_for_falls_back_to_pt():
     assert entities._model_for("xx") == "pt_core_news_sm"
     assert entities._model_for("en") == "en_core_web_sm"
+
+
+@pytest.mark.unit
+def test_load_glossary_patterns_absent_file_returns_empty(mocker, tmp_path):
+    mocker.patch(
+        "src.core.text.entities._glossary_path",
+        return_value=tmp_path / "nope.json",
+    )
+    assert entities._load_glossary_patterns() == []
+
+
+@pytest.mark.unit
+def test_load_glossary_patterns_malformed_json_returns_empty(mocker, tmp_path):
+    bad = tmp_path / "entity_glossary.json"
+    bad.write_text("not json", encoding="utf-8")
+    mocker.patch("src.core.text.entities._glossary_path", return_value=bad)
+    assert entities._load_glossary_patterns() == []
+
+
+@pytest.mark.unit
+def test_load_glossary_patterns_non_list_returns_empty(mocker, tmp_path):
+    bad = tmp_path / "entity_glossary.json"
+    bad.write_text('{"not": "a list"}', encoding="utf-8")
+    mocker.patch("src.core.text.entities._glossary_path", return_value=bad)
+    assert entities._load_glossary_patterns() == []
+
+
+@pytest.mark.unit
+def test_load_glossary_patterns_reads_valid_list(mocker, tmp_path):
+    good = tmp_path / "entity_glossary.json"
+    good.write_text('[{"label": "MISC", "pattern": "Muad\'Dib"}]', encoding="utf-8")
+    mocker.patch("src.core.text.entities._glossary_path", return_value=good)
+    assert entities._load_glossary_patterns() == [
+        {"label": "MISC", "pattern": "Muad'Dib"}
+    ]
+
+
+@pytest.mark.unit
+@_MODEL
+def test_glossary_pattern_adds_entities_the_model_would_miss(mocker, tmp_path):
+    # Made-up term the statistical model has no way of recognizing on its own.
+    glossary = tmp_path / "entity_glossary.json"
+    glossary.write_text(
+        '[{"label": "PROD", "pattern": "Zyloquark9000"}]', encoding="utf-8"
+    )
+    mocker.patch("src.core.text.entities._glossary_path", return_value=glossary)
+    entities._NLP_CACHE.clear()  # force a fresh load so the glossary is read
+    try:
+        out = entities.entities("O produto Zyloquark9000 foi lançado ontem.")
+        assert ("Zyloquark9000", "PROD") in out
+    finally:
+        entities._NLP_CACHE.clear()  # don't leak the ruler into other tests
