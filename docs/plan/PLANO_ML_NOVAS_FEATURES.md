@@ -205,7 +205,7 @@ O(n²)), mesmo padrão de `ml.dedup.near_duplicates`.
 **GUI:** deferida como fast-follow — mesmo padrão já aceito no Plano 3 ("acessor pronto, GUI
 deferida"); o CLI sozinho já entrega o valor prático.
 
-### 3.4 Reuso do classificador zero-shot em Dados e Documentos
+### 3.4 Reuso do classificador zero-shot em Dados e Documentos ✅ Núcleo implementado (commit `<próximo>`)
 
 **Problema/oportunidade.** `core/ml/classify.py` resolve "qual categoria esse texto pertence, com
 poucos exemplos e sem treino" — hoje hardcoded para o domínio "perfil de transcrição". A mesma
@@ -228,6 +228,16 @@ Definir os protótipos novos é o único trabalho de conteúdo:
   correspondência — exposto na aba de resultado do módulo Documentos.
 
 Zero código de ML novo — é o item mais barato do lote inteiro.
+
+**Implementado nesta rodada:** `classify.py` parametrizado por `domain` (17 testes, incluindo
+regressão de que o domínio default preserva os nomes de arquivo pré-existentes — nenhum cache/
+modelo já em produção invalida) + os dois catálogos de protótipos (`_DATA_DOMAIN_SEEDS`/
+`_DOCUMENT_TYPE_SEEDS`). **Adiado como fast-follow** (mesmo padrão já aceito para a GUI do item
+3.3): a superfície de consumo real — alimentar `datacard.py` com a etiqueta de domínio, expor na
+aba de resultado de Documentos, ou estender `ai classify` com `--domain` — exige decidir *qual*
+texto alimenta o classificador em cada caso (schema? perfil? amostra?), uma escolha de design que
+não estava validada o bastante para apressar nesta passagem. O núcleo reutilizável (a parte
+genuinamente nova e testável) é a entrega desta fase.
 
 ### 3.5 Visibilidade dos processos de ML — novo hub "Observatório"
 

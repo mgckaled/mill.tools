@@ -203,3 +203,76 @@ def test_supervised_signature_mismatch_falls_back_to_zeroshot(tmp_path):
 @pytest.mark.unit
 def test_maybe_train_without_labels_returns_none(tmp_path):
     assert cl.maybe_train(_labelled_dm()[0], directory=tmp_path) is None
+
+
+# ---------------------------------------------------------------------------
+# Multi-domain reuse (Tier A, item 3.4)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.unit
+def test_default_domain_keeps_the_pre_existing_filenames():
+    """Regression: the default domain must not invalidate anyone's existing
+    on-disk prototype/model/label cache."""
+    assert cl._proto_filenames(cl.DOMAIN_TRANSCRIPTION_PROFILE) == (
+        cl._PROTO_NPZ,
+        cl._PROTO_JSON,
+    )
+    assert cl._model_name(cl.DOMAIN_TRANSCRIPTION_PROFILE) == cl._MODEL_NAME
+    assert cl._labels_json_name(cl.DOMAIN_TRANSCRIPTION_PROFILE) == cl._LABELS_JSON
+
+
+@pytest.mark.unit
+def test_new_domains_get_their_own_filenames():
+    assert cl._proto_filenames(cl.DOMAIN_DATA) == (
+        "data_domain_prototypes.npz",
+        "data_domain_prototypes.json",
+    )
+    assert cl._model_name(cl.DOMAIN_DATA) == "data_domain_classifier"
+    assert cl._labels_json_name(cl.DOMAIN_DATA) == "data_domain_labels.json"
+
+
+@pytest.mark.unit
+def test_data_domain_prototypes_use_the_data_domain_seeds(tmp_path):
+    def fake_embed(texts):
+        return np.array([[len(t), i, 1.0] for i, t in enumerate(texts)], dtype=float)
+
+    _, ids = cl.profile_prototypes(
+        fake_embed, cache_dir=tmp_path, domain=cl.DOMAIN_DATA
+    )
+    assert "financial" in ids
+    assert "lecture" not in ids  # transcription profile ids must not leak in
+
+
+@pytest.mark.unit
+def test_document_domain_prototypes_use_the_document_type_seeds(tmp_path):
+    def fake_embed(texts):
+        return np.array([[len(t), i, 1.0] for i, t in enumerate(texts)], dtype=float)
+
+    _, ids = cl.profile_prototypes(
+        fake_embed, cache_dir=tmp_path, domain=cl.DOMAIN_DOCUMENT
+    )
+    assert "invoice" in ids
+    assert "financial" not in ids  # a different domain's ids must not leak in
+
+
+@pytest.mark.unit
+def test_domains_keep_independent_prototype_cache_files(tmp_path):
+    def fake_embed(texts):
+        return np.array([[len(t), i, 1.0] for i, t in enumerate(texts)], dtype=float)
+
+    cl.profile_prototypes(fake_embed, cache_dir=tmp_path)  # default domain
+    cl.profile_prototypes(fake_embed, cache_dir=tmp_path, domain=cl.DOMAIN_DATA)
+
+    names = {p.name for p in tmp_path.iterdir()}
+    assert cl._PROTO_NPZ in names
+    assert "data_domain_prototypes.npz" in names
+
+
+@pytest.mark.unit
+def test_record_label_isolates_by_domain(tmp_path):
+    cl.record_label("/a.csv", "financial", directory=tmp_path, domain=cl.DOMAIN_DATA)
+
+    assert cl.load_labels(directory=tmp_path) == {}  # default domain unaffected
+    data_labels = cl.load_labels(directory=tmp_path, domain=cl.DOMAIN_DATA)
+    assert len(data_labels) == 1

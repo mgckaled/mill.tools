@@ -1,8 +1,17 @@
-"""Profile classification — zero-shot prototypes, upgraded by supervision.
+"""Zero-shot/supervised text classification — reusable across domains.
 
-The class set is **not** invented here: it is exactly the analysis profiles the
-app already exposes via ``--profile`` (``src/analysis/profiles/``). Two regimes,
-chosen automatically:
+The class set is **not** invented here: for the default domain
+(``transcription_profile``) it is exactly the analysis profiles the app already
+exposes via ``--profile`` (``src/analysis/profiles/``). The same
+prototype+cosine+upgrade infrastructure is reused, keyed by ``domain``, for two
+more domains added in Tier A of ``docs/plan/PLANO_ML_NOVAS_FEATURES.md``:
+``data_domain`` (financial/research/log/people/catalog, for Dados) and
+``document_type`` (invoice/minutes/article/contract/correspondence, for
+Documentos). Every public function defaults ``domain=DOMAIN_TRANSCRIPTION_PROFILE``
+and derives filenames that match the pre-existing on-disk names for that one
+domain exactly (``profile_prototypes.npz``/``profile_classifier``/etc.) — no
+cache/model invalidation for the original use case. Two regimes, chosen
+automatically:
 
 * **Zero-shot (cold start).** Each profile becomes a *prototype*: a short
   canonical text (``label`` + ``source_hint``) embedded once by the same model as
@@ -38,6 +47,14 @@ from src.core.ml.types import Classification
 if TYPE_CHECKING:
     from src.core.ml.types import DocumentMatrix
 
+# The original, still-default domain: transcription analysis profiles. Its
+# filenames are the pre-existing ones (no "transcription_profile_" prefix) so
+# upgrading to multi-domain classification invalidates nothing on disk.
+DOMAIN_TRANSCRIPTION_PROFILE = "transcription_profile"
+# Tier A domains (docs/plan/PLANO_ML_NOVAS_FEATURES.md, item 3.4).
+DOMAIN_DATA = "data_domain"
+DOMAIN_DOCUMENT = "document_type"
+
 _PROTO_NPZ = "profile_prototypes.npz"
 _PROTO_JSON = "profile_prototypes.json"
 _MODEL_NAME = "profile_classifier"
@@ -48,9 +65,55 @@ _LABELS_JSON = "profile_labels.json"
 # 2-fold stratified split run during probability calibration.
 MIN_PER_CLASS = 2
 
+# Prototype seeds for the two new domains — (class_id, prototype_text) pairs,
+# same shape as _profile_seeds()'s output. Small, hand-written catalogs (no
+# existing registry to derive them from, unlike the transcription profiles).
+_DATA_DOMAIN_SEEDS: list[tuple[str, str]] = [
+    (
+        "financial",
+        "Financial data. Revenue, expenses, invoices, transactions, budgets.",
+    ),
+    (
+        "research",
+        "Scientific or research data. Experiment results, measurements, surveys.",
+    ),
+    (
+        "log",
+        "Operational log data. Timestamped events, system logs, application traces.",
+    ),
+    (
+        "people",
+        "People or registry data. Names, contacts, employee or customer records.",
+    ),
+    ("catalog", "Product catalog data. Items, SKUs, prices, inventory."),
+]
+
+_DOCUMENT_TYPE_SEEDS: list[tuple[str, str]] = [
+    (
+        "invoice",
+        "Invoice or receipt. Billed amounts, taxes, payment terms, itemized charges.",
+    ),
+    (
+        "minutes",
+        "Meeting minutes. Attendees, decisions, action items, discussion notes.",
+    ),
+    (
+        "article",
+        "Article or report. Analysis, findings, structured sections, references.",
+    ),
+    (
+        "contract",
+        "Contract or agreement. Parties, clauses, terms, signatures, obligations.",
+    ),
+    (
+        "correspondence",
+        "Correspondence. Letter or formal written communication between parties.",
+    ),
+]
+
 
 # ---------------------------------------------------------------------------
-# Prototypes — one embedding per analysis profile (cached by profile-set hash).
+# Prototypes — one embedding per class (cached by domain + class-set hash).
 # ---------------------------------------------------------------------------
 
 
@@ -66,6 +129,47 @@ def _profile_seeds() -> list[tuple[str, str]]:
     return [(p.id, f"{p.label}. {p.source_hint}.") for p in PROFILES.values()]
 
 
+def _seeds_for_domain(domain: str) -> list[tuple[str, str]]:
+    """Dispatch to the prototype seeds for ``domain``.
+
+    Raises:
+        ValueError: for an unregistered domain — callers pass a constant, so
+            this only fires on a genuine typo/programming error.
+    """
+    if domain == DOMAIN_TRANSCRIPTION_PROFILE:
+        return _profile_seeds()
+    if domain == DOMAIN_DATA:
+        return _DATA_DOMAIN_SEEDS
+    if domain == DOMAIN_DOCUMENT:
+        return _DOCUMENT_TYPE_SEEDS
+    raise ValueError(f"Unknown classification domain: {domain!r}")
+
+
+def _proto_filenames(domain: str) -> tuple[str, str]:
+    """Return ``(npz_name, json_name)`` for ``domain``'s prototype cache."""
+    if domain == DOMAIN_TRANSCRIPTION_PROFILE:
+        return _PROTO_NPZ, _PROTO_JSON
+    return f"{domain}_prototypes.npz", f"{domain}_prototypes.json"
+
+
+def _model_name(domain: str) -> str:
+    """Return the ``ml.store`` model name for ``domain``'s supervised classifier."""
+    return (
+        _MODEL_NAME
+        if domain == DOMAIN_TRANSCRIPTION_PROFILE
+        else f"{domain}_classifier"
+    )
+
+
+def _labels_json_name(domain: str) -> str:
+    """Return the gold-labels filename for ``domain``."""
+    return (
+        _LABELS_JSON
+        if domain == DOMAIN_TRANSCRIPTION_PROFILE
+        else f"{domain}_labels.json"
+    )
+
+
 def _seeds_signature(seeds: list[tuple[str, str]]) -> str:
     """Stable hash of the profile set — changes only when ids/texts change."""
     payload = "\n".join(f"{pid}\t{text}" for pid, text in seeds)
@@ -73,23 +177,33 @@ def _seeds_signature(seeds: list[tuple[str, str]]) -> str:
 
 
 def _save_prototypes(
-    directory: Path, P: np.ndarray, ids: list[str], signature: str
+    directory: Path,
+    P: np.ndarray,
+    ids: list[str],
+    signature: str,
+    *,
+    npz_name: str = _PROTO_NPZ,
+    json_name: str = _PROTO_JSON,
 ) -> None:
     """Persist the prototype matrix + ids + signature (npz/json, no pickle)."""
     directory.mkdir(parents=True, exist_ok=True)
-    np.savez_compressed(directory / _PROTO_NPZ, P=P)
-    (directory / _PROTO_JSON).write_text(
+    np.savez_compressed(directory / npz_name, P=P)
+    (directory / json_name).write_text(
         json.dumps({"ids": ids, "signature": signature}, ensure_ascii=False),
         encoding="utf-8",
     )
 
 
 def _load_prototypes(
-    directory: Path, signature: str
+    directory: Path,
+    signature: str,
+    *,
+    npz_name: str = _PROTO_NPZ,
+    json_name: str = _PROTO_JSON,
 ) -> tuple[np.ndarray, list[str]] | None:
     """Load cached prototypes only if their signature still matches the profiles."""
-    npz_path = directory / _PROTO_NPZ
-    json_path = directory / _PROTO_JSON
+    npz_path = directory / npz_name
+    json_path = directory / json_name
     if not (npz_path.exists() and json_path.exists()):
         return None
     try:
@@ -106,19 +220,24 @@ def profile_prototypes(
     embed_fn: Callable[[list[str]], np.ndarray] | None = None,
     *,
     cache_dir: Path | None = None,
+    domain: str = DOMAIN_TRANSCRIPTION_PROFILE,
 ) -> tuple[np.ndarray, list[str]]:
-    """Return the L2-normalized prototype matrix ``(C, D)`` and its profile ids.
+    """Return the L2-normalized prototype matrix ``(C, D)`` and its class ids.
 
-    Reads the on-disk cache when the profile set is unchanged (no embedder
-    needed); otherwise embeds one canonical text per profile via ``embed_fn``
-    (one call, then cached). Raises ``RuntimeError`` on a cache miss without an
-    ``embed_fn`` so the caller can surface the embedder setup hint.
+    Reads the on-disk cache when ``domain``'s class set is unchanged (no
+    embedder needed); otherwise embeds one canonical text per class via
+    ``embed_fn`` (one call, then cached). Raises ``RuntimeError`` on a cache
+    miss without an ``embed_fn`` so the caller can surface the embedder setup
+    hint.
     """
     cache_dir = cache_dir or model_dir()
-    seeds = _profile_seeds()
+    seeds = _seeds_for_domain(domain)
     signature = _seeds_signature(seeds)
+    npz_name, json_name = _proto_filenames(domain)
 
-    cached = _load_prototypes(cache_dir, signature)
+    cached = _load_prototypes(
+        cache_dir, signature, npz_name=npz_name, json_name=json_name
+    )
     if cached is not None:
         return cached
 
@@ -128,7 +247,9 @@ def profile_prototypes(
     ids = [pid for pid, _ in seeds]
     P = np.asarray(embed_fn([text for _, text in seeds]), dtype=np.float32)
     P = (P / (np.linalg.norm(P, axis=1, keepdims=True) + 1e-8)).astype(np.float32)
-    _save_prototypes(cache_dir, P, ids, signature)
+    _save_prototypes(
+        cache_dir, P, ids, signature, npz_name=npz_name, json_name=json_name
+    )
     return P, ids
 
 
@@ -156,40 +277,50 @@ def classify_zeroshot(
 # ---------------------------------------------------------------------------
 
 
-def _labels_file(directory: Path | None = None) -> Path:
+def _labels_file(
+    directory: Path | None = None, *, domain: str = DOMAIN_TRANSCRIPTION_PROFILE
+) -> Path:
     """Return the on-disk gold-label store (``~/.mill-tools/ml/profile_labels.json``)."""
-    return (directory or model_dir()) / _LABELS_JSON
+    return (directory or model_dir()) / _labels_json_name(domain)
 
 
-def load_labels(*, directory: Path | None = None) -> dict[str, str]:
-    """Return the ``{source_path: profile_id}`` gold labels, tolerating absence."""
+def load_labels(
+    *, directory: Path | None = None, domain: str = DOMAIN_TRANSCRIPTION_PROFILE
+) -> dict[str, str]:
+    """Return the ``{source_path: class_id}`` gold labels, tolerating absence."""
     try:
-        data = json.loads(_labels_file(directory).read_text(encoding="utf-8"))
+        data = json.loads(
+            _labels_file(directory, domain=domain).read_text(encoding="utf-8")
+        )
     except (OSError, ValueError):
         return {}
     return data if isinstance(data, dict) else {}
 
 
 def record_label(
-    source_path: str, profile_id: str, *, directory: Path | None = None
+    source_path: str,
+    profile_id: str,
+    *,
+    directory: Path | None = None,
+    domain: str = DOMAIN_TRANSCRIPTION_PROFILE,
 ) -> None:
-    """Record the user's confirmed/corrected profile for a document.
+    """Record the user's confirmed/corrected class for a document.
 
     This is the only labelling step — it piggybacks on the choice the user
     already makes, so there is no dedicated annotation chore. A later
     ``maybe_train`` turns enough of these into a supervised model.
     """
     path = str(Path(source_path).resolve())
-    labels = load_labels(directory=directory)
+    labels = load_labels(directory=directory, domain=domain)
     labels[path] = profile_id
-    out = _labels_file(directory)
+    out = _labels_file(directory, domain=domain)
     try:
         out.parent.mkdir(parents=True, exist_ok=True)
         out.write_text(
             json.dumps(labels, ensure_ascii=False, indent=2), encoding="utf-8"
         )
     except OSError as exc:
-        logging.debug("[d] Could not write profile labels: %s", exc)
+        logging.debug("[d] Could not write %s labels: %s", domain, exc)
 
 
 def labels_signature(labels: dict[str, str]) -> str:
@@ -219,6 +350,7 @@ def train_supervised(
     signature: str | None = None,
     directory: Path | None = None,
     min_per_class: int = MIN_PER_CLASS,
+    domain: str = DOMAIN_TRANSCRIPTION_PROFILE,
 ):
     """Train + persist a calibrated linear classifier; return it, or ``None``.
 
@@ -252,7 +384,7 @@ def train_supervised(
     model.fit(X, y)
 
     sig = signature if signature is not None else labels_signature(labels)
-    save_model(model, _MODEL_NAME, signature=sig, directory=directory)
+    save_model(model, _model_name(domain), signature=sig, directory=directory)
     return model
 
 
@@ -261,13 +393,14 @@ def maybe_train(
     *,
     directory: Path | None = None,
     min_per_class: int = MIN_PER_CLASS,
+    domain: str = DOMAIN_TRANSCRIPTION_PROFILE,
 ):
     """Train from the recorded labels if enough have accumulated; else ``None``."""
-    labels = load_labels(directory=directory)
+    labels = load_labels(directory=directory, domain=domain)
     if not labels:
         return None
     return train_supervised(
-        dm, labels, directory=directory, min_per_class=min_per_class
+        dm, labels, directory=directory, min_per_class=min_per_class, domain=domain
     )
 
 
@@ -277,17 +410,23 @@ def classify(
     embed_fn: Callable[[list[str]], np.ndarray] | None = None,
     dm: DocumentMatrix | None = None,  # noqa: ARG001 — reserved for future routing
     directory: Path | None = None,
+    domain: str = DOMAIN_TRANSCRIPTION_PROFILE,
 ) -> Classification:
-    """Classify ``doc_vec``: trained model if available + valid, else zero-shot.
+    """Classify ``doc_vec`` within ``domain``: trained model if available + valid,
+    else zero-shot.
 
     The supervised model is used only when ``ml.store`` holds one whose signature
     still matches the current label set; any mismatch (labels changed or sklearn
-    upgraded) transparently falls back to the zero-shot prototypes.
+    upgraded) transparently falls back to the zero-shot prototypes. Passing a
+    non-default ``domain`` (``DOMAIN_DATA``/``DOMAIN_DOCUMENT``) reuses this exact
+    infrastructure for a different class set — see the module docstring.
     """
-    labels = load_labels(directory=directory)
+    labels = load_labels(directory=directory, domain=domain)
     if labels:
         model = load_model(
-            _MODEL_NAME, signature=labels_signature(labels), directory=directory
+            _model_name(domain),
+            signature=labels_signature(labels),
+            directory=directory,
         )
         if model is not None:
             proba = model.predict_proba(
@@ -305,5 +444,5 @@ def classify(
                 str(classes[order[0]]), confidence, margin, "supervised"
             )
 
-    P, ids = profile_prototypes(embed_fn, cache_dir=directory)
+    P, ids = profile_prototypes(embed_fn, cache_dir=directory, domain=domain)
     return classify_zeroshot(doc_vec, P, ids)
