@@ -216,6 +216,63 @@ def test_adapter_calls_core_and_returns_path_list(
 
 
 @pytest.mark.unit
+def test_data_outliers_step_declared():
+    from src.core.recipes.registry import STEP_REGISTRY
+    from src.core.recipes.types import KIND_DATA, KIND_TEXT
+
+    spec = STEP_REGISTRY["data.outliers"]
+    assert spec.accepts == frozenset({KIND_DATA})
+    assert spec.produces == KIND_TEXT
+
+
+@pytest.mark.unit
+def test_data_outliers_adapter_writes_report(mocker, tmp_path):
+    import pandas as pd
+
+    from src.core.recipes.registry import STEP_REGISTRY
+    from src.core.recipes.types import StepContext
+
+    mocker.patch("src.core.ml.deps.is_available", return_value=True)
+    mocker.patch("src.utils.DATA_DIR", tmp_path)
+    fake_file = mocker.MagicMock(view_name="dados")
+    mocker.patch("src.core.data.scanner.scan_files", return_value=[fake_file])
+    mocker.patch("src.core.data.engine.run_query_arrow", return_value="ARROW")
+    mocker.patch("src.core.data.frames.from_arrow", return_value=mocker.MagicMock())
+    mocker.patch(
+        "src.core.data.frames.to_pandas",
+        return_value=pd.DataFrame({"valor": [1, 2, 100]}),
+    )
+
+    ctx = StepContext(
+        emit=lambda *a: None,
+        cancel_is_set=lambda: False,
+        initial_inputs=[tmp_path / "a.csv"],
+        outputs_by_op={},
+    )
+    out = STEP_REGISTRY["data.outliers"].adapter([tmp_path / "a.csv"], {}, ctx)
+
+    assert len(out) == 1
+    assert out[0].name == "a_outliers.txt"
+    assert "sinalizada" in out[0].read_text(encoding="utf-8")
+
+
+@pytest.mark.unit
+def test_data_outliers_adapter_raises_when_ml_gate_unavailable(mocker, tmp_path):
+    from src.core.recipes.registry import STEP_REGISTRY
+    from src.core.recipes.types import StepContext
+
+    mocker.patch("src.core.ml.deps.is_available", return_value=False)
+    ctx = StepContext(
+        emit=lambda *a: None,
+        cancel_is_set=lambda: False,
+        initial_inputs=[tmp_path / "a.csv"],
+        outputs_by_op={},
+    )
+    with pytest.raises(RuntimeError):
+        STEP_REGISTRY["data.outliers"].adapter([tmp_path / "a.csv"], {}, ctx)
+
+
+@pytest.mark.unit
 def test_data_query_accepts_data_and_produces_text():
     from src.core.recipes.registry import STEP_REGISTRY
     from src.core.recipes.types import KIND_DATA, KIND_TEXT

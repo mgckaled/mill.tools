@@ -280,3 +280,52 @@ def test_run_data_cli_plot_missing_file_exits(mocker):
     ns = _parse("plot", "ghost.csv", "q", "--sql")
     with pytest.raises(SystemExit):
         ns.func(ns)
+
+
+@pytest.mark.unit
+def test_outliers_parser_defaults():
+    ns = _parse("outliers", "a.csv")
+    assert ns.data_op == "outliers"
+    assert ns.file == "a.csv"
+    assert ns.contamination == 0.05
+    assert ns.limit == 20
+    assert callable(ns.func)
+
+
+@pytest.mark.unit
+def test_run_data_cli_outliers_dispatch(mocker, csv_sales, capsys):
+    import pandas as pd
+
+    mocker.patch("src.core.data.frames.is_available", return_value=True)
+    mocker.patch("src.core.ml.deps.is_available", return_value=True)
+    fake_df = mocker.MagicMock()
+    fake_df.height = 2
+    mocker.patch("src.core.data.engine.run_query_arrow", return_value="ARROW")
+    mocker.patch("src.core.data.frames.from_arrow", return_value=fake_df)
+    mocker.patch(
+        "src.core.data.frames.to_pandas", return_value=pd.DataFrame({"qtd": [3, 5]})
+    )
+
+    ns = _parse("outliers", str(csv_sales))
+    ns.func(ns)
+
+    out = capsys.readouterr().out
+    assert "linha(s) sinalizada(s)" in out
+
+
+@pytest.mark.unit
+def test_run_data_cli_outliers_gate_unavailable_exits(mocker, csv_sales):
+    mocker.patch("src.core.data.frames.is_available", return_value=True)
+    mocker.patch("src.core.ml.deps.is_available", return_value=False)
+    ns = _parse("outliers", str(csv_sales))
+    with pytest.raises(SystemExit):
+        ns.func(ns)
+
+
+@pytest.mark.unit
+def test_run_data_cli_outliers_missing_file_exits(mocker):
+    mocker.patch("src.core.data.frames.is_available", return_value=True)
+    mocker.patch("src.core.ml.deps.is_available", return_value=True)
+    ns = _parse("outliers", "ghost.csv")
+    with pytest.raises(SystemExit):
+        ns.func(ns)

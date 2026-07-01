@@ -60,6 +60,38 @@ def _data_profile(inputs: list, params: dict, ctx: StepContext) -> list[Path]:
     return [out]
 
 
+def _data_outliers(inputs: list, params: dict, ctx: StepContext) -> list[Path]:
+    """data file → text report of anomalous rows via IsolationForest.
+
+    Reads the whole file into a pandas frame (Plano 0 boundary, same path as
+    ``_data_profile``) and writes a plain-text preview of the flagged rows.
+    """
+    from src.core.data import frames
+    from src.core.data.engine import run_query_arrow
+    from src.core.data.ml import ANOMALY_COLUMN, detect_outliers
+    from src.core.data.scanner import scan_files
+    from src.core.ml import deps
+    from src.utils import DATA_DIR
+
+    if not deps.is_available():
+        raise RuntimeError(f"scikit-learn indisponível. {deps.SETUP_HINT}")
+
+    (file,) = scan_files([Path(inputs[0])])
+    pl_df = frames.from_arrow(
+        run_query_arrow([file], f'SELECT * FROM "{file.view_name}"')
+    )
+    result = detect_outliers(
+        frames.to_pandas(pl_df), contamination=params.get("contamination", 0.05)
+    )
+    flagged = result[result[ANOMALY_COLUMN] < 0].sort_values(ANOMALY_COLUMN)
+
+    DATA_DIR.mkdir(parents=True, exist_ok=True)
+    out = DATA_DIR / f"{Path(inputs[0]).stem}_outliers.txt"
+    header = f"{len(flagged)} de {len(result)} linha(s) sinalizada(s) como atípica(s)."
+    out.write_text(f"{header}\n\n{flagged.to_string(index=False)}", encoding="utf-8")
+    return [out]
+
+
 DATA_STEPS: dict[str, StepSpec] = {
     # data.query is multi-input (consumes the whole data-file list, like
     # document.merge) and is declared as producing KIND_TEXT so the result can
@@ -72,5 +104,8 @@ DATA_STEPS: dict[str, StepSpec] = {
     ),
     "data.profile": StepSpec(
         _data_profile, frozenset({KIND_DATA}), KIND_TEXT, "Perfilar dados"
+    ),
+    "data.outliers": StepSpec(
+        _data_outliers, frozenset({KIND_DATA}), KIND_TEXT, "Detectar anomalias"
     ),
 }

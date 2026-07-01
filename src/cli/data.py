@@ -127,6 +127,25 @@ def add_data_parser(subparsers) -> None:
     pl.add_argument("--out", help="Nome do arquivo PNG de saída (default: grafico.png)")
     pl.add_argument("--verbose", action="store_true", help="Logging DEBUG")
 
+    # outliers ----------------------------------------------------------------
+    o = data_sub.add_parser(
+        "outliers", help="Detecta linhas estatisticamente anômalas (IsolationForest)"
+    )
+    o.add_argument("file", help="Arquivo de dados de entrada")
+    o.add_argument(
+        "--contamination",
+        type=float,
+        default=0.05,
+        help="Fração esperada de linhas atípicas (default: 0.05)",
+    )
+    o.add_argument(
+        "--limit",
+        type=int,
+        default=20,
+        help="Linhas atípicas exibidas na prévia (default: 20)",
+    )
+    o.add_argument("--verbose", action="store_true", help="Logging DEBUG")
+
     data_p.set_defaults(func=run_data_cli)
 
 
@@ -293,6 +312,48 @@ def _plot(ns: argparse.Namespace) -> None:
     print(f"[✓] Gráfico salvo em: {out_path} ({spec.kind}, x={spec.x}, y={spec.y})")
 
 
+def _outliers(ns: argparse.Namespace) -> None:
+    """Run the ``data outliers`` operation — flag anomalous rows via IsolationForest.
+
+    Reads the whole file (not a filtered query) into a pandas frame via the
+    Plano 0 boundary (``frames``/``run_query_arrow``), same as ``_plot``.
+    """
+    from src.core.data import frames
+    from src.core.data.engine import run_query_arrow
+    from src.core.data.ml import ANOMALY_COLUMN, detect_outliers
+    from src.core.ml import deps
+
+    if not (frames.is_available() and deps.is_available()):
+        logging.error(deps.SETUP_HINT if not deps.is_available() else frames.SETUP_HINT)
+        sys.exit(1)
+
+    (src,) = _resolve_files([ns.file])
+    files = scanner.scan_files([src])
+    pl_df = frames.from_arrow(
+        run_query_arrow(files, f'SELECT * FROM "{files[0].view_name}"')
+    )
+    if pl_df.height == 0:
+        logging.error("Arquivo sem linhas para analisar.")
+        sys.exit(1)
+
+    try:
+        result = detect_outliers(
+            frames.to_pandas(pl_df), contamination=ns.contamination
+        )
+    except ValueError as exc:
+        logging.error(str(exc))
+        sys.exit(1)
+
+    flagged = result[result[ANOMALY_COLUMN] < 0].sort_values(ANOMALY_COLUMN)
+    print(f"{len(flagged)} de {len(result)} linha(s) sinalizada(s) como atípica(s).\n")
+    if len(flagged):
+        preview = flagged.head(ns.limit)
+        _print_table(
+            list(preview.columns),
+            [tuple(row) for row in preview.itertuples(index=False)],
+        )
+
+
 def run_data_cli(ns: argparse.Namespace) -> None:
     """Dispatch the ``data`` subcommand to its operation handler."""
     # Data values often contain non-cp1252 characters; force UTF-8 stdout.
@@ -313,3 +374,5 @@ def run_data_cli(ns: argparse.Namespace) -> None:
         _assess(ns)
     elif op == "plot":
         _plot(ns)
+    elif op == "outliers":
+        _outliers(ns)
