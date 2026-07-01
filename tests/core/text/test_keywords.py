@@ -47,3 +47,19 @@ def test_gate_raises_when_unavailable(mocker):
     mocker.patch("src.core.text.keywords.is_available", return_value=False)
     with pytest.raises(RuntimeError, match="nlp"):
         keywords.keyphrases("qualquer texto")
+
+
+@pytest.mark.unit
+def test_extractor_receives_the_tuned_dedup_params(mocker):
+    # yake.KeywordExtractor.__init__ has a **kwargs catch-all that silently
+    # swallows unknown keyword names instead of raising -- these must be the
+    # real (snake_case) parameter names, not a typo that gets no-op'd away.
+    import yake
+
+    spy = mocker.patch("yake.KeywordExtractor", wraps=yake.KeywordExtractor)
+    keywords.keyphrases("Texto qualquer para extrair frases-chave.", lang="pt")
+
+    _, kwargs = spy.call_args
+    assert kwargs["dedup_lim"] == keywords._DEDUP_LIM
+    assert kwargs["dedup_func"] == keywords._DEDUP_FUNC
+    assert kwargs["window_size"] == keywords._WINDOW_SIZE

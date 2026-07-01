@@ -6,11 +6,25 @@ is small and offline. A **lower** score means a **more** relevant phrase, so the
 returned list is sorted ascending. The dependency is optional (``[nlp]`` extra)
 and lazily imported; ``is_available()`` gates the GUI/CLI the way the Tesseract
 and embedder gates do.
+
+Deduplication is tuned down from YAKE's defaults: the installed
+``KeywordExtractor`` takes ``dedup_lim``/``dedup_func``/``window_size``
+(snake_case — its own README uses a stale camelCase spelling that the
+constructor's ``**kwargs`` silently swallows instead of rejecting, so this was
+verified against the actual installed signature, not just the docs). Lowering
+``dedup_lim`` from the 0.9 default trims near-duplicate phrase variants from
+the top-N; a wider ``window_size`` fits Portuguese's freer word order better.
 """
 
 from __future__ import annotations
 
 SETUP_HINT = "Instale o extra de NLP: uv sync --extra nlp"
+
+# Tuned down from YAKE's defaults (0.9 dedup_lim, "seqm" dedup_func already
+# default, 1 window_size) to cut near-duplicate phrase variants from the top-N.
+_DEDUP_LIM = 0.75
+_DEDUP_FUNC = "seqm"
+_WINDOW_SIZE = 2
 
 
 def is_available() -> bool:
@@ -48,7 +62,14 @@ def keyphrases(
 
     import yake
 
-    extractor = yake.KeywordExtractor(lan=lang, n=ngram, top=top_n)
+    extractor = yake.KeywordExtractor(
+        lan=lang,
+        n=ngram,
+        top=top_n,
+        dedup_lim=_DEDUP_LIM,
+        dedup_func=_DEDUP_FUNC,
+        window_size=_WINDOW_SIZE,
+    )
     # YAKE returns (phrase, score) already sorted ascending; cast numpy floats.
     return [
         (phrase, float(score)) for phrase, score in extractor.extract_keywords(text)
