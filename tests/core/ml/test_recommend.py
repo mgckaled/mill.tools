@@ -61,6 +61,46 @@ def test_related_raises_for_unknown_document():
         related(dm, "ghost.txt")
 
 
+@pytest.mark.unit
+def test_related_diversifies_near_duplicate_candidates():
+    # dup1/dup2 live in the same 2D subspace as the anchor and are near-
+    # identical to each other (cosine ~0.9998); "diverse" sits on its own axis,
+    # slightly less relevant than dup2 but with much lower redundancy against
+    # dup1. Plain top-k by raw cosine would return {dup1, dup2}; MMR should
+    # prefer "diverse" for the second slot instead of the redundant dup2.
+    dm = _dm(
+        [
+            ("a.txt", [1.0, 0.0, 0.0]),
+            ("dup1.txt", [0.9, 0.4359, 0.0]),  # cosine to anchor = 0.9
+            ("dup2.txt", [0.89, 0.4560, 0.0]),  # cosine to anchor = 0.89
+            ("diverse.txt", [0.85, 0.0, 0.5268]),  # cosine to anchor = 0.85
+        ]
+    )
+    out = related(dm, "a.txt", k=2)
+    paths = [p for p, _ in out]
+
+    assert paths[0] == "dup1.txt"  # most relevant still wins the first slot
+    assert "diverse.txt" in paths  # MMR picks it over the redundant dup2.txt
+    assert "dup2.txt" not in paths
+
+
+@pytest.mark.unit
+def test_related_matches_plain_top_k_without_redundancy():
+    # b/c/d each sit on their own axis (only sharing the anchor direction), and
+    # their relevances are well-separated — MMR's redundancy term never flips
+    # the ranking, so this must reduce to plain top-k by relevance.
+    dm = _dm(
+        [
+            ("a.txt", [1.0, 0.0, 0.0, 0.0]),
+            ("b.txt", [0.8660, 0.5, 0.0, 0.0]),  # cosine to anchor = 0.866
+            ("c.txt", [0.5, 0.0, 0.8660, 0.0]),  # cosine to anchor = 0.5
+            ("d.txt", [0.1736, 0.0, 0.0, 0.9848]),  # cosine to anchor = 0.1736
+        ]
+    )
+    out = related(dm, "a.txt", k=2)
+    assert [p for p, _ in out] == ["b.txt", "c.txt"]
+
+
 def _store_one(vec: list[float]) -> VectorStore:
     store = VectorStore(dim=len(vec))
     store.add(
