@@ -162,6 +162,115 @@ def test_search_mask_all_false_returns_empty():
 
 
 @pytest.mark.unit
+def test_dense_scores_matches_search_ranking():
+    from src.core.rag.store import VectorStore
+
+    store = VectorStore(dim=3)
+    store.add(np.eye(3, dtype=np.float32), [_meta("a", i) for i in range(3)])
+    scores = store.dense_scores(np.array([1, 0, 0], dtype=np.float32))
+    assert scores[0] == pytest.approx(1.0, abs=1e-5)
+    assert scores[1] == pytest.approx(0.0, abs=1e-5)
+
+
+@pytest.mark.unit
+def test_bm25_scores_ranks_lexical_match_highest():
+    from src.core.rag.store import VectorStore
+
+    store = VectorStore(dim=3)
+    store.add(
+        np.eye(3, dtype=np.float32),
+        [
+            _meta("a", 0, text="artigo quinto da constituicao"),
+            _meta("b", 0, text="completely unrelated cooking content"),
+            _meta("c", 0, text="more unrelated filler text here"),
+        ],
+    )
+    scores = store.bm25_scores("artigo quinto")
+    assert np.argmax(scores) == 0
+
+
+@pytest.mark.unit
+def test_bm25_scores_empty_store_returns_empty():
+    from src.core.rag.store import VectorStore
+
+    store = VectorStore(dim=3)
+    assert store.bm25_scores("query").shape == (0,)
+
+
+@pytest.mark.unit
+def test_bm25_scores_caches_index():
+    from src.core.rag.store import VectorStore
+
+    store = VectorStore(dim=3)
+    store.add(
+        np.eye(3, dtype=np.float32), [_meta("a", i, text=f"doc {i}") for i in range(3)]
+    )
+    assert store._bm25 is None
+
+    store.bm25_scores("doc")
+    cached = store._bm25
+    assert cached is not None
+
+    store.bm25_scores("doc")
+    assert store._bm25 is cached  # same object — not rebuilt
+
+
+@pytest.mark.unit
+def test_add_invalidates_bm25_cache():
+    from src.core.rag.store import VectorStore
+
+    store = VectorStore(dim=3)
+    store.add(
+        np.eye(3, dtype=np.float32)[:2],
+        [_meta("a", i, text=f"doc {i}") for i in range(2)],
+    )
+    store.bm25_scores("doc")
+    assert store._bm25 is not None
+
+    store.add(np.eye(3, dtype=np.float32)[2:], [_meta("a", 2, text="doc 2")])
+    assert store._bm25 is None
+
+
+@pytest.mark.unit
+def test_drop_source_invalidates_bm25_cache():
+    from src.core.rag.store import VectorStore
+
+    store = VectorStore(dim=3)
+    store.add(
+        np.eye(3, dtype=np.float32),
+        [
+            _meta("keep", 0, text="alpha"),
+            _meta("gone", 1, text="beta"),
+            _meta("keep", 2, text="gamma"),
+        ],
+    )
+    store.bm25_scores("alpha")
+    assert store._bm25 is not None
+
+    store.drop_source("gone")
+    assert store._bm25 is None
+
+
+@pytest.mark.unit
+def test_bm25_scores_mask_marks_excluded_rows_as_infinite():
+    from src.core.rag.store import VectorStore
+
+    store = VectorStore(dim=3)
+    store.add(
+        np.eye(3, dtype=np.float32),
+        [
+            _meta("a", 0, text="artigo quinto"),
+            _meta("b", 0, text="artigo sexto"),
+            _meta("c", 0, text="unrelated"),
+        ],
+    )
+    mask = np.array([False, True, True])
+    scores = store.bm25_scores("artigo", mask=mask)
+    assert not np.isfinite(scores[0])
+    assert np.isfinite(scores[1])
+
+
+@pytest.mark.unit
 def test_drop_source_removes_only_matching_chunks():
     from src.core.rag.store import VectorStore
 

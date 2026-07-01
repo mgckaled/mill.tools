@@ -124,3 +124,55 @@ def test_retrieve_no_scope_searches_whole_corpus():
     )
     hits = retrieve("q", store, lambda _q: np.array([1, 1, 0], dtype=np.float32), k=2)
     assert len(hits) == 2
+
+
+@pytest.mark.unit
+def test_retrieve_hybrid_surfaces_lexical_match_dense_alone_would_miss():
+    """A chunk with the weakest dense similarity but an exact match for a rare
+    query term should still make the top-k via BM25 fusion — pure dense
+    retrieval (by construction here) would rank it dead last and drop it."""
+    import math
+
+    from src.core.rag.retriever import retrieve
+
+    def _vec(deg: float) -> list[float]:
+        rad = math.radians(deg)
+        return [math.cos(rad), math.sin(rad), 0.0]
+
+    store = _store_with(
+        [
+            (_vec(0), _meta("d0.txt", 0, text="unrelated filler about gardening")),
+            (_vec(10), _meta("d1.txt", 0, text="another unrelated passage about cars")),
+            (_vec(20), _meta("d2.txt", 0, text="yet another bit about trains")),
+            (
+                _vec(30),
+                _meta("d3.txt", 0, text="more filler text about clouds and rain"),
+            ),
+            (
+                _vec(80),
+                _meta("target.txt", 0, text="zephyrion quasar appears exactly here"),
+            ),
+        ]
+    )
+    hits = retrieve(
+        "zephyrion quasar",
+        store,
+        lambda _q: np.array([1, 0, 0], dtype=np.float32),
+        k=3,
+    )
+    sources = [h.meta.source_path for h in hits]
+    assert "target.txt" in sources
+
+
+@pytest.mark.unit
+def test_retrieve_score_is_dense_cosine_not_fused_value():
+    """`.score` stays the dense cosine (in [-1, 1]) even under hybrid retrieval —
+    the out-of-scope check compares it against a cosine threshold, so its meaning
+    must not silently change to a tiny RRF fraction."""
+    from src.core.rag.retriever import retrieve
+
+    store = _store_with(
+        [([1, 0, 0], _meta("a", text="x")), ([0, 1, 0], _meta("b", text="x"))]
+    )
+    hits = retrieve("q", store, lambda _q: np.array([1, 0, 0], dtype=np.float32), k=2)
+    assert hits[0].score == pytest.approx(1.0, abs=1e-5)

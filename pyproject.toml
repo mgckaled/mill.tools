@@ -25,6 +25,10 @@ dependencies = [
     "duckdb>=1.5.4",
     "charset-normalizer>=3.4.7",
     "pytesseract>=0.3",
+    # Pure-Python, numpy-only (no scipy) — bm25s is ~500x faster but pulls scipy for a
+    # gain that only matters past ~1M docs; base dep since dense RAG search is already
+    # unconditional (hybrid retrieval, core/rag/bm25.py + retriever.py).
+    "rank-bm25>=0.2.2",
 ]
 
 [project.optional-dependencies]
