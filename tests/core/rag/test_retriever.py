@@ -81,6 +81,38 @@ def test_retrieve_scope_by_kind():
 
 
 @pytest.mark.unit
+def test_retrieve_scope_returns_full_k_even_when_outranked_globally():
+    """Regression: a selective scope must not lose recall to an unscoped cutoff.
+
+    Before the pre-filter fix, ``retrieve`` widened to k*3 candidates globally
+    and only then filtered by scope — so a document whose chunks all score
+    below the top k*3 globally could come back with fewer than k hits, or none,
+    even though it has plenty of relevant content.
+    """
+    from src.core.rag.retriever import retrieve
+
+    # Many chunks from other documents score near-perfectly against the query...
+    other_docs = [([0.99, 0.01 * i, 0], _meta(f"other_{i}.txt", 0)) for i in range(20)]
+    # ...while the scoped document's chunks score far lower, but there are only 3.
+    scoped_docs = [
+        ([0.1, 0.9, 0], _meta("doc_a.txt", 0)),
+        ([0.05, 0.95, 0], _meta("doc_a.txt", 1)),
+        ([0.0, 1.0, 0], _meta("doc_a.txt", 2)),
+    ]
+    store = _store_with(other_docs + scoped_docs)
+
+    hits = retrieve(
+        "q",
+        store,
+        lambda _q: np.array([1, 0, 0], dtype=np.float32),
+        k=3,
+        scope="doc_a.txt",
+    )
+    assert len(hits) == 3
+    assert {h.meta.source_path for h in hits} == {"doc_a.txt"}
+
+
+@pytest.mark.unit
 def test_retrieve_no_scope_searches_whole_corpus():
     from src.core.rag.retriever import retrieve
 

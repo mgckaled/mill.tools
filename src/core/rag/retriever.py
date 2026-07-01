@@ -31,16 +31,18 @@ def retrieve(
             function stays testable without Ollama).
         k: Number of chunks to return.
         scope: ``None`` searches the whole corpus. A source path restricts to
-            that single document; a kind string restricts to one kind. When a
-            scope is given the search widens to ``k * 3`` candidates first, then
-            keeps the top ``k`` survivors of the filter.
+            that single document; a kind string restricts to one kind. The scope
+            is applied as a mask *before* ranking (not a post-hoc filter over an
+            unscoped top-k'), so a selective scope — e.g. one document among
+            thousands of chunks — still returns up to ``k`` hits instead of
+            risking fewer when its chunks don't make an unscoped candidate pool.
 
     Returns:
         Up to ``k`` retrieved chunks, highest score first.
     """
-    hits = store.search(embed_query_fn(query), k=k * 3 if scope else k)
+    mask = None
     if scope:
-        hits = [h for h in hits if h.meta.source_path == scope or h.meta.kind == scope][
-            :k
-        ]
-    return hits
+        mask = np.array(
+            [m.source_path == scope or m.kind == scope for m in store.meta], dtype=bool
+        )
+    return store.search(embed_query_fn(query), k=k, mask=mask)

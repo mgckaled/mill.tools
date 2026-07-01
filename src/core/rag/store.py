@@ -26,6 +26,11 @@ class VectorStore:
         self.dim = dim
         self.vectors = np.empty((0, dim), dtype=np.float32)
         self.meta: list[ChunkMeta] = []
+        # Lazy cache of the L2-normalized vectors, invalidated by add()/drop_source().
+        # `vectors` itself stays raw — ml.features.document_matrix means the raw rows
+        # before normalizing the pooled result, so normalizing in place would shift
+        # that pooling math.
+        self._normalized: np.ndarray | None = None
 
     def __len__(self) -> int:
         """Number of stored chunks (rows in the matrix)."""
@@ -39,6 +44,7 @@ class VectorStore:
             return
         self.vectors = np.vstack([self.vectors, vecs]) if len(self.vectors) else vecs
         self.meta.extend(metas)
+        self._normalized = None
 
     def drop_source(self, source_path: str) -> None:
         """Remove every chunk belonging to one source (deleted or changed file)."""
@@ -49,17 +55,38 @@ class VectorStore:
             self.vectors[keep] if keep else np.empty((0, self.dim), dtype=np.float32)
         )
         self.meta = [self.meta[i] for i in keep]
+        self._normalized = None
 
-    def search(self, query_vec: np.ndarray, k: int = 6) -> list[RetrievedChunk]:
-        """Return the top-``k`` chunks by cosine similarity to ``query_vec``."""
+    def _normalized_vectors(self) -> np.ndarray:
+        """Return the L2-normalized vectors, computed once and cached until mutated."""
+        if self._normalized is None:
+            self._normalized = self.vectors / (
+                np.linalg.norm(self.vectors, axis=1, keepdims=True) + 1e-8
+            )
+        return self._normalized
+
+    def search(
+        self, query_vec: np.ndarray, k: int = 6, *, mask: np.ndarray | None = None
+    ) -> list[RetrievedChunk]:
+        """Return the top-``k`` chunks by cosine similarity to ``query_vec``.
+
+        Args:
+            query_vec: Query embedding, shape ``(D,)``.
+            k: Number of results to return.
+            mask: Optional boolean array (length ``len(self)``) restricting the
+                candidate rows *before* ranking. Pass a scope filter here rather
+                than filtering the result afterwards — a selective scope (e.g. a
+                single source document) still gets up to ``k`` hits instead of
+                risking fewer because its rows didn't make an unscoped top-k'.
+        """
         if len(self.vectors) == 0:
             return []
-        mat = self.vectors / (
-            np.linalg.norm(self.vectors, axis=1, keepdims=True) + 1e-8
-        )
         q = query_vec / (np.linalg.norm(query_vec) + 1e-8)
-        scores = mat @ q
+        scores = self._normalized_vectors() @ q
+        if mask is not None:
+            scores = np.where(mask, scores, -np.inf)
         top = np.argsort(scores)[::-1][:k]
+        top = top[np.isfinite(scores[top])]  # drop masked-out rows in a too-small scope
         return [RetrievedChunk(self.meta[i], float(scores[i])) for i in top]
 
     def persist(self, directory: Path, *, embed_model: str | None = None) -> None:

@@ -79,6 +79,89 @@ def test_search_empty_store_returns_empty():
 
 
 @pytest.mark.unit
+def test_search_caches_normalized_vectors():
+    from src.core.rag.store import VectorStore
+
+    store = VectorStore(dim=3)
+    store.add(np.eye(3, dtype=np.float32), [_meta("a", i) for i in range(3)])
+    assert store._normalized is None
+
+    store.search(np.array([1, 0, 0], dtype=np.float32))
+    cached = store._normalized
+    assert cached is not None
+
+    store.search(np.array([0, 1, 0], dtype=np.float32))
+    assert store._normalized is cached  # same array instance — not recomputed
+
+
+@pytest.mark.unit
+def test_add_invalidates_normalized_cache():
+    from src.core.rag.store import VectorStore
+
+    store = VectorStore(dim=3)
+    store.add(np.eye(3, dtype=np.float32)[:2], [_meta("a", i) for i in range(2)])
+    store.search(np.array([1, 0, 0], dtype=np.float32))
+    assert store._normalized is not None
+
+    store.add(np.eye(3, dtype=np.float32)[2:], [_meta("a", 2)])
+    assert store._normalized is None
+
+
+@pytest.mark.unit
+def test_drop_source_invalidates_normalized_cache():
+    from src.core.rag.store import VectorStore
+
+    store = VectorStore(dim=3)
+    store.add(
+        np.eye(3, dtype=np.float32),
+        [_meta("keep", 0), _meta("gone", 1), _meta("keep", 2)],
+    )
+    store.search(np.array([1, 0, 0], dtype=np.float32))
+    assert store._normalized is not None
+
+    store.drop_source("gone")
+    assert store._normalized is None
+
+
+@pytest.mark.unit
+def test_search_mask_restricts_candidates_before_ranking():
+    from src.core.rag.store import VectorStore
+
+    store = VectorStore(dim=3)
+    store.add(
+        np.array([[1, 0, 0], [0.9, 0.1, 0], [0, 1, 0]], dtype=np.float32),
+        [_meta("a", 0), _meta("b", 0), _meta("c", 0)],
+    )
+    mask = np.array([False, False, True])  # only "c" is a valid candidate
+    hits = store.search(np.array([1, 0, 0], dtype=np.float32), k=3, mask=mask)
+    assert [h.meta.source_path for h in hits] == ["c"]
+
+
+@pytest.mark.unit
+def test_search_mask_returns_fewer_than_k_when_scope_is_small():
+    from src.core.rag.store import VectorStore
+
+    store = VectorStore(dim=3)
+    store.add(
+        np.eye(3, dtype=np.float32), [_meta("a", 0), _meta("b", 0), _meta("c", 0)]
+    )
+    mask = np.array([True, False, False])
+    hits = store.search(np.array([1, 0, 0], dtype=np.float32), k=3, mask=mask)
+    assert len(hits) == 1
+    assert hits[0].meta.source_path == "a"
+
+
+@pytest.mark.unit
+def test_search_mask_all_false_returns_empty():
+    from src.core.rag.store import VectorStore
+
+    store = VectorStore(dim=3)
+    store.add(np.eye(3, dtype=np.float32)[:1], [_meta("a", 0)])
+    mask = np.array([False])
+    assert store.search(np.array([1, 0, 0], dtype=np.float32), mask=mask) == []
+
+
+@pytest.mark.unit
 def test_drop_source_removes_only_matching_chunks():
     from src.core.rag.store import VectorStore
 
