@@ -568,6 +568,11 @@ def test_map_default_method_is_pca():
 
 
 @pytest.mark.unit
+def test_map_accepts_tsne_method():
+    assert _parse("map", "--method", "tsne").method == "tsne"
+
+
+@pytest.mark.unit
 @pytest.mark.parametrize(
     "cmd,runner",
     [

@@ -5,7 +5,7 @@ Flows behind one positional:
     uv run main.py ai stats                        # summarize the persisted index
     uv run main.py ai dups                          # near-duplicate documents (ML)
     uv run main.py ai topics                        # cluster the corpus into topics
-    uv run main.py ai map [--method pca|umap]       # render the semantic map PNG
+    uv run main.py ai map [--method pca|tsne|umap]  # render the semantic map PNG
     uv run main.py ai related <path> [--k N]        # documents similar to one
     uv run main.py ai classify <path>               # suggest the analysis profile
     uv run main.py ai keywords <path> [--top N]     # YAKE keyphrases
@@ -113,9 +113,12 @@ def add_ai_parser(subparsers: argparse._SubParsersAction) -> None:
     )
     p.add_argument(
         "--method",
-        choices=["pca", "umap"],
+        choices=["pca", "tsne", "umap"],
         default="pca",
-        help="With map, the 2D projection (pca default; umap needs the [ml-viz] extra)",
+        help=(
+            "With map, the 2D projection (pca default; tsne separates clusters "
+            "better, no extra beyond [ml]; umap needs the [ml-viz] extra)"
+        ),
     )
     p.add_argument(
         "--out",
