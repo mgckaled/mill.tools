@@ -39,6 +39,21 @@ def test_noise_cluster_is_ignored():
 
 
 @pytest.mark.unit
+def test_multiword_phrase_can_appear_as_a_label():
+    # A discriminative trigram (no stopwords inside it) should be able to
+    # surface as a cluster label now that ngram_range covers up to 3 words.
+    doc_texts = [
+        "processamento linguagem natural python processamento linguagem natural modelo",
+        "processamento linguagem natural dados processamento linguagem natural treino",
+        "duna herbert arrakis livro duna herbert",
+        "duna arrakis especiaria herbert duna",
+    ]
+    labels = np.array([0, 0, 1, 1])
+    out = label_clusters(doc_texts, labels, top_n=5)
+    assert "processamento linguagem natural" in out[0]
+
+
+@pytest.mark.unit
 def test_stopwords_are_removed():
     doc_texts = ["the whisper and the gpu", "the whisper of the model"]
     labels = np.array([0, 0])

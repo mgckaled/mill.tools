@@ -7,6 +7,12 @@ one theme from another. Built on ``CountVectorizer`` + the c-TF-IDF formula, so
 no BERTopic dependency is pulled; scikit-learn is lazy and gated by the ``[ml]``
 extra. A small built-in PT/EN stopword list keeps function words out without a
 new dependency.
+
+``ngram_range=(1, 3)`` lets short discriminative phrases ("aprendizado de
+máquina"), not just single words, surface as cluster labels — BERTopic's own
+guidance for short-text corpora. The class term-frequency also gets
+``reduce_frequent_words`` (BERTopic's square-root dampening) before the IDF
+weighting, softening residual stopwords that survive the list.
 """
 
 from __future__ import annotations
@@ -168,7 +174,7 @@ def label_clusters(
 
     from sklearn.feature_extraction.text import CountVectorizer
 
-    vectorizer = CountVectorizer(stop_words=list(_STOPWORDS))
+    vectorizer = CountVectorizer(stop_words=list(_STOPWORDS), ngram_range=(1, 3))
     try:
         counts = vectorizer.fit_transform(corpus).toarray().astype(float)
     except ValueError:
@@ -188,12 +194,15 @@ def label_clusters(
 def _ctfidf(counts: np.ndarray) -> np.ndarray:
     """Compute the class-based TF-IDF matrix from per-class term counts.
 
-    ``tf`` is each class row L1-normalized by its token total; ``idf`` is
-    ``log(1 + A / f_x)`` where ``A`` is the average tokens per class and ``f_x``
-    the term's total frequency across classes (BERTopic's c-TF-IDF).
+    ``tf`` is each class row L1-normalized by its token total, then square-root
+    dampened (BERTopic's ``reduce_frequent_words``, softening residual
+    stopwords that survive the list); ``idf`` is ``log(1 + A / f_x)`` where
+    ``A`` is the average tokens per class and ``f_x`` the term's total
+    frequency across classes (BERTopic's c-TF-IDF).
     """
     tokens_per_class = counts.sum(axis=1, keepdims=True)
     tf = counts / np.where(tokens_per_class == 0, 1, tokens_per_class)
+    tf = np.sqrt(tf)
     avg_tokens = tokens_per_class.mean()
     term_freq = counts.sum(axis=0)
     idf = np.log(1 + avg_tokens / np.where(term_freq == 0, 1, term_freq))
