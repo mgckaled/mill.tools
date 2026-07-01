@@ -157,7 +157,7 @@ um caso de uso real para calibrar).
 rodar — linhas sinalizadas destacadas na `DataTable` paginada já existente (reusa `table_view.py`).
 **Receitas:** novo passo `data.outliers` (mesmo padrão de `data.query`/`data.profile`).
 
-### 3.3 Deduplicação de imagens (dHash) ✅ Implementado (commit `<próximo>`)
+### 3.3 Deduplicação de imagens (dHash) ✅ Implementado (commit `f972351`)
 
 **Problema.** A Biblioteca já deduplica texto por embedding (Plano 3), mas imagens (a mesma foto
 reencodada, recortada, ou salva duas vezes) não têm nenhuma defesa — hash criptográfico (MD5/SHA)
