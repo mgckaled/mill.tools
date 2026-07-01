@@ -65,8 +65,8 @@ tests/
 │   │   ├── test_scanner.py                 # unit — classify_path, scan_library (árvore falsa), filter_items (kind/category/query/since), sort_items
 │   │   └── test_thumbnails.py              # unit — thumbnail_for (imagem/PDF reais, fallbacks None) + 1 integration (frame de vídeo)
 │   ├── rag/                                # RAG local — tudo unit, sem Ollama (embed_fn injetado; LLM via GenericFakeChatModel)
-│       ├── test_store.py                   # unit — cosseno determinístico, drop_source, persist/load (npz/json)
-│       ├── test_retriever.py               # unit — top-k + filtro de escopo (1 doc / kind / corpus); embed_query_fn mockado
+│       ├── test_store.py                   # unit — cosseno determinístico, drop_source, persist/load (npz/json), cache de normalização (invalidado por add/drop_source), máscara de search() pré-rank
+│       ├── test_retriever.py               # unit — top-k + filtro de escopo (1 doc / kind / corpus) via máscara pré-rank; embed_query_fn mockado; regressão de recall (escopo pouco competitivo globalmente ainda devolve k hits)
 │       ├── test_embedder.py                # unit — is_available (langchain_ollama falso via sys.modules), _check_dim, shape float32
 │       ├── test_indexer.py                 # unit — chunking, header strip, filtro kind/sufixo, skip/reembed por mtime, reconciliação, progresso
 │       ├── test_chat.py                    # unit — build_context numerado [n] + dedupe de fontes; answer via GenericFakeChatModel

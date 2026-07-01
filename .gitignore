@@ -48,5 +48,8 @@ notes.md
 
 # implementation plans (working artifacts, not versioned)
 docs/*.md
+# ...except docs/plan/: living, multi-session plans actively being executed
+# (tracked across commits/tiers) -- versioned on purpose.
+!docs/plan/
 # Dados de teste ad-hoc do modulo Dados (scratch local)
 test_data/
