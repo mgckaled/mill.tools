@@ -204,11 +204,15 @@ Sem o arquivo → nenhum ruler é adicionado, comportamento idêntico a antes. *
 
 Sem CLI/GUI para editar o glossário — só o arquivo, documentado no `CLAUDE.md`.
 
+**Bônus fora do escopo original — bug real achado testando o glossário (commit `3c80820`).** `entities()` passava o documento inteiro pro spaCy numa chamada só; qualquer texto acima de 1.000.000 de caracteres (um livro completo, ex. `Duna_Livro_6...txt`) batia no guard-rail `nlp.max_length` do próprio spaCy (`E088`) e **travava**. Corrigido reaproveitando o `llm_utils.split_text` (mesmo `RecursiveCharacterTextSplitter` que o indexer do RAG já usa) para fatiar o texto em janelas seguras antes de rodar `nlp.pipe()`, mesclando os resultados pelo dedup já existente. Não estava listado como item do plano — apareceu ao validar o item 2.5 contra um livro real do próprio acervo do usuário.
+
 ---
 
-## 5. Tier 3 — ganho com guarda-corpo
+## 5. Tier 3 — ganho com guarda-corpo ✅
 
-### 5.1 `sklearn.manifold.TSNE` como 3º método de projeção
+**Implementado** (commits `a8af65a` TSNE, `8da9211` auto-k, `7f70cc1` correção de exposição na CLI). `uv run pytest -m unit` verde (1316 passed) + `ruff` limpo.
+
+### 5.1 `sklearn.manifold.TSNE` como 3º método de projeção ✅
 
 **Arquivo:** `src/core/ml/project.py` (`project_2d`).
 
@@ -226,11 +230,17 @@ def _tsne_2d(x: np.ndarray, random_state: int, pre_pca_dims: int) -> np.ndarray:
 
 `method="tsne"` some ao `if/elif` de `project_2d`, gated só por `is_available()` (o `[ml]` já cobre).
 
-### 5.2 Seleção automática de k via `silhouette_score`
+**Correção na implementação — o piso da heurística.** `max(2, ...)` quebra exatamente em `n_amostras=2`: `perplexity=2` não é `< n_samples=2`. Testado empiricamente (`inspect`/execução real com `n=2,3,4,5`) e trocado para piso `1.0` em vez de `2.0` — `_tsne_perplexity()` ficou como função pura testável isoladamente.
+
+**Achado extra — a CLI não expunha o método novo.** `project_2d` ganhar `method="tsne"` não bastava: `cli/ai.py`'s `ai map --method` tinha `choices=["pca", "umap"]` hardcoded, então o método ficaria inacessível fora de uma chamada Python direta. Corrigido (`choices=["pca", "tsne", "umap"]`) no commit `7f70cc1` — checklist da skill `architecture` (§5, "CLI e GUI cobertas") pegou esse gap antes de fechar o tier. A GUI (`semantic_map_panel.py`) não tem seletor de método nenhum (sempre `pca`, mesmo comportamento de antes para UMAP) — sem inconsistência nova introduzida.
+
+### 5.2 Seleção automática de k via `silhouette_score` ✅
 
 **Arquivo:** `src/core/ml/cluster.py` (`_kmeans`).
 
 Hoje `k` é sempre manual. Testar uma faixa (2 a `min(10, m-1)`) e escolher o maior `silhouette_score` é prática padrão, **mas** a doc oficial e a literatura alertam: o score fica instável abaixo de ~15–20 amostras por cluster candidato, é enviesado para clusters convexos/de densidade uniforme (nem sempre o caso num acervo pessoal) e custa O(n²) (irrelevante no nosso volume).
+
+**Achado na implementação — clustering por k-means nunca teve exposição via CLI/GUI, com ou sem esta mudança.** `cli/ai.py`'s `_topics()`/`_map()` chamam `build_semantic_map(store, ...)` sem nunca passar `method="kmeans"` nem `k=` — o clustering é sempre `hdbscan` na prática (o `--method` da CLI controla a **projeção** 2D, não o clustering). Ou seja, `cluster_documents(method="kmeans")` — com `k` manual ou agora com auto-k — já era só alcançável chamando a função Python diretamente, não é uma regressão desta mudança. Registrado aqui para não ficar ambíguo; expor isso na CLI seria uma feature nova, fora do escopo deste plano de refinamento.
 
 **Guarda-corpo:** só ativar auto-k quando `m` for grande o bastante para a faixa testada fazer sentido (ex.: `m >= 20`); abaixo disso, manter o comportamento atual (exigir `k` manual, `ValueError` se ausente).
 
@@ -288,14 +298,16 @@ Cada item ganha teste(s) `@pytest.mark.unit` espelhando `tests/core/ml/`/`tests/
 - **2.3** ✅ — `test_keywords.py` (`importorskip("yake")`): `test_extractor_receives_the_tuned_dedup_params` trava os kwargs reais passados ao `KeywordExtractor` (mais confiável que tentar provar deduplicação observando o texto de saída, dado o algoritmo interno da lib).
 - **2.4** ✅ — `test_summarize.py`: sentença inicial ganha score maior que uma sentença de conteúdo idêntico no meio do texto (`test_lead_bias_favors_earlier_sentence_with_equal_content`).
 - **2.5** ✅ (não estava na lista original — item revisado) — `test_entities.py`: `_load_glossary_patterns` com arquivo ausente/malformado/não-lista → `[]`; com o modelo spaCy real instalado, um termo inventado (`"Zyloquark9000"`) só é reconhecido como entidade quando o glossário o injeta (`test_glossary_pattern_adds_entities_the_model_would_miss`) — prova que o ruler está de fato no caminho de execução, não só instanciado.
-- **3.1** — `test_project.py`: `method="tsne"` não lança com N pequeno (perplexity clampada); coordenadas `(M, 2)` float32.
-- **3.2** — `test_cluster.py`: `k=None` com `m` grande escolhe um k plausível (testar com blobs sintéticos de k conhecido); `k=None` com `m` pequeno ainda lança `ValueError` (comportamento preservado).
+- **3.1** ✅ — `test_project.py`: `method="tsne"` não lança com N pequeno (`test_tsne_handles_tiny_corpus_without_error`); `_tsne_perplexity()` testada isoladamente e parametrizada (`test_tsne_perplexity_clamp`); coordenadas `(M, 2)` float32 (`test_tsne_projection_shape`); pré-redução PCA exercida com D>50 (`test_tsne_pre_reduces_high_dimensional_input`). `test_ai_cli.py`: `--method tsne` aceito pelo parser.
+- **3.2** ✅ — `test_cluster.py`: `k=None` com `m` grande (blobs de k conhecido) escolhe o k certo (`test_kmeans_auto_selects_k_for_well_separated_blobs`); `k=None` com `m` pequeno ainda lança `ValueError` (`test_kmeans_none_k_raises_when_corpus_too_small_for_auto`, comportamento preservado); `k=0` explícito continua erro mesmo com corpus grande (`test_kmeans_explicit_zero_k_raises`); guarda defensivo do range testado via chamada direta a `_auto_k` (`test_auto_k_respects_range_upper_guard_below_min_for_auto`).
 
 Cobertura mantida ≥ 90% em `core/ml`/`core/text` (padrão já estabelecido nos Planos 3/4).
 
 ---
 
 ## 9. Critérios de aceitação
+
+**Todos atendidos — plano fechado (Tiers 1–3 ✅, Tier 4 registrado e não implementado por escolha).**
 
 - Nenhuma dependência nova em `pyproject.toml`.
 - `uv run pytest -m unit` verde e `ruff` limpo após cada tier.
@@ -323,8 +335,8 @@ Não aplicar all-but-the-top (Tier 4.1) como padrão — o risco estatístico em
 | 2.3 | YAKE dedup_lim/dedup_func/window_size | `text/keywords.py` | 2 | Baixo | Baixo | ✅ Implementado |
 | 2.4 | TextRank sublinear_tf + lead bias | `text/summarize.py` | 2 | Baixo | Médio | ✅ Implementado |
 | 2.5 | spaCy EntityRuler (glossário opcional, revisado) | `text/entities.py` | 2 | Baixo | Médio (revisado: sem conteúdo hardcoded) | ✅ Implementado |
-| 3.1 | TSNE como 3º método | `ml/project.py` | 3 | Baixo-Médio | Médio | Pendente |
-| 3.2 | Auto-k via silhouette | `ml/cluster.py` | 3 | Médio | Médio | Pendente |
+| 3.1 | TSNE como 3º método (+ correção do choices na CLI) | `ml/project.py`, `cli/ai.py` | 3 | Baixo-Médio | Médio | ✅ Implementado |
+| 3.2 | Auto-k via silhouette (sem exposição CLI/GUI — pré-existente) | `ml/cluster.py` | 3 | Médio | Médio | ✅ Implementado |
 | 4.1 | All-but-the-top | `ml/features.py` | 4 | Alto | — (não implementado) | Não fazer agora |
 | 4.2 | Pooling ponderado por tamanho | `ml/features.py` | 4 | Baixo | — (não implementado) | Não fazer agora |
 | 4.3 | PCA whiten | `ml/project.py` | 4 | — | Rejeitado | Rejeitado |
