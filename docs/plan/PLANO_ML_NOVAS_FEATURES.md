@@ -205,7 +205,7 @@ O(n²)), mesmo padrão de `ml.dedup.near_duplicates`.
 **GUI:** deferida como fast-follow — mesmo padrão já aceito no Plano 3 ("acessor pronto, GUI
 deferida"); o CLI sozinho já entrega o valor prático.
 
-### 3.4 Reuso do classificador zero-shot em Dados e Documentos ✅ Núcleo implementado (commit `<próximo>`)
+### 3.4 Reuso do classificador zero-shot em Dados e Documentos ✅ Núcleo implementado (commit `0b574d4`)
 
 **Problema/oportunidade.** `core/ml/classify.py` resolve "qual categoria esse texto pertence, com
 poucos exemplos e sem treino" — hoje hardcoded para o domínio "perfil de transcrição". A mesma
