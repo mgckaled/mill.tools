@@ -73,7 +73,7 @@ recente já pagaram:
 
 ## 3. Tier A — ganho alto, custo baixo/quase-zero
 
-### 3.1 Busca híbrida (BM25 + denso) no RAG
+### 3.1 Busca híbrida (BM25 + denso) no RAG ✅ Implementado (commit `23b2ace`)
 
 **Problema.** Busca por embeddings é ótima para "sentido", mas falha em nomes próprios, siglas,
 números e termos exatos — fraqueza conhecida e documentada de RAG puramente denso. Uma pergunta
@@ -125,7 +125,7 @@ opt-in — consistente com o RAG já não ter nenhum extra hoje.
 **CLI/GUI.** Nenhuma superfície nova — `ai "pergunta"` e o chat da GUI já passam por
 `retriever.retrieve()`; o ganho é transparente.
 
-### 3.2 Detecção de outliers tabulares no módulo Dados
+### 3.2 Detecção de outliers tabulares no módulo Dados ✅ Implementado (commit `630d720`)
 
 **Problema.** Ninguém audita manualmente uma planilha de 5 mil linhas, e `assess.py` (parecer de
 qualidade pela IA) não pega isso — ele recebe só esquema + `SUMMARIZE` + amostra, nunca as linhas
@@ -157,18 +157,31 @@ um caso de uso real para calibrar).
 rodar — linhas sinalizadas destacadas na `DataTable` paginada já existente (reusa `table_view.py`).
 **Receitas:** novo passo `data.outliers` (mesmo padrão de `data.query`/`data.profile`).
 
-### 3.3 Deduplicação de imagens (hash perceptual)
+### 3.3 Deduplicação de imagens (dHash) ✅ Implementado (commit `<próximo>`)
 
 **Problema.** A Biblioteca já deduplica texto por embedding (Plano 3), mas imagens (a mesma foto
 reencodada, recortada, ou salva duas vezes) não têm nenhuma defesa — hash criptográfico (MD5/SHA)
 não tolera nem 1 pixel de diferença.
 
-**Arquivo novo:** `src/core/image/phash.py` (puro, gate `is_available()` no padrão de
-`ocr.is_available()`):
+**Correção na implementação — de `imagehash`/pHash para dHash hand-rolled (zero dependência).**
+A hipótese original (usar o pacote `imagehash`, extra novo `[ml-image]`) foi verificada e
+descartada: `importlib.metadata.metadata("imagehash")["Requires-Dist"]` mostra que o pacote
+depende de **`scipy`** (para a DCT do `phash`) **e `PyWavelets`** (para o `whash`) — exatamente a
+classe de dependência compilada que o item 3.1 já havia rejeitado (`bm25s` vs. `rank-bm25`).
+Pivotado para um **dHash (difference hash) escrito à mão**, usando só Pillow + numpy (dependências
+já obrigatórias) — **zero dependência nova**. Web search confirmou que dHash não é só "bom o
+bastante": é reportado como *mais* robusto que pHash especificamente contra duplicatas por
+redimensionamento/recompressão — o caso de uso exato do mill.tools.
+
+**Arquivo novo:** `src/core/image/dhash.py` (puro, sem gate — nenhuma dependência opcional):
 
 ```python
-def phash(path: Path, hash_size: int = 8) -> imagehash.ImageHash:
-    """Perceptual hash of an image, tolerant to light recompression/resize."""
+def dhash(path: Path, *, hash_size: int = 8) -> np.ndarray:
+    """Difference hash: redimensiona a (hash_size+1, hash_size) em cinza, compara
+    cada pixel ao vizinho da direita. Retorna um array de bits (bool)."""
+
+def hamming_distance(a: np.ndarray, b: np.ndarray) -> int:
+    """Contagem de bits diferentes entre dois hashes do mesmo formato."""
 ```
 
 **Arquivo novo:** `src/core/library/image_dedup.py`, reaproveitando o **mesmo algoritmo** de
@@ -177,17 +190,16 @@ tomada para o MMR no Tier 2 do refinamento:
 
 ```python
 def near_duplicate_images(paths: list[Path], *, max_distance: int = 8) -> list[ImageDuplicateGroup]:
-    """Group perceptually-identical images by Hamming distance between phashes."""
+    """Group perceptually-identical images by Hamming distance between dHashes."""
 ```
 
-`max_distance = 8` (de 64 bits, `hash_size=8`) é o limiar convencional da comunidade
-`imagehash` para "mesma imagem, reencodada/recortada levemente". `ImageDuplicateGroup` como novo
-tipo local em `core/library/types.py` — não reaproveita `DuplicateGroup` de `core/ml/types.py`
-(mesmo racional de independência de pacote).
+`max_distance = 8` (de 64 bits, `hash_size=8`) é o limiar convencional para "mesma imagem,
+reencodada/recortada levemente" (compartilhado pela comunidade de pHash/dHash). `ImageDuplicateGroup`
+como novo tipo local em `core/library/types.py` — não reaproveita `DuplicateGroup` de
+`core/ml/types.py` (mesmo racional de independência de pacote). Guarda `max_images=5000` (custo
+O(n²)), mesmo padrão de `ml.dedup.near_duplicates`.
 
-**Dependência.** `imagehash` (puro Python + numpy, sem binário) entra como novo extra
-**`[ml-image]`** — nome já reservado pelo `docs/ROADMAP_ML_DADOS.md` original para a onda de mídia,
-usado aqui adiantado só para este item leve.
+**Dependência: nenhuma** — correção em relação ao plano original (era `[ml-image]`).
 
 **CLI:** `library dedup-images [--max-distance 8]` (mesmo padrão read-only de `library list`).
 **GUI:** deferida como fast-follow — mesmo padrão já aceito no Plano 3 ("acessor pronto, GUI
@@ -318,8 +330,9 @@ o feed lê o log, não assina pubsub de outros módulos). Cada linha guarda `mod
 "máximo de informação": aba **Status** do novo hub Observatório, organizado em cartões por
 assunto:
 
-- **Gates/extras**: `[ml]`, `[ml-viz]`, `[nlp]` (+ modelo spaCy baixado ou não), `[ml-image]`
-  (3.3), embedder Ollama — cada um com ✓/✗ e o `SETUP_HINT` já existente quando ausente.
+- **Gates/extras**: `[ml]`, `[ml-viz]`, `[nlp]` (+ modelo spaCy baixado ou não), embedder Ollama —
+  cada um com ✓/✗ e o `SETUP_HINT` já existente quando ausente (dedup de imagem, 3.3, não tem gate
+  — dHash é zero-dependência, correção em relação ao plano original).
 - **Índice RAG**: tudo que `stats.index_stats()` já calcula (docs, chunks, dim, modelo de
   embedding, tamanho em disco, atualizado em) — hoje só na aba Índice, passa a aparecer resumido
   aqui também.
@@ -400,8 +413,8 @@ nenhum item.
 
 ### 4.3 Plano 6 revisado — ML de mídia, leveza máxima
 
-O roadmap original cogitava `librosa`, `PySceneDetect`/OpenCV, `imagehash` (este já adiantado
-como 3.3). Revisão:
+O roadmap original cogitava `librosa`, `PySceneDetect`/OpenCV, `imagehash` (dedup de imagem já
+adiantado como 3.3 — e implementado sem essa dependência, ver a correção na seção 3.3). Revisão:
 
 - **Blur/baixa qualidade em Imagens** — variância do Laplaciano sobre a imagem em escala de
   cinza, convolução manual em numpy puro (kernel `[[0,1,0],[1,-4,1],[0,1,0]]` via slicing
@@ -446,8 +459,8 @@ como 3.3). Revisão:
 1. `rag/bm25.py` + `rag/store.py` (`_bm25_index`) + `rag/retriever.py` (RRF) + `rank-bm25` em
    `[project.dependencies]` (decisão já confirmada — base, não extra).
 2. `data/ml.py` (`detect_outliers`) + CLI `data outliers` + integração na aba Consulta.
-3. `image/phash.py` + `library/image_dedup.py` + `library/types.py` (`ImageDuplicateGroup`) +
-   extra `[ml-image]` + CLI `library dedup-images`.
+3. `image/dhash.py` + `library/image_dedup.py` + `library/types.py` (`ImageDuplicateGroup`) +
+   CLI `library dedup-images` — sem extra novo (correção: dHash hand-rolled, não `imagehash`).
 4. `classify.py` parametrizado por `domain` (ler assinatura atual antes) + protótipos de Dados e
    Documentos + integração no `datacard.py`/aba de resultado de Documentos.
 5. Visibilidade de ML — **novo hub Observatório**, em sub-passos:
@@ -480,8 +493,10 @@ Cada item ganha teste(s) `@pytest.mark.unit`, espelhando `tests/core/`:
   sozinho rankeava baixo.
 - **3.2**: `test_data_ml.py` — linha sintética fora da distribuição é sinalizada; `contamination`
   respeitado; colunas não-numéricas ignoradas sem erro.
-- **3.3**: `test_phash.py`/`test_image_dedup.py` (`importorskip("imagehash")`) — imagem idêntica
-  reencodada → mesmo grupo; imagens distintas → não agrupam; `is_available()` False sem o extra.
+- **3.3**: `test_dhash.py` (sem `importorskip` — zero dependência opcional) — conteúdo idêntico →
+  distância 0; imagens estruturalmente distintas → distância > 0; cores sólidas dão o mesmo hash
+  todo-zero (limitação conhecida do dHash, não bug). `test_image_dedup.py`: perturbação leve →
+  mesmo grupo; cadeia transitiva A~B~C → um componente; guarda `max_images`.
 - **3.4**: `test_classify.py` estendido — dois domínios com protótipos diferentes não vazam
   categoria um para o outro; domínio default preserva comportamento atual (regressão).
 - **3.5**: `tests/core/observatory/test_activity.py` — round-trip do `ml_activity.json` em
@@ -534,7 +549,7 @@ zero/baixa dependência nova.
 |---|---|---|---|---|---|
 | 3.1 | Busca híbrida (BM25 + RRF) | RAG/IA | `rank-bm25` (base, confirmado) | Baixo | Alta |
 | 3.2 | Outliers tabulares | Dados | Nenhuma (`[ml]` já tem) | Baixo | Alta |
-| 3.3 | Dedup de imagens | Biblioteca | `imagehash` (novo `[ml-image]`) | Baixo | Alta |
+| 3.3 | Dedup de imagens (dHash) | Biblioteca | Nenhuma (correção: era `imagehash`/`[ml-image]`) | Baixo | Alta |
 | 3.4 | Reuso do classify.py | Dados, Documentos | Nenhuma | Baixo | Alta |
 | 3.5 | Visibilidade de ML — **novo hub Observatório** (stepper+feed+status+selo) | Novo hub, cross-módulo (RAG/Biblioteca/Transcrição/Dados/Receitas) | Nenhuma | Médio-Alto | Alta |
 | 4.1 | Plano 5 completo (clustering/previsão/importância) | Dados | Nenhuma (`[ml]` já tem) | Médio | Média |
@@ -555,7 +570,8 @@ zero/baixa dependência nova.
 - [sklearn.ensemble.IsolationForest](https://scikit-learn.org/stable/modules/generated/sklearn.ensemble.IsolationForest.html)
 - [sklearn.ensemble.HistGradientBoostingClassifier](https://scikit-learn.org/stable/modules/generated/sklearn.ensemble.HistGradientBoostingClassifier.html) · [HistGradientBoostingRegressor](https://scikit-learn.org/stable/modules/generated/sklearn.ensemble.HistGradientBoostingRegressor.html)
 - [sklearn.inspection.permutation_importance](https://scikit-learn.org/stable/modules/generated/sklearn.inspection.permutation_importance.html)
-- [imagehash — JohannesBuchner/imagehash](https://github.com/JohannesBuchner/imagehash)
+- [imagehash — JohannesBuchner/imagehash](https://github.com/JohannesBuchner/imagehash) (avaliado
+  e descartado — dependência transitiva de scipy/PyWavelets; ver correção na seção 3.3)
 - [ffmpeg — filtro `select` (detecção de mudança de cena via `scene`)](https://ffmpeg.org/ffmpeg-filters.html#select_002c-aselect)
 - [Flet — `flet.canvas` (Context7, `flet-dev/flet`)](https://flet.dev/docs/controls/canvas/)
 - [Variância do Laplaciano para detecção de blur — Pech-Pacheco et al., 2000 (referência clássica do método)](https://www.researchgate.net/publication/3945312)

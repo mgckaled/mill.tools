@@ -39,3 +39,15 @@ class LibraryItem:
     modified: float  # st_mtime epoch seconds
     stem: str
     suffix: str  # lowercase, with dot (".mp3")
+
+
+@dataclass(frozen=True, slots=True)
+class ImageDuplicateGroup:
+    """A set of perceptually-identical images found by Hamming distance.
+
+    Deliberately not ``core.ml.types.DuplicateGroup`` — ``core/library`` stays
+    independent of ``core/ml``, same rationale already applied to ``core/text``.
+    """
+
+    paths: list[Path]  # images mutually within the distance threshold
+    max_distance: int  # largest pairwise Hamming distance within the group (worst-case)

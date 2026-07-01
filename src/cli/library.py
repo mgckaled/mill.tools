@@ -10,8 +10,9 @@ import argparse
 import sys
 import time
 
+from src.core.library.image_dedup import DEFAULT_MAX_DISTANCE, near_duplicate_images
 from src.core.library.scanner import filter_items, scan_library, sort_items
-from src.core.library.types import ALL_KINDS
+from src.core.library.types import ALL_KINDS, KIND_IMAGE
 
 _SINCE_UNITS = {"m": 60, "h": 3600, "d": 86400}
 
@@ -82,11 +83,26 @@ def add_library_parser(subparsers) -> None:
     )
     stats.add_argument("--verbose", action="store_true", help="Enable debug logging")
 
+    dedup = library_sub.add_parser(
+        "dedup-images",
+        help="Encontra imagens quase-duplicadas no acervo (hash perceptual)",
+    )
+    dedup.add_argument(
+        "--max-distance",
+        type=int,
+        default=DEFAULT_MAX_DISTANCE,
+        help=f"Distância de Hamming máxima para considerar duplicata "
+        f"(default: {DEFAULT_MAX_DISTANCE})",
+    )
+    dedup.add_argument(
+        "--verbose", action="store_true", help="Ativa logging de depuração"
+    )
+
     library_p.set_defaults(func=run_library_cli)
 
 
 def run_library_cli(ns: argparse.Namespace) -> None:
-    """Dispatch the `library` subcommand: `list` (table) or `stats` (dashboard)."""
+    """Dispatch the `library` subcommand: `list`/`stats`/`dedup-images`."""
     # Output filenames may contain non-cp1252 characters (e.g. fullwidth ｜).
     # On Windows the console defaults to charmap and print() would raise — make
     # stdout UTF-8 and replace anything it still can't encode.
@@ -97,8 +113,32 @@ def run_library_cli(ns: argparse.Namespace) -> None:
 
     if ns.library_op == "stats":
         _run_stats(ns)
+    elif ns.library_op == "dedup-images":
+        _run_dedup_images(ns)
     else:
         _run_list(ns)
+
+
+def _run_dedup_images(ns: argparse.Namespace) -> None:
+    """Scan the image catalog and print near-duplicate groups (dHash)."""
+    items = filter_items(scan_library(), kinds={KIND_IMAGE})
+    if not items:
+        print("Nenhuma imagem encontrada em output/.")
+        return
+
+    groups = near_duplicate_images(
+        [it.path for it in items], max_distance=ns.max_distance
+    )
+    if not groups:
+        print(f"Nenhuma duplicata encontrada entre {len(items)} imagem(ns).")
+        return
+
+    print(f"{len(groups)} grupo(s) de imagens quase-duplicadas:\n")
+    for i, group in enumerate(groups, start=1):
+        print(f"Grupo {i} (distância máxima: {group.max_distance}):")
+        for path in group.paths:
+            print(f"  - {path.name}")
+        print()
 
 
 def _run_list(ns: argparse.Namespace) -> None:

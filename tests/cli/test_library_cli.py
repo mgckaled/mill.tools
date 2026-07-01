@@ -138,3 +138,57 @@ def test_stats_runner_empty(mocker, capsys):
     ns = _parse("stats")
     ns.func(ns)
     assert "No files found" in capsys.readouterr().out
+
+
+@pytest.mark.unit
+def test_dedup_images_parser_defaults():
+    ns = _parse("dedup-images")
+    assert ns.library_op == "dedup-images"
+    assert ns.max_distance == 8
+    assert callable(ns.func)
+
+
+@pytest.mark.unit
+def test_run_library_cli_dedup_images_dispatch(mocker, capsys):
+    from src.core.library.types import ImageDuplicateGroup
+
+    items = [
+        _item("a/x.jpg", "image"),
+        _item("b/y.jpg", "image"),
+        _item("c/z.mp3", "audio"),
+    ]
+    mocker.patch("src.cli.library.scan_library", return_value=items)
+    mock_dedup = mocker.patch(
+        "src.cli.library.near_duplicate_images",
+        return_value=[
+            ImageDuplicateGroup(
+                paths=[Path("a/x.jpg"), Path("b/y.jpg")], max_distance=3
+            )
+        ],
+    )
+    ns = _parse("dedup-images")
+    ns.func(ns)
+
+    # Only image-kind items are passed in — the audio file must be filtered out.
+    passed_paths = mock_dedup.call_args.args[0]
+    assert Path("c/z.mp3") not in passed_paths
+    out = capsys.readouterr().out
+    assert "1 grupo(s)" in out
+    assert "x.jpg" in out and "y.jpg" in out
+
+
+@pytest.mark.unit
+def test_run_library_cli_dedup_images_no_images(mocker, capsys):
+    mocker.patch("src.cli.library.scan_library", return_value=[])
+    ns = _parse("dedup-images")
+    ns.func(ns)
+    assert "Nenhuma imagem encontrada" in capsys.readouterr().out
+
+
+@pytest.mark.unit
+def test_run_library_cli_dedup_images_no_duplicates(mocker, capsys):
+    mocker.patch("src.cli.library.scan_library", return_value=[_item("a.jpg", "image")])
+    mocker.patch("src.cli.library.near_duplicate_images", return_value=[])
+    ns = _parse("dedup-images")
+    ns.func(ns)
+    assert "Nenhuma duplicata encontrada" in capsys.readouterr().out

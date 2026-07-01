@@ -35,6 +35,9 @@ dependencies = [
 # --- Image / OCR ---
 ai-image = ["rembg[cpu]>=2.0.50"]      # background removal/replacement
 ocr      = ["pytesseract>=0.3"]        # Tesseract OCR (binary is separate)
+# Near-duplicate image detection uses a hand-rolled dHash (Pillow + numpy, both
+# already hard deps) — no extra needed. See core/image/dhash.py for why: the
+# popular `imagehash` package's `phash()` transitively pulls scipy + PyWavelets.
 
 # --- Data / DataFrame (Plans 0/1) ---
 # Polars over DuckDB (Arrow zero-copy); pandas is the ML/plot border only.
