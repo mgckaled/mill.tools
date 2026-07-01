@@ -446,3 +446,26 @@ def classify(
 
     P, ids = profile_prototypes(embed_fn, cache_dir=directory, domain=domain)
     return classify_zeroshot(doc_vec, P, ids)
+
+
+def domain_label_count(
+    domain: str = DOMAIN_TRANSCRIPTION_PROFILE, *, directory: Path | None = None
+) -> int:
+    """Number of gold labels recorded for ``domain`` — used by the Observatório
+    status board (item 3.5) to show classifier health without exposing the
+    on-disk filename scheme."""
+    return len(load_labels(directory=directory, domain=domain))
+
+
+def has_supervised_model(
+    domain: str = DOMAIN_TRANSCRIPTION_PROFILE, *, directory: Path | None = None
+) -> bool:
+    """True if ``domain`` currently has a valid trained model in use (not just
+    labels recorded) — i.e. ``classify()`` would take the supervised branch."""
+    labels = load_labels(directory=directory, domain=domain)
+    if not labels:
+        return False
+    model = load_model(
+        _model_name(domain), signature=labels_signature(labels), directory=directory
+    )
+    return model is not None

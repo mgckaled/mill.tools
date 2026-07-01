@@ -458,12 +458,14 @@ def test_dups_dispatches_to_dups_runner(mocker):
 
 @pytest.mark.unit
 def test_dups_groups_identical_documents(tmp_path, monkeypatch, capsys):
+    import src.core.observatory.activity as activity
     import src.core.rag.indexer as indexer
     from src.cli.ai import _dups
 
     rag_dir = tmp_path / "rag"
     _persist_two_docs(rag_dir, identical=True)
     monkeypatch.setattr(indexer, "index_dir", lambda: rag_dir)
+    monkeypatch.setattr(activity, "log_activity", lambda *a, **k: None)
 
     _dups(_parse("dups"))
 
@@ -829,6 +831,7 @@ def test_classify_prints_suggested_profile(tmp_path, monkeypatch, mocker, capsys
         "src.core.ml.classify.classify",
         return_value=Classification("lecture", 0.82, 0.30, "zeroshot"),
     )
+    mocker.patch("src.core.observatory.activity.log_activity")
 
     _classify(_parse("classify", "aula.txt"))
     out = capsys.readouterr().out
@@ -850,6 +853,7 @@ def test_classify_warns_on_low_margin(tmp_path, monkeypatch, mocker, capsys):
         "src.core.ml.classify.classify",
         return_value=Classification("lecture", 0.40, 0.01, "zeroshot"),
     )
+    mocker.patch("src.core.observatory.activity.log_activity")
 
     _classify(_parse("classify", "x.txt"))
     assert "incerta" in capsys.readouterr().out

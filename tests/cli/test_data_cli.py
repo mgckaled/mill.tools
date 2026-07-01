@@ -305,12 +305,15 @@ def test_run_data_cli_outliers_dispatch(mocker, csv_sales, capsys):
     mocker.patch(
         "src.core.data.frames.to_pandas", return_value=pd.DataFrame({"qtd": [3, 5]})
     )
+    mock_log = mocker.patch("src.core.observatory.activity.log_activity")
 
     ns = _parse("outliers", str(csv_sales))
     ns.func(ns)
 
     out = capsys.readouterr().out
     assert "linha(s) sinalizada(s)" in out
+    assert mock_log.call_args.args[0] == "data"
+    assert mock_log.call_args.args[1] == "outliers_detected"
 
 
 @pytest.mark.unit

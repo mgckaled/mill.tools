@@ -89,6 +89,10 @@ def _data_outliers(inputs: list, params: dict, ctx: StepContext) -> list[Path]:
     out = DATA_DIR / f"{Path(inputs[0]).stem}_outliers.txt"
     header = f"{len(flagged)} de {len(result)} linha(s) sinalizada(s) como atípica(s)."
     out.write_text(f"{header}\n\n{flagged.to_string(index=False)}", encoding="utf-8")
+
+    from src.core.observatory.activity import log_activity
+
+    log_activity("recipes", "outliers_detected", f"{Path(inputs[0]).name}: {header}")
     return [out]
 
 

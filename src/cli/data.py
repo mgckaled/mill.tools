@@ -353,6 +353,14 @@ def _outliers(ns: argparse.Namespace) -> None:
             [tuple(row) for row in preview.itertuples(index=False)],
         )
 
+    from src.core.observatory.activity import log_activity
+
+    log_activity(
+        "data",
+        "outliers_detected",
+        f"{src.name}: {len(flagged)} de {len(result)} linha(s) atípica(s)",
+    )
+
 
 def run_data_cli(ns: argparse.Namespace) -> None:
     """Dispatch the ``data`` subcommand to its operation handler."""

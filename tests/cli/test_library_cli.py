@@ -166,6 +166,7 @@ def test_run_library_cli_dedup_images_dispatch(mocker, capsys):
             )
         ],
     )
+    mocker.patch("src.core.observatory.activity.log_activity")
     ns = _parse("dedup-images")
     ns.func(ns)
 

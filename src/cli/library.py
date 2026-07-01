@@ -140,6 +140,12 @@ def _run_dedup_images(ns: argparse.Namespace) -> None:
             print(f"  - {path.name}")
         print()
 
+    from src.core.observatory.activity import log_activity
+
+    log_activity(
+        "library", "image_dedup", f"{len(groups)} grupo(s) de imagens quase-duplicadas"
+    )
+
 
 def _run_list(ns: argparse.Namespace) -> None:
     """Scan output/, apply the filters and print a table to stdout."""

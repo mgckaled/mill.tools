@@ -327,6 +327,12 @@ def _dups(ns: argparse.Namespace) -> None:
             print(f"  • {Path(source).name}")
         print()
 
+    from src.core.observatory.activity import log_activity
+
+    log_activity(
+        "rag", "text_dedup", f"{len(groups)} grupo(s) de documentos semelhantes"
+    )
+
 
 def _semantic_map(store):
     """Build the cached SemanticMap, exiting with a hint if [ml] is missing."""
@@ -475,6 +481,14 @@ def _classify(ns: argparse.Namespace) -> None:
         print(
             "\n  [!] Sugestão incerta — margem baixa entre os dois perfis mais próximos."
         )
+
+    from src.core.observatory.activity import log_activity
+
+    log_activity(
+        "rag",
+        "profile_classified",
+        f"{Path(source).name}: {label} ({result.confidence:.2f})",
+    )
 
 
 def _read_target_text(ns: argparse.Namespace) -> tuple[Path, str] | None:

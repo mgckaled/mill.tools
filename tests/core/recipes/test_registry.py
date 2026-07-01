@@ -242,6 +242,7 @@ def test_data_outliers_adapter_writes_report(mocker, tmp_path):
         "src.core.data.frames.to_pandas",
         return_value=pd.DataFrame({"valor": [1, 2, 100]}),
     )
+    mocker.patch("src.core.observatory.activity.log_activity")
 
     ctx = StepContext(
         emit=lambda *a: None,
