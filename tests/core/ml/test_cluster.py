@@ -35,6 +35,19 @@ def _two_blobs(n_per: int = 10, *, jitter: float = 0.01, seed: int = 0) -> np.nd
     return np.vstack([a, b])
 
 
+def _n_blobs(
+    n_groups: int, n_per: int, *, dim: int, jitter: float = 0.01, seed: int = 0
+) -> np.ndarray:
+    """``n_groups`` tight blobs around orthogonal directions in ``dim``-D."""
+    rng = np.random.default_rng(seed)
+    groups = []
+    for i in range(n_groups):
+        e = np.zeros(dim)
+        e[i] = 1.0
+        groups.append(e + rng.normal(0, jitter, (n_per, dim)))
+    return np.vstack(groups)
+
+
 @pytest.mark.unit
 def test_hdbscan_finds_two_separated_blobs():
     dm = _dm(_two_blobs(n_per=10))
@@ -104,6 +117,47 @@ def test_kmeans_without_k_raises():
     dm = _dm(_two_blobs(n_per=4))
     with pytest.raises(ValueError, match="requires a positive"):
         cluster_documents(dm, method="kmeans")
+
+
+@pytest.mark.unit
+def test_kmeans_none_k_raises_when_corpus_too_small_for_auto():
+    # 8 docs is well below _MIN_FOR_AUTO_K (20) -- k stays a required argument,
+    # same behavior as before auto-k existed (test_kmeans_without_k_raises
+    # covers the message itself; this pins the "too small" reasoning).
+    dm = _dm(_two_blobs(n_per=4))
+    with pytest.raises(ValueError, match="too few for automatic"):
+        cluster_documents(dm, method="kmeans", k=None)
+
+
+@pytest.mark.unit
+def test_kmeans_explicit_zero_k_raises():
+    dm = _dm(_two_blobs(n_per=15))  # large enough that auto-k would apply for None
+    with pytest.raises(ValueError, match="requires a positive"):
+        cluster_documents(dm, method="kmeans", k=0)
+
+
+@pytest.mark.unit
+def test_auto_k_respects_range_upper_guard_below_min_for_auto():
+    # Direct call bypassing _kmeans' _MIN_FOR_AUTO_K guard: with m=5, the
+    # candidate range (up to 10) must stop once k >= m, per the defensive
+    # "k >= m: break" -- exercised here since _MIN_FOR_AUTO_K (20) is above
+    # _AUTO_K_RANGE's own ceiling and never triggers it through cluster_documents.
+    from src.core.ml.cluster import _auto_k
+
+    dm_vectors = _n_blobs(2, 3, dim=3)  # 6 rows total, but call with m=5 directly
+    k = _auto_k(dm_vectors[:5], m=5)
+    assert 2 <= k < 5
+
+
+@pytest.mark.unit
+def test_kmeans_auto_selects_k_for_well_separated_blobs():
+    # 4 tight orthogonal blobs, 24 docs total (>= _MIN_FOR_AUTO_K) -- silhouette
+    # over the candidate range should land on the true k.
+    dm = _dm(_n_blobs(4, 6, dim=4))
+    result = cluster_documents(dm, method="kmeans", k=None)
+    assert result.method == "kmeans"
+    assert result.n_clusters == 4
+    assert result.n_noise == 0
 
 
 @pytest.mark.unit
