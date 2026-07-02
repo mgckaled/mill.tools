@@ -22,7 +22,12 @@ from src.gui.theme.components import (
     section_label,
 )
 from src.gui.theme.tokens import Space, Type
-from src.gui.views.form_env import read_api_key, write_api_key
+from src.gui.views.form_env import (
+    read_api_key,
+    read_glm_api_key,
+    write_api_key,
+    write_glm_api_key,
+)
 from src.gui.views.profile_section import build_profile_section
 from src.gui.workers import PipelineArgs
 
@@ -219,6 +224,7 @@ def build_form_view(
         value=cfg.get("last_analyzer_model", "gemini-2.5-flash"),
         options=[
             ft.dropdown.Option("gemini-2.5-flash", "gemini-2.5-flash"),
+            ft.dropdown.Option("glm-4.7-flash", "glm-4.7-flash"),
             ft.dropdown.Option("gemma3-4b-custom", "gemma3-4b-custom (local)"),
             ft.dropdown.Option("qwen7b-custom", "qwen7b-custom"),
         ],
@@ -258,6 +264,7 @@ def build_form_view(
         value=cfg.get("last_prompt_model", "gemini-2.5-flash"),
         options=[
             ft.dropdown.Option("gemini-2.5-flash", "gemini-2.5-flash"),
+            ft.dropdown.Option("glm-4.7-flash", "glm-4.7-flash"),
             ft.dropdown.Option("gemma3-4b-custom", "gemma3-4b-custom (local)"),
             ft.dropdown.Option("qwen7b-custom", "qwen7b-custom"),
         ],
@@ -287,7 +294,7 @@ def build_form_view(
     )
 
     # ------------------------------------------------------------------
-    # Google API Key
+    # Cloud API keys (Google Gemini, Zhipu GLM)
     # ------------------------------------------------------------------
     api_key_field = ft.TextField(
         label="Google API Key",
@@ -304,6 +311,22 @@ def build_form_view(
         write_api_key(api_key_field.value or "")
 
     api_key_field.on_blur = _on_api_key_blur
+
+    glm_api_key_field = ft.TextField(
+        label="GLM API Key",
+        hint_text="...",
+        value=read_glm_api_key(),
+        password=True,
+        can_reveal_password=True,
+        expand=True,
+        border_color=ft.Colors.OUTLINE,
+        focused_border_color=ft.Colors.PRIMARY,
+    )
+
+    def _on_glm_api_key_blur(e: ft.ControlEvent) -> None:
+        write_glm_api_key(glm_api_key_field.value or "")
+
+    glm_api_key_field.on_blur = _on_glm_api_key_blur
 
     # ------------------------------------------------------------------
     # Start button
@@ -440,11 +463,12 @@ def build_form_view(
                         use_prompt_switch,
                         ft.Row(controls=[prompt_model_field]),
                         hairline(),
-                        # --- API Key ---
+                        # --- API Keys ---
                         section_label("Credenciais"),
                         ft.Row(controls=[api_key_field]),
+                        ft.Row(controls=[glm_api_key_field]),
                         ft.Text(
-                            "Necessária apenas para modelos Gemini. Salva automaticamente no .env.",
+                            "Necessária apenas para modelos Gemini/GLM. Salva automaticamente no .env.",
                             size=Type.small.size,
                             color=ft.Colors.ON_SURFACE_VARIANT,
                             italic=True,

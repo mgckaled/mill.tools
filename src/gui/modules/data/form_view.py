@@ -24,10 +24,11 @@ from src.gui.theme.components import (
     section_label,
 )
 from src.gui.theme.tokens import IconSize, Radius, Space, Type
+from src.llm_factory import is_cloud_model
 
 # NL→SQL models, recommended first: gemma3-4b is the quality/speed sweet spot on
-# this CPU; qwen7b is heavier/slower; gemini is the cloud opt-in (schema only).
-_MODELS = ["gemma3-4b-custom", "qwen7b-custom", "gemini-2.5-flash"]
+# this CPU; qwen7b is heavier/slower; gemini/glm are the cloud opt-ins (schema only).
+_MODELS = ["gemma3-4b-custom", "qwen7b-custom", "gemini-2.5-flash", "glm-4.7-flash"]
 
 # Picker extensions are the supported exts without the leading dot.
 _ALLOWED_EXTS = sorted(e.lstrip(".") for e in SUPPORTED_EXTS)
@@ -45,10 +46,6 @@ class DataForm:
     get_files: Callable[[], list]
     set_running: Callable[[bool], None]
     set_text: Callable[[str], None]
-
-
-def _is_gemini(model: str) -> bool:
-    return model.lower().startswith("gemini")
 
 
 def build_data_form(
@@ -230,7 +227,7 @@ def build_data_form(
         _safe_update(query_box)
 
     gemini_note = ft.Container(
-        visible=_is_gemini(cfg.get("last_data_model", "gemma3-4b-custom")),
+        visible=is_cloud_model(cfg.get("last_data_model", "gemma3-4b-custom")),
         bgcolor=ft.Colors.with_opacity(0.08, ft.Colors.PRIMARY),
         border_radius=Radius.sm,
         padding=ft.Padding(
@@ -242,8 +239,8 @@ def build_data_form(
                     ft.Icons.CLOUD_OUTLINED, size=IconSize.md, color=ft.Colors.PRIMARY
                 ),
                 ft.Text(
-                    "Com Gemini, só os nomes de coluna saem da máquina. O conteúdo "
-                    "das tabelas fica 100% local no DuckDB.",
+                    "Com modelos em nuvem (Gemini/GLM), só os nomes de coluna saem "
+                    "da máquina. O conteúdo das tabelas fica 100% local no DuckDB.",
                     size=Type.small.size,
                     color=ft.Colors.ON_SURFACE_VARIANT,
                     expand=True,
@@ -258,7 +255,7 @@ def build_data_form(
     def _on_model_select(e: ft.ControlEvent) -> None:
         value = e.control.value or "gemma3-4b-custom"
         settings.set("last_data_model", value)
-        gemini_note.visible = _is_gemini(value)
+        gemini_note.visible = is_cloud_model(value)
         _safe_update(gemini_note)
 
     model_dd = ft.Dropdown(

@@ -16,6 +16,7 @@ import flet as ft
 from src.core.rag.embedder import SETUP_HINT
 from src.core.rag.templates import load_templates
 from src.gui import settings
+from src.llm_factory import is_cloud_model
 from src.gui.theme.components import (
     Cursor,
     help_icon_for,
@@ -34,12 +35,13 @@ _SCOPE_LABELS = {
 }
 # Answer models, recommended first: gemma3-4b is the quality/speed sweet spot for
 # RAG synthesis + citation on this CPU; gemma3-1b is the fast/low-RAM fallback;
-# qwen7b is slowest/heaviest; gemini is the cloud opt-in.
+# qwen7b is slowest/heaviest; gemini/glm are the cloud opt-ins.
 _MODELS = [
     "gemma3-4b-custom",
     "gemma3-1b-custom",
     "qwen7b-custom",
     "gemini-2.5-flash",
+    "glm-4.7-flash",
 ]
 
 
@@ -55,10 +57,6 @@ class AiForm:
     set_available: Callable[[bool], None]
     bind_document: Callable[[str | None], None]
     clear_query: Callable[[], None]
-
-
-def _is_gemini(model: str) -> bool:
-    return model.lower().startswith("gemini")
 
 
 def _all_border(width: float, color: str) -> ft.Border:
@@ -169,9 +167,9 @@ def build_ai_form(page: ft.Page, *, on_ask: Callable[[], None]) -> AiForm:
         value = get_scope_value()
         return None if value == "all" else value
 
-    # ── answer model + Gemini privacy note ────────────────────────────────
-    gemini_warning = ft.Container(
-        visible=_is_gemini(cfg.get("last_ai_model", "gemma3-4b-custom")),
+    # ── answer model + cloud privacy note ────────────────────────────────
+    cloud_warning = ft.Container(
+        visible=is_cloud_model(cfg.get("last_ai_model", "gemma3-4b-custom")),
         bgcolor=ft.Colors.with_opacity(0.08, ft.Colors.PRIMARY),
         border_radius=Radius.sm,
         padding=ft.Padding(
@@ -183,8 +181,9 @@ def build_ai_form(page: ft.Page, *, on_ask: Callable[[], None]) -> AiForm:
                     ft.Icons.CLOUD_OUTLINED, size=IconSize.md, color=ft.Colors.PRIMARY
                 ),
                 ft.Text(
-                    "Com Gemini, os trechos recuperados são enviados à nuvem no "
-                    "passo de resposta. Os embeddings continuam locais.",
+                    "Com modelos em nuvem (Gemini/GLM), os trechos recuperados são "
+                    "enviados a um provedor externo no passo de resposta. Os "
+                    "embeddings continuam locais.",
                     size=Type.small.size,
                     color=ft.Colors.ON_SURFACE_VARIANT,
                     expand=True,
@@ -199,8 +198,8 @@ def build_ai_form(page: ft.Page, *, on_ask: Callable[[], None]) -> AiForm:
     def _on_model_select(e: ft.ControlEvent) -> None:
         value = e.control.value or "gemma3-4b-custom"
         settings.set("last_ai_model", value)
-        gemini_warning.visible = _is_gemini(value)
-        _safe_update(gemini_warning)
+        cloud_warning.visible = is_cloud_model(value)
+        _safe_update(cloud_warning)
 
     model_dd = ft.Dropdown(
         label="Modelo da resposta",
@@ -309,7 +308,7 @@ def build_ai_form(page: ft.Page, *, on_ask: Callable[[], None]) -> AiForm:
             doc_chip,
             section_label("Resposta"),
             model_dd,
-            gemini_warning,
+            cloud_warning,
             section_label("Modelos de prompt"),
             prompt_chips,
             question,
