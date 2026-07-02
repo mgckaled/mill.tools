@@ -9,14 +9,23 @@ backwards compatibility with the project's original 100% local pipeline.
 
 Gemini usage requires GOOGLE_API_KEY, GLM usage requires ZHIPU_API_KEY, both in
 a .env file at the project root.
+
+`make_llm()` is also the single funnel every text/vision LLM call in the project
+goes through (formatter/analyzer/prompter/RAG chat/data.assess/data.nl2sql, plus
+the cloud branch of image description) — so it is the one place a `domain`-tagged
+timing callback (see `_TimingCallback`) can observe every call without touching
+each of those call sites.
 """
 
 import logging
 import os
+import time
 from pathlib import Path
 from typing import TYPE_CHECKING
+from uuid import UUID
 
 from dotenv import load_dotenv
+from langchain_core.callbacks import BaseCallbackHandler
 
 if TYPE_CHECKING:  # avoid hard import at module load — keeps Ollama-only runs fast
     from langchain_core.language_models.chat_models import BaseChatModel
@@ -122,12 +131,56 @@ def _load_env_once() -> None:
     load_dotenv(env_path)
 
 
-def _make_gemini(model_name: str, temperature: float) -> "BaseChatModel":
+class _TimingCallback(BaseCallbackHandler):
+    """Records the wall-clock latency of each raw LLM call.
+
+    Fires automatically via LangChain's on_llm_start/on_llm_end hooks for any
+    Runnable built as `prompt | llm` — no call-site changes needed in
+    formatter/analyzer/prompter/chat/assess/nl2sql. Keyed by run_id (not a
+    single shared timestamp) so a model instance reused across several
+    sequential `.invoke()` calls — e.g. analyzer's chunk+merge loop — times
+    each call independently.
+    """
+
+    def __init__(self, model_name: str, domain: str) -> None:
+        self._model_name = model_name
+        self._domain = domain
+        self._starts: dict[UUID, float] = {}
+
+    def on_llm_start(self, serialized, prompts, *, run_id: UUID, **kwargs) -> None:
+        self._starts[run_id] = time.monotonic()
+
+    def on_llm_end(self, response, *, run_id: UUID, **kwargs) -> None:
+        t0 = self._starts.pop(run_id, None)
+        if t0 is not None:
+            from src.core.observatory.model_timing import record_timing
+
+            record_timing(self._model_name, self._domain, time.monotonic() - t0)
+
+    def on_llm_error(self, error, *, run_id: UUID, **kwargs) -> None:
+        self._starts.pop(run_id, None)  # discard — don't record failed calls
+
+
+def timing_callbacks(model_name: str, domain: str) -> list[BaseCallbackHandler]:
+    """Build the callback list that records this model's latency by domain.
+
+    Public so callers that build a chat model without going through make_llm()
+    (describe.py's local-Ollama branch) can attach the same instrumentation.
+    """
+    return [_TimingCallback(model_name, domain)]
+
+
+def _make_gemini(
+    model_name: str,
+    temperature: float,
+    callbacks: list[BaseCallbackHandler] | None = None,
+) -> "BaseChatModel":
     """Instantiate a ChatGoogleGenerativeAI with project-wide defaults.
 
     Args:
         model_name: Gemini model identifier (e.g. "gemini-2.5-flash").
         temperature: Sampling temperature.
+        callbacks: LangChain callback handlers to attach (e.g. timing).
 
     Returns:
         A ChatGoogleGenerativeAI configured with API key from environment.
@@ -158,15 +211,21 @@ def _make_gemini(model_name: str, temperature: float) -> "BaseChatModel":
         google_api_key=api_key,
         max_retries=GEMINI_DEFAULT_MAX_RETRIES,
         timeout=GEMINI_DEFAULT_TIMEOUT,
+        callbacks=callbacks,
     )
 
 
-def _make_glm(model_name: str, temperature: float) -> "BaseChatModel":
+def _make_glm(
+    model_name: str,
+    temperature: float,
+    callbacks: list[BaseCallbackHandler] | None = None,
+) -> "BaseChatModel":
     """Instantiate a ChatOpenAI pointed at Zhipu/Z.ai's OpenAI-compatible API.
 
     Args:
         model_name: GLM model identifier (e.g. "glm-4.7-flash").
         temperature: Sampling temperature.
+        callbacks: LangChain callback handlers to attach (e.g. timing).
 
     Returns:
         A ChatOpenAI configured with GLM_BASE_URL and API key from environment.
@@ -198,6 +257,7 @@ def _make_glm(model_name: str, temperature: float) -> "BaseChatModel":
         base_url=GLM_BASE_URL,
         max_retries=GLM_DEFAULT_MAX_RETRIES,
         timeout=GLM_DEFAULT_TIMEOUT,
+        callbacks=callbacks,
     )
 
 
@@ -205,6 +265,7 @@ def _make_ollama(
     model_name: str,
     temperature: float,
     num_ctx: int = DEFAULT_OLLAMA_NUM_CTX,
+    callbacks: list[BaseCallbackHandler] | None = None,
 ) -> "BaseChatModel":
     """Instantiate a ChatOllama for local inference.
 
@@ -213,6 +274,7 @@ def _make_ollama(
         temperature: Sampling temperature.
         num_ctx: Context window in tokens. Overrides Ollama's 2048 default so the
             verbose structured JSON the analyzer/prompter emit is not truncated.
+        callbacks: LangChain callback handlers to attach (e.g. timing).
 
     Returns:
         A ChatOllama instance.
@@ -233,6 +295,7 @@ def _make_ollama(
         temperature=temperature,
         num_ctx=num_ctx,
         client_kwargs={"timeout": 300.0},
+        callbacks=callbacks,
     )
 
 
@@ -240,6 +303,8 @@ def make_llm(
     model_name: str,
     temperature: float = 0.0,
     num_ctx: int = DEFAULT_OLLAMA_NUM_CTX,
+    *,
+    domain: str = "llm",
 ) -> "BaseChatModel":
     """Return a LangChain chat model routed by name prefix.
 
@@ -251,6 +316,9 @@ def make_llm(
         model_name: Model identifier as received from the CLI (--fm/--am/--pm).
         temperature: Sampling temperature (0.0 = deterministic, 1.0 = creative).
         num_ctx: Ollama context window in tokens (ignored for cloud providers).
+        domain: Timing bucket recorded for every call this model makes — "llm"
+            (default, covers all text pipelines) or "vlm" (image description's
+            cloud branch passes this explicitly). See _TimingCallback.
 
     Returns:
         A LangChain BaseChatModel compatible with the existing `prompt | llm`
@@ -259,8 +327,9 @@ def make_llm(
     Raises:
         RuntimeError: If a Gemini/GLM model is requested without its API key set.
     """
+    callbacks = timing_callbacks(model_name, domain)
     if _is_gemini(model_name):
-        return _make_gemini(model_name, temperature)
+        return _make_gemini(model_name, temperature, callbacks)
     if _is_glm(model_name):
-        return _make_glm(model_name, temperature)
-    return _make_ollama(model_name, temperature, num_ctx)
+        return _make_glm(model_name, temperature, callbacks)
+    return _make_ollama(model_name, temperature, num_ctx, callbacks)

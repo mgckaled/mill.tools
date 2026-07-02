@@ -101,7 +101,9 @@ def test_make_llm_routes_ollama(mocker):
     from src.llm_factory import DEFAULT_OLLAMA_NUM_CTX, make_llm
 
     make_llm("qwen7b-custom", temperature=0.4)
-    mock_ollama.assert_called_once_with("qwen7b-custom", 0.4, DEFAULT_OLLAMA_NUM_CTX)
+    args, _ = mock_ollama.call_args
+    assert args[:3] == ("qwen7b-custom", 0.4, DEFAULT_OLLAMA_NUM_CTX)
+    assert len(args[3]) == 1  # timing callbacks list
 
 
 @pytest.mark.unit
@@ -127,7 +129,9 @@ def test_make_llm_routes_gemini(mocker, monkeypatch):
     from src.llm_factory import make_llm
 
     make_llm("gemini-2.5-flash", temperature=0.0)
-    mock_gemini.assert_called_once_with("gemini-2.5-flash", 0.0)
+    args, _ = mock_gemini.call_args
+    assert args[:2] == ("gemini-2.5-flash", 0.0)
+    assert len(args[2]) == 1  # timing callbacks list
 
 
 @pytest.mark.unit
@@ -138,7 +142,9 @@ def test_make_llm_routes_glm(mocker, monkeypatch):
     from src.llm_factory import make_llm
 
     make_llm("glm-4.7-flash", temperature=0.0)
-    mock_glm.assert_called_once_with("glm-4.7-flash", 0.0)
+    args, _ = mock_glm.call_args
+    assert args[:2] == ("glm-4.7-flash", 0.0)
+    assert len(args[2]) == 1  # timing callbacks list
 
 
 @pytest.mark.unit
@@ -159,3 +165,98 @@ def test_make_glm_passes_base_url_and_api_key_to_chatopenai(mocker, monkeypatch)
     assert kwargs["temperature"] == 0.2
     assert kwargs["api_key"] == "fake-zhipu-key"
     assert kwargs["base_url"] == GLM_BASE_URL
+
+
+@pytest.mark.unit
+def test_make_ollama_forwards_callbacks_to_chatollama(mocker):
+    """callbacks= must reach ChatOllama unchanged (timing instrumentation)."""
+    import sys
+    from unittest.mock import MagicMock
+
+    fake_mod = MagicMock()
+    mocker.patch.dict(sys.modules, {"langchain_ollama": fake_mod})
+    from src.llm_factory import _make_ollama, timing_callbacks
+
+    cbs = timing_callbacks("qwen7b-custom", "llm")
+    _make_ollama("qwen7b-custom", 0.4, callbacks=cbs)
+    _, kwargs = fake_mod.ChatOllama.call_args
+    assert kwargs["callbacks"] is cbs
+
+
+@pytest.mark.unit
+def test_make_llm_domain_defaults_to_llm(mocker):
+    """make_llm() without an explicit domain tags every call site 'llm'."""
+    mock_ollama = mocker.patch("src.llm_factory._make_ollama")
+    from src.llm_factory import make_llm
+
+    make_llm("qwen7b-custom")
+    args, _ = mock_ollama.call_args
+    callback = args[3][0]
+    assert callback._domain == "llm"
+
+
+@pytest.mark.unit
+def test_make_llm_domain_vlm_is_forwarded(mocker, monkeypatch):
+    """describe.py's cloud branch passes domain='vlm' explicitly."""
+    monkeypatch.setenv("GOOGLE_API_KEY", "fake-key-for-test")
+    mock_gemini = mocker.patch("src.llm_factory._make_gemini")
+    from src.llm_factory import make_llm
+
+    make_llm("gemini-2.5-flash", domain="vlm")
+    args, _ = mock_gemini.call_args
+    callback = args[2][0]
+    assert callback._domain == "vlm"
+
+
+@pytest.mark.unit
+def test_timing_callback_records_elapsed_on_llm_end(mocker):
+    """on_llm_start -> on_llm_end records a positive elapsed via record_timing."""
+    from uuid import uuid4
+
+    from src.llm_factory import _TimingCallback
+
+    mock_record = mocker.patch("src.core.observatory.model_timing.record_timing")
+    cb = _TimingCallback("gemini-2.5-flash", "llm")
+    run_id = uuid4()
+
+    cb.on_llm_start({}, [], run_id=run_id)
+    cb.on_llm_end(object(), run_id=run_id)
+
+    mock_record.assert_called_once()
+    args, _ = mock_record.call_args
+    assert args[0] == "gemini-2.5-flash"
+    assert args[1] == "llm"
+    assert args[2] > 0
+
+
+@pytest.mark.unit
+def test_timing_callback_skips_recording_on_llm_error(mocker):
+    """A failed call must not be recorded — on_llm_error just discards the start."""
+    from uuid import uuid4
+
+    from src.llm_factory import _TimingCallback
+
+    mock_record = mocker.patch("src.core.observatory.model_timing.record_timing")
+    cb = _TimingCallback("gemini-2.5-flash", "llm")
+    run_id = uuid4()
+
+    cb.on_llm_start({}, [], run_id=run_id)
+    cb.on_llm_error(RuntimeError("boom"), run_id=run_id)
+
+    mock_record.assert_not_called()
+    assert run_id not in cb._starts
+
+
+@pytest.mark.unit
+def test_timing_callback_ignores_end_without_matching_start(mocker):
+    """on_llm_end for an unknown run_id (e.g. handler reused oddly) is a no-op."""
+    from uuid import uuid4
+
+    from src.llm_factory import _TimingCallback
+
+    mock_record = mocker.patch("src.core.observatory.model_timing.record_timing")
+    cb = _TimingCallback("gemini-2.5-flash", "llm")
+
+    cb.on_llm_end(object(), run_id=uuid4())
+
+    mock_record.assert_not_called()
