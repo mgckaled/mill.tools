@@ -106,6 +106,29 @@ def test_binary_statuses_reflects_a_resolved_binary(mocker):
 
 
 @pytest.mark.unit
+def test_cloud_provider_statuses_reflects_configured_keys(monkeypatch):
+    monkeypatch.setattr("src.llm_factory._load_env_once", lambda: None)
+    monkeypatch.setenv("GOOGLE_API_KEY", "fake-key")
+    monkeypatch.delenv("ZHIPU_API_KEY", raising=False)
+
+    providers = status.cloud_provider_statuses()
+    by_name = {p.name: p.configured for p in providers}
+    assert by_name["Gemini (GOOGLE_API_KEY)"] is True
+    assert by_name["GLM (ZHIPU_API_KEY)"] is False
+
+
+@pytest.mark.unit
+def test_cloud_provider_statuses_never_touches_the_real_env_file(monkeypatch):
+    """A missing/absent .env must not raise — only reflect absence."""
+    monkeypatch.setattr("src.llm_factory._load_env_once", lambda: None)
+    monkeypatch.delenv("GOOGLE_API_KEY", raising=False)
+    monkeypatch.delenv("ZHIPU_API_KEY", raising=False)
+
+    providers = status.cloud_provider_statuses()
+    assert all(p.configured is False for p in providers)
+
+
+@pytest.mark.unit
 def test_domain_statuses_covers_all_three_domains(tmp_path):
     domains = status.domain_statuses(directory=tmp_path)
     assert {d.domain for d in domains} == {

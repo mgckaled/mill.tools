@@ -14,6 +14,7 @@ import pytest
 
 from src.gui.modules.observatory.status_tab import (
     _binary_row,
+    _cloud_provider_row,
     _glossary_row,
     _ollama_rows,
     _section_header,
@@ -96,6 +97,22 @@ def test_binary_row_shows_not_found_message():
 
 
 @pytest.mark.unit
+def test_cloud_provider_row_shows_configured():
+    from src.core.observatory.status import CloudProviderStatus
+
+    row = _cloud_provider_row(CloudProviderStatus("Gemini (GOOGLE_API_KEY)", True))
+    assert "configurado" in row.controls[2].value
+
+
+@pytest.mark.unit
+def test_cloud_provider_row_shows_missing_key():
+    from src.core.observatory.status import CloudProviderStatus
+
+    row = _cloud_provider_row(CloudProviderStatus("GLM (ZHIPU_API_KEY)", False))
+    assert "chave ausente" in row.controls[2].value
+
+
+@pytest.mark.unit
 def test_section_header_without_help_returns_plain_label():
     header = _section_header("Sem ajuda", "chave.inexistente", MagicMock())
     assert isinstance(header, ft.Text)
@@ -115,6 +132,7 @@ def test_section_header_with_help_returns_row_with_icon():
         "observatory.gates",
         "observatory.ollama",
         "observatory.binaries",
+        "observatory.cloud",
         "observatory.classify",
         "observatory.config",
     ],

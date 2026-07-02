@@ -56,6 +56,14 @@ class BinaryStatus:
 
 
 @dataclass(frozen=True, slots=True)
+class CloudProviderStatus:
+    """Whether a cloud LLM provider's API key is configured (.env)."""
+
+    name: str
+    configured: bool
+
+
+@dataclass(frozen=True, slots=True)
 class OllamaModelStatus:
     """Whether one of the app's *-custom Ollama models is pulled locally."""
 
@@ -199,6 +207,28 @@ def binary_statuses() -> tuple[BinaryStatus, ...]:
         BinaryStatus("ffmpeg", shutil.which("ffmpeg")),
         BinaryStatus("ffprobe", shutil.which("ffprobe")),
         BinaryStatus("tesseract", _resolve_tesseract_cmd()),
+    )
+
+
+def cloud_provider_statuses() -> tuple[CloudProviderStatus, ...]:
+    """Whether the opt-in cloud providers (Gemini, GLM) have an API key set.
+
+    Never reveals the key itself — presence/absence only. Reuses
+    ``llm_factory``'s own ``.env`` loader (idempotent, same one ``make_llm``
+    uses) rather than re-implementing ``.env`` parsing here; ``core/data/
+    nl2sql.py`` already sets the precedent of ``core/`` importing
+    ``src.llm_factory`` directly.
+    """
+    import os
+
+    from src.llm_factory import _load_env_once
+
+    _load_env_once()
+    return (
+        CloudProviderStatus(
+            "Gemini (GOOGLE_API_KEY)", bool(os.getenv("GOOGLE_API_KEY"))
+        ),
+        CloudProviderStatus("GLM (ZHIPU_API_KEY)", bool(os.getenv("ZHIPU_API_KEY"))),
     )
 
 

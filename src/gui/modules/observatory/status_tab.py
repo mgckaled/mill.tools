@@ -95,6 +95,20 @@ def _binary_row(b: status.BinaryStatus) -> ft.Row:
     )
 
 
+def _cloud_provider_row(p: status.CloudProviderStatus) -> ft.Row:
+    icon = ft.Icons.CHECK_CIRCLE_OUTLINE if p.configured else ft.Icons.CANCEL_OUTLINED
+    color = ft.Colors.GREEN if p.configured else ft.Colors.ON_SURFACE_VARIANT
+    detail = "configurado" if p.configured else "chave ausente"
+    return ft.Row(
+        controls=[
+            ft.Icon(icon, size=Type.body.size, color=color),
+            ft.Text(p.name, size=Type.body.size, color=ft.Colors.ON_SURFACE),
+            ft.Text(detail, size=Type.caption.size, color=ft.Colors.ON_SURFACE_VARIANT),
+        ],
+        spacing=Space.sm,
+    )
+
+
 def _ollama_model_row(m: status.OllamaModelStatus) -> ft.Row:
     icon = ft.Icons.CHECK_CIRCLE_OUTLINE if m.installed else ft.Icons.CANCEL_OUTLINED
     color = ft.Colors.GREEN if m.installed else ft.Colors.ON_SURFACE_VARIANT
@@ -144,6 +158,7 @@ def build_status_tab(page: ft.Page) -> tuple[ft.Control, Callable[[], None]]:
     gates_col = ft.Column(spacing=Space.xs)
     ollama_col = ft.Column(spacing=Space.xs)
     binaries_col = ft.Column(spacing=Space.xs)
+    cloud_col = ft.Column(spacing=Space.xs)
     domains_col = ft.Column(spacing=Space.xs)
     config_col = ft.Column(spacing=Space.xs)
 
@@ -157,6 +172,9 @@ def build_status_tab(page: ft.Page) -> tuple[ft.Control, Callable[[], None]]:
             hairline(),
             _section_header("Binários externos", "observatory.binaries", page),
             binaries_col,
+            hairline(),
+            _section_header("Provedores de nuvem", "observatory.cloud", page),
+            cloud_col,
             hairline(),
             _section_header(
                 "Classificador (por domínio)", "observatory.classify", page
@@ -177,6 +195,9 @@ def build_status_tab(page: ft.Page) -> tuple[ft.Control, Callable[[], None]]:
         ]
         ollama_col.controls = _ollama_rows(status.ollama_inventory())
         binaries_col.controls = [_binary_row(b) for b in status.binary_statuses()]
+        cloud_col.controls = [
+            _cloud_provider_row(p) for p in status.cloud_provider_statuses()
+        ]
         domains_col.controls = [_domain_row(d) for d in status.domain_statuses()]
 
         snap = status.config_snapshot()

@@ -302,6 +302,10 @@ HELP_SHORT: dict[str, str] = {
         "Onde o app encontrou (ou não) os binários externos que ele invoca "
         "via subprocess — yt-dlp, ffmpeg, ffprobe e Tesseract."
     ),
+    "observatory.cloud": (
+        "Se GOOGLE_API_KEY/ZHIPU_API_KEY estão presentes no .env — nunca "
+        "mostra a chave em si, só se está configurada."
+    ),
     "observatory.classify": (
         "Quantos rótulos de treino existem por domínio e se o classificador já "
         "usa um modelo supervisionado ou ainda está em zero-shot."
@@ -608,6 +612,15 @@ HELP_LONG: dict[str, str] = {
         "Um X aqui explica na hora por que um download trava ou um OCR "
         "recusa rodar, sem precisar abrir um terminal e testar cada binário "
         "manualmente."
+    ),
+    "observatory.cloud": (
+        "Gemini e GLM são opt-in — o app funciona 100% local sem nenhum dos "
+        "dois. Configurar a chave em Configurações (engrenagem no AppBar → "
+        "Credenciais) libera os modelos gemini-*/glm-* nos seletores de "
+        "modelo da Transcrição, IA, Dados e descrição de imagens.\n\n"
+        "Esta linha só confirma presença/ausência da chave no .env — nunca "
+        "lê nem exibe o valor. Uma chave 'configurada' mas inválida/expirada "
+        "só aparece como erro na hora de usar o modelo, não aqui."
     ),
     "observatory.classify": (
         "O classificador de perfil/domínio (core/ml/classify.py) começa em "

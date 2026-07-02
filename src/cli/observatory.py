@@ -97,6 +97,12 @@ def _run_status(ns: argparse.Namespace) -> None:
         detail = b.path or "não encontrado no PATH"
         print(f"  {mark} {b.name}: {detail}")
 
+    print("\nProvedores de nuvem:")
+    for p in status.cloud_provider_statuses():
+        mark = "[✓]" if p.configured else "[✗]"
+        detail = "configurado" if p.configured else "chave ausente"
+        print(f"  {mark} {p.name}: {detail}")
+
     print("\nClassificador (por domínio):")
     for d in status.domain_statuses():
         method = "supervisionado" if d.supervised else "zero-shot"

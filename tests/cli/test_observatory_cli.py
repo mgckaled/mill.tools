@@ -40,6 +40,7 @@ def test_activity_parser_custom_limit():
 def test_run_status_prints_every_section(mocker, capsys):
     from src.core.observatory.status import (
         BinaryStatus,
+        CloudProviderStatus,
         DomainStatus,
         EntityGlossaryStatus,
         GateStatus,
@@ -74,6 +75,13 @@ def test_run_status_prints_every_section(mocker, capsys):
         ),
     )
     mocker.patch(
+        "src.core.observatory.status.cloud_provider_statuses",
+        return_value=(
+            CloudProviderStatus("Gemini (GOOGLE_API_KEY)", True),
+            CloudProviderStatus("GLM (ZHIPU_API_KEY)", False),
+        ),
+    )
+    mocker.patch(
         "src.core.observatory.status.domain_statuses",
         return_value=(DomainStatus("data_domain", 2, False),),
     )
@@ -97,6 +105,9 @@ def test_run_status_prints_every_section(mocker, capsys):
     assert "Binários externos" in out
     assert "[✓] ffmpeg: /usr/bin/ffmpeg" in out
     assert "[✗] tesseract: não encontrado no PATH" in out
+    assert "Provedores de nuvem" in out
+    assert "[✓] Gemini (GOOGLE_API_KEY): configurado" in out
+    assert "[✗] GLM (ZHIPU_API_KEY): chave ausente" in out
     assert "Domínio de dados" in out
     assert "Configuração em vigor" in out
     assert "LLM (texto)" in out
