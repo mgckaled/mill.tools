@@ -42,6 +42,17 @@ def add_observatory_parser(subparsers) -> None:
     )
     activity_p.add_argument("--verbose", action="store_true", help="Logging DEBUG")
 
+    logs_p = sub.add_parser(
+        "logs", help="Falhas (task_error) recentes entre todos os módulos"
+    )
+    logs_p.add_argument(
+        "--limit",
+        type=int,
+        default=50,
+        help="Quantidade de falhas exibidas (default: 50)",
+    )
+    logs_p.add_argument("--verbose", action="store_true", help="Logging DEBUG")
+
     p.set_defaults(func=run_observatory_cli)
 
 
@@ -108,8 +119,20 @@ def _run_activity(ns: argparse.Namespace) -> None:
         print(f"{_fmt_time(e.timestamp)}  {e.module:<12}  {e.detail}")
 
 
+def _run_logs(ns: argparse.Namespace) -> None:
+    """Run the `observatory logs` operation."""
+    from src.core.observatory.logs import load_logs, recent
+
+    entries = recent(load_logs(), limit=ns.limit)
+    if not entries:
+        print("Nenhuma falha registrada.")
+        return
+    for e in entries:
+        print(f"{_fmt_time(e.timestamp)}  {e.module:<12}  {e.stage:<14}  {e.message}")
+
+
 def run_observatory_cli(ns: argparse.Namespace) -> None:
-    """Dispatch the `observatory` subcommand: `status` or `activity`."""
+    """Dispatch the `observatory` subcommand: `status`, `activity` or `logs`."""
     try:
         sys.stdout.reconfigure(encoding="utf-8", errors="replace")
     except Exception:
@@ -117,5 +140,7 @@ def run_observatory_cli(ns: argparse.Namespace) -> None:
 
     if ns.observatory_op == "status":
         _run_status(ns)
-    else:
+    elif ns.observatory_op == "activity":
         _run_activity(ns)
+    else:
+        _run_logs(ns)

@@ -128,3 +128,42 @@ def test_run_activity_empty(mocker, capsys):
     ns = _parse("activity")
     ns.func(ns)
     assert "Nenhuma atividade" in capsys.readouterr().out
+
+
+@pytest.mark.unit
+def test_logs_parser_defaults():
+    ns = _parse("logs")
+    assert ns.observatory_op == "logs"
+    assert ns.limit == 50
+
+
+@pytest.mark.unit
+def test_logs_parser_custom_limit():
+    ns = _parse("logs", "--limit", "5")
+    assert ns.limit == 5
+
+
+@pytest.mark.unit
+def test_run_logs_prints_entries(mocker, capsys):
+    from src.core.observatory.logs import LogEntry
+
+    mocker.patch(
+        "src.core.observatory.logs.load_logs",
+        return_value=[LogEntry("audio", "convert", "ffmpeg not found", 100.0)],
+    )
+
+    ns = _parse("logs")
+    ns.func(ns)
+
+    out = capsys.readouterr().out
+    assert "ffmpeg not found" in out
+    assert "audio" in out
+    assert "convert" in out
+
+
+@pytest.mark.unit
+def test_run_logs_empty(mocker, capsys):
+    mocker.patch("src.core.observatory.logs.load_logs", return_value=[])
+    ns = _parse("logs")
+    ns.func(ns)
+    assert "Nenhuma falha" in capsys.readouterr().out

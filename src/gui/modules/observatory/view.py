@@ -2,8 +2,11 @@
 
 A hub (reached from the AppBar, not the rail), auto-contido like IA/Receitas.
 No worker/pipeline — pure reads over ``core/observatory/`` on each mount, same
-"read-only" spirit as the Library hub. Three manual tabs
-(Atividade | Status | Tempo de resposta) — Flet 0.85 has no ``ft.Tabs``.
+"read-only" spirit as the Library hub. Four manual tabs
+(Status | Atividade | Logs | Tempo de resposta) — Flet 0.85 has no ``ft.Tabs``.
+Status is first/default: it is the single-glance overview of the whole app's
+ML surface (gates, models, binaries, cloud config), the tab most useful to
+land on.
 """
 
 from __future__ import annotations
@@ -16,6 +19,7 @@ import flet as ft
 from src.gui import settings
 from src.gui.modules.base import Module
 from src.gui.modules.observatory.activity_tab import build_activity_tab
+from src.gui.modules.observatory.logs_tab import build_logs_tab
 from src.gui.modules.observatory.status_tab import build_status_tab
 from src.gui.modules.observatory.timing_tab import build_timing_tab
 from src.gui.theme.components import Cursor, hairline
@@ -44,10 +48,12 @@ def build_observatory_module(
         pipeline_running: Shared [bool] with app.py (signature symmetry).
         nav: List holding [navigate_to] (signature symmetry).
     """
-    activity_view, apply_activity = build_activity_tab(page)
     status_view, apply_status = build_status_tab(page)
+    activity_view, apply_activity = build_activity_tab(page)
+    logs_view, apply_logs = build_logs_tab(page)
     timing_view, apply_timing = build_timing_tab(page)
-    status_view.visible = False
+    activity_view.visible = False
+    logs_view.visible = False
     timing_view.visible = False
 
     def _tab_style(active: bool) -> ft.ButtonStyle:
@@ -56,41 +62,51 @@ def build_observatory_module(
             mouse_cursor=Cursor.interactive,
         )
 
-    tab_activity = ft.TextButton(
-        "Atividade", icon=ft.Icons.HISTORY_OUTLINED, style=_tab_style(True)
-    )
     tab_status = ft.TextButton(
-        "Status", icon=ft.Icons.MONITOR_HEART_OUTLINED, style=_tab_style(False)
+        "Status", icon=ft.Icons.MONITOR_HEART_OUTLINED, style=_tab_style(True)
+    )
+    tab_activity = ft.TextButton(
+        "Atividade", icon=ft.Icons.HISTORY_OUTLINED, style=_tab_style(False)
+    )
+    tab_logs = ft.TextButton(
+        "Logs", icon=ft.Icons.ERROR_OUTLINE, style=_tab_style(False)
     )
     tab_timing = ft.TextButton(
         "Tempo de resposta", icon=ft.Icons.SPEED_OUTLINED, style=_tab_style(False)
     )
 
     def _show_tab(name: str) -> None:
-        activity_view.visible = name == "atividade"
         status_view.visible = name == "status"
+        activity_view.visible = name == "atividade"
+        logs_view.visible = name == "logs"
         timing_view.visible = name == "timing"
-        tab_activity.style = _tab_style(name == "atividade")
         tab_status.style = _tab_style(name == "status")
+        tab_activity.style = _tab_style(name == "atividade")
+        tab_logs.style = _tab_style(name == "logs")
         tab_timing.style = _tab_style(name == "timing")
         settings.set("last_observatory_tab", name)
-        if name == "atividade":
-            apply_activity()
-        elif name == "status":
+        if name == "status":
             apply_status()
+        elif name == "atividade":
+            apply_activity()
+        elif name == "logs":
+            apply_logs()
         else:
             apply_timing()
         page.update()
 
-    tab_activity.on_click = lambda _e: _show_tab("atividade")
     tab_status.on_click = lambda _e: _show_tab("status")
+    tab_activity.on_click = lambda _e: _show_tab("atividade")
+    tab_logs.on_click = lambda _e: _show_tab("logs")
     tab_timing.on_click = lambda _e: _show_tab("timing")
 
-    body_stack = ft.Stack([activity_view, status_view, timing_view], expand=True)
+    body_stack = ft.Stack(
+        [status_view, activity_view, logs_view, timing_view], expand=True
+    )
 
     control = ft.Column(
         controls=[
-            ft.Row([tab_activity, tab_status, tab_timing], spacing=Space.xs),
+            ft.Row([tab_status, tab_activity, tab_logs, tab_timing], spacing=Space.xs),
             hairline(),
             ft.Container(content=body_stack, expand=True, padding=Space.md),
         ],
@@ -106,7 +122,7 @@ def build_observatory_module(
         entries = load_activity()
         if entries:
             settings.set("last_ml_activity_seen", entries[-1].timestamp)
-        saved = settings.load().get("last_observatory_tab", "atividade")
+        saved = settings.load().get("last_observatory_tab", "status")
         _show_tab(saved)
 
     return Module(

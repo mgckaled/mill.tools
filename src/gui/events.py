@@ -20,6 +20,16 @@ class PipelineEvent:
     module_id: str = ""  # "transcription" | "audio" | "" (legado — passa por todos)
 
 
+def _is_cancellation(message: str) -> bool:
+    """True for the user-initiated cancellation messages emitted across workers.
+
+    Cancelling is a user action, not a system failure — it must not clutter
+    the Observatório's Logs tab with an expected event every time someone
+    hits Esc.
+    """
+    return "cancel" in message.lower()
+
+
 class EventBus:
     """Publica PipelineEvents de forma thread-safe via page.pubsub."""
 
@@ -33,7 +43,17 @@ class EventBus:
         payload: dict | None = None,
         module_id: str = "",
     ) -> None:
-        self._page.pubsub.send_all(PipelineEvent(type, stage, payload or {}, module_id))
+        payload = payload or {}
+        self._page.pubsub.send_all(PipelineEvent(type, stage, payload, module_id))
+        if type == "task_error":
+            try:
+                message = str(payload.get("message", ""))
+                if not _is_cancellation(message):
+                    from src.core.observatory.logs import log_error
+
+                    log_error(module_id or "?", stage, message)
+            except Exception:
+                pass
 
 
 class LogEventHandler(logging.Handler):
