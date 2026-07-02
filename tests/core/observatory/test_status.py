@@ -30,6 +30,82 @@ def test_gate_statuses_reflects_missing_extra(mocker):
 
 
 @pytest.mark.unit
+def test_gate_statuses_includes_ocr_ai_image_analysis_and_data_plot():
+    gates = status.gate_statuses()
+    names = [g.name for g in gates]
+    assert any("[ocr]" in n for n in names)
+    assert any("[ai-image]" in n for n in names)
+    assert any("[analysis]" in n for n in names)
+    assert any("[data-plot]" in n for n in names)
+
+
+@pytest.mark.unit
+def test_gate_statuses_reflects_missing_ocr(mocker):
+    mocker.patch("src.core.document.ocr.is_available", return_value=False)
+    gates = status.gate_statuses()
+    ocr_gate = next(g for g in gates if g.name.startswith("[ocr]"))
+    assert ocr_gate.available is False
+    assert ocr_gate.hint
+
+
+@pytest.mark.unit
+def test_entity_glossary_status_absent_file(mocker, tmp_path):
+    mocker.patch(
+        "src.core.text.entities._glossary_path",
+        return_value=tmp_path / "entity_glossary.json",
+    )
+    glossary = status.entity_glossary_status()
+    assert glossary.exists is False
+    assert glossary.n_patterns == 0
+
+
+@pytest.mark.unit
+def test_entity_glossary_status_reads_pattern_count(mocker, tmp_path):
+    import json
+
+    glossary_path = tmp_path / "entity_glossary.json"
+    glossary_path.write_text(
+        json.dumps(
+            [
+                {"label": "PRODUCT", "pattern": "mill.tools"},
+                {"label": "ORG", "pattern": "Anthropic"},
+            ]
+        ),
+        encoding="utf-8",
+    )
+    mocker.patch("src.core.text.entities._glossary_path", return_value=glossary_path)
+    glossary = status.entity_glossary_status()
+    assert glossary.exists is True
+    assert glossary.n_patterns == 2
+
+
+@pytest.mark.unit
+def test_binary_statuses_returns_the_four_binaries():
+    binaries = status.binary_statuses()
+    names = [b.name for b in binaries]
+    assert names == ["yt-dlp", "ffmpeg", "ffprobe", "tesseract"]
+
+
+@pytest.mark.unit
+def test_binary_statuses_reflects_a_missing_binary(mocker):
+    mocker.patch("shutil.which", return_value=None)
+    mocker.patch("src.core.document.ocr._resolve_tesseract_cmd", return_value=None)
+    binaries = status.binary_statuses()
+    assert all(b.path is None for b in binaries)
+
+
+@pytest.mark.unit
+def test_binary_statuses_reflects_a_resolved_binary(mocker):
+    mocker.patch("shutil.which", return_value="/usr/bin/ffmpeg")
+    mocker.patch(
+        "src.core.document.ocr._resolve_tesseract_cmd",
+        return_value="/usr/bin/tesseract",
+    )
+    binaries = status.binary_statuses()
+    assert all(b.path is not None for b in binaries)
+
+
+@pytest.mark.unit
 def test_domain_statuses_covers_all_three_domains(tmp_path):
     domains = status.domain_statuses(directory=tmp_path)
     assert {d.domain for d in domains} == {

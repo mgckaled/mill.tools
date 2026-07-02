@@ -76,6 +76,11 @@ def _run_status(ns: argparse.Namespace) -> None:
         mark = "[✓]" if gate.available else "[✗]"
         extra = "" if gate.available else f" — {gate.hint}"
         print(f"  {mark} {gate.name}{extra}")
+    glossary = status.entity_glossary_status()
+    if glossary.exists:
+        print(f"  Glossário de entidades: {glossary.n_patterns} padrão(ões)")
+    else:
+        print("  Glossário de entidades: nenhum arquivo configurado (opcional)")
 
     inventory = status.ollama_inventory()
     print("\nModelos Ollama:")
@@ -85,6 +90,12 @@ def _run_status(ns: argparse.Namespace) -> None:
         for m in inventory.models:
             mark = "[✓]" if m.installed else "[✗]"
             print(f"  {mark} {m.name}")
+
+    print("\nBinários externos:")
+    for b in status.binary_statuses():
+        mark = "[✓]" if b.path else "[✗]"
+        detail = b.path or "não encontrado no PATH"
+        print(f"  {mark} {b.name}: {detail}")
 
     print("\nClassificador (por domínio):")
     for d in status.domain_statuses():

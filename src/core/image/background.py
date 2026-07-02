@@ -1,4 +1,4 @@
-"""Remoção de fundo via rembg (CPU/ONNX). Imports sempre lazy."""
+"""Background removal via rembg (CPU/ONNX). Always lazy imports."""
 
 from __future__ import annotations
 
@@ -14,9 +14,11 @@ _MODEL_LABELS: dict[str, str] = {
     "u2net_human_seg": "humano",
 }
 
+SETUP_HINT = "Instale o extra de remoção de fundo: uv sync --extra ai-image"
+
 
 def is_available() -> bool:
-    """True se rembg + onnxruntime instalados."""
+    """True if rembg + onnxruntime are installed."""
     try:
         import rembg  # noqa: F401
 
@@ -26,14 +28,14 @@ def is_available() -> bool:
 
 
 def create_session(model: str = "u2net"):
-    """Cria sessão rembg. 1ª vez: faz download para ~/.u2net/."""
+    """Create a rembg session. First call downloads the model to ~/.u2net/."""
     import rembg
 
     return rembg.new_session(model)
 
 
 def remove_background(src: Path, out_dir: Path, session) -> Path:
-    """Remove fundo; salva PNG com alpha em out_dir."""
+    """Remove the background; save an alpha PNG to out_dir."""
     return replace_background(src, out_dir, session, bg_mode="transparent")
 
 

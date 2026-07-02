@@ -39,7 +39,9 @@ def test_activity_parser_custom_limit():
 @pytest.mark.unit
 def test_run_status_prints_every_section(mocker, capsys):
     from src.core.observatory.status import (
+        BinaryStatus,
         DomainStatus,
+        EntityGlossaryStatus,
         GateStatus,
         MLConfigSnapshot,
         OllamaInventoryStatus,
@@ -51,6 +53,10 @@ def test_run_status_prints_every_section(mocker, capsys):
         return_value=(GateStatus("[ml]", True, ""), GateStatus("[nlp]", False, "dica")),
     )
     mocker.patch(
+        "src.core.observatory.status.entity_glossary_status",
+        return_value=EntityGlossaryStatus(True, 3),
+    )
+    mocker.patch(
         "src.core.observatory.status.ollama_inventory",
         return_value=OllamaInventoryStatus(
             True,
@@ -58,6 +64,13 @@ def test_run_status_prints_every_section(mocker, capsys):
                 OllamaModelStatus("gemma3-4b-custom", True),
                 OllamaModelStatus("moondream-custom", False),
             ),
+        ),
+    )
+    mocker.patch(
+        "src.core.observatory.status.binary_statuses",
+        return_value=(
+            BinaryStatus("ffmpeg", "/usr/bin/ffmpeg"),
+            BinaryStatus("tesseract", None),
         ),
     )
     mocker.patch(
@@ -77,9 +90,13 @@ def test_run_status_prints_every_section(mocker, capsys):
     assert "Gates e extras" in out
     assert "[✓] [ml]" in out
     assert "[✗] [nlp]" in out and "dica" in out
+    assert "Glossário de entidades: 3 padrão" in out
     assert "Modelos Ollama" in out
     assert "[✓] gemma3-4b-custom" in out
     assert "[✗] moondream-custom" in out
+    assert "Binários externos" in out
+    assert "[✓] ffmpeg: /usr/bin/ffmpeg" in out
+    assert "[✗] tesseract: não encontrado no PATH" in out
     assert "Domínio de dados" in out
     assert "Configuração em vigor" in out
     assert "LLM (texto)" in out

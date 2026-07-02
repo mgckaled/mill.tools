@@ -13,6 +13,8 @@ import flet as ft
 import pytest
 
 from src.gui.modules.observatory.status_tab import (
+    _binary_row,
+    _glossary_row,
     _ollama_rows,
     _section_header,
     build_status_tab,
@@ -62,6 +64,38 @@ def test_ollama_rows_shows_a_single_message_when_unreachable():
 
 
 @pytest.mark.unit
+def test_glossary_row_shows_pattern_count_when_present():
+    from src.core.observatory.status import EntityGlossaryStatus
+
+    row = _glossary_row(EntityGlossaryStatus(exists=True, n_patterns=3))
+    assert "3 padrão" in row.controls[1].value
+
+
+@pytest.mark.unit
+def test_glossary_row_shows_optional_message_when_absent():
+    from src.core.observatory.status import EntityGlossaryStatus
+
+    row = _glossary_row(EntityGlossaryStatus(exists=False, n_patterns=0))
+    assert "nenhum arquivo configurado" in row.controls[1].value
+
+
+@pytest.mark.unit
+def test_binary_row_shows_resolved_path():
+    from src.core.observatory.status import BinaryStatus
+
+    row = _binary_row(BinaryStatus("ffmpeg", "/usr/bin/ffmpeg"))
+    assert "/usr/bin/ffmpeg" in row.controls[2].value
+
+
+@pytest.mark.unit
+def test_binary_row_shows_not_found_message():
+    from src.core.observatory.status import BinaryStatus
+
+    row = _binary_row(BinaryStatus("tesseract", None))
+    assert "não encontrado" in row.controls[2].value
+
+
+@pytest.mark.unit
 def test_section_header_without_help_returns_plain_label():
     header = _section_header("Sem ajuda", "chave.inexistente", MagicMock())
     assert isinstance(header, ft.Text)
@@ -80,6 +114,7 @@ def test_section_header_with_help_returns_row_with_icon():
     [
         "observatory.gates",
         "observatory.ollama",
+        "observatory.binaries",
         "observatory.classify",
         "observatory.config",
     ],

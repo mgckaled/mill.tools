@@ -17,6 +17,11 @@ from src.utils import sanitize_filename
 # por = Portuguese, eng = English, spa = Spanish. Combine with '+': "por+eng".
 LANGS = ("por", "eng", "por+eng", "spa")
 
+SETUP_HINT = (
+    "Instale o extra de OCR e o binário do Tesseract: uv sync --extra ocr "
+    "(https://github.com/UB-Mannheim/tesseract/wiki)"
+)
+
 # Common Windows install locations checked when tesseract isn't on PATH.
 _WINDOWS_FALLBACKS = (
     Path(r"C:\Program Files\Tesseract-OCR\tesseract.exe"),

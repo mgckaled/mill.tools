@@ -55,6 +55,46 @@ def _gate_row(gate: status.GateStatus) -> ft.Row:
     )
 
 
+def _glossary_row(glossary: status.EntityGlossaryStatus) -> ft.Row:
+    text = (
+        f"Glossário de entidades: {glossary.n_patterns} padrão(ões) carregado(s)"
+        if glossary.exists
+        else "Glossário de entidades: nenhum arquivo configurado (opcional)"
+    )
+    return ft.Row(
+        controls=[
+            ft.Icon(
+                ft.Icons.INFO_OUTLINE,
+                size=Type.body.size,
+                color=ft.Colors.ON_SURFACE_VARIANT,
+            ),
+            ft.Text(text, size=Type.caption.size, color=ft.Colors.ON_SURFACE_VARIANT),
+        ],
+        spacing=Space.sm,
+    )
+
+
+def _binary_row(b: status.BinaryStatus) -> ft.Row:
+    icon = ft.Icons.CHECK_CIRCLE_OUTLINE if b.path else ft.Icons.CANCEL_OUTLINED
+    color = ft.Colors.GREEN if b.path else ft.Colors.ON_SURFACE_VARIANT
+    detail = b.path or "não encontrado no PATH"
+    return ft.Row(
+        controls=[
+            ft.Icon(icon, size=Type.body.size, color=color),
+            ft.Text(b.name, size=Type.body.size, color=ft.Colors.ON_SURFACE, width=90),
+            ft.Text(
+                detail,
+                size=Type.caption.size,
+                color=ft.Colors.ON_SURFACE_VARIANT,
+                italic=True,
+                expand=True,
+                no_wrap=False,
+            ),
+        ],
+        spacing=Space.sm,
+    )
+
+
 def _ollama_model_row(m: status.OllamaModelStatus) -> ft.Row:
     icon = ft.Icons.CHECK_CIRCLE_OUTLINE if m.installed else ft.Icons.CANCEL_OUTLINED
     color = ft.Colors.GREEN if m.installed else ft.Colors.ON_SURFACE_VARIANT
@@ -103,6 +143,7 @@ def build_status_tab(page: ft.Page) -> tuple[ft.Control, Callable[[], None]]:
     """Build the status board control plus an ``apply()`` refresher."""
     gates_col = ft.Column(spacing=Space.xs)
     ollama_col = ft.Column(spacing=Space.xs)
+    binaries_col = ft.Column(spacing=Space.xs)
     domains_col = ft.Column(spacing=Space.xs)
     config_col = ft.Column(spacing=Space.xs)
 
@@ -113,6 +154,9 @@ def build_status_tab(page: ft.Page) -> tuple[ft.Control, Callable[[], None]]:
             hairline(),
             _section_header("Modelos Ollama", "observatory.ollama", page),
             ollama_col,
+            hairline(),
+            _section_header("Binários externos", "observatory.binaries", page),
+            binaries_col,
             hairline(),
             _section_header(
                 "Classificador (por domínio)", "observatory.classify", page
@@ -128,8 +172,11 @@ def build_status_tab(page: ft.Page) -> tuple[ft.Control, Callable[[], None]]:
     )
 
     def apply() -> None:
-        gates_col.controls = [_gate_row(g) for g in status.gate_statuses()]
+        gates_col.controls = [_gate_row(g) for g in status.gate_statuses()] + [
+            _glossary_row(status.entity_glossary_status())
+        ]
         ollama_col.controls = _ollama_rows(status.ollama_inventory())
+        binaries_col.controls = [_binary_row(b) for b in status.binary_statuses()]
         domains_col.controls = [_domain_row(d) for d in status.domain_statuses()]
 
         snap = status.config_snapshot()

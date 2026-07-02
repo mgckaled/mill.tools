@@ -40,6 +40,22 @@ class MLConfigSnapshot:
 
 
 @dataclass(frozen=True, slots=True)
+class EntityGlossaryStatus:
+    """Whether the optional NER domain glossary is configured, and its size."""
+
+    exists: bool
+    n_patterns: int
+
+
+@dataclass(frozen=True, slots=True)
+class BinaryStatus:
+    """Resolution of one external binary dependency (yt-dlp, ffmpeg, ...)."""
+
+    name: str
+    path: str | None  # resolved path, or None if not found
+
+
+@dataclass(frozen=True, slots=True)
 class OllamaModelStatus:
     """Whether one of the app's *-custom Ollama models is pulled locally."""
 
@@ -69,7 +85,11 @@ _KNOWN_CUSTOM_MODELS = (
 
 
 def gate_statuses() -> tuple[GateStatus, ...]:
-    """Availability of every optional ML/NLP engine, plus the RAG embedder."""
+    """Availability of every optional ML/NLP/media engine, plus the RAG embedder."""
+    from src.core.data import charts as data_charts
+    from src.core.data import frames as data_frames
+    from src.core.document import ocr as document_ocr
+    from src.core.image import background as image_background
     from src.core.ml import deps as ml_deps
     from src.core.rag import embedder
     from src.core.text import entities, keywords
@@ -82,6 +102,24 @@ def gate_statuses() -> tuple[GateStatus, ...]:
         GateStatus("[nlp] (YAKE)", keywords.is_available(), keywords.SETUP_HINT),
         GateStatus("[nlp] (spaCy)", entities.is_available(), entities.SETUP_HINT),
         GateStatus("Embedder (Ollama)", embedder.is_available(), embedder.SETUP_HINT),
+        GateStatus(
+            "[ocr] (Tesseract)", document_ocr.is_available(), document_ocr.SETUP_HINT
+        ),
+        GateStatus(
+            "[ai-image] (rembg)",
+            image_background.is_available(),
+            image_background.SETUP_HINT,
+        ),
+        GateStatus(
+            "[analysis] (Polars/PyArrow)",
+            data_frames.is_available(),
+            data_frames.SETUP_HINT,
+        ),
+        GateStatus(
+            "[data-plot] (matplotlib)",
+            data_charts.is_available(),
+            data_charts.SETUP_HINT,
+        ),
     )
 
 
@@ -132,6 +170,35 @@ def config_snapshot() -> MLConfigSnapshot:
         image_dedup_max_distance=DEFAULT_MAX_DISTANCE,
         auto_k_min_corpus=_MIN_FOR_AUTO_K,
         mmr_lambda=recommend._MMR_LAMBDA,
+    )
+
+
+def entity_glossary_status() -> EntityGlossaryStatus:
+    """Whether the optional ``~/.mill-tools/entity_glossary.json`` domain
+    glossary is configured, and how many EntityRuler patterns it holds.
+
+    Reuses ``core.text.entities``'s own path/parsing helpers (both already
+    tolerant of an absent/malformed file) rather than duplicating them.
+    """
+    from src.core.text.entities import _glossary_path, _load_glossary_patterns
+
+    return EntityGlossaryStatus(
+        exists=_glossary_path().exists(),
+        n_patterns=len(_load_glossary_patterns()),
+    )
+
+
+def binary_statuses() -> tuple[BinaryStatus, ...]:
+    """Resolution of every external binary the app shells out to."""
+    import shutil
+
+    from src.core.document.ocr import _resolve_tesseract_cmd
+
+    return (
+        BinaryStatus("yt-dlp", shutil.which("yt-dlp")),
+        BinaryStatus("ffmpeg", shutil.which("ffmpeg")),
+        BinaryStatus("ffprobe", shutil.which("ffprobe")),
+        BinaryStatus("tesseract", _resolve_tesseract_cmd()),
     )
 
 

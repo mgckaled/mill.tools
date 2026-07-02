@@ -298,6 +298,10 @@ HELP_SHORT: dict[str, str] = {
         "Quais dos modelos *-custom do app (ollama/Modelfile*) estão puxados "
         "no seu Ollama local agora."
     ),
+    "observatory.binaries": (
+        "Onde o app encontrou (ou não) os binários externos que ele invoca "
+        "via subprocess — yt-dlp, ffmpeg, ffprobe e Tesseract."
+    ),
     "observatory.classify": (
         "Quantos rótulos de treino existem por domínio e se o classificador já "
         "usa um modelo supervisionado ou ainda está em zero-shot."
@@ -571,7 +575,17 @@ HELP_LONG: dict[str, str] = {
         "• [nlp] (spaCy) — reconhecimento de entidades nomeadas ('ai entities'). "
         "Exige também o modelo pt_core_news_sm baixado à parte.\n"
         "• Embedder (Ollama) — o motor de embeddings do RAG (nomic-embed-custom). "
-        "Sem ele, indexação e busca semântica não funcionam em lugar nenhum do app."
+        "Sem ele, indexação e busca semântica não funcionam em lugar nenhum do app.\n"
+        "• [ocr] (Tesseract) — OCR híbrido de PDFs/imagens escaneadas. Exige "
+        "também o binário do Tesseract instalado (packs por/eng).\n"
+        "• [ai-image] (rembg) — remoção/troca de fundo no módulo Imagens.\n"
+        "• [analysis] (Polars/PyArrow) — camada de DataFrame sobre o DuckDB "
+        "(fundação para gráficos e ML tabular no módulo Dados).\n"
+        "• [data-plot] (matplotlib) — renderização dos gráficos da aba Gráfico "
+        "do módulo Dados e do gráfico de tempo de resposta aqui no Observatório.\n\n"
+        "A última linha (Glossário de entidades) não é um gate binário — mostra "
+        "quantos padrões o EntityRuler opcional de ~/.mill-tools/entity_glossary."
+        "json tem carregado, quando o arquivo existe."
     ),
     "observatory.ollama": (
         "O app usa 6 modelos Ollama customizados (Modelfiles em ollama/, "
@@ -584,6 +598,16 @@ HELP_LONG: dict[str, str] = {
         "puxado/criado localmente (ver 'Instalação → Modelos locais' no "
         "README). Se o Ollama não estiver rodando, a lista some e aparece um "
         "aviso único no lugar."
+    ),
+    "observatory.binaries": (
+        "yt-dlp e ffmpeg são exigidos por Áudio/Vídeo/Transcrição (checados no "
+        "início da GUI/CLI). ffprobe acompanha o ffmpeg e é usado para ler "
+        "duração/metadados de áudio. Tesseract é opcional (extra [ocr]) — "
+        "resolvido no PATH ou, no Windows, em "
+        "'C:\\Program Files\\Tesseract-OCR\\tesseract.exe' como fallback.\n\n"
+        "Um X aqui explica na hora por que um download trava ou um OCR "
+        "recusa rodar, sem precisar abrir um terminal e testar cada binário "
+        "manualmente."
     ),
     "observatory.classify": (
         "O classificador de perfil/domínio (core/ml/classify.py) começa em "
