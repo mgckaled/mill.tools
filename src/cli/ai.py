@@ -14,9 +14,11 @@ Flows behind one positional:
     uv run main.py ai "what did I say about X?"    # ask the whole corpus
     uv run main.py ai "summarize" --scope path.txt # ask a single document
     uv run main.py ai "..." --model gemini-2.5-flash --k 8
+    uv run main.py ai "..." --model glm-4.7-flash --k 8
 
 Reuses the same core (scan_library / build_index / retrieve / answer) as the GUI.
-Embeddings are always local (Ollama); only the answer step may use Gemini opt-in.
+Embeddings are always local (Ollama); only the answer step may use a cloud
+provider opt-in (Gemini or GLM).
 ``dups``/``topics``/``map``/``related`` are read-only over the persisted index
 (the ML layer, Plans 3/4A): no embedder/network needed. ``topics``/``map`` need
 the ``[ml]`` extra; ``related`` is numpy-pure like ``dups``.
@@ -73,7 +75,10 @@ def add_ai_parser(subparsers: argparse._SubParsersAction) -> None:
     p.add_argument(
         "--model",
         default=None,
-        help="Answer model — Ollama tag (e.g. qwen7b-custom) or Gemini (gemini-2.5-flash)",
+        help=(
+            "Answer model — Ollama tag (e.g. qwen7b-custom) or cloud "
+            "(gemini-2.5-flash / glm-4.7-flash)"
+        ),
     )
     p.add_argument(
         "--embed-model",

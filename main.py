@@ -11,6 +11,7 @@ Usage:
     uv run main.py transcribe /path/to/audio.mp3               # local audio/video file
     uv run main.py transcribe /path/to/notes.txt --analyze     # text file → skips Whisper
     uv run main.py transcribe <URL> --am gemini-2.5-flash      # analysis via Gemini
+    uv run main.py transcribe <URL> --am glm-4.7-flash         # analysis via GLM
     uv run -m src output/transcriptions/text/<file>.txt        # standalone analysis
 
     uv run main.py audio URL [--fmt mp3] [--quality 320]       # audio download/convert
