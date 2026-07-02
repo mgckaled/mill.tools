@@ -55,6 +55,31 @@ def _gate_row(gate: status.GateStatus) -> ft.Row:
     )
 
 
+def _ollama_model_row(m: status.OllamaModelStatus) -> ft.Row:
+    icon = ft.Icons.CHECK_CIRCLE_OUTLINE if m.installed else ft.Icons.CANCEL_OUTLINED
+    color = ft.Colors.GREEN if m.installed else ft.Colors.ON_SURFACE_VARIANT
+    return ft.Row(
+        controls=[
+            ft.Icon(icon, size=Type.body.size, color=color),
+            ft.Text(m.name, size=Type.body.size, color=ft.Colors.ON_SURFACE),
+        ],
+        spacing=Space.sm,
+    )
+
+
+def _ollama_rows(inventory: status.OllamaInventoryStatus) -> list[ft.Control]:
+    if not inventory.reachable:
+        return [
+            ft.Text(
+                "Ollama não está acessível (serviço rodando?)",
+                size=Type.caption.size,
+                color=ft.Colors.ON_SURFACE_VARIANT,
+                italic=True,
+            )
+        ]
+    return [_ollama_model_row(m) for m in inventory.models]
+
+
 def _domain_row(d: status.DomainStatus) -> ft.Row:
     method = "supervisionado" if d.supervised else "zero-shot"
     return ft.Row(
@@ -77,6 +102,7 @@ def _domain_row(d: status.DomainStatus) -> ft.Row:
 def build_status_tab(page: ft.Page) -> tuple[ft.Control, Callable[[], None]]:
     """Build the status board control plus an ``apply()`` refresher."""
     gates_col = ft.Column(spacing=Space.xs)
+    ollama_col = ft.Column(spacing=Space.xs)
     domains_col = ft.Column(spacing=Space.xs)
     config_col = ft.Column(spacing=Space.xs)
 
@@ -84,6 +110,9 @@ def build_status_tab(page: ft.Page) -> tuple[ft.Control, Callable[[], None]]:
         controls=[
             _section_header("Gates e extras", "observatory.gates", page),
             gates_col,
+            hairline(),
+            _section_header("Modelos Ollama", "observatory.ollama", page),
+            ollama_col,
             hairline(),
             _section_header(
                 "Classificador (por domínio)", "observatory.classify", page
@@ -100,6 +129,7 @@ def build_status_tab(page: ft.Page) -> tuple[ft.Control, Callable[[], None]]:
 
     def apply() -> None:
         gates_col.controls = [_gate_row(g) for g in status.gate_statuses()]
+        ollama_col.controls = _ollama_rows(status.ollama_inventory())
         domains_col.controls = [_domain_row(d) for d in status.domain_statuses()]
 
         snap = status.config_snapshot()

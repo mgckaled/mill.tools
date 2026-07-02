@@ -42,11 +42,23 @@ def test_run_status_prints_every_section(mocker, capsys):
         DomainStatus,
         GateStatus,
         MLConfigSnapshot,
+        OllamaInventoryStatus,
+        OllamaModelStatus,
     )
 
     mocker.patch(
         "src.core.observatory.status.gate_statuses",
         return_value=(GateStatus("[ml]", True, ""), GateStatus("[nlp]", False, "dica")),
+    )
+    mocker.patch(
+        "src.core.observatory.status.ollama_inventory",
+        return_value=OllamaInventoryStatus(
+            True,
+            (
+                OllamaModelStatus("gemma3-4b-custom", True),
+                OllamaModelStatus("moondream-custom", False),
+            ),
+        ),
     )
     mocker.patch(
         "src.core.observatory.status.domain_statuses",
@@ -65,6 +77,9 @@ def test_run_status_prints_every_section(mocker, capsys):
     assert "Gates e extras" in out
     assert "[✓] [ml]" in out
     assert "[✗] [nlp]" in out and "dica" in out
+    assert "Modelos Ollama" in out
+    assert "[✓] gemma3-4b-custom" in out
+    assert "[✗] moondream-custom" in out
     assert "Domínio de dados" in out
     assert "Configuração em vigor" in out
     assert "LLM (texto)" in out
@@ -76,9 +91,17 @@ def test_run_status_prints_every_section(mocker, capsys):
 @pytest.mark.unit
 def test_run_status_breaks_down_timings_by_domain(mocker, capsys):
     from src.core.observatory.model_timing import TimingEntry
-    from src.core.observatory.status import DomainStatus, MLConfigSnapshot
+    from src.core.observatory.status import (
+        DomainStatus,
+        MLConfigSnapshot,
+        OllamaInventoryStatus,
+    )
 
     mocker.patch("src.core.observatory.status.gate_statuses", return_value=())
+    mocker.patch(
+        "src.core.observatory.status.ollama_inventory",
+        return_value=OllamaInventoryStatus(False, ()),
+    )
     mocker.patch(
         "src.core.observatory.status.domain_statuses",
         return_value=(DomainStatus("data_domain", 0, False),),
@@ -102,6 +125,7 @@ def test_run_status_breaks_down_timings_by_domain(mocker, capsys):
     out = capsys.readouterr().out
     assert "gemini-2.5-flash" in out
     assert "moondream-custom" in out
+    assert "não está acessível" in out  # Ollama inventory, unreachable branch
     assert "nomic-embed-custom" in out
 
 

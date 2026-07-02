@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import sys
+from types import SimpleNamespace
+
 import pytest
 
 from src.core.observatory import status
@@ -57,3 +60,57 @@ def test_config_snapshot_reads_real_defaults_not_a_stale_copy():
     assert snap.image_dedup_max_distance == 8
     assert snap.auto_k_min_corpus == 20
     assert snap.mmr_lambda == 0.6
+
+
+def _fake_ollama_module(model_names: list[str]) -> SimpleNamespace:
+    models = [SimpleNamespace(model=n) for n in model_names]
+
+    class _FakeClient:
+        def list(self):
+            return SimpleNamespace(models=models)
+
+    return SimpleNamespace(Client=_FakeClient)
+
+
+@pytest.mark.unit
+def test_ollama_inventory_all_installed(mocker):
+    names = [f"{n}:latest" for n in status._KNOWN_CUSTOM_MODELS]
+    mocker.patch.dict(sys.modules, {"ollama": _fake_ollama_module(names)})
+
+    inv = status.ollama_inventory()
+    assert inv.reachable is True
+    assert all(m.installed for m in inv.models)
+    assert [m.name for m in inv.models] == list(status._KNOWN_CUSTOM_MODELS)
+
+
+@pytest.mark.unit
+def test_ollama_inventory_normalizes_the_latest_tag_and_flags_missing(mocker):
+    mocker.patch.dict(
+        sys.modules, {"ollama": _fake_ollama_module(["gemma3-4b-custom:latest"])}
+    )
+
+    inv = status.ollama_inventory()
+    assert inv.reachable is True
+    by_name = {m.name: m.installed for m in inv.models}
+    assert by_name["gemma3-4b-custom"] is True
+    assert by_name["moondream-custom"] is False
+
+
+@pytest.mark.unit
+def test_ollama_inventory_package_missing(mocker):
+    mocker.patch.dict(sys.modules, {"ollama": None})
+    inv = status.ollama_inventory()
+    assert inv.reachable is False
+    assert inv.models == ()
+
+
+@pytest.mark.unit
+def test_ollama_inventory_service_unreachable(mocker):
+    class _FailingClient:
+        def list(self):
+            raise ConnectionError("refused")
+
+    mocker.patch.dict(sys.modules, {"ollama": SimpleNamespace(Client=_FailingClient)})
+    inv = status.ollama_inventory()
+    assert inv.reachable is False
+    assert inv.models == ()

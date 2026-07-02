@@ -77,6 +77,15 @@ def _run_status(ns: argparse.Namespace) -> None:
         extra = "" if gate.available else f" — {gate.hint}"
         print(f"  {mark} {gate.name}{extra}")
 
+    inventory = status.ollama_inventory()
+    print("\nModelos Ollama:")
+    if not inventory.reachable:
+        print("  Ollama não está acessível (serviço rodando?)")
+    else:
+        for m in inventory.models:
+            mark = "[✓]" if m.installed else "[✗]"
+            print(f"  {mark} {m.name}")
+
     print("\nClassificador (por domínio):")
     for d in status.domain_statuses():
         method = "supervisionado" if d.supervised else "zero-shot"

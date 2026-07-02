@@ -39,6 +39,35 @@ class MLConfigSnapshot:
     mmr_lambda: float
 
 
+@dataclass(frozen=True, slots=True)
+class OllamaModelStatus:
+    """Whether one of the app's *-custom Ollama models is pulled locally."""
+
+    name: str
+    installed: bool
+
+
+@dataclass(frozen=True, slots=True)
+class OllamaInventoryStatus:
+    """Snapshot of the local Ollama service's model inventory."""
+
+    reachable: bool
+    models: tuple[OllamaModelStatus, ...]
+
+
+# The 6 *-custom models the app's Modelfiles create (ollama/Modelfile*), kept
+# here as the single list this status reads against — see CLAUDE.md's Ollama
+# section for what each one is for.
+_KNOWN_CUSTOM_MODELS = (
+    "phi4mini-custom",
+    "gemma3-4b-custom",
+    "gemma3-1b-custom",
+    "qwen7b-custom",
+    "nomic-embed-custom",
+    "moondream-custom",
+)
+
+
 def gate_statuses() -> tuple[GateStatus, ...]:
     """Availability of every optional ML/NLP engine, plus the RAG embedder."""
     from src.core.ml import deps as ml_deps
@@ -103,4 +132,25 @@ def config_snapshot() -> MLConfigSnapshot:
         image_dedup_max_distance=DEFAULT_MAX_DISTANCE,
         auto_k_min_corpus=_MIN_FOR_AUTO_K,
         mmr_lambda=recommend._MMR_LAMBDA,
+    )
+
+
+def ollama_inventory() -> OllamaInventoryStatus:
+    """Which of the 6 *-custom Ollama models are pulled locally, right now.
+
+    ``reachable=False`` (rather than raising) when the Ollama service isn't
+    running — this is a transparency read, not a hard dependency check.
+    """
+    try:
+        import ollama
+
+        installed = {m.model.split(":")[0] for m in ollama.Client().list().models}
+    except Exception:
+        return OllamaInventoryStatus(reachable=False, models=())
+
+    return OllamaInventoryStatus(
+        reachable=True,
+        models=tuple(
+            OllamaModelStatus(name, name in installed) for name in _KNOWN_CUSTOM_MODELS
+        ),
     )

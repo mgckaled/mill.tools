@@ -294,6 +294,10 @@ HELP_SHORT: dict[str, str] = {
         "Um X não quebra o app — só desativa aquele recurso, com a dica de "
         "instalação ao lado."
     ),
+    "observatory.ollama": (
+        "Quais dos modelos *-custom do app (ollama/Modelfile*) estão puxados "
+        "no seu Ollama local agora."
+    ),
     "observatory.classify": (
         "Quantos rótulos de treino existem por domínio e se o classificador já "
         "usa um modelo supervisionado ou ainda está em zero-shot."
@@ -568,6 +572,18 @@ HELP_LONG: dict[str, str] = {
         "Exige também o modelo pt_core_news_sm baixado à parte.\n"
         "• Embedder (Ollama) — o motor de embeddings do RAG (nomic-embed-custom). "
         "Sem ele, indexação e busca semântica não funcionam em lugar nenhum do app."
+    ),
+    "observatory.ollama": (
+        "O app usa 6 modelos Ollama customizados (Modelfiles em ollama/, "
+        "CPU-pinned): phi4mini-custom (formatação), gemma3-4b-custom "
+        "(análise/prompt/RAG/PT→SQL, padrão), gemma3-1b-custom (fallback "
+        "rápido), qwen7b-custom (máxima qualidade, lento na CPU), "
+        "nomic-embed-custom (embeddings do RAG) e moondream-custom "
+        "(descrição de imagens).\n\n"
+        "Um X aqui não significa erro — só que aquele modelo ainda não foi "
+        "puxado/criado localmente (ver 'Instalação → Modelos locais' no "
+        "README). Se o Ollama não estiver rodando, a lista some e aparece um "
+        "aviso único no lugar."
     ),
     "observatory.classify": (
         "O classificador de perfil/domínio (core/ml/classify.py) começa em "
