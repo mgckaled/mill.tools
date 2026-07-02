@@ -6,7 +6,7 @@ import logging
 
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 
-from src.llm_factory import is_gemini_model, long_context_char_budget
+from src.llm_factory import is_cloud_model, long_context_char_budget
 
 # Default separators: paragraph breaks first, then sentence, word, character.
 _SEPARATORS = ["\n\n", "\n", ". ", " ", ""]
@@ -25,9 +25,10 @@ def split_text(
 
     Returns [text] unchanged when the text fits within chunk_size, or when
     bypass_long_context is True and the model supports a large context window:
-    Gemini (1M tokens) bypasses unconditionally; known long-context local models
-    (e.g. gemma3-4b-custom) bypass only while the text stays within their char
-    budget — above it, chunking resumes to keep a CPU single pass practical.
+    cloud providers (Gemini 1M tokens, GLM 200K tokens) bypass unconditionally;
+    known long-context local models (e.g. gemma3-4b-custom) bypass only while
+    the text stays within their char budget — above it, chunking resumes to
+    keep a CPU single pass practical.
 
     Args:
         text: Full text to split.
@@ -42,9 +43,9 @@ def split_text(
         List of text chunks (always at least one element).
     """
     if bypass_long_context and model_name:
-        if is_gemini_model(model_name):
+        if is_cloud_model(model_name):
             logging.debug(
-                "[d] Long context (Gemini) — chunking skipped (%d chars)", len(text)
+                "[d] Long context (cloud) — chunking skipped (%d chars)", len(text)
             )
             return [text]
         budget = long_context_char_budget(model_name)

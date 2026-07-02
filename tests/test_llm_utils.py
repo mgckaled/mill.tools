@@ -26,7 +26,7 @@ def test_split_text_long_produces_multiple_chunks():
 def test_split_text_gemini_bypass_returns_single_chunk(mocker):
     from src.llm_utils import split_text
 
-    mocker.patch("src.llm_utils.is_gemini_model", return_value=True)
+    mocker.patch("src.llm_utils.is_cloud_model", return_value=True)
     text = "x" * 10_000
     result = split_text(
         text,
@@ -39,10 +39,26 @@ def test_split_text_gemini_bypass_returns_single_chunk(mocker):
 
 
 @pytest.mark.unit
+def test_split_text_glm_bypass_returns_single_chunk(mocker):
+    from src.llm_utils import split_text
+
+    mocker.patch("src.llm_utils.is_cloud_model", return_value=True)
+    text = "x" * 10_000
+    result = split_text(
+        text,
+        chunk_size=100,
+        chunk_overlap=0,
+        model_name="glm-4.7-flash",
+        bypass_long_context=True,
+    )
+    assert result == [text]
+
+
+@pytest.mark.unit
 def test_split_text_gemini_without_bypass_still_splits(mocker):
     from src.llm_utils import split_text
 
-    mocker.patch("src.llm_utils.is_gemini_model", return_value=True)
+    mocker.patch("src.llm_utils.is_cloud_model", return_value=True)
     text = "word " * 200
     chunks = split_text(
         text,
@@ -58,7 +74,7 @@ def test_split_text_gemini_without_bypass_still_splits(mocker):
 def test_split_text_ollama_bypass_true_still_splits(mocker):
     from src.llm_utils import split_text
 
-    mocker.patch("src.llm_utils.is_gemini_model", return_value=False)
+    mocker.patch("src.llm_utils.is_cloud_model", return_value=False)
     text = "word " * 200
     chunks = split_text(
         text,

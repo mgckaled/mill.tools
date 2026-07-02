@@ -3,11 +3,12 @@ llm_factory.py: Provider-agnostic LLM factory.
 
 Single entry point `make_llm()` decides which LangChain chat model to instantiate
 based on the model name passed via CLI flags (--fm / --am / --pm). Names starting
-with "gemini" are routed to Google's Gemini API; everything else falls back to
-the local Ollama runtime — preserving full backwards compatibility with the
-project's original 100% local pipeline.
+with "gemini" are routed to Google's Gemini API, "glm" to Zhipu/Z.ai's GLM API;
+everything else falls back to the local Ollama runtime — preserving full
+backwards compatibility with the project's original 100% local pipeline.
 
-Gemini usage requires GOOGLE_API_KEY in a .env file at the project root.
+Gemini usage requires GOOGLE_API_KEY, GLM usage requires ZHIPU_API_KEY, both in
+a .env file at the project root.
 """
 
 import logging
@@ -29,6 +30,16 @@ GEMINI_DEFAULT_MAX_RETRIES = 3
 GEMINI_DEFAULT_TIMEOUT = (
     120  # seconds — Gemini Flash usually returns in <30s for 30k-token analyses
 )
+
+# Provider routing: any model name starting with one of these prefixes goes to GLM
+# (Zhipu/Z.ai), via its OpenAI-compatible API.
+GLM_PREFIXES = ("glm",)
+GLM_BASE_URL = "https://api.z.ai/api/paas/v4/"
+
+# Sensible GLM defaults for this project's workloads (same values as Gemini's —
+# both are cloud APIs with comparable latency for this project's prompt sizes).
+GLM_DEFAULT_MAX_RETRIES = 3
+GLM_DEFAULT_TIMEOUT = 120
 
 # Ollama defaults num_ctx to 2048 tokens — far too small for the verbose structured
 # JSON the analyzer/prompter emit (and for the long-context bypass), which silently
@@ -52,12 +63,32 @@ def is_gemini_model(model_name: str) -> bool:
     return _is_gemini(model_name)
 
 
+def _is_glm(model_name: str) -> bool:
+    """Return True when the model name belongs to the Zhipu/Z.ai GLM family."""
+    return model_name.lower().startswith(GLM_PREFIXES)
+
+
+def is_glm_model(model_name: str) -> bool:
+    """Public helper for callers that need to branch behaviour by provider."""
+    return _is_glm(model_name)
+
+
+def is_cloud_model(model_name: str) -> bool:
+    """Return True for any third-party API provider (Gemini or GLM).
+
+    Used where the distinction that matters is "runs locally via Ollama" vs.
+    "calls out to an external API" — e.g. skipping chunking for large-context
+    cloud models, or surfacing a privacy note in the GUI.
+    """
+    return _is_gemini(model_name) or _is_glm(model_name)
+
+
 # Local models with a large context window: short/medium inputs can skip the
 # chunk+merge step and run as a single, more coherent pass. The per-model char
 # budget caps the cost of a CPU single pass (a giant pass on a small CPU model is
-# impractically slow); above it we fall back to chunking. Gemini (1M tokens)
-# bypasses unconditionally via is_gemini_model and is intentionally NOT listed
-# here. Budgets are in characters (~4 chars/token).
+# impractically slow); above it we fall back to chunking. Cloud providers (Gemini
+# 1M tokens, GLM 200K tokens) bypass unconditionally via is_cloud_model and are
+# intentionally NOT listed here. Budgets are in characters (~4 chars/token).
 LONG_CONTEXT_LOCAL_BUDGETS: dict[str, int] = {
     # gemma3-4b-custom: skip the merge for short/medium inputs. The cap stays well
     # under DEFAULT_OLLAMA_NUM_CTX so the prompt + the verbose JSON output still fit
@@ -75,8 +106,8 @@ def long_context_char_budget(model_name: str) -> int | None:
 
     Returns:
         The per-model character budget when *model_name* is a known long-context
-        local model (e.g. gemma3-4b-custom), or None otherwise. Gemini is handled
-        separately (unconditional bypass) and is not included here.
+        local model (e.g. gemma3-4b-custom), or None otherwise. Cloud providers
+        are handled separately (unconditional bypass) and are not included here.
     """
     return LONG_CONTEXT_LOCAL_BUDGETS.get(model_name)
 
@@ -130,6 +161,46 @@ def _make_gemini(model_name: str, temperature: float) -> "BaseChatModel":
     )
 
 
+def _make_glm(model_name: str, temperature: float) -> "BaseChatModel":
+    """Instantiate a ChatOpenAI pointed at Zhipu/Z.ai's OpenAI-compatible API.
+
+    Args:
+        model_name: GLM model identifier (e.g. "glm-4.7-flash").
+        temperature: Sampling temperature.
+
+    Returns:
+        A ChatOpenAI configured with GLM_BASE_URL and API key from environment.
+
+    Raises:
+        RuntimeError: If ZHIPU_API_KEY is not present in the environment.
+    """
+    _load_env_once()
+    api_key = os.getenv("ZHIPU_API_KEY")
+    if not api_key:
+        raise RuntimeError(
+            "ZHIPU_API_KEY não encontrada. Crie um arquivo .env na raiz do projeto com:\n"
+            "    ZHIPU_API_KEY=sua-chave-do-z.ai\n"
+            "Gere a chave em https://z.ai/model-api (API Keys no menu do perfil)"
+        )
+
+    # Lazy import — only loaded when the user actually opts into GLM.
+    from langchain_openai import ChatOpenAI
+
+    logging.debug(
+        "[d] Provider: Zhipu GLM | model=%s | temperature=%.2f",
+        model_name,
+        temperature,
+    )
+    return ChatOpenAI(
+        model=model_name,
+        temperature=temperature,
+        api_key=api_key,
+        base_url=GLM_BASE_URL,
+        max_retries=GLM_DEFAULT_MAX_RETRIES,
+        timeout=GLM_DEFAULT_TIMEOUT,
+    )
+
+
 def _make_ollama(
     model_name: str,
     temperature: float,
@@ -173,20 +244,23 @@ def make_llm(
     """Return a LangChain chat model routed by name prefix.
 
     - Names starting with "gemini" → Google Gemini (requires GOOGLE_API_KEY in .env)
+    - Names starting with "glm" → Zhipu/Z.ai GLM (requires ZHIPU_API_KEY in .env)
     - Anything else → local Ollama
 
     Args:
         model_name: Model identifier as received from the CLI (--fm/--am/--pm).
         temperature: Sampling temperature (0.0 = deterministic, 1.0 = creative).
-        num_ctx: Ollama context window in tokens (ignored for Gemini).
+        num_ctx: Ollama context window in tokens (ignored for cloud providers).
 
     Returns:
         A LangChain BaseChatModel compatible with the existing `prompt | llm`
         pipelines used across analyzer.py, formatter.py and prompter.py.
 
     Raises:
-        RuntimeError: If a Gemini model is requested without GOOGLE_API_KEY set.
+        RuntimeError: If a Gemini/GLM model is requested without its API key set.
     """
     if _is_gemini(model_name):
         return _make_gemini(model_name, temperature)
+    if _is_glm(model_name):
+        return _make_glm(model_name, temperature)
     return _make_ollama(model_name, temperature, num_ctx)
