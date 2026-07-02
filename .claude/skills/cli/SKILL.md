@@ -276,6 +276,7 @@ uv run main.py ai "pergunta?"                            # responde, citando fon
 uv run main.py ai "resuma" --scope output/.../x.txt      # um documento
 uv run main.py ai "liste as ações" --batch --kind transcription
 uv run main.py ai "..." --model gemini-2.5-flash --k 8
+uv run main.py ai "..." --model glm-4.7-flash --k 8
 ```
 
 **Um único positional** `query` (não usa sub-subparser): se for o literal
@@ -296,7 +297,7 @@ pergunta — que agora passa por **busca híbrida** (cosseno + BM25 via RRF em
 `retriever.retrieve()`, Tier A) de forma transparente, sem flag nova. Reaproveita o core
 (`scan_library`/`build_index`/`retrieve`/`answer`); **não** usa `CLIEventBus`
 nem `run_*_pipeline` (como `library`). Embeddings **sempre locais** (Ollama);
-Gemini só no passo de resposta. `run_ai_cli` reconfigura `sys.stdout` p/ UTF-8.
+Gemini/GLM só no passo de resposta. `run_ai_cli` reconfigura `sys.stdout` p/ UTF-8.
 `dups`/`classify` gravam um evento no log do Observatório (`log_activity`) — mockar
 `src.core.observatory.activity.log_activity` em testes que exercitam o caminho de sucesso.
 
@@ -313,7 +314,7 @@ tamanho em disco · atualizado em · local) + tabela por documento
 | `--method` | `pca` | Com `map`, projeção 2D (`pca` / `umap` exige `[ml-viz]`) |
 | `--out` | — | Com `map`, caminho do PNG (default `output/data/semantic_map.png`) |
 | `--scope` | (acervo) | Caminho de arquivo (1 doc) **ou** kind (`transcription`/`document`/`image`). `_resolve_scope` resolve path existente → absoluto; senão trata como kind |
-| `--model` | `qwen7b-custom` | Modelo da resposta — Ollama tag ou `gemini-2.5-flash` |
+| `--model` | `qwen7b-custom` | Modelo da resposta — Ollama tag ou nuvem (`gemini-2.5-flash`/`glm-4.7-flash`) |
 | `--embed-model` | `nomic-embed-custom` | Modelo de embedding (sempre local, CPU `num_gpu 0`; ver `ollama/Modelfile.nomic`) |
 | `--k` | `6` | Trechos recuperados |
 | `--reindex` | off | Reindexa antes de responder |

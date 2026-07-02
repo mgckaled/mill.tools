@@ -23,7 +23,7 @@
 
 ## Visão geral
 
-**mill.tools** é uma caixa de ferramentas pessoal que processa mídia, documentos e dados **diretamente no seu computador** — sem enviar arquivos para servidores, sem assinaturas e sem limites de uso. A IA roda 100% local por padrão (via [Ollama](https://ollama.com)), com o [Google Gemini](https://ai.google.dev/) disponível como alternativa opt-in na nuvem.
+**mill.tools** é uma caixa de ferramentas pessoal que processa mídia, documentos e dados **diretamente no seu computador** — sem enviar arquivos para servidores, sem assinaturas e sem limites de uso. A IA roda 100% local por padrão (via [Ollama](https://ollama.com)), com o [Google Gemini](https://ai.google.dev/) e o [GLM da Zhipu/Z.ai](https://z.ai/model-api) disponíveis como alternativas opt-in na nuvem.
 
 A aplicação é organizada em **módulos independentes que se integram**: cada um é especializado numa categoria de tarefa, mas a saída de um alimenta o outro — um áudio baixado segue para a transcrição com um clique, e uma cadeia inteira (`URL → áudio → transcrever → analisar`) cabe numa receita.
 
@@ -44,7 +44,7 @@ Seis **ferramentas** de processamento (NavigationRail) e quatro **hubs** que ope
 | **Documentos** | Ferramenta | 13 operações PDF/QR (merge, split, compress, rotate, watermark, stamp, encrypt, extract, OCR, pdf↔imagens, QR, análise). 100% local via pymupdf |
 | **Dados** | Ferramenta | Consulte CSV/TSV/JSON/Parquet/XLSX em **português** (a IA traduz para SQL vendo só o schema) ou SQL na mão; motor **DuckDB** embutido. Salva o resultado, perfila e gera **gráficos** (barras/linha/histograma/dispersão) |
 | **Biblioteca** | Hub | Índice navegável de tudo em `output/`: grade com thumbnails, lista, **painel analítico** (acervo por tipo/tamanho/crescimento) ou **mapa semântico** (temas do acervo agrupados + relacionados); filtro/busca/ordenação, abrir arquivo/pasta e reenviar a outro módulo |
-| **IA** | Hub | RAG local sobre o seu acervo: pergunte ao corpus e receba respostas **citando as fontes** (com aviso quando o acervo não cobre a pergunta). Embeddings sempre locais; Gemini opt-in. **Painel**: saúde do índice + tempo de resposta por modelo. **ML semântico**: duplicatas (`ai dups`), tópicos automáticos (`ai topics`), mapa semântico (`ai map`) e relacionados (`ai related`) — tudo reusando o índice |
+| **IA** | Hub | RAG local sobre o seu acervo: pergunte ao corpus e receba respostas **citando as fontes** (com aviso quando o acervo não cobre a pergunta). Embeddings sempre locais; Gemini/GLM opt-in. **Painel**: saúde do índice + tempo de resposta por modelo. **ML semântico**: duplicatas (`ai dups`), tópicos automáticos (`ai topics`), mapa semântico (`ai map`) e relacionados (`ai related`) — tudo reusando o índice |
 | **Receitas** | Hub | Automação: cadeias lineares entre módulos (`URL → áudio → transcrever → analisar`). Presets + construtor com validação ao vivo; lote; **histórico de execução** (confiabilidade/velocidade); CLI `recipe run` |
 | **Observatório** | Hub | Central de ML de todo o app: aba **Atividade** (feed cronológico do que o ML fez em qualquer módulo) e aba **Status** (gates de extras, rótulos do classificador por domínio, parâmetros em vigor, tempo de resposta por modelo). Read-only, sem pipeline; CLI `observatory status`/`observatory activity` |
 
@@ -64,7 +64,7 @@ Seis **ferramentas** de processamento (NavigationRail) e quatro **hubs** que ope
 | Imagens | Pillow (transforms, EXIF, smart crop, watermark/QR, filtros) + rembg/ONNX (CPU) para remoção/troca de fundo; OCR via Tesseract (extra `[ocr]`); descrição por visão via Ollama (`gemma3-4b`) |
 | Documentos | [pymupdf](https://pymupdf.readthedocs.io) (PDF) + Tesseract (OCR híbrido, opcional) |
 | Interface | [Flet 0.85](https://flet.dev) (Flutter desktop) com log em tempo real, design system próprio e ajuda contextual (ⓘ) |
-| IA | Ollama local por padrão; Gemini opt-in por prefixo de modelo (`gemini-*`) |
+| IA | Ollama local por padrão; Gemini/GLM opt-in por prefixo de modelo (`gemini-*`/`glm-*`) |
 
 > **Decisão consciente: sem PyTorch.** O app base é torch-free. IA de áudio com torch (DeepFilterNet/Demucs) ficaria isolada num extra opcional.
 
@@ -78,6 +78,7 @@ Seis **ferramentas** de processamento (NavigationRail) e quatro **hubs** que ope
 | [ffmpeg](https://ffmpeg.org/download.html) · [yt-dlp](https://github.com/yt-dlp/yt-dlp) (no PATH) | Áudio, Vídeo, Transcrição |
 | [Ollama](https://ollama.com/download) | Modelos de IA locais (formatação, análise, RAG, PT→SQL) |
 | Chave [Google AI Studio](https://aistudio.google.com/apikey) | Modelos Gemini (opcional) |
+| Chave [z.ai](https://z.ai/model-api) | Modelos GLM/Zhipu (opcional) |
 | [Tesseract OCR](https://github.com/UB-Mannheim/tesseract/wiki) + packs `por`/`eng` | OCR de Documentos (extra `[ocr]`) |
 | Modelo spaCy `pt_core_news_sm` (`python -m spacy download …`) | NER do `[nlp]` (download à parte, como o Tesseract) |
 
@@ -124,13 +125,16 @@ uv run python -m spacy download pt_core_news_sm  # modelo de NER (download à pa
 > O app base funciona sem os extras; os cards correspondentes desabilitam-se graciosamente quando ausentes.
 > O resumo extractivo (`ai summary` / Insights) e a classificação de perfil usam só o extra `[ml]` — sem dep nova.
 
-### Google Gemini (opcional, free tier)
+### Modelos em nuvem (opcionais, free tier)
 
 ```bash
-cp .env.example .env       # preencha GOOGLE_API_KEY=...
+cp .env.example .env       # preencha GOOGLE_API_KEY=... e/ou ZHIPU_API_KEY=...
 ```
 
-O `.env` é carregado quando um modelo começa com `gemini`. O Ollama segue como padrão — nada quebra sem o `.env`. Recomendado: `gemini-2.5-flash` (contexto de 1M tokens).
+O `.env` é carregado quando um modelo começa com `gemini` ou `glm`. O Ollama segue como padrão — nada quebra sem o `.env`.
+
+- **Google Gemini**: chave em [Google AI Studio](https://aistudio.google.com/apikey). Recomendado: `gemini-2.5-flash` (contexto de 1M tokens).
+- **Zhipu GLM**: chave em [z.ai](https://z.ai/model-api) (portal internacional — não use `open.bigmodel.cn`, que exige verificação de identidade chinesa). Recomendado: `glm-4.7-flash` (contexto de 200K tokens, tier grátis recorrente).
 
 ---
 
@@ -215,7 +219,7 @@ uv run main.py observatory activity --limit 15
 | `--prompt` / `--pm` | off / `gemma3-4b-custom` | Digest condensado (~40%) |
 | `--verbose` | off | Logging DEBUG |
 
-> Modelos `gemini-*` em `--fm`/`--am`/`--pm` roteiam para o Google (requer `GOOGLE_API_KEY`).
+> Modelos `gemini-*` em `--fm`/`--am`/`--pm` roteiam para o Google (requer `GOOGLE_API_KEY`); `glm-*` roteiam para a Zhipu (requer `ZHIPU_API_KEY`).
 
 #### Cookies do YouTube (verificação anti-bot)
 
@@ -259,6 +263,8 @@ output/
 | `moondream-custom` | Descrição de imagens (visão) | ~1,7 GB |
 
 **Gemini** (nuvem, opt-in): roteado por prefixo `gemini-*`. Com a janela de 1M tokens, `--analyze`/`--prompt` dispensam chunking. Recomendado: `gemini-2.5-flash`.
+
+**GLM/Zhipu** (nuvem, opt-in): roteado por prefixo `glm-*`, via `langchain-openai` apontando para a API OpenAI-compatible da Zhipu. Com a janela de 200K tokens, `--analyze`/`--prompt` também dispensam chunking. Recomendado: `glm-4.7-flash` (tier grátis recorrente, sem assinatura).
 
 ---
 
