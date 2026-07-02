@@ -288,6 +288,20 @@ HELP_SHORT: dict[str, str] = {
         "(ex.: o áudio baixado antes de transcrever). Mantém as saídas finais "
         "e os seus arquivos de entrada."
     ),
+    # --- Observatório ---
+    "observatory.gates": (
+        "Disponibilidade dos extras opcionais de ML/NLP e do embedder do RAG. "
+        "Um X não quebra o app — só desativa aquele recurso, com a dica de "
+        "instalação ao lado."
+    ),
+    "observatory.classify": (
+        "Quantos rótulos de treino existem por domínio e se o classificador já "
+        "usa um modelo supervisionado ou ainda está em zero-shot."
+    ),
+    "observatory.config": (
+        "Parâmetros internos de ML em vigor agora, lidos direto do código-fonte "
+        "— nunca uma cópia hardcoded que poderia divergir."
+    ),
 }
 
 #: Texto longo (opcional) — quando presente, a ⓘ vira clicável e abre um modal.
@@ -537,6 +551,53 @@ HELP_LONG: dict[str, str] = {
         "Paridade na linha de comando: uv run main.py data query <arquivos> "
         '"<pergunta>" [--sql] [--out csv|xlsx|json|parquet] · data convert · '
         "data profile · data assess <arquivo>."
+    ),
+    "observatory.gates": (
+        "Cada linha é um recurso opcional que pode estar ausente sem quebrar o "
+        "app — só desliga aquela funcionalidade específica, com a dica de "
+        "instalação ao lado.\n\n"
+        "• [ml] (scikit-learn) — clustering (HDBSCAN/k-means), classificação "
+        "supervisionada, dedup semântico de texto. Sem ele, Mapa semântico, "
+        "'ai topics'/'ai dups' e a promoção do classificador a supervisionado "
+        "ficam indisponíveis.\n"
+        "• [ml-viz] (UMAP) — método alternativo de projeção 2D do mapa "
+        "semântico. Sem ele, o mapa usa só PCA (padrão, sem dependência extra).\n"
+        "• [nlp] (YAKE) — extração de palavras-chave estatística, usada em "
+        "'ai keywords' e nos rótulos de cluster.\n"
+        "• [nlp] (spaCy) — reconhecimento de entidades nomeadas ('ai entities'). "
+        "Exige também o modelo pt_core_news_sm baixado à parte.\n"
+        "• Embedder (Ollama) — o motor de embeddings do RAG (nomic-embed-custom). "
+        "Sem ele, indexação e busca semântica não funcionam em lugar nenhum do app."
+    ),
+    "observatory.classify": (
+        "O classificador de perfil/domínio (core/ml/classify.py) começa em "
+        "zero-shot: compara o embedding do documento com protótipos por rótulo "
+        "e escolhe o mais próximo por cosseno, sem exigir treino.\n\n"
+        "Conforme você confirma ou corrige a sugestão (ex.: aceitar/trocar o "
+        "perfil sugerido na Transcrição), esse rótulo é gravado como exemplo de "
+        "treino. Ao acumular exemplos suficientes por classe, o domínio migra "
+        "automaticamente para um modelo supervisionado (LinearSVC + calibração), "
+        "mais preciso que o zero-shot — sem exigir nenhuma ação manual.\n\n"
+        "Os três domínios são independentes entre si:\n"
+        "• Perfil de transcrição — aula, entrevista, tutorial, reunião…\n"
+        "• Domínio de dados — tipo de planilha/CSV analisado no módulo Dados.\n"
+        "• Tipo de documento — categoria de PDF/documento processado."
+    ),
+    "observatory.config": (
+        "Números que várias operações de ML usam por baixo dos panos, lidos "
+        "direto das constantes reais do código (nunca uma cópia que poderia "
+        "ficar desatualizada) — aqui só para transparência, sem UI para editá-los.\n\n"
+        "• Limiar de dedup de texto (padrão 0.95) — cosseno mínimo para dois "
+        "documentos entrarem no mesmo grupo de quase-duplicatas ('ai dups').\n"
+        "• Distância máx. dedup de imagem (padrão 8) — distância de Hamming "
+        "máxima entre dHashes para duas imagens contarem como quase-idênticas "
+        "na Biblioteca.\n"
+        "• Piso de corpus p/ auto-k (padrão 20) — tamanho mínimo do acervo para "
+        "o k-means escolher o número de clusters sozinho via silhouette score; "
+        "abaixo disso, o k precisa ser informado manualmente.\n"
+        "• λ do MMR (padrão 0.6) — equilíbrio entre relevância e diversidade em "
+        "'Relacionados' e no resumo extrativo. Mais perto de 1 prioriza "
+        "relevância pura; mais perto de 0 prioriza variedade."
     ),
 }
 

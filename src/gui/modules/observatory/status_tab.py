@@ -12,7 +12,7 @@ from typing import Callable
 import flet as ft
 
 from src.core.observatory import status
-from src.gui.theme.components import hairline, section_label
+from src.gui.theme.components import hairline, help_icon_for, section_label
 from src.gui.theme.tokens import Space, Type
 
 _DOMAIN_LABELS = {
@@ -20,6 +20,18 @@ _DOMAIN_LABELS = {
     "data_domain": "Domínio de dados",
     "document_type": "Tipo de documento",
 }
+
+
+def _section_header(text: str, help_key: str, page: ft.Page) -> ft.Control:
+    """A section_label with an optional ⓘ (tooltip, or modal for long help)."""
+    icon = help_icon_for(help_key, page)
+    if icon is None:
+        return section_label(text)
+    return ft.Row(
+        [section_label(text), icon],
+        spacing=Space.xs,
+        vertical_alignment=ft.CrossAxisAlignment.CENTER,
+    )
 
 
 def _gate_row(gate: status.GateStatus) -> ft.Row:
@@ -70,13 +82,15 @@ def build_status_tab(page: ft.Page) -> tuple[ft.Control, Callable[[], None]]:
 
     control = ft.Column(
         controls=[
-            section_label("Gates e extras"),
+            _section_header("Gates e extras", "observatory.gates", page),
             gates_col,
             hairline(),
-            section_label("Classificador (por domínio)"),
+            _section_header(
+                "Classificador (por domínio)", "observatory.classify", page
+            ),
             domains_col,
             hairline(),
-            section_label("Configuração em vigor"),
+            _section_header("Configuração em vigor", "observatory.config", page),
             config_col,
         ],
         scroll=ft.ScrollMode.AUTO,
