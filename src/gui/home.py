@@ -1,4 +1,4 @@
-"""Home screen do mill.tools — fundo animado + 5 ferramentas + 3 hubs (Biblioteca/IA/Receitas)."""
+"""Home screen do mill.tools — fundo animado + 6 ferramentas + 4 hubs (grade 2×2)."""
 
 from __future__ import annotations
 
@@ -543,11 +543,29 @@ def show_home(page: ft.Page, on_complete: Callable[[str], None]) -> None:
         horizontal_alignment=ft.CrossAxisAlignment.STRETCH,
     )
 
-    # Hubs: wide cards in a single row (Biblioteca · IA · Receitas), each equal width.
-    hubs_grid = ft.Row(
-        controls=hub_cards,
-        spacing=Space.xl,
-        vertical_alignment=ft.CrossAxisAlignment.START,
+    # Hubs: 2×2 grid. A single row of 4 narrows each card enough that the
+    # description/features wrap to extra lines and overflow the fixed hover
+    # height (clipped). Two per row doubles the width, matching the room the
+    # wide horizontal hub-card design expects.
+    _HUB_PER_ROW = 2
+
+    def _hub_row(cards: list[ft.Control]) -> ft.Row:
+        padded = list(cards) + [
+            ft.Container(expand=True) for _ in range(_HUB_PER_ROW - len(cards))
+        ]
+        return ft.Row(
+            controls=padded,
+            spacing=Space.xl,
+            vertical_alignment=ft.CrossAxisAlignment.START,
+        )
+
+    hubs_grid = ft.Column(
+        controls=[
+            _hub_row(hub_cards[i : i + _HUB_PER_ROW])
+            for i in range(0, len(hub_cards), _HUB_PER_ROW)
+        ],
+        spacing=Space.md,
+        horizontal_alignment=ft.CrossAxisAlignment.STRETCH,
     )
 
     cards_grid = ft.Column(
