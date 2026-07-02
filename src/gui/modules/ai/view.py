@@ -226,8 +226,7 @@ def build_ai_module(
 
             if stats:
                 index_tab.apply(stats)  # keep the inspector tab in sync
-                times_map = settings.load().get("ai_answer_times", {})
-                analytics_tab.apply(stats, times_map)  # keep the panel in sync
+                analytics_tab.apply(stats)  # keep the panel in sync
 
             form.set_available(available)
             if not available:

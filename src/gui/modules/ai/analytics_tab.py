@@ -1,16 +1,22 @@
-"""Analytics tab for the AI hub (Plano 2): index health + per-model timing.
+"""Analytics tab for the AI hub (Plano 2): index health.
 
-A third tab beside Conversa | Índice. Answers two actionable questions from data
-the hub already keeps: which documents dominate the index (top by chunks) and
-which model answers fastest on this machine (mean/median/p90). Numbers come from
-the pure ``core/rag/analytics`` core; the bar charts reuse the Plano 1 path via
-``_charts`` and are gated on the extras (graceful degradation).
+A third tab beside Conversa | Índice. Answers one actionable question from
+data the hub already keeps: which documents dominate the index (top by
+chunks). Numbers come from the pure ``core/rag/analytics`` core; the bar chart
+reuses the Plano 1 path via ``_charts`` and is gated on the extras (graceful
+degradation).
+
+Per-model response timing used to live here too (Tier "model timing"), but it
+duplicated the same data shown in the Observatório hub's Status tab — and
+Observatório is the one that also covers VLM/embed, not just this RAG-scoped
+LLM number. It was removed from this tab; see
+``gui/modules/observatory/timing_section.py``.
 
 ``apply`` is invoked off the UI thread (from ``view._refresh_status``'s daemon
 worker, like ``index_tab.apply``), so the matplotlib render runs synchronously
 there — never on the UI thread — and the controls are refreshed via a scoped
-``control.update()``. The charts only render when this tab is the visible one, so
-a hidden panel never pays for a render.
+``control.update()``. The chart only renders when this tab is the visible one,
+so a hidden panel never pays for a render.
 """
 
 from __future__ import annotations
@@ -21,12 +27,7 @@ from typing import Callable
 
 import flet as ft
 
-from src.core.rag.analytics import (
-    index_health,
-    model_timings,
-    model_timings_result,
-    top_docs_result,
-)
+from src.core.rag.analytics import index_health, top_docs_result
 from src.core.rag.stats import IndexStats
 from src.gui.modules import _charts
 from src.gui.theme.components import hairline, help_icon_for, section_label
@@ -40,7 +41,7 @@ class AnalyticsTab:
     """Handles for the AI analytics tab."""
 
     control: ft.Control
-    apply: Callable[[IndexStats, dict], None]  # called off the UI thread
+    apply: Callable[[IndexStats], None]  # called off the UI thread
 
 
 def _safe_update(*controls: ft.Control) -> None:
@@ -121,14 +122,6 @@ def _empty(text: str) -> ft.Control:
 
 def build_analytics_tab(page: ft.Page) -> AnalyticsTab:
     """Build the analytics tab and return its handles."""
-    timing_body = ft.Column(controls=[], spacing=0)
-    timing_chart = ft.Image(
-        _charts.BLANK_PNG,
-        fit=ft.BoxFit.CONTAIN,
-        height=320,
-        visible=False,
-        gapless_playback=True,
-    )
     docs_body = ft.Column(controls=[], spacing=0)
     docs_chart = ft.Image(
         _charts.BLANK_PNG,
@@ -158,13 +151,6 @@ def build_analytics_tab(page: ft.Page) -> AnalyticsTab:
     if _help is not None:
         header_controls.append(_help)
 
-    timing_header = _header(
-        _hcell("Modelo", expand=True),
-        _hcell("Respostas", width=72, right=True),
-        _hcell("Média (s)", width=72, right=True),
-        _hcell("Mediana", width=64, right=True),
-        _hcell("p90", width=56, right=True),
-    )
     docs_header = _header(
         _hcell("Documento", expand=True),
         _hcell("Chunks", width=72, right=True),
@@ -177,30 +163,17 @@ def build_analytics_tab(page: ft.Page) -> AnalyticsTab:
                 spacing=Space.sm,
                 vertical_alignment=ft.CrossAxisAlignment.CENTER,
             ),
-            section_label("Tempo de resposta por modelo"),
-            timing_header,
-            timing_body,
-            timing_chart,
-            hairline(),
             section_label("Documentos que dominam o índice"),
             docs_header,
             docs_body,
             docs_chart,
             chart_note,
+            hairline(),
         ],
         scroll=ft.ScrollMode.AUTO,
         expand=True,
         spacing=Space.md,
     )
-
-    def _timing_row(t) -> ft.Control:
-        return _data_row(
-            _cell(t.model, expand=True),
-            _cell(str(t.count), width=72, right=True, muted=True),
-            _cell(f"{t.mean:.1f}", width=72, right=True),
-            _cell(f"{t.median:.1f}", width=64, right=True, muted=True),
-            _cell(f"{t.p90:.1f}", width=56, right=True, muted=True),
-        )
 
     def _doc_row(d) -> ft.Control:
         return _data_row(
@@ -208,34 +181,17 @@ def build_analytics_tab(page: ft.Page) -> AnalyticsTab:
             _cell(str(d.n_chunks), width=72, right=True),
         )
 
-    def _render_charts(timings, health) -> None:
-        """Render both bar charts synchronously (called off the UI thread)."""
+    def _render_chart(health) -> None:
+        """Render the bar chart synchronously (called off the UI thread)."""
         if not control.visible:  # hidden tab never pays for a render
             return
         if not _charts.extras_available():
-            timing_chart.visible = False
             docs_chart.visible = False
             chart_note.value = _charts.setup_hint()
             chart_note.visible = True
             return
         chart_note.visible = False
         from src.core.data.charts import ChartSpec
-
-        timing_chart.visible = False
-        if timings:
-            try:
-                timing_chart.src = _charts.render_result_png(
-                    model_timings_result(timings),
-                    ChartSpec(
-                        kind="bar",
-                        x="modelo",
-                        y="média_s",
-                        title="Tempo médio por modelo (s)",
-                    ),
-                )
-                timing_chart.visible = True
-            except Exception:
-                timing_chart.visible = False
 
         docs_chart.visible = False
         if health.top_docs:
@@ -253,17 +209,13 @@ def build_analytics_tab(page: ft.Page) -> AnalyticsTab:
             except Exception:
                 docs_chart.visible = False
 
-    def apply(stats: IndexStats, times_map: dict) -> None:
-        """Refresh tables + charts from fresh stats and the answer-time history."""
-        timings = model_timings(times_map)
+    def apply(stats: IndexStats) -> None:
+        """Refresh the table + chart from fresh index stats."""
         health = index_health(stats, top_n=_TOP_N)
-        timing_body.controls = [_timing_row(t) for t in timings] or [
-            _empty("Sem histórico de respostas ainda — faça algumas perguntas.")
-        ]
         docs_body.controls = [_doc_row(d) for d in health.top_docs] or [
             _empty("Índice vazio — clique em Reindexar.")
         ]
-        _render_charts(timings, health)
+        _render_chart(health)
         _safe_update(control)
 
     return AnalyticsTab(control=control, apply=apply)
