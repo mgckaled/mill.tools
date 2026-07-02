@@ -53,6 +53,21 @@ def test_on_mount_marks_activity_as_seen_and_does_not_raise(mocker):
 
 
 @pytest.mark.unit
+def test_switching_to_timing_tab_does_not_raise(tmp_path, monkeypatch):
+    import src.core.observatory.model_timing as model_timing_mod
+    from src.gui.modules.observatory.view import build_observatory_module
+
+    monkeypatch.setattr(
+        model_timing_mod, "_store_path", lambda: tmp_path / "model_timings.json"
+    )
+    module = build_observatory_module(
+        MagicMock(), MagicMock(), MagicMock(), [False], []
+    )
+    module.on_mount({})
+    module.control.controls[0].controls[2].on_click(MagicMock())  # tab_timing
+
+
+@pytest.mark.unit
 def test_on_mount_records_last_seen_timestamp(tmp_path, monkeypatch):
     import src.core.observatory.activity as activity_mod
     from src.core.observatory.activity import log_activity

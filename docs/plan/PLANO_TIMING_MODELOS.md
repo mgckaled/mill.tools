@@ -297,9 +297,11 @@ Uma entrada por **lote** (até 16 chunks) em `embed_texts`, não por documento i
 
 `core/rag/embedder.py` já importa só stdlib+numpy+lazy langchain_ollama; importar `core/observatory/model_timing` é `core → core`, permitido pela skill `architecture`.
 
-### 4.5 GUI — Observatório: 3 tabelas + 2 gráficos
+### 4.5 GUI — Observatório: 3 tabelas + 2 gráficos ✅ (revisado — aba própria, não seção do Status)
 
-Novo componente reusável `src/gui/modules/observatory/timing_section.py` (evita triplicar o código de tabela+gráfico entre LLM/VLM/embed — mesmo padrão de extração "divide-se ao tocar" da skill `architecture`, tabela reaproveitando os helpers `_cell`/`_header`/`_hcell`/`_data_row` hoje em `gui/modules/ai/analytics_tab.py`, que serão movidos para cá):
+**Revisão pós-implementação**: o desenho original colocava as 3 seções dentro da aba **Status** existente. Ao usar, ficou claro que timing merece uma aba **própria** (3 tabelas + 2 gráficos é superfície demais para dividir espaço com gates/classificador/config) — então o hub Observatório ganhou uma **3ª aba** ("Tempo de resposta", `gui/modules/observatory/timing_tab.py`) e `status_tab.py` voltou a conter só gates/classificador/config, como antes deste plano.
+
+Novo componente reusável `src/gui/modules/observatory/timing_section.py` (evita triplicar o código de tabela+gráfico entre LLM/VLM/embed — mesmo padrão de extração "divide-se ao tocar" da skill `architecture`, tabela reaproveitando os helpers `_cell`/`_header`/`_hcell`/`_data_row` que existiam em `gui/modules/ai/analytics_tab.py`):
 
 ```python
 def build_timing_section(
@@ -308,21 +310,23 @@ def build_timing_section(
     """One domain's table (+ optional bar chart). Returns (control, apply)."""
 ```
 
-`status_tab.py::apply()` passa a:
+`timing_tab.py::build_timing_tab(page) -> (control, apply)` (mesma assinatura de `build_status_tab`/`build_activity_tab`) monta as 3 seções e, no `apply()`:
 
 ```python
 from src.core.observatory.model_timing import load_timings, timings_by_domain
 from src.core.rag.analytics import model_timings
 
 entries = load_timings()
-llm_apply(model_timings(timings_by_domain(entries, "llm")))
-vlm_apply(model_timings(timings_by_domain(entries, "vlm")))
-embed_apply(model_timings(timings_by_domain(entries, "embed")))  # show_chart=False
+llm_section.apply(model_timings(timings_by_domain(entries, "llm")))
+vlm_section.apply(model_timings(timings_by_domain(entries, "vlm")))
+embed_section.apply(model_timings(timings_by_domain(entries, "embed")))  # show_chart=False
 ```
 
 `embed` usa `show_chart=False` (um modelo só — `nomic-embed-custom` — não é comparação, não precisa de barra; a tabela já mostra count/média/mediana/p90). LLM e VLM usam `show_chart=True`, reaproveitando `model_timings_result()` (`core/rag/analytics.py`, **intocada**) + `_charts.render_result_png` (`core/data/charts.py`, **intocado**) — mesmo caminho já provado no Painel da IA.
 
-`cli/observatory.py::_run_status` ganha a mesma quebra por domínio (3 blocos de texto em vez de 1), lendo `model_timings.json` diretamente (mesmo padrão de `_answer_times()` — CLI não importa `gui.settings`).
+`view.py` (`build_observatory_module`) passa de duas para **três** abas manuais (`Atividade | Status | Tempo de resposta`, `visible=` num `ft.Stack`, mesmo padrão Flet 0.85 sem `ft.Tabs`); `last_observatory_tab` ganha o valor `"timing"` além de `"atividade"`/`"status"`.
+
+`cli/observatory.py::_run_status` ganha a mesma quebra por domínio (3 blocos de texto em vez de 1), lendo `model_timings.json` diretamente (mesmo padrão de `_answer_times()` — CLI não importa `gui.settings`); a CLI não tem o conceito de "aba", então não muda com essa revisão.
 
 ### 4.6 GUI — remoção da seção de timing do Painel da IA
 
@@ -391,7 +395,7 @@ Cobertura alvo ≥ 90% em `core/observatory/model_timing.py` (mesmo padrão de `
 - Nenhuma dependência nova em `pyproject.toml` (só `langchain_core`, já instalado).
 - `uv run pytest -m unit` verde e `ruff` limpo após cada commit.
 - Uma pergunta na aba Conversa da IA, uma descrição de imagem (local **e** cloud) e uma indexação no RAG cada uma gera pelo menos 1 entrada nova em `~/.mill-tools/model_timings.json`, com o `domain` correto (`llm`/`vlm`/`embed`).
-- A aba Status do Observatório mostra 3 tabelas (LLM/VLM/embed) e 2 gráficos (LLM/VLM — embed só tabela).
+- A aba **Tempo de resposta** do Observatório (própria, não uma seção do Status) mostra 3 tabelas (LLM/VLM/embed) e 2 gráficos (LLM/VLM — embed só tabela).
 - A aba Painel do hub IA não mostra mais nenhuma menção a tempo de resposta por modelo (só saúde do índice).
 - `observatory status` (CLI) imprime a quebra por domínio.
 - `ai_answer_times`/estimativa "tempo típico" da aba Conversa continuam funcionando exatamente como antes (nenhuma regressão).
@@ -417,8 +421,10 @@ Não introduzir `filelock` ou qualquer locking entre processos — mesmo risco (
 | `src/core/rag/embedder.py` | Modificado | Medição manual por lote em `embed_texts`/`embed_query` |
 | `tests/core/rag/test_embedder.py` | Modificado | Fixture de isolamento de `model_timing._store_path` |
 | `src/gui/modules/observatory/timing_section.py` | Novo | Componente reusável tabela+gráfico por domínio |
-| `src/gui/modules/observatory/status_tab.py` | Modificado | 3 seções via `timing_section.py` |
-| `tests/gui/modules/observatory/` | Modificado | Construct-smoke atualizado |
+| `src/gui/modules/observatory/timing_tab.py` | Novo | Aba própria "Tempo de resposta" (revisão pós-implementação — não fica dentro do Status) |
+| `src/gui/modules/observatory/status_tab.py` | Modificado (revertido) | Timing removido de volta; só gates/classificador/config |
+| `src/gui/modules/observatory/view.py` | Modificado | 3ª aba manual "Tempo de resposta" |
+| `tests/gui/modules/observatory/` | Modificado | Construct-smoke atualizado (`test_timing_tab.py` novo) |
 | `src/cli/observatory.py` | Modificado | `_run_status` com quebra por domínio |
 | `src/gui/modules/ai/analytics_tab.py` | Modificado | Remove seção de timing (mantém saúde do índice) |
 | `src/gui/modules/ai/view.py` | Modificado | `analytics_tab.apply(stats)` sem `times_map` |
