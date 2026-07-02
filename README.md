@@ -9,6 +9,8 @@
 ![Flet](https://img.shields.io/badge/GUI-Flet%200.85-02569B)
 ![faster-whisper](https://img.shields.io/badge/faster--whisper-GPU-FFB000)
 ![Ollama](https://img.shields.io/badge/Ollama-local-000000?logo=ollama&logoColor=white)
+![Gemini](https://img.shields.io/badge/Gemini-opt--in-8E75B2?logo=googlegemini&logoColor=white)
+![GLM](https://img.shields.io/badge/GLM-opt--in-3B82F6)
 ![DuckDB](https://img.shields.io/badge/DuckDB-embutido-FFF000?logo=duckdb&logoColor=black)
 ![scikit-learn](https://img.shields.io/badge/scikit--learn-ML-F7931E?logo=scikitlearn&logoColor=white)
 
@@ -40,7 +42,7 @@ Seis **ferramentas** de processamento (NavigationRail) e quatro **hubs** que ope
 | **Transcrição** | Ferramenta | Whisper local (GPU) sobre URL, áudio/vídeo local ou texto; pós-processamento por IA: parágrafos, análise estruturada e digest. Um `.txt`/`.md` pula o Whisper e vai direto à IA |
 | **Áudio** | Ferramenta | Download (yt-dlp), conversão e extração de faixas em fila; pós-processamento encadeável: remoção de silêncio, denoise (spectral gating), velocidade sem pitch (`atempo`), normalização de loudness (EBU R128), downmix mono e reamostragem; **presets de uma tecla** (Transcrição/Podcast/Música); reprodutor com **A/B antes/depois**; aba **Visualizar** (waveform/espectrograma PNG) |
 | **Vídeo** | Ferramenta | 8 operações: download, convert, trim, compress, resize, extract-audio, thumbnail e legenda (mux/burn-in). Encoding 100% CPU — sem NVENC |
-| **Imagens** | Ferramenta | Conversão/manipulação + IA, com toggle **Edição \| Descrição IA**. Edição: convert, resize, **smart crop** (ponto focal), rotate, **watermark** (texto/imagem/QR, 9-grid, tiling, rotação), border, adjust, **grade de filtros**, favicon, colagem, **remoção/troca de fundo** (rembg) e **OCR** (Tesseract). Controle de **EXIF** (privacidade/copyright), visor Antes/Depois (xadrez de transparência, metadados, lote navegável), bridge **imagem→PDF**. Descrição por visão (gemma3-4b) em aba própria com Markdown |
+| **Imagens** | Ferramenta | Conversão/manipulação + IA, com toggle **Edição \| Descrição IA**. Edição: convert, resize, **smart crop** (ponto focal), rotate, **watermark** (texto/imagem/QR, 9-grid, tiling, rotação), border, adjust, **grade de filtros**, favicon, colagem, **remoção/troca de fundo** (rembg) e **OCR** (Tesseract). Controle de **EXIF** (privacidade/copyright), visor Antes/Depois (xadrez de transparência, metadados, lote navegável), bridge **imagem→PDF**. Descrição por visão (gemma3-4b local ou GLM em nuvem) em aba própria com Markdown |
 | **Documentos** | Ferramenta | 13 operações PDF/QR (merge, split, compress, rotate, watermark, stamp, encrypt, extract, OCR, pdf↔imagens, QR, análise). 100% local via pymupdf |
 | **Dados** | Ferramenta | Consulte CSV/TSV/JSON/Parquet/XLSX em **português** (a IA traduz para SQL vendo só o schema) ou SQL na mão; motor **DuckDB** embutido. Salva o resultado, perfila e gera **gráficos** (barras/linha/histograma/dispersão) |
 | **Biblioteca** | Hub | Índice navegável de tudo em `output/`: grade com thumbnails, lista, **painel analítico** (acervo por tipo/tamanho/crescimento) ou **mapa semântico** (temas do acervo agrupados + relacionados); filtro/busca/ordenação, abrir arquivo/pasta e reenviar a outro módulo |
@@ -61,7 +63,7 @@ Seis **ferramentas** de processamento (NavigationRail) e quatro **hubs** que ope
 | NLP textual | `core/text` **torch-free** (extra `[nlp]`): keyphrases ([YAKE](https://github.com/LIAAD/yake)), resumo extractivo (TextRank self-contained, sem nltk) e entidades ([spaCy](https://spacy.io) CNN `pt_core_news_sm`). Auto-sugestão de perfil, aba Insights e auto-tags da Biblioteca |
 | Vídeo | yt-dlp + ffmpeg CPU-only (libx264/libx265/libvpx-vp9) — sem NVENC |
 | Áudio | noisereduce (spectral gating, CPU) + ffmpeg loudnorm (EBU R128, 2 passes), silenceremove e atempo (silêncio/velocidade); torch-free |
-| Imagens | Pillow (transforms, EXIF, smart crop, watermark/QR, filtros) + rembg/ONNX (CPU) para remoção/troca de fundo; OCR via Tesseract (extra `[ocr]`); descrição por visão via Ollama (`gemma3-4b`) |
+| Imagens | Pillow (transforms, EXIF, smart crop, watermark/QR, filtros) + rembg/ONNX (CPU) para remoção/troca de fundo; OCR via Tesseract (extra `[ocr]`); descrição por visão via Ollama (`gemma3-4b`/moondream/llava/minicpm-v) ou GLM em nuvem (`glm-4.6v-flash`, opt-in) |
 | Documentos | [pymupdf](https://pymupdf.readthedocs.io) (PDF) + Tesseract (OCR híbrido, opcional) |
 | Interface | [Flet 0.85](https://flet.dev) (Flutter desktop) com log em tempo real, design system próprio e ajuda contextual (ⓘ) |
 | IA | Ollama local por padrão; Gemini/GLM opt-in por prefixo de modelo (`gemini-*`/`glm-*`) |
@@ -264,7 +266,7 @@ output/
 
 **Gemini** (nuvem, opt-in): roteado por prefixo `gemini-*`. Com a janela de 1M tokens, `--analyze`/`--prompt` dispensam chunking. Recomendado: `gemini-2.5-flash`.
 
-**GLM/Zhipu** (nuvem, opt-in): roteado por prefixo `glm-*`, via `langchain-openai` apontando para a API OpenAI-compatible da Zhipu. Com a janela de 200K tokens, `--analyze`/`--prompt` também dispensam chunking. Recomendado: `glm-4.7-flash` (tier grátis recorrente, sem assinatura).
+**GLM/Zhipu** (nuvem, opt-in): roteado por prefixo `glm-*`, via `langchain-openai` apontando para a API OpenAI-compatible da Zhipu. Com a janela de 200K tokens, `--analyze`/`--prompt` também dispensam chunking. Recomendado: `glm-4.7-flash` (tier grátis recorrente, sem assinatura). Também disponível como VLM no módulo Imagens: `glm-4.6v-flash` (visão, mesmo tier grátis) descreve imagens sem precisar de Ollama.
 
 ---
 
