@@ -9,7 +9,6 @@ from __future__ import annotations
 import argparse
 import sys
 import time
-from pathlib import Path
 
 _DOMAIN_LABELS = {
     "transcription_profile": "Perfil de transcrição",
@@ -50,21 +49,11 @@ def _fmt_time(ts: float) -> str:
     return time.strftime("%d/%m %H:%M", time.localtime(ts))
 
 
-def _answer_times() -> dict[str, list[float]]:
-    """Read the per-model answer-time map from ~/.mill-tools/config.json.
-
-    Read directly (not via gui.settings) so the CLI layer never imports the
-    GUI — same convention as `cli/ai.py::_answer_times`.
-    """
-    import json
-
-    config = Path.home() / ".mill-tools" / "config.json"
-    try:
-        data = json.loads(config.read_text(encoding="utf-8"))
-    except (OSError, ValueError):
-        return {}
-    times = data.get("ai_answer_times", {})
-    return times if isinstance(times, dict) else {}
+_TIMING_DOMAIN_LABELS = (
+    ("llm", "LLM (texto)"),
+    ("vlm", "VLM (descrição de imagem)"),
+    ("embed", "Embedder"),
+)
 
 
 def _run_status(ns: argparse.Namespace) -> None:
@@ -90,15 +79,21 @@ def _run_status(ns: argparse.Namespace) -> None:
     print(f"  Piso de corpus p/ auto-k: {snap.auto_k_min_corpus}")
     print(f"  λ do MMR: {snap.mmr_lambda:.2f}")
 
+    from src.core.observatory.model_timing import load_timings, timings_by_domain
     from src.core.rag.analytics import model_timings
 
-    timings = model_timings(_answer_times())
+    entries = load_timings()
     print("\nTempo de resposta por modelo:")
-    if not timings:
-        print("  Nenhuma resposta registrada ainda.")
-    else:
-        for t in timings:
-            print(f"  {t.model}: {t.count}x · média {t.mean:.1f}s · p90 {t.p90:.1f}s")
+    for domain, label in _TIMING_DOMAIN_LABELS:
+        timings = model_timings(timings_by_domain(entries, domain))
+        print(f"  {label}:")
+        if not timings:
+            print("    Nenhuma resposta registrada ainda.")
+        else:
+            for t in timings:
+                print(
+                    f"    {t.model}: {t.count}x · média {t.mean:.1f}s · p90 {t.p90:.1f}s"
+                )
 
 
 def _run_activity(ns: argparse.Namespace) -> None:

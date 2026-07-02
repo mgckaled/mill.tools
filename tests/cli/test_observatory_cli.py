@@ -56,7 +56,7 @@ def test_run_status_prints_every_section(mocker, capsys):
         "src.core.observatory.status.config_snapshot",
         return_value=MLConfigSnapshot(0.95, 8, 20, 0.6),
     )
-    mocker.patch("src.cli.observatory._answer_times", return_value={})
+    mocker.patch("src.core.observatory.model_timing.load_timings", return_value=[])
 
     ns = _parse("status")
     ns.func(ns)
@@ -67,7 +67,42 @@ def test_run_status_prints_every_section(mocker, capsys):
     assert "[✗] [nlp]" in out and "dica" in out
     assert "Domínio de dados" in out
     assert "Configuração em vigor" in out
-    assert "Nenhuma resposta registrada" in out
+    assert "LLM (texto)" in out
+    assert "VLM (descrição de imagem)" in out
+    assert "Embedder" in out
+    assert out.count("Nenhuma resposta registrada ainda.") == 3
+
+
+@pytest.mark.unit
+def test_run_status_breaks_down_timings_by_domain(mocker, capsys):
+    from src.core.observatory.model_timing import TimingEntry
+    from src.core.observatory.status import DomainStatus, MLConfigSnapshot
+
+    mocker.patch("src.core.observatory.status.gate_statuses", return_value=())
+    mocker.patch(
+        "src.core.observatory.status.domain_statuses",
+        return_value=(DomainStatus("data_domain", 0, False),),
+    )
+    mocker.patch(
+        "src.core.observatory.status.config_snapshot",
+        return_value=MLConfigSnapshot(0.95, 8, 20, 0.6),
+    )
+    mocker.patch(
+        "src.core.observatory.model_timing.load_timings",
+        return_value=[
+            TimingEntry("gemini-2.5-flash", "llm", 4.0, 1.0),
+            TimingEntry("moondream-custom", "vlm", 2.0, 2.0),
+            TimingEntry("nomic-embed-custom", "embed", 0.3, 3.0),
+        ],
+    )
+
+    ns = _parse("status")
+    ns.func(ns)
+
+    out = capsys.readouterr().out
+    assert "gemini-2.5-flash" in out
+    assert "moondream-custom" in out
+    assert "nomic-embed-custom" in out
 
 
 @pytest.mark.unit
