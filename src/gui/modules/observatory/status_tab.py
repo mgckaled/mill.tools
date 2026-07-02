@@ -12,6 +12,7 @@ from typing import Callable
 import flet as ft
 
 from src.core.observatory import status
+from src.gui.modules.observatory.timing_section import build_timing_section
 from src.gui.theme.components import hairline, section_label
 from src.gui.theme.tokens import Space, Type
 
@@ -67,7 +68,11 @@ def build_status_tab(page: ft.Page) -> tuple[ft.Control, Callable[[], None]]:
     gates_col = ft.Column(spacing=Space.xs)
     domains_col = ft.Column(spacing=Space.xs)
     config_col = ft.Column(spacing=Space.xs)
-    timings_col = ft.Column(spacing=Space.xs)
+
+    llm_section = build_timing_section("LLM (texto)", show_chart=True)
+    vlm_section = build_timing_section("VLM (descrição de imagem)", show_chart=True)
+    # A single model (nomic-embed-custom) makes a comparison bar meaningless.
+    embed_section = build_timing_section("Embedder", show_chart=False)
 
     control = ft.Column(
         controls=[
@@ -81,7 +86,9 @@ def build_status_tab(page: ft.Page) -> tuple[ft.Control, Callable[[], None]]:
             config_col,
             hairline(),
             section_label("Tempo de resposta por modelo"),
-            timings_col,
+            llm_section.control,
+            vlm_section.control,
+            embed_section.control,
         ],
         scroll=ft.ScrollMode.AUTO,
         expand=True,
@@ -105,39 +112,13 @@ def build_status_tab(page: ft.Page) -> tuple[ft.Control, Callable[[], None]]:
             )
         ]
 
+        from src.core.observatory.model_timing import load_timings, timings_by_domain
         from src.core.rag.analytics import model_timings
-        from src.gui import settings
 
-        times_map = settings.load().get("ai_answer_times", {})
-        timings = model_timings(times_map)
-        if not timings:
-            timings_col.controls = [
-                ft.Text(
-                    "Nenhuma resposta registrada ainda.",
-                    size=Type.caption.size,
-                    color=ft.Colors.ON_SURFACE_VARIANT,
-                    italic=True,
-                )
-            ]
-        else:
-            timings_col.controls = [
-                ft.Row(
-                    [
-                        ft.Text(
-                            t.model,
-                            size=Type.body.size,
-                            color=ft.Colors.ON_SURFACE,
-                            expand=True,
-                        ),
-                        ft.Text(
-                            f"{t.count}x · média {t.mean:.1f}s · p90 {t.p90:.1f}s",
-                            size=Type.caption.size,
-                            color=ft.Colors.ON_SURFACE_VARIANT,
-                        ),
-                    ]
-                )
-                for t in timings
-            ]
+        entries = load_timings()
+        llm_section.apply(model_timings(timings_by_domain(entries, "llm")))
+        vlm_section.apply(model_timings(timings_by_domain(entries, "vlm")))
+        embed_section.apply(model_timings(timings_by_domain(entries, "embed")))
 
         try:
             control.update()
