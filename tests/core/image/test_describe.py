@@ -1,0 +1,43 @@
+import sys
+from unittest.mock import MagicMock
+
+import pytest
+
+
+@pytest.mark.unit
+def test_describe_image_local_uses_chatollama(jpg_image, mocker):
+    """A non-GLM model name must route through ChatOllama with pinned num_ctx."""
+    from src.core.image.describe import describe_image
+
+    fake_response = MagicMock(content="uma descrição qualquer")
+    fake_llm = MagicMock()
+    fake_llm.invoke.return_value = fake_response
+    fake_mod = MagicMock()
+    fake_mod.ChatOllama.return_value = fake_llm
+    mocker.patch.dict(sys.modules, {"langchain_ollama": fake_mod})
+    mock_make_llm = mocker.patch("src.llm_factory.make_llm")
+
+    result = describe_image(jpg_image, model="moondream-custom")
+
+    assert result == "uma descrição qualquer"
+    mock_make_llm.assert_not_called()
+    _, kwargs = fake_mod.ChatOllama.call_args
+    assert kwargs["model"] == "moondream-custom"
+    assert kwargs["num_ctx"] > 0
+
+
+@pytest.mark.unit
+def test_describe_image_glm_routes_through_make_llm(jpg_image, mocker):
+    """A glm-* model name must route through llm_factory.make_llm, not ChatOllama."""
+    from src.core.image.describe import describe_image
+
+    fake_response = MagicMock(content="descrição via GLM")
+    fake_llm = MagicMock()
+    fake_llm.invoke.return_value = fake_response
+    mock_make_llm = mocker.patch("src.llm_factory.make_llm", return_value=fake_llm)
+
+    result = describe_image(jpg_image, model="glm-4.6v-flash")
+
+    assert result == "descrição via GLM"
+    mock_make_llm.assert_called_once_with("glm-4.6v-flash")
+    fake_llm.invoke.assert_called_once()

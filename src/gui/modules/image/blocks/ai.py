@@ -9,7 +9,8 @@ import flet as ft
 from src.core.image.background import is_available as _rembg_ok
 from src.gui.theme.components import labeled_field, section_label, segmented_selector
 from src.gui.theme.components.sliders import labeled_slider
-from src.gui.theme.tokens import Layout, Space, Type
+from src.gui.theme.tokens import IconSize, Layout, Radius, Space, Type
+from src.llm_factory import is_cloud_model
 
 
 class AIRefs(NamedTuple):
@@ -118,6 +119,40 @@ def build_ai_blocks(page: ft.Page) -> AIRefs:
 
     # ── describe ──────────────────────────────────────────────────────────────
 
+    desc_cloud_warning = ft.Container(
+        visible=False,
+        bgcolor=ft.Colors.with_opacity(0.08, ft.Colors.PRIMARY),
+        border_radius=Radius.sm,
+        padding=ft.Padding(
+            left=Space.sm, right=Space.sm, top=Space.xs, bottom=Space.xs
+        ),
+        content=ft.Row(
+            controls=[
+                ft.Icon(
+                    ft.Icons.CLOUD_OUTLINED, size=IconSize.md, color=ft.Colors.PRIMARY
+                ),
+                ft.Text(
+                    "Com modelos em nuvem (GLM), a imagem é enviada a um provedor "
+                    "externo para ser descrita.",
+                    size=Type.small.size,
+                    color=ft.Colors.ON_SURFACE_VARIANT,
+                    expand=True,
+                    no_wrap=False,
+                ),
+            ],
+            spacing=Space.xs,
+            vertical_alignment=ft.CrossAxisAlignment.CENTER,
+        ),
+    )
+
+    def _on_desc_model_select(e: ft.ControlEvent) -> None:
+        desc_cloud_warning.visible = is_cloud_model(e.control.value or "")
+        try:
+            if desc_cloud_warning.page:
+                desc_cloud_warning.update()
+        except RuntimeError:
+            pass
+
     desc_dd = ft.Dropdown(
         options=[
             ft.dropdown.Option("moondream-custom", "moondream-custom — rápido"),
@@ -126,8 +161,10 @@ def build_ai_blocks(page: ft.Page) -> AIRefs:
             ),
             ft.dropdown.Option("llava:7b", "llava:7b"),
             ft.dropdown.Option("minicpm-v", "minicpm-v"),
+            ft.dropdown.Option("glm-4.6v-flash", "glm-4.6v-flash (nuvem)"),
         ],
         value="moondream-custom",
+        on_select=_on_desc_model_select,
         border_color=ft.Colors.OUTLINE_VARIANT,
         focused_border_color=ft.Colors.PRIMARY,
         text_size=Type.input.size,
@@ -151,6 +188,7 @@ def build_ai_blocks(page: ft.Page) -> AIRefs:
             labeled_field(
                 "Modelo vision", desc_dd, help_key="image.describe_model", page=page
             ),
+            desc_cloud_warning,
             labeled_field(
                 "Prompt", desc_prompt_tf, help_key="image.describe_prompt", page=page
             ),

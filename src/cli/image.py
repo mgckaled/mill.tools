@@ -334,13 +334,21 @@ def add_image_parser(subparsers: argparse._SubParsersAction) -> None:
     )
 
     # ── describe ──────────────────────────────────────────────────────────────
-    dc = img_sub.add_parser("describe", help="Describe image via Ollama vision model")
+    dc = img_sub.add_parser(
+        "describe", help="Describe image via a vision model (Ollama local or GLM cloud)"
+    )
     dc.add_argument("file", help="Image file or URL")
     dc.add_argument(
         "--model",
         default="moondream-custom",
-        choices=["moondream-custom", "gemma3-4b-custom", "llava:7b", "minicpm-v"],
-        help="Vision model (default moondream-custom)",
+        choices=[
+            "moondream-custom",
+            "gemma3-4b-custom",
+            "llava:7b",
+            "minicpm-v",
+            "glm-4.6v-flash",
+        ],
+        help="Vision model (default moondream-custom; glm-4.6v-flash is a cloud opt-in)",
     )
     dc.add_argument(
         "--prompt", default="", help="Custom prompt (empty = default PT-BR)"
