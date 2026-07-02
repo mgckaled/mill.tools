@@ -15,7 +15,7 @@ Usage:
     uv run main.py image favicon FILE [--sizes 16,32,48,64,128,256]
     uv run main.py image contact-sheet FILES... [--cols 4] [--thumb 200]
     uv run main.py image remove-bg FILE [--model u2net]
-    uv run main.py image describe FILE [--model moondream-custom]
+    uv run main.py image describe FILE [--model moondream-custom] [--preset short]
 """
 
 from __future__ import annotations
@@ -356,8 +356,12 @@ def add_image_parser(subparsers: argparse._SubParsersAction) -> None:
         ),
     )
     dc.add_argument(
-        "--prompt", default="", help="Custom prompt (empty = default PT-BR)"
+        "--preset",
+        default="detailed",
+        choices=["detailed", "short", "technical", "text", "objects", "narrative"],
+        help="Preset prompt (ignored if --prompt is set); default: detailed",
     )
+    dc.add_argument("--prompt", default="", help="Custom prompt (overrides --preset)")
 
     # ── exif ──────────────────────────────────────────────────────────────────
     ex = img_sub.add_parser("exif", help="Read or edit EXIF metadata")
@@ -401,6 +405,7 @@ def run_image_cli(ns: argparse.Namespace) -> None:
     from src.cli.bus import CLIEventBus
     from src.cli.transcription import resolve_input
     from src.core.image.args import ImageArgs
+    from src.core.image.describe import DESCRIBE_PRESETS
     from src.core.io_types import InputItem
     from src.gui.modules.image.worker import run_image_pipeline
     from src.utils import check_dependencies
@@ -500,7 +505,10 @@ def run_image_cli(ns: argparse.Namespace) -> None:
         rembg_bg_image=(Path(ns.bg_image) if getattr(ns, "bg_image", "") else None),
         # describe
         describe_model=getattr(ns, "model", "moondream-custom"),
-        describe_prompt=getattr(ns, "prompt", ""),
+        describe_prompt=(
+            getattr(ns, "prompt", "")
+            or DESCRIBE_PRESETS.get(getattr(ns, "preset", "detailed"), "")
+        ),
         # ocr
         ocr_lang=getattr(ns, "lang", "por"),
     )

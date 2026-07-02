@@ -206,8 +206,8 @@ HELP_SHORT: dict[str, str] = {
         "nuvem (tier grátis) — a imagem sai da máquina."
     ),
     "image.describe_prompt": (
-        "Instrução enviada ao modelo. "
-        "Vazio = descrição geral em português (objetos, contexto, cores, texto visível)."
+        "Instrução enviada ao modelo. Preenchida pelo preset escolhido acima "
+        "(Estilo de descrição) — editável antes de rodar."
     ),
     # --- Documentos ---
     "document.input": (

@@ -119,6 +119,13 @@ def test_image_describe_prompt():
 
 
 @pytest.mark.unit
+def test_image_describe_preset_default():
+    ns = _parse("describe", "photo.jpg")
+    assert ns.preset == "detailed"
+    assert ns.prompt == ""
+
+
+@pytest.mark.unit
 def test_image_func_is_callable():
     ns = _parse("convert", "photo.jpg")
     assert callable(ns.func)
@@ -162,3 +169,39 @@ def test_run_image_cli_contact_sheet_collects_multiple_items(mocker, tmp_path):
     args = mock_pipeline.call_args.args[0]
     assert args.operation == "contact_sheet"
     assert len(args.items) == 3
+
+
+@pytest.mark.unit
+def test_run_image_cli_describe_preset_fills_prompt(mocker, tmp_path):
+    """--preset (no --prompt) resolves to that preset's full text."""
+    from src.core.image.describe import DESCRIBE_PRESETS
+
+    mocker.patch("src.utils.check_dependencies")
+    mock_pipeline = mocker.patch(
+        "src.gui.modules.image.worker.run_image_pipeline",
+        return_value=True,
+    )
+    f = tmp_path / "photo.jpg"
+    f.write_bytes(b"")
+    ns = _parse("describe", str(f), "--preset", "short")
+    ns.func(ns)
+    args = mock_pipeline.call_args.args[0]
+    assert args.describe_prompt == DESCRIBE_PRESETS["short"]
+
+
+@pytest.mark.unit
+def test_run_image_cli_describe_prompt_overrides_preset(mocker, tmp_path):
+    """An explicit --prompt wins over --preset."""
+    mocker.patch("src.utils.check_dependencies")
+    mock_pipeline = mocker.patch(
+        "src.gui.modules.image.worker.run_image_pipeline",
+        return_value=True,
+    )
+    f = tmp_path / "photo.jpg"
+    f.write_bytes(b"")
+    ns = _parse(
+        "describe", str(f), "--preset", "technical", "--prompt", "custom prompt"
+    )
+    ns.func(ns)
+    args = mock_pipeline.call_args.args[0]
+    assert args.describe_prompt == "custom prompt"

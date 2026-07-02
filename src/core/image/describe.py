@@ -9,6 +9,39 @@ _DEFAULT_PROMPT = (
     "Descreva detalhadamente o que está nesta imagem em português: "
     "objetos presentes, contexto, cores dominantes, texto visível (se houver)."
 )
+_SHORT_PROMPT = (
+    "Descreva esta imagem em português numa frase curta e objetiva, como uma "
+    "legenda (caption) — sem floreios."
+)
+_TECHNICAL_PROMPT = (
+    "Analise esta imagem do ponto de vista técnico e artístico em português: "
+    "composição, enquadramento, iluminação, estilo/técnica e paleta de cores."
+)
+_TEXT_PROMPT = (
+    "Transcreva em português todo o texto visível nesta imagem, palavra por "
+    "palavra, sem descrever o resto da cena. Se não houver texto, responda "
+    '"Nenhum texto visível.".'
+)
+_OBJECTS_PROMPT = (
+    "Liste em português, em tópicos e sem prosa, todos os objetos e elementos "
+    "identificáveis nesta imagem."
+)
+_NARRATIVE_PROMPT = (
+    "Descreva esta imagem em português de forma criativa e narrativa, "
+    "capturando a atmosfera, a emoção e a história que ela parece contar."
+)
+
+# Preset prompts selectable by id (CLI --preset, GUI card selector). "detailed"
+# is the historical default — same text describe_image() falls back to when no
+# prompt is given at all, so leaving prompt="" is still equivalent to it.
+DESCRIBE_PRESETS: dict[str, str] = {
+    "detailed": _DEFAULT_PROMPT,
+    "short": _SHORT_PROMPT,
+    "technical": _TECHNICAL_PROMPT,
+    "text": _TEXT_PROMPT,
+    "objects": _OBJECTS_PROMPT,
+    "narrative": _NARRATIVE_PROMPT,
+}
 
 
 def is_available() -> bool:

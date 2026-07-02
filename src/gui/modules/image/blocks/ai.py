@@ -7,6 +7,8 @@ from typing import Callable, NamedTuple
 import flet as ft
 
 from src.core.image.background import is_available as _rembg_ok
+from src.core.image.describe import DESCRIBE_PRESETS
+from src.gui.modules.image.blocks.describe_presets import build_describe_preset_selector
 from src.gui.theme.components import labeled_field, section_label, segmented_selector
 from src.gui.theme.components.sliders import labeled_slider
 from src.gui.theme.tokens import IconSize, Layout, Radius, Space, Type
@@ -173,13 +175,26 @@ def build_ai_blocks(page: ft.Page) -> AIRefs:
         content_padding=ft.Padding(left=10, right=4, top=0, bottom=0),
     )
     desc_prompt_tf = ft.TextField(
-        hint_text="Prompt customizado (vazio = padrão PT-BR)",
+        value=DESCRIBE_PRESETS["detailed"],
+        hint_text="Prompt customizado",
         text_size=Type.caption.size,
         height=Layout.field_height,
         content_padding=ft.Padding(left=10, right=4, top=0, bottom=0),
         border_color=ft.Colors.OUTLINE_VARIANT,
         focused_border_color=ft.Colors.PRIMARY,
         expand=True,
+    )
+
+    def _on_desc_preset_select(preset_id: str) -> None:
+        desc_prompt_tf.value = DESCRIBE_PRESETS.get(preset_id, "")
+        try:
+            if desc_prompt_tf.page:
+                desc_prompt_tf.update()
+        except RuntimeError:
+            pass
+
+    preset_grid, _get_desc_preset = build_describe_preset_selector(
+        page, value="detailed", on_select=_on_desc_preset_select
     )
 
     describe_block = ft.Column(
@@ -190,6 +205,8 @@ def build_ai_blocks(page: ft.Page) -> AIRefs:
                 "Modelo vision", desc_dd, help_key="image.describe_model", page=page
             ),
             desc_cloud_warning,
+            section_label("Estilo de descrição"),
+            preset_grid,
             labeled_field(
                 "Prompt", desc_prompt_tf, help_key="image.describe_prompt", page=page
             ),
