@@ -189,7 +189,7 @@ Usa sub-subparsers. `ns.image_op` contém a operação (com hífen, ex: `"contac
 | `favicon` | `--sizes 16,32,48,64,128,256` |
 | `contact-sheet` | `files…`, `--cols 4`, `--thumb 200`, `--gap 10`, `--bg-color` |
 | `remove-bg` | `--model u2net/…`, `--bg-mode transparent/color/blur/image`, `--bg-color`, `--bg-blur`, `--bg-image` |
-| `describe` | `--model moondream-custom/gemma3-4b-custom/llava:7b/minicpm-v/glm-4.6v-flash/gemini-2.5-flash` (últimos dois = nuvem, opt-in), `--prompt` |
+| `describe` | `--model moondream-custom/gemma3-4b-custom/llava:7b/minicpm-v/glm-4.6v-flash/gemini-2.5-flash` (últimos dois = nuvem, opt-in), `--preset detailed/short/technical/text/objects/narrative` (ignorado se `--prompt` for passado), `--prompt` |
 | `exif` | `--show` \| `--strip` \| `--strip-gps` \| `--artist`/`--copyright`/`--description` (inject), `--out` (read/write direto, sem pipeline) |
 | `ocr` | `--lang por/eng/por+eng/spa` (Tesseract → `<stem>_ocr.txt`, indexável no RAG) |
 
