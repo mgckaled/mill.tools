@@ -1,0 +1,142 @@
+"""Append-only, per-(domain, model) latency log — the Observatório's timing data.
+
+Every call to ``make_llm()`` (LLM/VLM) and to the embedder (embed) writes one
+``TimingEntry`` here at its natural completion point, mirroring
+``activity.py``'s convention. Persisted to ``~/.mill-tools/model_timings.json``,
+capped at the last ``_MAX_PER_BUCKET`` entries *per (domain, model) pair* — not
+a flat cut on the whole file, because "llm" is called far more often than
+"vlm"/"embed" and a flat cut would silently evict their history.
+"""
+
+from __future__ import annotations
+
+import json
+import logging
+import time
+from dataclasses import asdict, dataclass
+from pathlib import Path
+
+logger = logging.getLogger(__name__)
+
+# Same magnitude as core.recipes.history's _MAX_RUNS — generous enough to span
+# months of personal use without the file growing unbounded.
+_MAX_PER_BUCKET = 500
+
+
+@dataclass(frozen=True, slots=True)
+class TimingEntry:
+    """One model call's latency, tagged by domain."""
+
+    model: str
+    domain: str  # "llm" | "vlm" | "embed"
+    elapsed: float  # seconds
+    timestamp: float  # epoch seconds
+
+
+def _store_path() -> Path:
+    """Canonical on-disk location for the model timing log."""
+    return Path.home() / ".mill-tools" / "model_timings.json"
+
+
+def load_timings(path: Path | None = None) -> list[TimingEntry]:
+    """Load the log in append order (oldest first). ``[]`` on absence or
+    corruption.
+
+    Individual malformed entries are skipped (logged) rather than aborting the
+    whole load — same convention as ``core.observatory.activity.load_activity``.
+    """
+    path = path or _store_path()
+    if not path.exists():
+        return []
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError) as exc:
+        logger.warning("[!] Could not read model timing log %s: %s", path, exc)
+        return []
+
+    entries: list[TimingEntry] = []
+    for raw in data:
+        try:
+            entries.append(
+                TimingEntry(
+                    model=raw["model"],
+                    domain=raw["domain"],
+                    elapsed=float(raw["elapsed"]),
+                    timestamp=float(raw["timestamp"]),
+                )
+            )
+        except (KeyError, TypeError, ValueError):
+            logger.warning("[!] Skipping malformed timing entry: %r", raw)
+    return entries
+
+
+def _trim_per_bucket(
+    entries: list[TimingEntry], *, cap: int | None = None
+) -> list[TimingEntry]:
+    """Keep only the last ``cap`` entries per (domain, model), then re-sort by
+    timestamp.
+
+    A flat ``entries[-cap:]`` would let a chatty domain (e.g. "llm", called far
+    more often than "vlm"/"embed") silently evict the other domains' history —
+    so the cut is per bucket instead. ``cap`` defaults to ``_MAX_PER_BUCKET``
+    read at call time (not bound as a parameter default) so tests can
+    monkeypatch the module attribute.
+    """
+    if cap is None:
+        cap = _MAX_PER_BUCKET
+    buckets: dict[tuple[str, str], list[TimingEntry]] = {}
+    for e in entries:
+        buckets.setdefault((e.domain, e.model), []).append(e)
+    trimmed = [e for group in buckets.values() for e in group[-cap:]]
+    trimmed.sort(key=lambda e: e.timestamp)
+    return trimmed
+
+
+def record_timing(
+    model: str,
+    domain: str,
+    elapsed: float,
+    *,
+    path: Path | None = None,
+    now: float | None = None,
+) -> None:
+    """Append one sample, capped at ``_MAX_PER_BUCKET`` per (domain, model).
+
+    Non-positive ``elapsed`` is dropped silently — a zero/negative duration
+    means the call errored or was never actually timed, not a valid sample.
+    ``now`` is injectable (epoch seconds) so callers get deterministic tests;
+    defaults to the wall clock.
+    """
+    if elapsed <= 0:
+        return
+    path = path or _store_path()
+    entries = load_timings(path)
+    entries.append(
+        TimingEntry(
+            model=model,
+            domain=domain,
+            elapsed=float(elapsed),
+            timestamp=now if now is not None else time.time(),
+        )
+    )
+    entries = _trim_per_bucket(entries)
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        payload = [asdict(e) for e in entries]
+        path.write_text(
+            json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8"
+        )
+    except OSError as exc:
+        logger.debug("[d] Could not write model timing log: %s", exc)
+
+
+def timings_by_domain(
+    entries: list[TimingEntry], domain: str
+) -> dict[str, list[float]]:
+    """Filter + group into the ``{model: [durations]}`` shape
+    ``core.rag.analytics.model_timings`` expects."""
+    out: dict[str, list[float]] = {}
+    for e in entries:
+        if e.domain == domain:
+            out.setdefault(e.model, []).append(e.elapsed)
+    return out
