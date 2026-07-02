@@ -13,6 +13,19 @@ import numpy as np
 import pytest
 
 
+@pytest.fixture(autouse=True)
+def isolate_model_timing_store(tmp_path, monkeypatch):
+    """embed_texts/embed_query call the real record_timing() — redirect its
+    store so running this file never touches the developer's real
+    ~/.mill-tools/model_timings.json (same isolation pattern already used for
+    gui.settings/activity._store_path in tests/gui/modules/observatory/)."""
+    import src.core.observatory.model_timing as model_timing
+
+    path = tmp_path / ".mill-tools" / "model_timings.json"
+    monkeypatch.setattr(model_timing, "_store_path", lambda: path)
+    return path
+
+
 def _fake_ollama_module(*, query_vec=None, doc_vec=None, raises=None) -> MagicMock:
     """Build a fake `langchain_ollama` module exposing OllamaEmbeddings.
 
@@ -143,3 +156,53 @@ def test_check_dim_silent_on_expected_width(caplog):
     with caplog.at_level(logging.WARNING):
         embedder._check_dim(np.zeros((2, embedder.EMBED_DIM), dtype=np.float32))
     assert not caplog.records
+
+
+@pytest.mark.unit
+def test_embed_texts_records_one_timing_entry_per_batch(
+    mocker, isolate_model_timing_store
+):
+    from src.core.observatory.model_timing import load_timings
+    from src.core.rag import embedder
+
+    module = _fake_ollama_module(doc_vec=[1, 2, 3])
+    mocker.patch.dict(sys.modules, {"langchain_ollama": module})
+
+    embedder.embed_texts(
+        ["a", "b", "c", "d", "e"], model="nomic-embed-custom", batch_size=2
+    )
+
+    entries = load_timings(isolate_model_timing_store)
+    assert len(entries) == 3  # 5 texts at batch_size 2 -> 3 sub-batches
+    assert all(e.domain == "embed" for e in entries)
+    assert all(e.model == "nomic-embed-custom" for e in entries)
+    assert all(e.elapsed >= 0 for e in entries)
+
+
+@pytest.mark.unit
+def test_embed_query_records_one_timing_entry(mocker, isolate_model_timing_store):
+    from src.core.observatory.model_timing import load_timings
+    from src.core.rag import embedder
+
+    mocker.patch.dict(
+        sys.modules, {"langchain_ollama": _fake_ollama_module(query_vec=[1, 2, 3, 4])}
+    )
+
+    embedder.embed_query("hello", model="nomic-embed-custom")
+
+    entries = load_timings(isolate_model_timing_store)
+    assert len(entries) == 1
+    assert entries[0].domain == "embed"
+    assert entries[0].model == "nomic-embed-custom"
+
+
+@pytest.mark.unit
+def test_embed_texts_empty_records_no_timing(mocker, isolate_model_timing_store):
+    from src.core.observatory.model_timing import load_timings
+    from src.core.rag import embedder
+
+    mocker.patch.dict(sys.modules, {"langchain_ollama": _fake_ollama_module()})
+
+    embedder.embed_texts([])
+
+    assert load_timings(isolate_model_timing_store) == []

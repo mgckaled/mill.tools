@@ -9,9 +9,12 @@ keeps the rest of the core testable without a running Ollama.
 from __future__ import annotations
 
 import logging
+import time
 from typing import Callable
 
 import numpy as np
+
+from src.core.observatory.model_timing import record_timing
 
 # CPU-pinned custom build of nomic-embed-text (num_gpu 0), matching the project's
 # *-custom convention so embedding never contends for the MX150 with Whisper/Flet.
@@ -95,7 +98,10 @@ def embed_texts(
     out: list[list[float]] = []
     total = len(texts)
     for start in range(0, total, batch_size):
-        out.extend(client.embed_documents(texts[start : start + batch_size]))
+        t0 = time.monotonic()
+        batch = client.embed_documents(texts[start : start + batch_size])
+        record_timing(model, "embed", time.monotonic() - t0)
+        out.extend(batch)
         if progress_cb:
             progress_cb(min(start + batch_size, total), total)
 
@@ -106,5 +112,7 @@ def embed_texts(
 
 def embed_query(text: str, model: str = DEFAULT_EMBED_MODEL) -> np.ndarray:
     """Return a (EMBED_DIM,) float32 vector for a single query."""
+    t0 = time.monotonic()
     vec = _embeddings(model).embed_query(text)
+    record_timing(model, "embed", time.monotonic() - t0)
     return np.asarray(vec, dtype=np.float32)
