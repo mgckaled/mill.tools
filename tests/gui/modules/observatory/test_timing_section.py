@@ -10,7 +10,10 @@ from __future__ import annotations
 import pytest
 
 from src.core.rag.analytics import ModelTiming
-from src.gui.modules.observatory.timing_section import build_timing_section
+from src.gui.modules.observatory.timing_section import (
+    _model_cell,
+    build_timing_section,
+)
 
 
 @pytest.mark.unit
@@ -52,6 +55,22 @@ def test_show_chart_true_adds_chart_controls():
     section = build_timing_section("LLM (texto)", show_chart=True)
     # [section_label, header, body, chart, chart_note]
     assert len(section.control.controls) == 5
+
+
+@pytest.mark.unit
+def test_model_cell_shows_cloud_icon_for_a_cloud_model():
+    cell = _model_cell("gemini-2.5-flash")
+    row = cell.content
+    assert len(row.controls) == 2  # icon + text
+    assert row.controls[1].value == "gemini-2.5-flash"
+
+
+@pytest.mark.unit
+def test_model_cell_omits_cloud_icon_for_a_local_model():
+    cell = _model_cell("gemma3-4b-custom")
+    row = cell.content
+    assert len(row.controls) == 1  # text only, no icon
+    assert row.controls[0].value == "gemma3-4b-custom"
 
 
 @pytest.mark.unit

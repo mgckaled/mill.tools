@@ -19,7 +19,8 @@ import flet as ft
 from src.core.rag.analytics import ModelTiming, model_timings_result
 from src.gui.modules import _charts
 from src.gui.theme.components import section_label
-from src.gui.theme.tokens import Space, Type
+from src.gui.theme.tokens import IconSize, Space, Type
+from src.llm_factory import is_cloud_model
 
 
 @dataclass
@@ -101,9 +102,30 @@ def _empty(text: str) -> ft.Control:
     )
 
 
+def _model_cell(model: str) -> ft.Control:
+    """The model-name cell, prefixed with a cloud icon for gemini-*/glm-* models."""
+    controls: list[ft.Control] = []
+    if is_cloud_model(model):
+        controls.append(
+            ft.Icon(ft.Icons.CLOUD_OUTLINED, size=IconSize.sm, color=ft.Colors.PRIMARY)
+        )
+    controls.append(
+        ft.Text(
+            model,
+            size=Type.small.size,
+            color=ft.Colors.ON_SURFACE,
+            no_wrap=True,
+            overflow=ft.TextOverflow.ELLIPSIS,
+        )
+    )
+    return ft.Container(
+        expand=True, content=ft.Row(controls, spacing=Space.xxs, tight=True)
+    )
+
+
 def _timing_row(t: ModelTiming) -> ft.Control:
     return _data_row(
-        _cell(t.model, expand=True),
+        _model_cell(t.model),
         _cell(str(t.count), width=72, right=True, muted=True),
         _cell(f"{t.mean:.1f}", width=72, right=True),
         _cell(f"{t.median:.1f}", width=64, right=True, muted=True),

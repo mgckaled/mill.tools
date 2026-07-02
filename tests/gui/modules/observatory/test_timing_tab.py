@@ -14,6 +14,18 @@ import pytest
 from src.gui.modules.observatory.timing_tab import build_timing_tab
 
 
+def _walk(control):
+    """Yield a control and its descendants (best-effort, for smoke assertions)."""
+    yield control
+    for attr in ("controls", "content"):
+        child = getattr(control, attr, None)
+        if isinstance(child, list):
+            for c in child:
+                yield from _walk(c)
+        elif child is not None and not isinstance(child, (str, bytes)):
+            yield from _walk(child)
+
+
 @pytest.mark.unit
 def test_timing_tab_builds():
     control, apply = build_timing_tab(MagicMock())
@@ -50,12 +62,10 @@ def test_apply_routes_each_domain_to_its_own_section(tmp_path, mocker):
 
     # control's children are the 3 sections, in LLM/VLM/embed order.
     llm_control, vlm_control, embed_control = control.controls
-    assert llm_control.controls[2].controls[0].content.controls[0].content.value == (
-        "gemini-2.5-flash"
-    )
-    assert vlm_control.controls[2].controls[0].content.controls[0].content.value == (
-        "moondream-custom"
-    )
-    assert embed_control.controls[2].controls[0].content.controls[0].content.value == (
-        "nomic-embed-custom"
-    )
+
+    def _texts(section):
+        return [getattr(c, "value", "") for c in _walk(section)]
+
+    assert "gemini-2.5-flash" in _texts(llm_control)
+    assert "moondream-custom" in _texts(vlm_control)
+    assert "nomic-embed-custom" in _texts(embed_control)
