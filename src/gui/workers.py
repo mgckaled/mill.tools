@@ -311,8 +311,14 @@ def run_pipeline(
             # eventually upgrade the zero-shot suggestion. Never break the run.
             try:
                 from src.core.ml.classify import record_label
+                from src.core.observatory.activity import log_activity
 
                 record_label(str(output_path), args.analysis_profile)
+                log_activity(
+                    "transcription",
+                    "profile_labelled",
+                    f"{Path(output_path).name}: {args.analysis_profile}",
+                )
             except Exception as exc:  # noqa: BLE001 — labelling is non-critical
                 logging.debug("[d] Could not record profile label: %s", exc)
 

@@ -132,9 +132,18 @@ def build_profile_section(
                 return
             profile_id, confidence, margin = result
             from src.analysis.profiles import get_profile
+            from src.core.observatory.activity import log_activity
 
             set_value(profile_id)
             label = get_profile(profile_id).label
+            try:
+                log_activity(
+                    "transcription",
+                    "profile_suggested",
+                    f"{Path(path).name}: {label} ({confidence:.2f}, margem {margin:.2f})",
+                )
+            except Exception as exc:  # noqa: BLE001 — activity logging is best-effort
+                logging.debug("[d] Could not log profile suggestion activity: %s", exc)
             conf_str = f"{confidence:.2f}".replace(".", ",")
             prefix = "Sugestão incerta" if margin < _LOW_MARGIN else "Sugerido"
             chip_text.value = f"{prefix}: {label} · {conf_str}"
