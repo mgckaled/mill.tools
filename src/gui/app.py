@@ -23,6 +23,7 @@ from src.gui.modules.data.view import build_data_module
 from src.gui.modules.document.view import build_document_module
 from src.gui.modules.image.view import build_image_module
 from src.gui.modules.library.view import build_library_module
+from src.gui.modules.observatory.view import build_observatory_module
 from src.gui.modules.recipes.view import build_recipes_module
 from src.gui.modules.transcription.view import (
     build_transcription_module,
@@ -149,6 +150,26 @@ def build_app(page: ft.Page, initial_module: str = "transcription") -> None:
         style=_hub_btn_style(initial_module == "recipes"),
     )
 
+    def _observatory_badge_text() -> str:
+        """'Observatório' + unread count in parentheses, e.g. 'Observatório (3)'.
+
+        Cheap snapshot (not live-pushed): recomputed at app build and whenever
+        navigate_to visits the hub (which also clears it, via the module's
+        own on_mount recording last_ml_activity_seen).
+        """
+        from src.core.observatory.activity import load_activity
+
+        entries = load_activity()
+        seen = settings.get("last_ml_activity_seen", 0.0)
+        unread = sum(1 for e in entries if e.timestamp > seen)
+        return f"Observatório ({unread})" if unread else "Observatório"
+
+    observatory_btn = ft.TextButton(
+        _observatory_badge_text(),
+        icon=ft.Icons.QUERY_STATS_OUTLINED,
+        style=_hub_btn_style(initial_module == "observatory"),
+    )
+
     wordmark = ft.Text(
         spans=[
             ft.TextSpan(
@@ -179,6 +200,7 @@ def build_app(page: ft.Page, initial_module: str = "transcription") -> None:
                 library_btn,
                 ai_btn,
                 recipes_btn,
+                observatory_btn,
             ],
             spacing=Space.xs,
             vertical_alignment=ft.CrossAxisAlignment.CENTER,
@@ -206,9 +228,12 @@ def build_app(page: ft.Page, initial_module: str = "transcription") -> None:
     _library = build_library_module(page, bus, cancel_event, pipeline_running, nav)
     _ai = build_ai_module(page, bus, cancel_event, pipeline_running, nav)
     _recipes = build_recipes_module(page, bus, cancel_event, pipeline_running, nav)
+    _observatory = build_observatory_module(
+        page, bus, cancel_event, pipeline_running, nav
+    )
 
-    # Library, AI and Recipes are appended last so the default initial_module
-    # ("transcription") and the opening behavior are unchanged.
+    # Library, AI, Recipes and Observatório are appended last so the default
+    # initial_module ("transcription") and the opening behavior are unchanged.
     MODULES: list[Module] = [
         _audio,
         _video,
@@ -219,13 +244,14 @@ def build_app(page: ft.Page, initial_module: str = "transcription") -> None:
         _library,
         _ai,
         _recipes,
+        _observatory,
     ]
     _DEFAULT_ID = initial_module
 
-    # The rail shows only the 5 processing tools; Library, AI and Recipes are hubs
-    # reached from the AppBar. They still live in MODULES (and the Stack) so
-    # navigate_to works.
-    _HUB_IDS = ("library", "ai", "recipes")
+    # The rail shows only the 5 processing tools; Library, AI, Recipes and
+    # Observatório are hubs reached from the AppBar. They still live in MODULES
+    # (and the Stack) so navigate_to works.
+    _HUB_IDS = ("library", "ai", "recipes", "observatory")
     _RAIL_MODULES: list[Module] = [m for m in MODULES if m.id not in _HUB_IDS]
 
     def _rail_index(module_id: str) -> int | None:
@@ -261,15 +287,21 @@ def build_app(page: ft.Page, initial_module: str = "transcription") -> None:
         library_btn.style = _hub_btn_style(module_id == "library")
         ai_btn.style = _hub_btn_style(module_id == "ai")
         recipes_btn.style = _hub_btn_style(module_id == "recipes")
+        observatory_btn.style = _hub_btn_style(module_id == "observatory")
         for i, m in enumerate(MODULES):
             m.control.visible = i == idx
         MODULES[idx].on_mount(payload or {})
+        if module_id == "observatory":
+            # The module's on_mount just recorded last_ml_activity_seen — the
+            # badge is now stale (unread=0); refresh the button text to match.
+            observatory_btn.text = _observatory_badge_text()
         page.update()
 
     nav.append(navigate_to)  # resolve a forward reference do módulo Áudio
     library_btn.on_click = lambda _e: navigate_to("library")
     ai_btn.on_click = lambda _e: navigate_to("ai")
     recipes_btn.on_click = lambda _e: navigate_to("recipes")
+    observatory_btn.on_click = lambda _e: navigate_to("observatory")
 
     def _on_rail_change(e: ft.ControlEvent) -> None:
         idx = e.control.selected_index

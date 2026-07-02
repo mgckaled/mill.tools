@@ -149,6 +149,18 @@ _HUB_CARDS: list[dict] = [
             "Processe em lote, limpe restos",
         ],
     },
+    {
+        "id": "observatory",
+        "title": "Observatório",
+        "icon": ft.Icons.QUERY_STATS_OUTLINED,
+        "accent": Color.log.info,
+        "desc": "Tudo que o ML já fez, num só lugar",
+        "features": [
+            "Atividade de ML de todos os módulos",
+            "Status de gates, classificador e índice",
+            "Parâmetros em vigor, para transparência",
+        ],
+    },
 ]
 
 
