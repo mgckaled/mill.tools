@@ -239,7 +239,7 @@ texto alimenta o classificador em cada caso (schema? perfil? amostra?), uma esco
 não estava validada o bastante para apressar nesta passagem. O núcleo reutilizável (a parte
 genuinamente nova e testável) é a entrega desta fase.
 
-### 3.5 Visibilidade dos processos de ML — novo hub "Observatório"
+### 3.5 Visibilidade dos processos de ML — novo hub "Observatório" ✅ Implementado (commits `d2c611f`, `d8561e6`, `6660c72`, `b205ba7`)
 
 **Origem.** Pesquisa dedicada (Context7 + web) sobre viabilidade no Flet 0.85 e inspiração em
 dashboards de observabilidade de ML (Airflow DAG, Prefect Radar, ComfyUI/n8n, stepper de
@@ -529,14 +529,30 @@ Cada item ganha teste(s) `@pytest.mark.unit`, espelhando `tests/core/`:
 
 ## 8. Critérios de aceitação
 
+**Tier A concluído — todos atendidos:**
+
 - Nenhuma dependência nova sem extra opcional, exceto `rank-bm25` (decisão confirmada: base) +
-  import preguiçoso + gate `is_available()` nas demais.
-- `uv run pytest -m unit` verde e `ruff` limpo após cada item.
+  import preguiçoso + gate `is_available()` nas demais. dHash acabou **zero dependência nova**
+  (correção em relação ao plano original, que cogitava `imagehash`/`[ml-image]`).
+- `uv run pytest -m unit` verde e `ruff` limpo após cada item — 71 testes novos (3.1: 12 ·
+  3.2: 14 · 3.3: 15 · 3.4: 6 · 5a: 12 · 5b: 8 · 5c: 4 (stepper) + 2 (`on_stage`) · 5d: 6 —
+  contagem aproximada por commit, não uma auditoria exaustiva).
 - Tier A: busca híbrida não piora recall em nenhum caso coberto pelo Tier 1 do refinamento;
   outliers/dedup/classify não regridem nenhum teste existente; visibilidade de ML não introduz
   nenhuma animação com tempo fabricado (só eventos reais); o hub Observatório segue o mesmo
   contrato de `Module` dos demais hubs (auto-contido, escopado por `module_id`).
+- Validado **end-to-end contra o ambiente real** (não só testes isolados): `ai dups` grava
+  atividade real, `observatory activity`/`observatory status` leem de volta corretamente,
+  refletindo o estado genuíno do acervo do usuário (49 rótulos de perfil, 4 timings de resposta).
 - Tier C permanece **não implementado** nesta rodada.
+
+**Escopo conscientemente reduzido (documentado, não esquecido):**
+- 3.4: integração de superfície em Dados/Documentos (`datacard.py`, aba de resultado) adiada —
+  o núcleo reutilizável e testado é a entrega; qual texto alimenta o classificador em cada caso
+  é uma decisão de design que não estava madura o bastante para apressar.
+- 3.5: wiring do stepper nas 3 telas de origem (RAG/Mapa/Insights) adiado — a peça reusável e o
+  hook em `mapviz` estão prontos; a ponte thread-safe (`page.pubsub`) para o callback disparado
+  de dentro de `asyncio.to_thread` merece uma passagem própria em vez de 3 cópias apressadas.
 
 ---
 
@@ -555,21 +571,21 @@ zero/baixa dependência nova.
 
 ## 10. Tabela-resumo
 
-| # | Item | Módulo | Dependência nova | Esforço | Prioridade |
-|---|---|---|---|---|---|
-| 3.1 | Busca híbrida (BM25 + RRF) | RAG/IA | `rank-bm25` (base, confirmado) | Baixo | Alta |
-| 3.2 | Outliers tabulares | Dados | Nenhuma (`[ml]` já tem) | Baixo | Alta |
-| 3.3 | Dedup de imagens (dHash) | Biblioteca | Nenhuma (correção: era `imagehash`/`[ml-image]`) | Baixo | Alta |
-| 3.4 | Reuso do classify.py | Dados, Documentos | Nenhuma | Baixo | Alta |
-| 3.5 | Visibilidade de ML — **novo hub Observatório** (stepper+feed+status+selo) | Novo hub, cross-módulo (RAG/Biblioteca/Transcrição/Dados/Receitas) | Nenhuma | Médio-Alto | Alta |
-| 4.1 | Plano 5 completo (clustering/previsão/importância) | Dados | Nenhuma (`[ml]` já tem) | Médio | Média |
-| 4.2 | Plano 7 (previsão de tempo, próxima etapa, falhas) | Receitas | Nenhuma | Médio | Média |
-| 4.3 | Plano 6 leve (blur/paleta/cena/VAD) | Imagens/Vídeo/Áudio | Nenhuma (VAD condicional: `webrtcvad-wheels`) | Baixo-Médio | Média-Baixa |
-| — | XGBoost/LightGBM | — | Rejeitado | — | — |
-| — | CLIP/busca visual | — | Fora de escopo | — | — |
-| — | BPM/key, vocal isolation | — | Já rejeitado (Áudio Tier 3) | — | — |
-| — | Diarização/upscale/denoise neural | — | Fora de escopo (torch) | — | — |
-| — | Canvas de nós livre p/ visualizar ML | — | Desproporcional | — | — |
+| # | Item | Módulo | Dependência nova | Esforço | Prioridade | Status |
+|---|---|---|---|---|---|---|
+| 3.1 | Busca híbrida (BM25 + RRF) | RAG/IA | `rank-bm25` (base, confirmado) | Baixo | Alta | ✅ `23b2ace` |
+| 3.2 | Outliers tabulares | Dados | Nenhuma (`[ml]` já tem) | Baixo | Alta | ✅ `630d720` |
+| 3.3 | Dedup de imagens (dHash) | Biblioteca | Nenhuma (correção: era `imagehash`/`[ml-image]`) | Baixo | Alta | ✅ `f972351` |
+| 3.4 | Reuso do classify.py (núcleo; superfície adiada) | Dados, Documentos | Nenhuma | Baixo | Alta | ✅ `0b574d4` |
+| 3.5 | **Novo hub Observatório** (core+GUI+CLI; stepper adiado) | Novo hub, cross-módulo | Nenhuma | Médio-Alto | Alta | ✅ `d2c611f`+ |
+| 4.1 | Plano 5 completo (clustering/previsão/importância) | Dados | Nenhuma (`[ml]` já tem) | Médio | Média | Não iniciado |
+| 4.2 | Plano 7 (previsão de tempo, próxima etapa, falhas) | Receitas | Nenhuma | Médio | Média | Não iniciado |
+| 4.3 | Plano 6 leve (blur/paleta/cena/VAD) | Imagens/Vídeo/Áudio | Nenhuma (VAD condicional: `webrtcvad-wheels`) | Baixo-Médio | Média-Baixa | Não iniciado |
+| — | XGBoost/LightGBM | — | Rejeitado | — | — | — |
+| — | CLIP/busca visual | — | Fora de escopo | — | — | — |
+| — | BPM/key, vocal isolation | — | Já rejeitado (Áudio Tier 3) | — | — | — |
+| — | Diarização/upscale/denoise neural | — | Fora de escopo (torch) | — | — | — |
+| — | Canvas de nós livre p/ visualizar ML | — | Desproporcional | — | — | — |
 
 ---
 

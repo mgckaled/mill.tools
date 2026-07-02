@@ -33,7 +33,7 @@ Acesse por uma **GUI desktop** (Flet/Flutter) ou pela **CLI** — paridade de co
 
 ## Módulos
 
-Seis **ferramentas** de processamento (NavigationRail) e três **hubs** que operam sobre as saídas de todas elas (AppBar).
+Seis **ferramentas** de processamento (NavigationRail) e quatro **hubs** que operam sobre as saídas de todas elas (AppBar).
 
 | Módulo | Tipo | Descrição |
 |---|---|---|
@@ -46,6 +46,7 @@ Seis **ferramentas** de processamento (NavigationRail) e três **hubs** que oper
 | **Biblioteca** | Hub | Índice navegável de tudo em `output/`: grade com thumbnails, lista, **painel analítico** (acervo por tipo/tamanho/crescimento) ou **mapa semântico** (temas do acervo agrupados + relacionados); filtro/busca/ordenação, abrir arquivo/pasta e reenviar a outro módulo |
 | **IA** | Hub | RAG local sobre o seu acervo: pergunte ao corpus e receba respostas **citando as fontes** (com aviso quando o acervo não cobre a pergunta). Embeddings sempre locais; Gemini opt-in. **Painel**: saúde do índice + tempo de resposta por modelo. **ML semântico**: duplicatas (`ai dups`), tópicos automáticos (`ai topics`), mapa semântico (`ai map`) e relacionados (`ai related`) — tudo reusando o índice |
 | **Receitas** | Hub | Automação: cadeias lineares entre módulos (`URL → áudio → transcrever → analisar`). Presets + construtor com validação ao vivo; lote; **histórico de execução** (confiabilidade/velocidade); CLI `recipe run` |
+| **Observatório** | Hub | Central de ML de todo o app: aba **Atividade** (feed cronológico do que o ML fez em qualquer módulo) e aba **Status** (gates de extras, rótulos do classificador por domínio, parâmetros em vigor, tempo de resposta por modelo). Read-only, sem pipeline; CLI `observatory status`/`observatory activity` |
 
 ---
 
@@ -55,8 +56,8 @@ Seis **ferramentas** de processamento (NavigationRail) e três **hubs** que oper
 |---|---|
 | Transcrição local | [faster-whisper](https://github.com/SYSTRAN/faster-whisper) + ctranslate2, aceleração GPU, **sem PyTorch** |
 | Dados | [DuckDB](https://duckdb.org) embutido (in-process, torch-free); PT→SQL pela IA recebendo só o schema — o conteúdo das tabelas nunca sai da máquina |
-| RAG local | embeddings Ollama (`nomic-embed-text`, CPU), vector store numpy, busca cosseno, resposta com fontes `[n]` |
-| ML local | `core/ml` **torch-free** sobre os embeddings do RAG (sem recálculo): duplicatas e relacionados por cosseno (**numpy**); clustering ([HDBSCAN](https://scikit-learn.org)), rótulos de tema (c-TF-IDF) e mapa semântico 2D (PCA) via [scikit-learn](https://scikit-learn.org) (extra `[ml]`); projeção UMAP opcional (extra `[ml-viz]`); **classificação de perfil** zero-shot→supervisionada (`classify`) |
+| RAG local | embeddings Ollama (`nomic-embed-text`, CPU), vector store numpy, busca **híbrida** (cosseno + [BM25](https://github.com/dorianbrown/rank_bm25) via Reciprocal Rank Fusion — pega termos exatos que o denso sozinho perde), resposta com fontes `[n]` |
+| ML local | `core/ml` **torch-free** sobre os embeddings do RAG (sem recálculo): duplicatas e relacionados por cosseno com reranking **MMR** (**numpy**); clustering ([HDBSCAN](https://scikit-learn.org)/k-means com auto-k), rótulos de tema (c-TF-IDF) e mapa semântico 2D (PCA/t-SNE) via [scikit-learn](https://scikit-learn.org) (extra `[ml]`); projeção UMAP opcional (extra `[ml-viz]`); **classificação de perfil** zero-shot→supervisionada (`classify`, reusável por domínio: perfil de transcrição, domínio de dados, tipo de documento); outliers tabulares (IsolationForest) e dedup de imagens (dHash, zero dependência nova) |
 | NLP textual | `core/text` **torch-free** (extra `[nlp]`): keyphrases ([YAKE](https://github.com/LIAAD/yake)), resumo extractivo (TextRank self-contained, sem nltk) e entidades ([spaCy](https://spacy.io) CNN `pt_core_news_sm`). Auto-sugestão de perfil, aba Insights e auto-tags da Biblioteca |
 | Vídeo | yt-dlp + ffmpeg CPU-only (libx264/libx265/libvpx-vp9) — sem NVENC |
 | Áudio | noisereduce (spectral gating, CPU) + ffmpeg loudnorm (EBU R128, 2 passes), silenceremove e atempo (silêncio/velocidade); torch-free |
@@ -180,12 +181,14 @@ uv run main.py data query dados.parquet "SELECT * FROM dados LIMIT 10" --sql
 uv run main.py data convert dados.csv --out parquet
 uv run main.py data profile dados.csv
 uv run main.py data plot vendas.csv "total por produto" --kind bar   # gráfico PNG em output/data/
+uv run main.py data outliers vendas.csv --contamination 0.05        # linhas atípicas (IsolationForest)
 
 # Biblioteca — índice de output/ como tabela (+ dashboard do acervo)
 uv run main.py library list --kind audio --since 7d --sort size
 uv run main.py library stats --top 10
+uv run main.py library dedup-images --max-distance 8   # imagens quase-duplicadas (dHash)
 
-# IA — RAG local sobre o corpus (cita fontes); stats inclui timing por modelo
+# IA — RAG local sobre o corpus (busca híbrida BM25+denso; cita fontes); stats inclui timing por modelo
 uv run main.py ai index
 uv run main.py ai "o que eu disse sobre faster-whisper?" --k 8
 uv run main.py ai stats
@@ -194,6 +197,10 @@ uv run main.py ai stats
 uv run main.py recipe list
 uv run main.py recipe run "YouTube → transcrição completa" "https://youtu.be/..." --model medium
 uv run main.py recipe stats
+
+# Observatório — atividade e status de ML entre todos os módulos (leitura)
+uv run main.py observatory status
+uv run main.py observatory activity --limit 15
 ```
 
 #### Flags da Transcrição

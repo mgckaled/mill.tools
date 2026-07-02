@@ -223,6 +223,19 @@ Para `docs/ROADMAP_ML_DADOS.md`, esta skill é o ponto de partida de cada plano:
   entities`. Entrega os motores que o **Plano 4C** vai compor. Ver `docs/PLANO_4B_SUPERVISIONADO_TEXTUAL.md`.
 - **Planos 4C–7** — cada feature pela seção 5; ao tocar `ai/view.py`/`library/view.py`/builder de Receitas,
   **dividir ao tocar** (seção 3) antes de adicionar a aba/recurso.
+- **Novas features de ML — Tier A ✅** — busca híbrida (BM25+RRF, `rank-bm25` **base**, não atrás de extra —
+  a busca densa do RAG já é incondicional); outliers tabulares (`core/data/ml.py`, `IsolationForest`);
+  dedup de imagens via **dHash hand-rolled** (`core/image/dhash.py`, zero dep — correção em relação ao
+  plano original, que cogitava o pacote `imagehash`/scipy); `classify.py` **parametrizado por `domain`**
+  (mesmas funções, chaveadas por prefixo de arquivo — domínio default preserva os nomes pré-existentes,
+  zero invalidação de cache). **Novo pacote `core/observatory/`** (puro, cross-módulo: `activity.py` log
+  append-only + `status.py` agregador read-only) e **4º hub GUI** (`gui/modules/observatory/`) — promovido
+  de "aba de outro hub" para hub próprio ao aplicar a própria definição de hub desta skill ("opera sobre
+  as saídas de todos os módulos"): a superfície cobre RAG/Biblioteca/Transcrição/Dados/Receitas, não só
+  um deles. Stepper reusável (`gui/modules/_stepper.py`) + hook `mapviz.build_semantic_map(on_stage=…)`
+  prontos; wiring nas 3 telas de origem (RAG/Mapa/Insights) requer ponte thread-safe (`page.pubsub`) por
+  causa de `asyncio.to_thread` — deixado para uma passagem dedicada. CLI `observatory status/activity`,
+  `library dedup-images`, `data outliers`. Ver `docs/plan/PLANO_ML_NOVAS_FEATURES.md`.
 
 A regra de ouro do roadmap vale também para o código: **pagar uma fundação pequena uma vez (camadas, limites,
 padrões) para não pagar retrabalho muitas vezes.**

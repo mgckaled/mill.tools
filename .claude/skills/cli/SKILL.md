@@ -38,7 +38,8 @@ src/cli/
 ├── library.py        — add_library_parser() + run_library_cli()  (read-only, sem CLIEventBus)
 ├── ai.py             — add_ai_parser() + run_ai_cli()  (RAG local; index / pergunta / --batch)
 ├── recipes.py        — add_recipe_parser() + run_recipe_cli()  (recipe list / run; usa CLIEventBus)
-└── data.py           — add_data_parser() + run_data_cli()  (query/convert/profile; reusa core direto)
+├── data.py           — add_data_parser() + run_data_cli()  (query/convert/profile/outliers; reusa core direto)
+└── observatory.py    — add_observatory_parser() + run_observatory_cli()  (status/activity, read-only, sem CLIEventBus)
 ```
 
 ---
@@ -227,26 +228,34 @@ Sem operação `analyze` na CLI (apenas GUI).
 
 ```bash
 uv run main.py library list [opções]
+uv run main.py library stats [--top 10]
+uv run main.py library dedup-images [--max-distance 8]
 ```
 
 **Read-only** — lista tudo sob `output/` numa tabela. Reaproveita o core
 (`scan_library`/`filter_items`/`sort_items`); **não** usa pipeline nem
-`CLIEventBus`. Usa sub-subparser (`ns.library_op`), por ora só `list`.
+`CLIEventBus`. Sub-subparser (`ns.library_op` ∈ {`list`, `stats`, `dedup-images`}).
 
 | Flag | Default | Descrição |
 |---|---|---|
-| `--kind` | (todos) | `audio`/`video`/`image`/`transcription`/`document` |
-| `--since` | — | Duração: `7d`, `24h`, `30m` (número puro = dias). `_parse_since` levanta `ValueError` em formato inválido |
-| `--sort` | `modified` | `modified`/`name`/`size` |
+| `--kind` (`list`) | (todos) | `audio`/`video`/`image`/`transcription`/`document`/`data` |
+| `--since` (`list`) | — | Duração: `7d`, `24h`, `30m` (número puro = dias). `_parse_since` levanta `ValueError` em formato inválido |
+| `--sort` (`list`) | `modified` | `modified`/`name`/`size` |
+| `--top` (`stats`) | `10` | Quantos maiores arquivos exibir (Plano 2) |
+| `--max-distance` (`dedup-images`) | `8` (`image_dedup.DEFAULT_MAX_DISTANCE`) | Distância de Hamming máxima entre dHashes p/ considerar duplicata (Tier A) |
 | `--verbose` | off | Logging DEBUG |
 
 `run_library_cli` reconfigura `sys.stdout` para UTF-8/replace antes de imprimir
 (nomes de arquivo com caracteres fora do cp1252, ex.: `｜`, quebram o console
-do Windows).
+do Windows). `dedup-images` filtra o catálogo por `KIND_IMAGE`, roda
+`core.library.image_dedup.near_duplicate_images` e grava um evento no log do
+Observatório (`log_activity`) — mockar em testes que exercitam o caminho de
+sucesso.
 
 > Atenção: `library` foge do padrão dos demais — não há `CLIEventBus`,
 > `install_log_handler` nem `run_*_pipeline` a mockar. Nos testes, mocke
-> `src.cli.library.scan_library` e capture stdout via `capsys`.
+> `src.cli.library.scan_library` (e `src.cli.library.near_duplicate_images` p/
+> `dedup-images`) e capture stdout via `capsys`.
 
 ---
 
@@ -257,7 +266,7 @@ uv run main.py ai index                                  # (re)indexa o corpus
 uv run main.py ai stats                                  # resumo do índice (read-only)
 uv run main.py ai dups [--threshold 0.95] [--scope kind] # duplicatas (ML, read-only)
 uv run main.py ai topics                                 # clusters + rótulos c-TF-IDF ([ml])
-uv run main.py ai map [--method pca|umap] [--out p.png]  # PNG do mapa semântico ([ml])
+uv run main.py ai map [--method pca|tsne|umap] [--out p.png]  # PNG do mapa semântico ([ml])
 uv run main.py ai related <path> [--k 5]                 # vizinhos por cosseno (numpy)
 uv run main.py ai classify <path>                        # perfil sugerido + confiança/margem (4B)
 uv run main.py ai keywords <path> [--top 10]             # keyphrases YAKE ([nlp], 4B)
@@ -279,13 +288,17 @@ agrupa por cosseno; `--scope` aqui é só kind, `--threshold` ajusta o limiar) e
 retorna; se for `topics`/`map`/`related` → camada semântica do Plano 4A
 (`_topics`/`_map`/`_related`, read-only/sem embedder): `topics` clusteriza e lista
 os grupos com rótulos c-TF-IDF, `map` salva o PNG do mapa em `--out`
-(default `DATA_DIR/semantic_map.png`, `--method pca|umap`), `related <path>` lista
+(default `DATA_DIR/semantic_map.png`, `--method pca|tsne|umap` — TSNE já vem no `[ml]`,
+sem exigir `[ml-viz]`), `related <path>` lista
 vizinhos por cosseno (resolve o path por absoluto→basename). topics/map exigem `[ml]`
 (+ extras de gráfico no map); `related` é numpy-puro. Todos retornam; senão é a
-pergunta. Reaproveita o core
+pergunta — que agora passa por **busca híbrida** (cosseno + BM25 via RRF em
+`retriever.retrieve()`, Tier A) de forma transparente, sem flag nova. Reaproveita o core
 (`scan_library`/`build_index`/`retrieve`/`answer`); **não** usa `CLIEventBus`
 nem `run_*_pipeline` (como `library`). Embeddings **sempre locais** (Ollama);
 Gemini só no passo de resposta. `run_ai_cli` reconfigura `sys.stdout` p/ UTF-8.
+`dups`/`classify` gravam um evento no log do Observatório (`log_activity`) — mockar
+`src.core.observatory.activity.log_activity` em testes que exercitam o caminho de sucesso.
 
 `ai stats` imprime cabeçalho (docs · chunks · dim · modelo de embedding ·
 tamanho em disco · atualizado em · local) + tabela por documento
@@ -362,9 +375,10 @@ uv run main.py data query <arquivos...> "<pergunta>" [--sql] [--out csv|xlsx|jso
 uv run main.py data convert <arquivo> [--out parquet]
 uv run main.py data profile <arquivo>
 uv run main.py data assess <arquivo> [--model gemma3-4b-custom] [--no-cache]
+uv run main.py data outliers <arquivo> [--contamination 0.05] [--limit 20]
 ```
 
-Usa **sub-subparsers** (`ns.data_op` ∈ {`query`, `convert`, `profile`, `assess`}); `set_defaults(func=run_data_cli)`
+Usa **sub-subparsers** (`ns.data_op` ∈ {`query`, `convert`, `profile`, `assess`, `outliers`}); `set_defaults(func=run_data_cli)`
 no parser `data`. Como `library`/`ai`, **reusa o core puro direto** (`src/core/data/`) — operações
 síncronas, sem progresso → **sem `CLIEventBus`/`run_*_pipeline`**. `run_data_cli` reconfigura
 `sys.stdout` p/ UTF-8 (valores com caracteres fora do cp1252). `query` é **multi-input** (`files`
@@ -393,6 +407,37 @@ a avaliação cacheada se houver. `--model` = modelo do parecer.
 > dispatch; `--sql` deve **não** chamar `to_sql`; arquivo inexistente/ não suportado → `sys.exit(1)`.
 > Para `assess`, mocke `src.core.data.assess.load_cached_assessment`/`assess`/`save_assessment`
 > (cache hit não chama `assess`; `--no-cache` força e salva).
+
+`outliers <arquivo>` (Tier A, `docs/plan/PLANO_ML_NOVAS_FEATURES.md`) lê o arquivo inteiro (não uma
+query filtrada) via `run_query_arrow`/`frames`, roda `core/data/ml.py::detect_outliers`
+(`IsolationForest`, gate `core.ml.deps.is_available()`) e imprime a contagem + prévia das linhas
+mais atípicas (`--limit`, default 20). Grava um evento no log do Observatório
+(`core.observatory.activity.log_activity`) — mockar em testes que exercitam o caminho de sucesso,
+senão a suíte escreve no `~/.mill-tools/ml_activity.json` real.
+
+---
+
+## Subcomando `observatory`
+
+```bash
+uv run main.py observatory status
+uv run main.py observatory activity [--limit 15]
+```
+
+Hub read-only (Tier A) — mesmo padrão de `library`: **sub-subparsers**
+(`ns.observatory_op` ∈ {`status`, `activity`}), sem `CLIEventBus`/`run_*_pipeline`, `run_observatory_cli`
+reconfigura `sys.stdout` p/ UTF-8. `status` imprime gates (`core.observatory.status.gate_statuses`),
+rótulos do classificador por domínio (`domain_statuses`), parâmetros em vigor (`config_snapshot`,
+lidos via `inspect.signature` — nunca uma cópia hardcoded) e timings por modelo (`rag.analytics
+.model_timings`, alimentado por `_answer_times()` que lê `~/.mill-tools/config.json` **direto**,
+não via `gui.settings`, mesma convenção de `cli/ai.py::_answer_times` — a camada CLI nunca importa
+a GUI). `activity` lista as últimas N entradas do log cross-módulo (`core.observatory.activity
+.load_activity`/`recent`).
+
+> Nos testes (`tests/cli/test_observatory_cli.py`): `_parse(*argv)` isolado; mocke
+> `src.core.observatory.status.*`/`src.core.observatory.activity.load_activity` no ponto de
+> origem (ambos são acessados via `from X import Y` module-level ou via referência de módulo
+> dentro da função — patchar a origem funciona nos dois casos aqui).
 
 ---
 

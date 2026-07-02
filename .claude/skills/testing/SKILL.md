@@ -61,19 +61,26 @@ tests/
 │       ├── test_info.py                    # unit — get_pdf_info, PdfInfo (pymupdf REAL)
 │       ├── test_ocr.py                     # unit — ocr_pdf híbrido (pytesseract mockado) + 1 integration real (Tesseract)
 │       └── test_qr.py                      # unit — generate_qr (qrcode REAL — gera PNG em disco)
+│   ├── image/
+│       └── test_dhash.py                   # unit — dHash + hamming_distance: conteúdo idêntico→distância 0, cores sólidas→mesmo hash todo-zero (limitação conhecida), estruturas distintas→distância > 0
 │   ├── library/
 │   │   ├── test_scanner.py                 # unit — classify_path, scan_library (árvore falsa), filter_items (kind/category/query/since), sort_items
-│   │   └── test_thumbnails.py              # unit — thumbnail_for (imagem/PDF reais, fallbacks None) + 1 integration (frame de vídeo)
+│   │   ├── test_thumbnails.py              # unit — thumbnail_for (imagem/PDF reais, fallbacks None) + 1 integration (frame de vídeo)
+│   │   └── test_image_dedup.py             # unit — near_duplicate_images: perturbação leve→mesmo grupo, cadeia transitiva A~B~C→1 componente, guard max_images, max_distance=0
 │   ├── rag/                                # RAG local — tudo unit, sem Ollama (embed_fn injetado; LLM via GenericFakeChatModel)
-│       ├── test_store.py                   # unit — cosseno determinístico, drop_source, persist/load (npz/json), cache de normalização (invalidado por add/drop_source), máscara de search() pré-rank
-│       ├── test_retriever.py               # unit — top-k + filtro de escopo (1 doc / kind / corpus) via máscara pré-rank; embed_query_fn mockado; regressão de recall (escopo pouco competitivo globalmente ainda devolve k hits)
+│       ├── test_bm25.py                    # unit — bm25_score/build_bm25_index: termo exato ranqueia mais alto, sem match → zeros, case-insensitive (corpus ≥3 docs — IDF de 1-2 docs é degenerado/zero)
+│       ├── test_store.py                   # unit — cosseno determinístico, drop_source, persist/load (npz/json), cache de normalização E de bm25 (ambos invalidados por add/drop_source), máscara de search()/dense_scores()/bm25_scores() pré-rank
+│       ├── test_retriever.py               # unit — top-k + filtro de escopo (1 doc / kind / corpus) via máscara pré-rank; embed_query_fn mockado; regressão de recall (escopo pouco competitivo globalmente ainda devolve k hits); fusão RRF surfaça match lexical que o denso sozinho perderia; `.score` reportado continua o cosseno denso, não o valor fundido
 │       ├── test_embedder.py                # unit — is_available (langchain_ollama falso via sys.modules), _check_dim, shape float32
 │       ├── test_indexer.py                 # unit — chunking, header strip, filtro kind/sufixo, skip/reembed por mtime, reconciliação, progresso
 │       ├── test_chat.py                    # unit — build_context numerado [n] + dedupe de fontes; answer via GenericFakeChatModel
 │       ├── test_templates.py               # unit — defaults + merge prompts.json + proteção contra shadowing de default
 │       ├── test_batch.py                   # unit — distinct_sources (dedupe/kind), run_batch (1 answer/doc, progresso)
+│   ├── observatory/                        # Tier A — puro, sem gate próprio
+│       ├── test_activity.py                # unit — log_activity/load_activity round-trip, cap _MAX_ENTRIES, malformado→[], recent() ordena mais-novo-primeiro
+│       └── test_status.py                  # unit — gate_statuses (reflete extra ausente), domain_statuses (isolamento por diretório, sem tocar model_dir() real), config_snapshot (lê defaults reais via inspect.signature, não uma cópia)
 │   └── recipes/                            # Receitas — tudo unit; STEP_REGISTRY mockado via patch.dict (sem ffmpeg/Whisper/rede)
-│       ├── test_registry.py                # unit — specs bem-formadas + cada adaptador mockado no ponto de uso; ai.answer (RAG mockado); video.subtitle multi-input
+│       ├── test_registry.py                # unit — specs bem-formadas + cada adaptador mockado no ponto de uso; ai.answer (RAG mockado); video.subtitle multi-input; data.outliers (mock log_activity!)
 │       ├── test_runner.py                  # unit — encadeamento, ordem de eventos, cancel, stop_on_error, emit_terminal, execute_recipe_batch, histórico
 │       ├── test_validate.py                # unit — coerência accepts/produces, mismatch, op desconhecida, receita vazia
 │       ├── test_presets.py                 # unit — cada preset válido p/ todo kind aceito pelo 1º passo
@@ -85,12 +92,14 @@ tests/
     ├── test_workers_text.py                # unit — run_pipeline ramo texto (guarda sem análise + analyzer na cópia; LLM mockado)
     ├── test_file_viewer.py                 # unit — is_viewable (gating do visor in-app .md/.txt)
     └── modules/
+        ├── test_stepper.py                 # unit — build_stepper: 1 chip/estágio, set_active destaca o atual + marca anteriores com ✓, set_active(None)/chave desconhecida reseta tudo
         ├── audio/test_pipeline_log.py      # unit — resolve_*, fmt_* (download/convert/extract/denoise/normalize)
         ├── image/test_pipeline_log.py      # unit — resolve_*, fmt_* (13 operações)
         ├── video/test_pipeline_log.py      # unit — resolve_*, fmt_* (8 operações, inclui subtitle)
         ├── document/test_pipeline_log.py   # unit — resolve_messages, resolve_stage_label, fmt_* builders (13 operações, inclui ocr)
         ├── document/test_worker_analyze.py # unit — _run_analyze ramo .txt (mock analyzer.analyze; pula get_pdf_info)
         ├── ai/                             # unit — worker (index/answer via bus falso + core mockado) + pipeline_log (resolve_status/fmt_*)
+        ├── observatory/                    # unit — construct-smoke (MagicMock page) p/ status_tab/activity_tab/view; isola gui.settings E core.observatory.activity._store_path via monkeypatch (on_mount grava em ambos)
         └── recipes/                        # unit — worker (single/lote/clean/false/exceção via bus falso + execute_recipe(_batch) mockado) + pipeline_log
 ```
 
@@ -483,6 +492,17 @@ via `GenericFakeChatModel`). Padrões:
   `split_text` roda de verdade (barato).
 - **`index_dir()`**: `monkeypatch.setattr(Path, "home", classmethod(lambda cls: tmp_path))`
   ou patch direto do atributo do módulo nos callers.
+- **`bm25`/busca híbrida (Tier A)**: `build_bm25_index`/`bm25_score` são puros (`rank_bm25`
+  já é dependência base, sem `importorskip`) — mas cuidado com IDF degenerado em corpus
+  ≤2 docs (`log((N-n+0.5)/(n+0.5))` bate 0/negativo quando o termo não é minoria; use
+  ≥3 documentos nos testes de ranking). `VectorStore._bm25` é um 2º cache lazy ao lado
+  de `_normalized`, invalidado pelos mesmos `add()`/`drop_source()` — teste os dois juntos
+  (mesmo padrão: comparar identidade do objeto, não só o valor). `retriever._reciprocal
+  _rank_fusion` usa `np.lexsort((idx, -scores))`, não `argsort(...)[::-1]`, deliberadamente:
+  a reversão de um argsort ascendente inverte a ordem de desempate em empates, o que pode
+  fazer um sinal totalmente neutro (BM25 sem nenhum match) **cancelar** uma preferência clara
+  do outro sinal quando há poucos candidatos — achado real ao escrever os testes, não uma
+  hipótese.
 
 ### Core Receitas (`src/core/recipes/`) — `STEP_REGISTRY` mockado, sem core real
 
@@ -563,7 +583,16 @@ Fundação de ML, testável sem rede e (na maior parte) sem o extra `[ml]`:
 - **`mapviz` (`importorskip("sklearn")`)**: `build_semantic_map` clusteriza+rotula+cacheia
   (**spy** em `cluster_documents`: 1× com cache, 2× com `use_cache=False`);
   `cluster_display_name`; `render_semantic_map_png` → PNG válido (Pillow), mapa vazio /
-  charts ausente → erro.
+  charts ausente → erro. **`on_stage` (Tier A)**: callback chamado em
+  `["cluster","project","label"]` nessa ordem exata (a ordem real do código — a prosa do
+  plano original tinha `project`/`label` trocados); **pulado inteiramente** em cache hit
+  (nenhum estágio de fato roda).
+- **`classify` (Tier A — `domain` parametrizado)**: domínio default preserva os nomes de
+  arquivo pré-existentes (`_proto_filenames`/`_model_name`/`_labels_json_name` do domínio
+  `DOMAIN_TRANSCRIPTION_PROFILE` == as constantes antigas — teste de regressão explícito);
+  domínios novos (`DOMAIN_DATA`/`DOMAIN_DOCUMENT`) não vazam ids de protótipo um pro outro;
+  rótulos gravados num domínio não aparecem em `load_labels` de outro (isolamento por
+  arquivo, não por processo).
 - **`charts.render_category_scatter`** (`tests/core/data/test_charts.py`): scatter
   categórico → PNG válido, vazio/coluna inexistente → erro, >12 categorias sem legenda,
   thread-safe (dois renders concorrentes).
@@ -603,6 +632,11 @@ como os do RAG. Fixtures locais em `tests/core/data/conftest.py` (`csv_sales`,
   sem reconciliação, usado pelo botão Indexar da aba Pré-visualização): indexar
   só o arquivo B **não** derruba A já indexado; reembeda a cada chamada (ação
   explícita, sem skip por mtime); `card_fn` que falha pula só aquele.
+- **`ml.detect_outliers`** (`test_ml.py`, Tier A — `pd = pytest.importorskip("pandas")` +
+  `pytest.importorskip("sklearn")`, sem fixture de arquivo — DataFrame sintético direto):
+  linha bem fora da distribuição → menor `ANOMALY_COLUMN` (mais anômala); ordem de linhas
+  e colunas não-numéricas preservadas; NaN numérico não lança (mean-imputado antes de
+  `IsolationForest`, que rejeita NaN); sem coluna numérica → `ValueError`.
 
 ### Mock de `WhisperModel` (faster-whisper) — para testar `transcriber.transcribe`
 
@@ -773,6 +807,12 @@ O alvo é **≥ 90%** por módulo. Total agregado: **88%** com branch. Estado at
 | `core/ml/cache.py` | **100%** |
 | `core/ml/project.py` | **100%** (UMAP sob `# pragma`) |
 | `core/ml/mapviz.py` | **100%** |
+| `core/rag/bm25.py` | **100%** (Tier A) |
+| `core/image/dhash.py` | **100%** (Tier A) |
+| `core/library/image_dedup.py` | **100%** (Tier A) |
+| `core/data/ml.py` | **100%** (Tier A) |
+| `core/observatory/status.py` | **100%** (Tier A) |
+| `core/observatory/activity.py` | 94% (Tier A — write-failure/log branches) |
 | `analyzer.py` | 99% |
 | `cli/ai.py` | 98% |
 | `core/rag/store.py` | 98% |
