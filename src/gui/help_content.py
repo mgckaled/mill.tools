@@ -202,8 +202,8 @@ HELP_SHORT: dict[str, str] = {
     "image.describe_model": (
         "Modelo com suporte a visão. moondream-custom: leve e rápido. "
         "gemma3-4b-custom: melhor qualidade e PT-BR nativo, porém mais lento (CPU). "
-        "llava:7b / minicpm-v: alternativas locais. glm-4.6v-flash: nuvem "
-        "(Zhipu/Z.ai, tier grátis) — a imagem sai da máquina."
+        "llava:7b / minicpm-v: alternativas locais. glm-4.6v-flash / gemini-2.5-flash: "
+        "nuvem (tier grátis) — a imagem sai da máquina."
     ),
     "image.describe_prompt": (
         "Instrução enviada ao modelo. "
@@ -333,7 +333,9 @@ HELP_LONG: dict[str, str] = {
         "• llava:7b — mais capaz e detalhado, requer ~4 GB RAM.\n"
         "• minicpm-v — alternativa leve com bom desempenho em PT-BR.\n"
         "• glm-4.6v-flash — nuvem (Zhipu/Z.ai, tier grátis), sem instalar nada; "
-        "a imagem sai da máquina. Requer ZHIPU_API_KEY no .env.\n\n"
+        "a imagem sai da máquina. Requer ZHIPU_API_KEY no .env.\n"
+        "• gemini-2.5-flash — nuvem (Google, tier grátis), sem instalar nada; "
+        "a imagem sai da máquina. Requer GOOGLE_API_KEY no .env.\n\n"
         "A descrição é salva como .txt em output/image/processed/ (indexável no RAG, "
         "reaproveitável via Biblioteca). Modelos locais devem estar instalados no Ollama antes de usar."
     ),

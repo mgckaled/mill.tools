@@ -335,7 +335,8 @@ def add_image_parser(subparsers: argparse._SubParsersAction) -> None:
 
     # ── describe ──────────────────────────────────────────────────────────────
     dc = img_sub.add_parser(
-        "describe", help="Describe image via a vision model (Ollama local or GLM cloud)"
+        "describe",
+        help="Describe image via a vision model (Ollama local or Gemini/GLM cloud)",
     )
     dc.add_argument("file", help="Image file or URL")
     dc.add_argument(
@@ -347,8 +348,12 @@ def add_image_parser(subparsers: argparse._SubParsersAction) -> None:
             "llava:7b",
             "minicpm-v",
             "glm-4.6v-flash",
+            "gemini-2.5-flash",
         ],
-        help="Vision model (default moondream-custom; glm-4.6v-flash is a cloud opt-in)",
+        help=(
+            "Vision model (default moondream-custom; glm-4.6v-flash/gemini-2.5-flash "
+            "are cloud opt-ins)"
+        ),
     )
     dc.add_argument(
         "--prompt", default="", help="Custom prompt (empty = default PT-BR)"

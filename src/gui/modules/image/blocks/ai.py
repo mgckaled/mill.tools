@@ -132,8 +132,8 @@ def build_ai_blocks(page: ft.Page) -> AIRefs:
                     ft.Icons.CLOUD_OUTLINED, size=IconSize.md, color=ft.Colors.PRIMARY
                 ),
                 ft.Text(
-                    "Com modelos em nuvem (GLM), a imagem é enviada a um provedor "
-                    "externo para ser descrita.",
+                    "Com modelos em nuvem (Gemini/GLM), a imagem é enviada a um "
+                    "provedor externo para ser descrita.",
                     size=Type.small.size,
                     color=ft.Colors.ON_SURFACE_VARIANT,
                     expand=True,
@@ -162,6 +162,7 @@ def build_ai_blocks(page: ft.Page) -> AIRefs:
             ft.dropdown.Option("llava:7b", "llava:7b"),
             ft.dropdown.Option("minicpm-v", "minicpm-v"),
             ft.dropdown.Option("glm-4.6v-flash", "glm-4.6v-flash (nuvem)"),
+            ft.dropdown.Option("gemini-2.5-flash", "gemini-2.5-flash (nuvem)"),
         ],
         value="moondream-custom",
         on_select=_on_desc_model_select,

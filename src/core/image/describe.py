@@ -1,4 +1,4 @@
-"""Descrição de imagem via VLM — Ollama local ou GLM em nuvem (LangChain). Import lazy."""
+"""Descrição de imagem via VLM — Ollama local ou Gemini/GLM em nuvem (LangChain). Import lazy."""
 
 from __future__ import annotations
 
@@ -22,11 +22,16 @@ def is_available() -> bool:
 
 
 def describe_image(src: Path, model: str = "moondream-custom", prompt: str = "") -> str:
-    """Send an image to a vision model (local Ollama or GLM cloud) and return its
-    text description."""
+    """Send an image to a vision model (local Ollama or Gemini/GLM cloud) and
+    return its text description."""
     from langchain_core.messages import HumanMessage
 
-    from src.llm_factory import DEFAULT_OLLAMA_NUM_CTX, is_glm_model, make_llm
+    from src.llm_factory import (
+        DEFAULT_OLLAMA_NUM_CTX,
+        is_gemini_model,
+        is_glm_model,
+        make_llm,
+    )
 
     with open(src, "rb") as f:
         img_b64 = base64.b64encode(f.read()).decode()
@@ -34,9 +39,10 @@ def describe_image(src: Path, model: str = "moondream-custom", prompt: str = "")
     suffix = src.suffix.lower().lstrip(".")
     mime = "jpeg" if suffix in ("jpg", "jpeg") else suffix
 
-    if is_glm_model(model):
-        # GLM-4.6V-Flash (Zhipu/Z.ai, free tier): ChatOpenAI accepts the same
-        # multimodal message shape used below, no request changes needed.
+    if is_glm_model(model) or is_gemini_model(model):
+        # GLM-4.6V-Flash (Zhipu/Z.ai) and every Gemini model (natively multimodal,
+        # no separate vision variant) accept the same multimodal message shape
+        # used below, no request changes needed. Both are free-tier eligible.
         llm = make_llm(model)
     else:
         from langchain_ollama import ChatOllama
