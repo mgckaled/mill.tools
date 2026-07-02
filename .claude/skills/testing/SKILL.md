@@ -62,7 +62,8 @@ tests/
 │       ├── test_ocr.py                     # unit — ocr_pdf híbrido (pytesseract mockado) + 1 integration real (Tesseract)
 │       └── test_qr.py                      # unit — generate_qr (qrcode REAL — gera PNG em disco)
 │   ├── image/
-│       └── test_dhash.py                   # unit — dHash + hamming_distance: conteúdo idêntico→distância 0, cores sólidas→mesmo hash todo-zero (limitação conhecida), estruturas distintas→distância > 0
+│       ├── test_dhash.py                   # unit — dHash + hamming_distance: conteúdo idêntico→distância 0, cores sólidas→mesmo hash todo-zero (limitação conhecida), estruturas distintas→distância > 0
+│       └── test_describe.py                # unit — describe_image: modelo local→ChatOllama (langchain_ollama mockado via sys.modules), glm-*/gemini-*→llm_factory.make_llm (não ChatOllama)
 │   ├── library/
 │   │   ├── test_scanner.py                 # unit — classify_path, scan_library (árvore falsa), filter_items (kind/category/query/since), sort_items
 │   │   ├── test_thumbnails.py              # unit — thumbnail_for (imagem/PDF reais, fallbacks None) + 1 integration (frame de vídeo)

@@ -63,7 +63,7 @@ Seis **ferramentas** de processamento (NavigationRail) e quatro **hubs** que ope
 | NLP textual | `core/text` **torch-free** (extra `[nlp]`): keyphrases ([YAKE](https://github.com/LIAAD/yake)), resumo extractivo (TextRank self-contained, sem nltk) e entidades ([spaCy](https://spacy.io) CNN `pt_core_news_sm`). Auto-sugestão de perfil, aba Insights e auto-tags da Biblioteca |
 | Vídeo | yt-dlp + ffmpeg CPU-only (libx264/libx265/libvpx-vp9) — sem NVENC |
 | Áudio | noisereduce (spectral gating, CPU) + ffmpeg loudnorm (EBU R128, 2 passes), silenceremove e atempo (silêncio/velocidade); torch-free |
-| Imagens | Pillow (transforms, EXIF, smart crop, watermark/QR, filtros) + rembg/ONNX (CPU) para remoção/troca de fundo; OCR via Tesseract (extra `[ocr]`); descrição por visão via Ollama (`gemma3-4b`/moondream/llava/minicpm-v) ou GLM em nuvem (`glm-4.6v-flash`, opt-in) |
+| Imagens | Pillow (transforms, EXIF, smart crop, watermark/QR, filtros) + rembg/ONNX (CPU) para remoção/troca de fundo; OCR via Tesseract (extra `[ocr]`); descrição por visão via Ollama (`gemma3-4b`/moondream/llava/minicpm-v) ou nuvem (`glm-4.6v-flash`/`gemini-2.5-flash`, opt-in) |
 | Documentos | [pymupdf](https://pymupdf.readthedocs.io) (PDF) + Tesseract (OCR híbrido, opcional) |
 | Interface | [Flet 0.85](https://flet.dev) (Flutter desktop) com log em tempo real, design system próprio e ajuda contextual (ⓘ) |
 | IA | Ollama local por padrão; Gemini/GLM opt-in por prefixo de modelo (`gemini-*`/`glm-*`) |
@@ -264,7 +264,7 @@ output/
 | `nomic-embed-custom` | Embeddings do RAG (768-dim) | ~275 MB |
 | `moondream-custom` | Descrição de imagens (visão) | ~1,7 GB |
 
-**Gemini** (nuvem, opt-in): roteado por prefixo `gemini-*`. Com a janela de 1M tokens, `--analyze`/`--prompt` dispensam chunking. Recomendado: `gemini-2.5-flash`.
+**Gemini** (nuvem, opt-in): roteado por prefixo `gemini-*`. Com a janela de 1M tokens, `--analyze`/`--prompt` dispensam chunking. Recomendado: `gemini-2.5-flash`. Também disponível como VLM no módulo Imagens: todo modelo Gemini já é multimodal nativamente (sem variante de visão separada), então o mesmo `gemini-2.5-flash` descreve imagens sem precisar de Ollama.
 
 **GLM/Zhipu** (nuvem, opt-in): roteado por prefixo `glm-*`, via `langchain-openai` apontando para a API OpenAI-compatible da Zhipu. Com a janela de 200K tokens, `--analyze`/`--prompt` também dispensam chunking. Recomendado: `glm-4.7-flash` (tier grátis recorrente, sem assinatura). Também disponível como VLM no módulo Imagens: `glm-4.6v-flash` (visão, mesmo tier grátis) descreve imagens sem precisar de Ollama.
 
