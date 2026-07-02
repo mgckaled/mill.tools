@@ -182,18 +182,20 @@ _NON_TRANSCRIBE_CMDS = frozenset(
         "ai",
         "recipe",
         "data",
+        "observatory",
     }
 )
 
 
 def _dispatch_other(cmd: str) -> None:
-    """Dispatch audio / video / image / document / library / ai / recipe / data subcommands."""
+    """Dispatch audio / video / image / document / library / ai / recipe / data / observatory subcommands."""
     from src.cli.ai import add_ai_parser
     from src.cli.audio import add_audio_parser, add_audio_viz_parser
     from src.cli.data import add_data_parser
     from src.cli.document import add_document_parser
     from src.cli.image import add_image_parser
     from src.cli.library import add_library_parser
+    from src.cli.observatory import add_observatory_parser
     from src.cli.recipes import add_recipe_parser
     from src.cli.video import add_video_parser
 
@@ -211,6 +213,7 @@ def _dispatch_other(cmd: str) -> None:
     add_ai_parser(subparsers)
     add_recipe_parser(subparsers)
     add_data_parser(subparsers)
+    add_observatory_parser(subparsers)
 
     ns = parser.parse_args(sys.argv[1:])
     setup_logging(getattr(ns, "verbose", False))
