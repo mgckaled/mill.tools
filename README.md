@@ -48,7 +48,7 @@ Seis **ferramentas** de processamento (NavigationRail) e quatro **hubs** que ope
 | **Biblioteca** | Hub | Índice navegável de tudo em `output/`: grade com thumbnails, lista, **painel analítico** (acervo por tipo/tamanho/crescimento) ou **mapa semântico** (temas do acervo agrupados + relacionados); filtro/busca/ordenação, abrir arquivo/pasta e reenviar a outro módulo |
 | **IA** | Hub | RAG local sobre o seu acervo: pergunte ao corpus e receba respostas **citando as fontes** (com aviso quando o acervo não cobre a pergunta). Embeddings sempre locais; Gemini/GLM opt-in. **Painel**: saúde do índice + tempo de resposta por modelo. **ML semântico**: duplicatas (`ai dups`), tópicos automáticos (`ai topics`), mapa semântico (`ai map`) e relacionados (`ai related`) — tudo reusando o índice |
 | **Receitas** | Hub | Automação: cadeias lineares entre módulos (`URL → áudio → transcrever → analisar`). Presets + construtor com validação ao vivo; lote; **histórico de execução** (confiabilidade/velocidade); CLI `recipe run` |
-| **Observatório** | Hub | Central de ML de todo o app: aba **Atividade** (feed cronológico do que o ML fez em qualquer módulo) e aba **Status** (gates de extras, rótulos do classificador por domínio, parâmetros em vigor, tempo de resposta por modelo). Read-only, sem pipeline; CLI `observatory status`/`observatory activity` |
+| **Observatório** | Hub | Central de ML de todo o app, 4 abas (Status é a padrão): **Status** (gates de extras, modelos Ollama instalados, binários externos, provedores de nuvem configurados, classificador por domínio, parâmetros em vigor), **Atividade** (feed do que o ML fez em qualquer módulo), **Logs** (falhas recentes cross-módulo) e **Tempo de resposta** (por modelo, com badge nuvem/local). Read-only, sem pipeline; CLI `observatory status`/`observatory activity`/`observatory logs` |
 
 ---
 
@@ -204,9 +204,10 @@ uv run main.py recipe list
 uv run main.py recipe run "YouTube → transcrição completa" "https://youtu.be/..." --model medium
 uv run main.py recipe stats
 
-# Observatório — atividade e status de ML entre todos os módulos (leitura)
+# Observatório — atividade, falhas e status de ML entre todos os módulos (leitura)
 uv run main.py observatory status
 uv run main.py observatory activity --limit 15
+uv run main.py observatory logs --limit 50
 ```
 
 #### Flags da Transcrição

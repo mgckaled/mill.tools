@@ -236,6 +236,15 @@ Para `docs/ROADMAP_ML_DADOS.md`, esta skill é o ponto de partida de cada plano:
   prontos; wiring nas 3 telas de origem (RAG/Mapa/Insights) requer ponte thread-safe (`page.pubsub`) por
   causa de `asyncio.to_thread` — deixado para uma passagem dedicada. CLI `observatory status/activity`,
   `library dedup-images`, `data outliers`. Ver `docs/plan/PLANO_ML_NOVAS_FEATURES.md`.
-
-A regra de ouro do roadmap vale também para o código: **pagar uma fundação pequena uma vez (camadas, limites,
-padrões) para não pagar retrabalho muitas vezes.**
+  - **Fast-follow — GUI write-through + Status ampliado ✅** — fechou o gap em que só a CLI gravava em
+    `log_activity` (a aba Atividade ficava vazia para quem só usa a GUI): `views/profile_section.py` e
+    `gui/workers.py` passaram a gravar eventos de auto-sugestão/confirmação de perfil. Novo
+    `core/observatory/logs.py` (mesmo padrão de `activity.py`, cap 100) alimentado por um **hook central**
+    em `gui/events.py::EventBus.emit()` — todo `task_error` da GUI (exceto cancelamentos) vira uma entrada,
+    sem tocar nenhum `worker.py` — prova de que o `page.pubsub.send_all()` já é um broadcast page-wide (o
+    mesmo mecanismo que `app.py::_on_pipeline_cursor` já usava). `status.py` ganhou `ollama_inventory()`
+    (consulta `ollama.Client().list()` — pacote promovido a dependência direta), `binary_statuses()`
+    (`shutil.which` + o resolvedor de Tesseract existente), `cloud_provider_statuses()` (reusa
+    `llm_factory._load_env_once()`, mesmo precedente de `core/data/nl2sql.py` importando `llm_factory`
+    direto de `core/`) e 4 gates novos (`[ocr]`/`[ai-image]`/`[analysis]`/`[data-plot]` — dois deles não
+    tinham `SETUP_HINT` ainda). Hub reordenado para Status primeiro (visão de conjunto antes do feed).

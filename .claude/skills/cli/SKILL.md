@@ -39,7 +39,7 @@ src/cli/
 ├── ai.py             — add_ai_parser() + run_ai_cli()  (RAG local; index / pergunta / --batch)
 ├── recipes.py        — add_recipe_parser() + run_recipe_cli()  (recipe list / run; usa CLIEventBus)
 ├── data.py           — add_data_parser() + run_data_cli()  (query/convert/profile/outliers; reusa core direto)
-└── observatory.py    — add_observatory_parser() + run_observatory_cli()  (status/activity, read-only, sem CLIEventBus)
+└── observatory.py    — add_observatory_parser() + run_observatory_cli()  (status/activity/logs, read-only, sem CLIEventBus)
 ```
 
 ---
@@ -423,22 +423,31 @@ senão a suíte escreve no `~/.mill-tools/ml_activity.json` real.
 ```bash
 uv run main.py observatory status
 uv run main.py observatory activity [--limit 15]
+uv run main.py observatory logs [--limit 50]
 ```
 
 Hub read-only (Tier A) — mesmo padrão de `library`: **sub-subparsers**
-(`ns.observatory_op` ∈ {`status`, `activity`}), sem `CLIEventBus`/`run_*_pipeline`, `run_observatory_cli`
-reconfigura `sys.stdout` p/ UTF-8. `status` imprime gates (`core.observatory.status.gate_statuses`),
-rótulos do classificador por domínio (`domain_statuses`), parâmetros em vigor (`config_snapshot`,
-lidos via `inspect.signature` — nunca uma cópia hardcoded) e timings por modelo (`rag.analytics
-.model_timings`, alimentado por `_answer_times()` que lê `~/.mill-tools/config.json` **direto**,
-não via `gui.settings`, mesma convenção de `cli/ai.py::_answer_times` — a camada CLI nunca importa
-a GUI). `activity` lista as últimas N entradas do log cross-módulo (`core.observatory.activity
-.load_activity`/`recent`).
+(`ns.observatory_op` ∈ {`status`, `activity`, `logs`}), sem `CLIEventBus`/`run_*_pipeline`, `run_observatory_cli`
+reconfigura `sys.stdout` p/ UTF-8. `status` imprime, em ordem: gates (`core.observatory.status
+.gate_statuses`, 9 entradas — `[ml]`/`[ml-viz]`/`[nlp]` YAKE/`[nlp]` spaCy/embedder/`[ocr]`/
+`[ai-image]`/`[analysis]`/`[data-plot]`) + glossário de entidades (`entity_glossary_status`);
+inventário de modelos Ollama (`ollama_inventory`, consulta `ollama.Client().list()` — degrada p/
+"não acessível" sem lançar se o serviço não estiver rodando); binários externos (`binary_statuses`
+— yt-dlp/ffmpeg/ffprobe/tesseract); provedores de nuvem configurados (`cloud_provider_statuses`
+— só presença de `GOOGLE_API_KEY`/`ZHIPU_API_KEY`, nunca o valor); rótulos do classificador por
+domínio (`domain_statuses`); parâmetros em vigor (`config_snapshot`, lidos via `inspect.signature`
+— nunca uma cópia hardcoded); e timings por modelo (`rag.analytics.model_timings`, alimentado por
+`_answer_times()` que lê `~/.mill-tools/config.json` **direto**, não via `gui.settings`, mesma
+convenção de `cli/ai.py::_answer_times` — a camada CLI nunca importa a GUI). `activity` lista as
+últimas N entradas do log de sucesso cross-módulo (`core.observatory.activity.load_activity`/
+`recent`). `logs` lista as últimas N entradas do log de **falhas** (`core.observatory.logs
+.load_logs`/`recent` — populado por um hook em `gui/events.py::EventBus.emit()`, não por esta CLI).
 
 > Nos testes (`tests/cli/test_observatory_cli.py`): `_parse(*argv)` isolado; mocke
-> `src.core.observatory.status.*`/`src.core.observatory.activity.load_activity` no ponto de
-> origem (ambos são acessados via `from X import Y` module-level ou via referência de módulo
-> dentro da função — patchar a origem funciona nos dois casos aqui).
+> `src.core.observatory.status.*`/`src.core.observatory.activity.load_activity`/
+> `src.core.observatory.logs.load_logs` no ponto de origem (todos acessados via `from X import Y`
+> module-level ou via referência de módulo dentro da função — patchar a origem funciona em todos
+> os casos aqui).
 
 ---
 
