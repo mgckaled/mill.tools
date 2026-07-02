@@ -135,11 +135,11 @@ def build_describe_tab(
         size=Type.input.size,
     )
 
-    def _copy_description(_e) -> None:
+    async def _copy_description(_e) -> None:
         text = desc_md.value or ""
         if not text.strip():
             return
-        page.set_clipboard(text)
+        await ft.Clipboard().set(text)
         page.show_dialog(
             ft.SnackBar(content=ft.Text("Descrição copiada."), duration=2000)
         )

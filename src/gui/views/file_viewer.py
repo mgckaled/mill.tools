@@ -64,9 +64,11 @@ def open_file_viewer(page: ft.Page, path: Path) -> None:
         md_style_sheet=_MD_STYLE,
     )
 
-    def _copy(_e: ft.ControlEvent) -> None:
-        page.set_clipboard(text)
-        page.open(ft.SnackBar(content=ft.Text("Conteúdo copiado."), duration=2000))
+    async def _copy(_e: ft.ControlEvent) -> None:
+        await ft.Clipboard().set(text)
+        page.show_dialog(
+            ft.SnackBar(content=ft.Text("Conteúdo copiado."), duration=2000)
+        )
 
     def _open_external(_e: ft.ControlEvent) -> None:
         try:

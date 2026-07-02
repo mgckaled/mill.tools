@@ -188,9 +188,9 @@ def build_result_view(
     )
 
     # --- ações ---
-    def on_copy(_: ft.ControlEvent) -> None:
-        page.set_clipboard(tab_contents[selected[0]])
-        page.open(
+    async def on_copy(_: ft.ControlEvent) -> None:
+        await ft.Clipboard().set(tab_contents[selected[0]])
+        page.show_dialog(
             ft.SnackBar(
                 content=ft.Text("Conteúdo copiado para a área de transferência."),
                 duration=2000,

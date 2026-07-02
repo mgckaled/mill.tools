@@ -65,7 +65,7 @@ def rag_index_button(
 
     def _toast(message: str) -> None:
         try:
-            page.open(ft.SnackBar(content=ft.Text(message), duration=3000))
+            page.show_dialog(ft.SnackBar(content=ft.Text(message), duration=3000))
         except Exception as exc:
             logging.debug("[d] snackbar failed: %s", exc)
 

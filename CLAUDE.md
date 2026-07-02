@@ -294,7 +294,8 @@ Modelos custom CPU-pinned (`num_gpu 0`); Modelfiles minimalistas (sem `SYSTEM`/`
 | `ft.Image` updates frequentes | `gapless_playback=True` mantém o frame anterior visível — evita flicker (cursor de waveform) |
 | `Container.on_hover` coberto | **não dispara** quando o Container é totalmente coberto por outra região de mouse. Para hover **e** tap no mesmo card, usar **um único** `ft.GestureDetector` com `on_enter`/`on_exit` (+ `on_tap`) — ver `home.py` |
 | `control.update()` de thread daemon | **não repinta** até o próximo `page.update()` da UI thread — um cronômetro/ticker em `threading.Thread` parece travado. Para atualização periódica viva, rodar no event loop da UI via `page.run_task` (corotina async com `await asyncio.sleep`) — ver `ai/view.py`, `home.py`, `library.py` |
-| `page.open(...)` | **não existe** no 0.85.2 (`AttributeError` em runtime, no handler). Diálogos **e** SnackBars (SnackBar é `DialogControl`) vão por `page.show_dialog(...)`; fechar = `page.pop_dialog()`. Nunca `page.snack_bar=`/`page.dialog=`. Há usos latentes de `page.open` no repo (não exercitados) |
+| `page.open(...)` | **não existe** no 0.85.2 (`AttributeError` em runtime, no handler). Diálogos **e** SnackBars (SnackBar é `DialogControl`) vão por `page.show_dialog(...)`; fechar = `page.pop_dialog()`. Nunca `page.snack_bar=`/`page.dialog=` |
+| `page.set_clipboard(...)`/`page.get_clipboard()` | **não existem** no 0.85.2 (`AttributeError`, `Did you mean: 'clipboard'?`) — a API virou assíncrona: `await ft.Clipboard().set(texto)` / `await ft.Clipboard().get()`. `page.clipboard` (propriedade) ainda funciona mas está **deprecated** (remoção em 0.90.0); preferir `ft.Clipboard()` direto. Handler de botão precisa ser `async def` — `_trigger_event` do Flet 0.85 já dá `await` em handlers async automaticamente |
 
 ### Modelos nos dropdowns de Transcrição
 

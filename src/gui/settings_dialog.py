@@ -73,7 +73,9 @@ def open_settings_dialog(page: ft.Page) -> None:
         settings.set("yt_cookies_browser", browser_dd.value or "none")
         settings.set("yt_cookies_profile", (profile_field.value or "").strip())
         page.pop_dialog()
-        page.open(ft.SnackBar(content=ft.Text("Configurações salvas."), duration=2000))
+        page.show_dialog(
+            ft.SnackBar(content=ft.Text("Configurações salvas."), duration=2000)
+        )
 
     dlg = ft.AlertDialog(
         title=ft.Row(
