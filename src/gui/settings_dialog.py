@@ -1,8 +1,17 @@
 """Global settings dialog (opened from the AppBar gear).
 
-Currently hosts the YouTube cookies setting used to pass the anti-bot gate. The cookie
-resolution itself lives in src/core/ytdlp_cookies.py (pure, reused by every yt-dlp call
-site); this dialog only persists the user's choice via gui.settings.
+Hosts the YouTube cookies setting (anti-bot gate) and cloud API keys
+(Google Gemini, Zhipu GLM). The cookie resolution itself lives in
+src/core/ytdlp_cookies.py (pure, reused by every yt-dlp call site); the API
+key read/write lives in src/gui/views/form_env.py (pure file I/O against the
+project's .env, no Flet) — moved here from the Transcrição form, which was
+never the right owner since every module that calls a cloud model (Analyzer,
+Prompter, RAG chat, Dados' assess/nl2sql, descrição de imagem) needs the same
+keys, not just Transcrição. Credenciais is deliberately the LAST section in
+this dialog. Everything else here only persists the user's choice via
+gui.settings; API keys are the one exception (they go straight to .env, same
+as before the move — see the security note on write_api_key/write_glm_api_key
+call sites below).
 """
 
 from __future__ import annotations
@@ -13,6 +22,12 @@ from src.core import ytdlp_cookies
 from src.gui import settings
 from src.gui.theme.components import Cursor, section
 from src.gui.theme.tokens import Space, Type
+from src.gui.views.form_env import (
+    read_api_key,
+    read_glm_api_key,
+    write_api_key,
+    write_glm_api_key,
+)
 
 _BROWSER_LABELS = {
     "auto": "Automático (detecta o Zen)",
@@ -77,6 +92,42 @@ def open_settings_dialog(page: ft.Page) -> None:
             ft.SnackBar(content=ft.Text("Configurações salvas."), duration=2000)
         )
 
+    # Cloud API keys (Google Gemini, Zhipu GLM). Unlike the cookies fields
+    # above, these save on blur (not on the dialog's "Salvar" button) — same
+    # behavior as before the move from the Transcrição form, kept as-is.
+    # Security note: read/write only ever touch the local .env file via
+    # form_env.py; the value never crosses into gui.settings/config.json or
+    # any network call made by this dialog.
+    api_key_field = ft.TextField(
+        label="Google API Key",
+        hint_text="AIza...",
+        value=read_api_key(),
+        password=True,
+        can_reveal_password=True,
+        border_color=ft.Colors.OUTLINE,
+        focused_border_color=ft.Colors.PRIMARY,
+    )
+
+    def _on_api_key_blur(_e: ft.ControlEvent) -> None:
+        write_api_key(api_key_field.value or "")
+
+    api_key_field.on_blur = _on_api_key_blur
+
+    glm_api_key_field = ft.TextField(
+        label="GLM API Key",
+        hint_text="...",
+        value=read_glm_api_key(),
+        password=True,
+        can_reveal_password=True,
+        border_color=ft.Colors.OUTLINE,
+        focused_border_color=ft.Colors.PRIMARY,
+    )
+
+    def _on_glm_api_key_blur(_e: ft.ControlEvent) -> None:
+        write_glm_api_key(glm_api_key_field.value or "")
+
+    glm_api_key_field.on_blur = _on_glm_api_key_blur
+
     dlg = ft.AlertDialog(
         title=ft.Row(
             controls=[
@@ -108,8 +159,24 @@ def open_settings_dialog(page: ft.Page) -> None:
                         size=Type.caption.size,
                         color=ft.Colors.ON_SURFACE_VARIANT,
                     ),
+                    # Credenciais fica sempre por último, deliberadamente.
+                    section(
+                        "Credenciais",
+                        api_key_field,
+                        glm_api_key_field,
+                    ),
+                    ft.Text(
+                        "Necessárias apenas para modelos Gemini/GLM. Salvas localmente "
+                        "no .env do projeto ao sair do campo — nunca saem desta máquina "
+                        "nem são enviadas a nenhum serviço além do provedor escolhido "
+                        "quando você de fato usa um modelo daquela nuvem.",
+                        size=Type.caption.size,
+                        color=ft.Colors.ON_SURFACE_VARIANT,
+                    ),
                 ],
                 spacing=Space.md,
+                scroll=ft.ScrollMode.AUTO,
+                height=460,
             ),
         ),
         actions=[
