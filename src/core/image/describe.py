@@ -64,6 +64,7 @@ def describe_image(src: Path, model: str = "moondream-custom", prompt: str = "")
         is_gemini_model,
         is_glm_model,
         make_llm,
+        timing_callbacks,
     )
 
     with open(src, "rb") as f:
@@ -76,13 +77,19 @@ def describe_image(src: Path, model: str = "moondream-custom", prompt: str = "")
         # GLM-4.6V-Flash (Zhipu/Z.ai) and every Gemini model (natively multimodal,
         # no separate vision variant) accept the same multimodal message shape
         # used below, no request changes needed. Both are free-tier eligible.
-        llm = make_llm(model)
+        llm = make_llm(model, domain="vlm")
     else:
         from langchain_ollama import ChatOllama
 
         # Pin num_ctx: Ollama defaults to 2048, too small for the verbose PT prompt
         # plus the image tokens (a larger VLM like gemma3-4b would truncate the reply).
-        llm = ChatOllama(model=model, num_ctx=DEFAULT_OLLAMA_NUM_CTX)
+        # This branch bypasses make_llm() (different temperature default), so the
+        # timing callback is attached manually to still record VLM latency.
+        llm = ChatOllama(
+            model=model,
+            num_ctx=DEFAULT_OLLAMA_NUM_CTX,
+            callbacks=timing_callbacks(model, "vlm"),
+        )
     message = HumanMessage(
         content=[
             {"type": "text", "text": prompt or _DEFAULT_PROMPT},

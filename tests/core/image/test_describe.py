@@ -24,6 +24,7 @@ def test_describe_image_local_uses_chatollama(jpg_image, mocker):
     _, kwargs = fake_mod.ChatOllama.call_args
     assert kwargs["model"] == "moondream-custom"
     assert kwargs["num_ctx"] > 0
+    assert len(kwargs["callbacks"]) == 1  # VLM timing callback, attached manually
 
 
 @pytest.mark.unit
@@ -39,7 +40,7 @@ def test_describe_image_glm_routes_through_make_llm(jpg_image, mocker):
     result = describe_image(jpg_image, model="glm-4.6v-flash")
 
     assert result == "descrição via GLM"
-    mock_make_llm.assert_called_once_with("glm-4.6v-flash")
+    mock_make_llm.assert_called_once_with("glm-4.6v-flash", domain="vlm")
     fake_llm.invoke.assert_called_once()
 
 
@@ -56,5 +57,5 @@ def test_describe_image_gemini_routes_through_make_llm(jpg_image, mocker):
     result = describe_image(jpg_image, model="gemini-2.5-flash")
 
     assert result == "descrição via Gemini"
-    mock_make_llm.assert_called_once_with("gemini-2.5-flash")
+    mock_make_llm.assert_called_once_with("gemini-2.5-flash", domain="vlm")
     fake_llm.invoke.assert_called_once()
