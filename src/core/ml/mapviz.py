@@ -14,7 +14,7 @@ matplotlib). pandas is imported lazily, only at render time.
 from __future__ import annotations
 
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Callable
 
 import numpy as np
 
@@ -42,12 +42,19 @@ def build_semantic_map(
     top_n: int = 5,
     use_cache: bool = True,
     cache_dir: Path | None = None,
+    on_stage: Callable[[str], None] | None = None,
 ) -> SemanticMap:
     """Cluster, project and label the corpus into a (cached) ``SemanticMap``.
 
     The cache is keyed by the corpus signature (``(source_path, mtime)``), so an
     unchanged index returns instantly without recomputing. Requires the ``[ml]``
     extra (raised by the underlying steps when missing).
+
+    ``on_stage`` (optional) is called with ``"cluster"``/``"project"``/
+    ``"label"`` right before each stage starts — the Observatório stepper's
+    hook (item 3.5): this is the one place in ``core/ml`` that internally
+    chains multiple stages itself, so it is the one pure function that needs
+    to know about a progress callback at all.
     """
     signature = corpus_signature(store.meta)
     if use_cache:
@@ -56,8 +63,14 @@ def build_semantic_map(
             return cached
 
     dm = features.document_matrix(store)
+    if on_stage:
+        on_stage("cluster")
     clusters = cluster_documents(dm, method=method, k=k)
+    if on_stage:
+        on_stage("project")
     coords = project_2d(dm, method=projection)
+    if on_stage:
+        on_stage("label")
     names = label_clusters(features.document_texts(store), clusters.labels, top_n=top_n)
 
     semantic_map = SemanticMap(

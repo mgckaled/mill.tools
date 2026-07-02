@@ -78,6 +78,23 @@ def test_build_semantic_map_clusters_and_labels(tmp_path):
 
 
 @pytest.mark.unit
+def test_build_semantic_map_calls_on_stage_in_order(tmp_path):
+    seen: list[str] = []
+    build_semantic_map(_store_two_themes(), cache_dir=tmp_path, on_stage=seen.append)
+    assert seen == ["cluster", "project", "label"]
+
+
+@pytest.mark.unit
+def test_build_semantic_map_skips_on_stage_when_cache_hits(tmp_path):
+    store = _store_two_themes()
+    build_semantic_map(store, cache_dir=tmp_path)  # populates the cache
+
+    seen: list[str] = []
+    build_semantic_map(store, cache_dir=tmp_path, on_stage=seen.append)
+    assert seen == []  # cache hit — no stage actually ran
+
+
+@pytest.mark.unit
 def test_build_semantic_map_uses_cache(tmp_path, mocker):
     import src.core.ml.mapviz as mapviz
 
