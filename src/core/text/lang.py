@@ -11,8 +11,27 @@ from __future__ import annotations
 
 import re
 
+# "do" and "as" used to be here too, but both are also top-100 English words
+# ("do you", "as well") — that overlap systematically biased English text
+# toward "pt" whenever it happened to use either. Replaced with markers that
+# have no English reading.
 _PT_MARKERS = frozenset(
-    {"de", "que", "não", "uma", "para", "com", "como", "mas", "os", "as", "do", "da"}
+    {
+        "de",
+        "que",
+        "não",
+        "uma",
+        "para",
+        "com",
+        "como",
+        "mas",
+        "os",
+        "da",
+        "é",
+        "já",
+        "então",
+        "também",
+    }
 )
 _EN_MARKERS = frozenset(
     {"the", "and", "of", "to", "is", "that", "with", "for", "are", "this", "was", "it"}

@@ -27,3 +27,11 @@ def test_detects_english():
 def test_empty_defaults_to_pt():
     assert detect_lang("") == "pt"
     assert detect_lang("123 456 !!!") == "pt"
+
+
+@pytest.mark.unit
+def test_ambiguous_english_words_do_not_bias_toward_portuguese():
+    # "do" and "as" are common English words that used to sit in _PT_MARKERS
+    # too (they double as PT function words) — a real English sentence built
+    # mostly around them used to tip "pt" purely from that overlap.
+    assert detect_lang("As long as I do this, it works.") == "en"
