@@ -79,7 +79,8 @@ tests/
 │       ├── test_batch.py                   # unit — distinct_sources (dedupe/kind), run_batch (1 answer/doc, progresso)
 │   ├── observatory/                        # Tier A — puro, sem gate próprio
 │       ├── test_activity.py                # unit — log_activity/load_activity round-trip, cap _MAX_ENTRIES, malformado→[], recent() ordena mais-novo-primeiro
-│       └── test_status.py                  # unit — gate_statuses (reflete extra ausente), domain_statuses (isolamento por diretório, sem tocar model_dir() real), config_snapshot (lê defaults reais via inspect.signature, não uma cópia)
+│       ├── test_status.py                  # unit — gate_statuses (reflete extra ausente), domain_statuses (isolamento por diretório, sem tocar model_dir() real), config_snapshot (lê defaults reais via inspect.signature, não uma cópia), ollama_inventory (Client(timeout=...) — dublês aceitam **kwargs)
+│       └── test_disk_usage.py              # unit — disk_usage (diretório ausente→(), soma recursiva de pasta, ordenação desc, resiliente a OSError mid-scan), total_bytes
 │   └── recipes/                            # Receitas — tudo unit; STEP_REGISTRY mockado via patch.dict (sem ffmpeg/Whisper/rede)
 │       ├── test_registry.py                # unit — specs bem-formadas + cada adaptador mockado no ponto de uso; ai.answer (RAG mockado); video.subtitle multi-input; data.outliers (mock log_activity!)
 │       ├── test_runner.py                  # unit — encadeamento, ordem de eventos, cancel, stop_on_error, emit_terminal, execute_recipe_batch, histórico
@@ -99,8 +100,8 @@ tests/
         ├── video/test_pipeline_log.py      # unit — resolve_*, fmt_* (8 operações, inclui subtitle)
         ├── document/test_pipeline_log.py   # unit — resolve_messages, resolve_stage_label, fmt_* builders (13 operações, inclui ocr)
         ├── document/test_worker_analyze.py # unit — _run_analyze ramo .txt (mock analyzer.analyze; pula get_pdf_info)
-        ├── ai/                             # unit — worker (index/answer via bus falso + core mockado) + pipeline_log (resolve_status/fmt_*)
-        ├── observatory/                    # unit — construct-smoke (MagicMock page) p/ status_tab/activity_tab/view; isola gui.settings E core.observatory.activity._store_path via monkeypatch (on_mount grava em ambos)
+        ├── ai/                             # unit — só worker (index/answer via bus falso + core mockado) + pipeline_log (resolve_status/fmt_*); Índice/Painel migraram p/ observatory/
+        ├── observatory/                    # unit — construct-smoke (MagicMock page) p/ status_tab/activity_tab/logs_tab/timing_tab/timing_section/disk_usage_tab/rag_tab/view; isola gui.settings, core.observatory.activity._store_path, core.observatory.logs._store_path E src.core.rag.indexer.index_dir via monkeypatch (on_mount da aba padrão Índice/RAG dispara refresh do índice); status_tab usa uma fake threading.Thread (`.start()` chama `target()` sincronamente) pra exercer o cálculo que hoje roda em thread daemon
         └── recipes/                        # unit — worker (single/lote/clean/false/exceção via bus falso + execute_recipe(_batch) mockado) + pipeline_log
 ```
 

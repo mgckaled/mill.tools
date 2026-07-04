@@ -248,3 +248,17 @@ Para `docs/ROADMAP_ML_DADOS.md`, esta skill é o ponto de partida de cada plano:
     `llm_factory._load_env_once()`, mesmo precedente de `core/data/nl2sql.py` importando `llm_factory`
     direto de `core/`) e 4 gates novos (`[ocr]`/`[ai-image]`/`[analysis]`/`[data-plot]` — dois deles não
     tinham `SETUP_HINT` ainda). Hub reordenado para Status primeiro (visão de conjunto antes do feed).
+  - **Fast-follow 2 — perf fix + Índice/RAG aninhado ✅** — a aba Status travava a UI por 7-12s (leituras
+    síncronas na UI thread: cold-import de vários extras opcionais + `ollama.Client().list()` sem
+    timeout); movidas p/ thread daemon (mesmo padrão já provado em `ai/view.py::_refresh_status`) com
+    placeholder "Carregando…" + `Client(timeout=5)`. Separação estrutural aplicando a seção 4 desta
+    skill um nível mais fundo: Índice e Painel saíram do hub de IA (que agora é só Conversa,
+    `ai/view.py` perdeu a maquinaria de abas) e viraram uma aba **aninhada** "Índice/RAG" no
+    Observatório — mesmo padrão `Row(TextButton)+Stack` do nível de topo, repetido dentro de um único
+    `(control, apply)` (`observatory/rag_tab.py`), sem suporte especial do framework nem necessário.
+    3 sub-abas: Índice/Painel (relocados, arquivos renomeados — `analytics_tab.py` →
+    `rag_analytics_tab.py` — não reescritos) + **Uso de disco** (nova, `core/observatory/
+    disk_usage.py` — scanner genérico de `~/.mill-tools/`, agora incluindo `rag/`). "Reindexar" na
+    aba Índice não roda pipeline no Observatório (que segue read-only) — bridgeia via `nav` pro hub
+    de IA, que dispara o reindex ao montar com `{"trigger_reindex": True}`. Índice/RAG é a nova
+    aba padrão/primeira. CLI ganhou `observatory disk-usage`.
