@@ -120,7 +120,8 @@ def _run_status(ns: argparse.Namespace) -> None:
     print(f"  Limiar de dedup de texto: {snap.text_dedup_threshold:.2f}")
     print(f"  Distância máx. dedup de imagem: {snap.image_dedup_max_distance}")
     print(f"  Piso de corpus p/ auto-k: {snap.auto_k_min_corpus}")
-    print(f"  λ do MMR: {snap.mmr_lambda:.2f}")
+    print(f"  λ do MMR (recomendacao): {snap.mmr_lambda:.2f}")
+    print(f"  λ do MMR (resumo): {snap.mmr_lambda_summary:.2f}")
 
     from src.core.observatory.model_timing import load_timings, timings_by_domain
     from src.core.rag.analytics import model_timings

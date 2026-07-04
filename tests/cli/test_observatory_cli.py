@@ -87,7 +87,7 @@ def test_run_status_prints_every_section(mocker, capsys):
     )
     mocker.patch(
         "src.core.observatory.status.config_snapshot",
-        return_value=MLConfigSnapshot(0.95, 8, 20, 0.6),
+        return_value=MLConfigSnapshot(0.95, 8, 20, 0.6, 0.6),
     )
     mocker.patch("src.core.observatory.model_timing.load_timings", return_value=[])
 
@@ -136,7 +136,7 @@ def test_run_status_breaks_down_timings_by_domain(mocker, capsys):
     )
     mocker.patch(
         "src.core.observatory.status.config_snapshot",
-        return_value=MLConfigSnapshot(0.95, 8, 20, 0.6),
+        return_value=MLConfigSnapshot(0.95, 8, 20, 0.6, 0.6),
     )
     mocker.patch(
         "src.core.observatory.model_timing.load_timings",

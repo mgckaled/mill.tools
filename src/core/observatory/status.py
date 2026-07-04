@@ -31,12 +31,20 @@ class DomainStatus:
 
 @dataclass(frozen=True, slots=True)
 class MLConfigSnapshot:
-    """Hardcoded parameters currently in effect — transparency, not a settings form."""
+    """Hardcoded parameters currently in effect — transparency, not a settings form.
+
+    ``mmr_lambda`` (``core.ml.recommend``) and ``mmr_lambda_summary``
+    (``core.text.summarize``) are two independent constants that happen to
+    share both a name and a value today — ``core/text`` stays independent of
+    ``core/ml`` by design (see ``docs/HISTORY.md``), so this reports both
+    instead of picking one and hiding the other.
+    """
 
     text_dedup_threshold: float
     image_dedup_max_distance: int
     auto_k_min_corpus: int
     mmr_lambda: float
+    mmr_lambda_summary: float
 
 
 @dataclass(frozen=True, slots=True)
@@ -180,6 +188,7 @@ def config_snapshot() -> MLConfigSnapshot:
     from src.core.library.image_dedup import DEFAULT_MAX_DISTANCE
     from src.core.ml import dedup, recommend
     from src.core.ml.cluster import _MIN_FOR_AUTO_K
+    from src.core.text import summarize
 
     threshold_default = (
         inspect.signature(dedup.near_duplicates).parameters["threshold"].default
@@ -190,6 +199,7 @@ def config_snapshot() -> MLConfigSnapshot:
         image_dedup_max_distance=DEFAULT_MAX_DISTANCE,
         auto_k_min_corpus=_MIN_FOR_AUTO_K,
         mmr_lambda=recommend._MMR_LAMBDA,
+        mmr_lambda_summary=summarize._MMR_LAMBDA,
     )
 
 

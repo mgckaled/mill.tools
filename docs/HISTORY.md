@@ -11,6 +11,14 @@ ficam em [`ROADMAP.md`](ROADMAP.md) e [`plans/active/`](plans/active/).
 
 ## Entregas (marcos)
 
+### Decisão — `MLConfigSnapshot` reporta os dois `_MMR_LAMBDA` (jul/2026)
+Fase 4 do plano do quarteto ML (item T3/O5): `core/observatory/status.py::config_snapshot()` só lia
+`recommend._MMR_LAMBDA`, deixando `summarize._MMR_LAMBDA` (`core/text`) invisível no board do Observatório —
+mesmo nome, mesmo valor hoje (0.6), mas constantes independentes por design (ver decisão abaixo). Decisão:
+reportar as duas (`mmr_lambda` + `mmr_lambda_summary`) em vez de esconder uma; não move nenhuma constante
+entre camadas, só lê ambas para exibição. CLI (`observatory status`) e a aba Status do hub Observatório
+mostram as duas linhas. [`plans/active/PLANO_CORRECOES_QUARTETO_ML.md`](plans/active/PLANO_CORRECOES_QUARTETO_ML.md).
+
 ### Decisão — duplicação aceita entre `core/text` × `core/ml` (jul/2026)
 Revisão arquivo-a-arquivo do quarteto ML (rag·ml·text·observatory) encontrou três pequenas duplicações na
 fronteira entre `core/text` e `core/ml`: separador de cabeçalho `"-" * 64` (`core/rag/indexer.py`,

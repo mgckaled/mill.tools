@@ -232,7 +232,8 @@ def build_status_tab(page: ft.Page) -> tuple[ft.Control, Callable[[], None]]:
                     f"Distância máx. dedup de imagem: "
                     f"{snap.image_dedup_max_distance}  ·  "
                     f"Piso de corpus p/ auto-k: {snap.auto_k_min_corpus}  ·  "
-                    f"λ do MMR: {snap.mmr_lambda:.2f}",
+                    f"λ do MMR (recomendacao): {snap.mmr_lambda:.2f}  ·  "
+                    f"λ do MMR (resumo): {snap.mmr_lambda_summary:.2f}",
                     size=Type.caption.size,
                     color=ft.Colors.ON_SURFACE_VARIANT,
                     no_wrap=False,

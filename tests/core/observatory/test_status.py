@@ -224,6 +224,7 @@ def test_config_snapshot_reads_real_defaults_not_a_stale_copy():
     assert snap.image_dedup_max_distance == 8
     assert snap.auto_k_min_corpus == 20
     assert snap.mmr_lambda == 0.6
+    assert snap.mmr_lambda_summary == 0.6
 
 
 def _fake_ollama_module(model_names: list[str]) -> SimpleNamespace:
