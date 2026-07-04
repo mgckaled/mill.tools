@@ -18,6 +18,7 @@ from __future__ import annotations
 import statistics
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Callable
 
 from src.core.data.types import QueryResult
 from src.core.rag.stats import DocStat, IndexStats
@@ -44,18 +45,47 @@ class ModelTiming:
     p90: float
 
 
-def index_health(stats: IndexStats, *, top_n: int = 10) -> IndexHealth:
-    """Rank documents by weight and flag stale sources. Pure.
+def _current_mtime(source_path: str) -> float | None:
+    """Read a source file's current on-disk mtime; ``None`` if it cannot be
+    stat'd (deleted/moved). A missing file is not "stale" in the sense this
+    function cares about — content-changed-since-index — reconciling a
+    removed source is the indexer's job (``build_index``), not this check's.
+    """
+    try:
+        return Path(source_path).stat().st_mtime
+    except OSError:
+        return None
 
-    A document is *stale* when its source ``mtime`` is newer than the index's
-    ``updated_at`` (the file changed after the last build → reindex it). When the
-    index was never built (``updated_at is None``) nothing is flagged stale.
+
+def index_health(
+    stats: IndexStats,
+    *,
+    top_n: int = 10,
+    current_mtime: Callable[[str], float | None] = _current_mtime,
+) -> IndexHealth:
+    """Rank documents by weight and flag stale sources.
+
+    A document is *stale* when its source's **current** on-disk mtime is newer
+    than the mtime recorded at index time (``DocStat.mtime``) — the file
+    changed after it was last embedded, so it needs reindexing. Comparing
+    against the index's ``updated_at`` (the old approach) never fired: that
+    timestamp is the ``vectors.npz`` write time, which by construction always
+    comes *after* every chunk's recorded mtime was captured. When the index
+    was never built (``updated_at is None``) nothing is flagged stale.
+
+    ``current_mtime`` is injectable (defaults to a real ``Path.stat()``) so
+    this stays unit-testable without touching the filesystem.
     """
     per_doc = stats.per_doc  # already ordered by n_chunks desc, then filename
     top_docs = per_doc[:top_n]
 
-    cutoff = stats.updated_at
-    stale = tuple(d for d in per_doc if d.mtime > cutoff) if cutoff is not None else ()
+    stale: tuple[DocStat, ...] = ()
+    if stats.updated_at is not None:
+        stale = tuple(
+            d
+            for d in per_doc
+            if (cur := current_mtime(d.source_path)) is not None and cur > d.mtime
+        )
     return IndexHealth(
         n_docs=stats.n_docs,
         n_chunks=stats.n_chunks,

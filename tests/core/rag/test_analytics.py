@@ -91,13 +91,30 @@ def test_index_health_top_docs_limited():
 
 
 @pytest.mark.unit
-def test_index_health_flags_stale_by_mtime():
+def test_index_health_flags_stale_when_current_mtime_newer_than_recorded():
+    # Both were embedded at mtime=100.0; only "changed.txt" was touched again
+    # afterwards (its current on-disk mtime moved on to 200.0).
     per_doc = [
-        _doc("fresh.txt", 3, mtime=50.0),
-        _doc("changed.txt", 2, mtime=150.0),  # newer than index build (100.0)
+        _doc("fresh.txt", 3, mtime=100.0),
+        _doc("changed.txt", 2, mtime=100.0),
     ]
-    health = index_health(_stats(per_doc, updated_at=100.0))
+    current = {"fresh.txt": 100.0, "changed.txt": 200.0}
+    health = index_health(
+        _stats(per_doc, updated_at=500.0),
+        current_mtime=lambda p: current[p],
+    )
     assert [d.source_path for d in health.stale_docs] == ["changed.txt"]
+
+
+@pytest.mark.unit
+def test_index_health_treats_unreadable_source_as_not_stale():
+    # A deleted/moved source can't be stat'd — that's the indexer's
+    # reconciliation job, not staleness detection.
+    per_doc = [_doc("deleted.txt", 1, mtime=100.0)]
+    health = index_health(
+        _stats(per_doc, updated_at=500.0), current_mtime=lambda _p: None
+    )
+    assert health.stale_docs == ()
 
 
 @pytest.mark.unit
@@ -105,6 +122,17 @@ def test_index_health_never_built_flags_nothing_stale():
     per_doc = [_doc("a.txt", 3, mtime=999.0)]
     health = index_health(_stats(per_doc, updated_at=None))
     assert health.stale_docs == ()
+
+
+@pytest.mark.unit
+def test_index_health_default_current_mtime_reads_real_file(tmp_path):
+    path = tmp_path / "doc.txt"
+    path.write_text("hello", encoding="utf-8")
+    recorded_mtime = path.stat().st_mtime - 1000  # recorded well before "now"
+    per_doc = [_doc(str(path), 1, mtime=recorded_mtime)]
+
+    health = index_health(_stats(per_doc, updated_at=recorded_mtime + 500))
+    assert [d.source_path for d in health.stale_docs] == [str(path)]
 
 
 # ---------------------------------------------------------------------------
