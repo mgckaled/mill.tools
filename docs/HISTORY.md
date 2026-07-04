@@ -11,6 +11,15 @@ ficam em [`ROADMAP.md`](ROADMAP.md) e [`plans/active/`](plans/active/).
 
 ## Entregas (marcos)
 
+### Decisão — duplicação aceita entre `core/text` × `core/ml` (jul/2026)
+Revisão arquivo-a-arquivo do quarteto ML (rag·ml·text·observatory) encontrou três pequenas duplicações na
+fronteira entre `core/text` e `core/ml`: separador de cabeçalho `"-" * 64` (`core/rag/indexer.py`,
+`core/text/reader.py`, `src/analyzer.py`), a função `_mmr` (`core/ml/recommend.py`,
+`core/text/summarize.py`) e o gate `is_available()` de scikit-learn (`core/ml/deps.py`,
+`core/text/summarize.py`). Decisão: manter — `core/text` é independente de `core/ml` por design (Plano 4B)
+e o acoplamento de extrair uma camada comum para ~3 linhas repetidas não compensa. Não "consertar" uma
+cópia isolada sem revisitar esta nota. [`plans/active/PLANO_CORRECOES_QUARTETO_ML.md`](plans/active/PLANO_CORRECOES_QUARTETO_ML.md).
+
 ### Reorganização da documentação técnica (jul/2026)
 Consolidação dos três locais de plano (`docs/` raiz, `docs/plan/`, `.claude/plans/`) numa árvore única
 `docs/plans/{active,implemented,archive}`; roadmap vivo único em `ROADMAP.md`; referência em `reference/`;
