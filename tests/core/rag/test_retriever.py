@@ -23,6 +23,26 @@ def _store_with(rows):
 
 
 @pytest.mark.unit
+def test_retrieve_empty_store_skips_embed_query_fn():
+    """An empty store has nothing to search — retrieve must not pay for the
+    embed_query_fn round-trip (a real Ollama call in production) just to
+    discard the result."""
+    from src.core.rag.retriever import retrieve
+    from src.core.rag.store import VectorStore
+
+    calls: list[str] = []
+
+    def embed_query(q: str):
+        calls.append(q)
+        return np.zeros(3, dtype=np.float32)
+
+    hits = retrieve("pergunta", VectorStore(dim=3), embed_query, k=6)
+
+    assert hits == []
+    assert calls == []
+
+
+@pytest.mark.unit
 def test_retrieve_orders_by_similarity_to_query():
     from src.core.rag.retriever import retrieve
 
@@ -162,6 +182,43 @@ def test_retrieve_hybrid_surfaces_lexical_match_dense_alone_would_miss():
     )
     sources = [h.meta.source_path for h in hits]
     assert "target.txt" in sources
+
+
+@pytest.mark.unit
+def test_retrieve_skips_rrf_fusion_when_bm25_has_no_signal():
+    """A query with zero vocabulary overlap with the corpus gets an all-zero
+    BM25 vector. Fusing it in anyway would still rank it via RRF's tie-break
+    (earlier index wins ties), which can outrank the true best dense match
+    with a document that merely happens to sit earlier in the store — pure
+    insertion-order bias. retrieve() must fall back to dense-only ranking
+    when lexical.max() <= 0.
+
+    These three cosine values + insertion order are a known case (found by a
+    brute-force search) where naive RRF fusion picks d0.txt as the top hit
+    even though d2.txt has the clearly highest dense cosine (0.997) — dense
+    -only ranking must pick d2.txt instead.
+    """
+    import math
+
+    from src.core.rag.retriever import retrieve
+
+    def _vec(cosine: float) -> list[float]:
+        return [cosine, math.sqrt(1 - cosine**2), 0.0]
+
+    store = _store_with(
+        [
+            (_vec(0.61538511), _meta("d0.txt", text="zzz yyy xxx")),
+            (_vec(0.38367755), _meta("d1.txt", text="zzz yyy xxx")),
+            (_vec(0.99720994), _meta("d2.txt", text="zzz yyy xxx")),
+        ]
+    )
+    hits = retrieve(
+        "totally unrelated gibberish not in corpus",
+        store,
+        lambda _q: np.array([1, 0, 0], dtype=np.float32),
+        k=3,
+    )
+    assert hits[0].meta.source_path == "d2.txt"
 
 
 @pytest.mark.unit

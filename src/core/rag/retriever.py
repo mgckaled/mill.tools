@@ -79,6 +79,9 @@ def retrieve(
         value) — callers such as the out-of-scope check compare it against a
         cosine threshold, so its meaning stays unchanged by hybrid retrieval.
     """
+    if len(store) == 0:  # nothing to search — skip the embed_query_fn round-trip
+        return []
+
     mask = None
     if scope:
         mask = np.array(
@@ -88,7 +91,13 @@ def retrieve(
     if len(dense) == 0:
         return []
     lexical = store.bm25_scores(query, mask=mask)
-    fused = _reciprocal_rank_fusion(dense, lexical)
+    # A query whose terms match none of the corpus's vocabulary gets an
+    # all-zero (or, with a mask, all-zero-or--inf) BM25 vector — no lexical
+    # signal at all. Fusing it in anyway would still rank it: ties in
+    # _reciprocal_rank_fusion break on the earlier index, so BM25 would
+    # inject a pure insertion-order bias into the result on top of the
+    # dense ranking. Skip the fusion and fall back to dense-only ranking.
+    fused = _reciprocal_rank_fusion(dense, lexical) if lexical.max() > 0 else dense
     top = np.argsort(fused)[::-1][:k]
     top = top[np.isfinite(dense[top])]  # drop masked-out rows in a too-small scope
     return [RetrievedChunk(store.meta[i], float(dense[i])) for i in top]
