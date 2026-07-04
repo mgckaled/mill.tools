@@ -1,12 +1,18 @@
 """Observatório — aba Status: inventário read-only dos motores de ML.
 
 Mirrors library/analytics_panel.py's shape: `build_status_tab(page) ->
-(control, apply)`, `apply()` recomputes every row synchronously (cheap, pure
-reads over what core/observatory/status.py already aggregates).
+(control, apply)`. `apply()`'s reads are cheap individually, but
+`gate_statuses()` cold-imports several optional-extra packages (sklearn,
+spaCy, pymupdf/polars/pandas, matplotlib) and `ollama_inventory()` makes a
+local network call — combined, this can take several seconds. Both run in a
+daemon thread (same pattern as `ai/view.py::_refresh_status`, already proven
+to repaint correctly from a background thread) so opening this tab never
+freezes the rest of the UI.
 """
 
 from __future__ import annotations
 
+import threading
 from typing import Callable
 
 import flet as ft
@@ -189,33 +195,55 @@ def build_status_tab(page: ft.Page) -> tuple[ft.Control, Callable[[], None]]:
         spacing=Space.md,
     )
 
+    def _loading_row() -> ft.Text:
+        return ft.Text(
+            "Carregando…",
+            size=Type.caption.size,
+            italic=True,
+            color=ft.Colors.ON_SURFACE_VARIANT,
+        )
+
     def apply() -> None:
-        gates_col.controls = [_gate_row(g) for g in status.gate_statuses()] + [
-            _glossary_row(status.entity_glossary_status())
-        ]
-        ollama_col.controls = _ollama_rows(status.ollama_inventory())
-        binaries_col.controls = [_binary_row(b) for b in status.binary_statuses()]
-        cloud_col.controls = [
-            _cloud_provider_row(p) for p in status.cloud_provider_statuses()
-        ]
-        domains_col.controls = [_domain_row(d) for d in status.domain_statuses()]
-
-        snap = status.config_snapshot()
-        config_col.controls = [
-            ft.Text(
-                f"Limiar de dedup de texto: {snap.text_dedup_threshold:.2f}  ·  "
-                f"Distância máx. dedup de imagem: {snap.image_dedup_max_distance}  ·  "
-                f"Piso de corpus p/ auto-k: {snap.auto_k_min_corpus}  ·  "
-                f"λ do MMR: {snap.mmr_lambda:.2f}",
-                size=Type.caption.size,
-                color=ft.Colors.ON_SURFACE_VARIANT,
-                no_wrap=False,
-            )
-        ]
-
+        # Immediate, cheap feedback before the slow reads below even start —
+        # without this the tab looks frozen/blank for several seconds.
+        for col in (gates_col, ollama_col, binaries_col, cloud_col, domains_col):
+            col.controls = [_loading_row()]
+        config_col.controls = [_loading_row()]
         try:
             control.update()
         except Exception:
             pass
+
+        def _worker() -> None:
+            gates_col.controls = [_gate_row(g) for g in status.gate_statuses()] + [
+                _glossary_row(status.entity_glossary_status())
+            ]
+            ollama_col.controls = _ollama_rows(status.ollama_inventory())
+            binaries_col.controls = [_binary_row(b) for b in status.binary_statuses()]
+            cloud_col.controls = [
+                _cloud_provider_row(p) for p in status.cloud_provider_statuses()
+            ]
+            domains_col.controls = [_domain_row(d) for d in status.domain_statuses()]
+
+            snap = status.config_snapshot()
+            config_col.controls = [
+                ft.Text(
+                    f"Limiar de dedup de texto: {snap.text_dedup_threshold:.2f}  ·  "
+                    f"Distância máx. dedup de imagem: "
+                    f"{snap.image_dedup_max_distance}  ·  "
+                    f"Piso de corpus p/ auto-k: {snap.auto_k_min_corpus}  ·  "
+                    f"λ do MMR: {snap.mmr_lambda:.2f}",
+                    size=Type.caption.size,
+                    color=ft.Colors.ON_SURFACE_VARIANT,
+                    no_wrap=False,
+                )
+            ]
+
+            try:
+                control.update()
+            except Exception:
+                pass
+
+        threading.Thread(target=_worker, daemon=True).start()
 
     return control, apply

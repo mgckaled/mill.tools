@@ -29,6 +29,22 @@ def test_status_tab_builds():
     assert callable(apply)
 
 
+class _ImmediateThread:
+    """Fake ``threading.Thread`` that runs ``target`` synchronously on `.start()`.
+
+    ``apply()``'s heavy work now runs in a real daemon thread (PR — fixes the
+    7-12s UI freeze on the Status tab); this collapses it back to synchronous
+    execution so the test can assert on the *actual* computed rows instead of
+    just "didn't raise before the thread even ran".
+    """
+
+    def __init__(self, target=None, daemon=None, **kwargs):
+        self._target = target
+
+    def start(self) -> None:
+        self._target()
+
+
 @pytest.mark.unit
 def test_apply_does_not_raise(tmp_path, mocker):
     # domain_statuses() reads ml.store.model_dir() by default — isolate it so
@@ -36,8 +52,26 @@ def test_apply_does_not_raise(tmp_path, mocker):
     # inventory() would otherwise hit the real local Ollama service.
     mocker.patch("src.core.ml.classify.model_dir", return_value=tmp_path)
     mocker.patch("src.core.observatory.status.ollama_inventory")
+    mocker.patch(
+        "src.gui.modules.observatory.status_tab.threading.Thread", _ImmediateThread
+    )
     control, apply = build_status_tab(MagicMock())
     apply()  # must not raise, even with every gate/domain in its default state
+
+
+@pytest.mark.unit
+def test_apply_populates_rows_via_background_thread(tmp_path, mocker):
+    """The heavy work must actually run (in the fake thread) and render rows."""
+    mocker.patch("src.core.ml.classify.model_dir", return_value=tmp_path)
+    mocker.patch("src.core.observatory.status.ollama_inventory")
+    mocker.patch(
+        "src.gui.modules.observatory.status_tab.threading.Thread", _ImmediateThread
+    )
+    control, apply = build_status_tab(MagicMock())
+    apply()
+
+    gates_col = control.controls[1]
+    assert len(gates_col.controls) > 1  # gates + the glossary row, not "Carregando…"
 
 
 @pytest.mark.unit

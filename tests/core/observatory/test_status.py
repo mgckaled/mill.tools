@@ -165,6 +165,9 @@ def _fake_ollama_module(model_names: list[str]) -> SimpleNamespace:
     models = [SimpleNamespace(model=n) for n in model_names]
 
     class _FakeClient:
+        def __init__(self, **kwargs):
+            pass
+
         def list(self):
             return SimpleNamespace(models=models)
 
@@ -204,8 +207,28 @@ def test_ollama_inventory_package_missing(mocker):
 
 
 @pytest.mark.unit
+def test_ollama_inventory_passes_a_bounded_timeout(mocker):
+    """A slow/half-open Ollama service must not hang this read forever."""
+    captured: dict = {}
+
+    class _FakeClient:
+        def __init__(self, **kwargs):
+            captured.update(kwargs)
+
+        def list(self):
+            return SimpleNamespace(models=[])
+
+    mocker.patch.dict(sys.modules, {"ollama": SimpleNamespace(Client=_FakeClient)})
+    status.ollama_inventory()
+    assert captured.get("timeout") == status._OLLAMA_TIMEOUT_S
+
+
+@pytest.mark.unit
 def test_ollama_inventory_service_unreachable(mocker):
     class _FailingClient:
+        def __init__(self, **kwargs):
+            pass
+
         def list(self):
             raise ConnectionError("refused")
 

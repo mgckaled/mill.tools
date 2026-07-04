@@ -232,16 +232,24 @@ def cloud_provider_statuses() -> tuple[CloudProviderStatus, ...]:
     )
 
 
+# Bounds worst-case latency — this is a status read, not a workflow.
+_OLLAMA_TIMEOUT_S = 5
+
+
 def ollama_inventory() -> OllamaInventoryStatus:
     """Which of the 6 *-custom Ollama models are pulled locally, right now.
 
     ``reachable=False`` (rather than raising) when the Ollama service isn't
-    running — this is a transparency read, not a hard dependency check.
+    running — this is a transparency read, not a hard dependency check. The
+    client gets a bounded timeout so a slow/half-open service can't hang this
+    read indefinitely (this runs off the UI thread, but still shouldn't stall
+    forever).
     """
     try:
         import ollama
 
-        installed = {m.model.split(":")[0] for m in ollama.Client().list().models}
+        client = ollama.Client(timeout=_OLLAMA_TIMEOUT_S)
+        installed = {m.model.split(":")[0] for m in client.list().models}
     except Exception:
         return OllamaInventoryStatus(reachable=False, models=())
 
