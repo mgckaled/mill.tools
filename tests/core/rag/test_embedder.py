@@ -159,9 +159,12 @@ def test_check_dim_silent_on_expected_width(caplog):
 
 
 @pytest.mark.unit
-def test_embed_texts_records_one_timing_entry_per_batch(
+def test_embed_texts_records_one_timing_entry_for_the_whole_call(
     mocker, isolate_model_timing_store
 ):
+    """Sub-batches share one aggregated timing entry (not one each) — logging
+    per sub-batch would rewrite the whole model_timings.json log dozens of
+    times for a single large document (plan item [O2])."""
     from src.core.observatory.model_timing import load_timings
     from src.core.rag import embedder
 
@@ -173,10 +176,10 @@ def test_embed_texts_records_one_timing_entry_per_batch(
     )
 
     entries = load_timings(isolate_model_timing_store)
-    assert len(entries) == 3  # 5 texts at batch_size 2 -> 3 sub-batches
-    assert all(e.domain == "embed" for e in entries)
-    assert all(e.model == "nomic-embed-custom" for e in entries)
-    assert all(e.elapsed >= 0 for e in entries)
+    assert len(entries) == 1  # 5 texts at batch_size 2 -> 3 sub-batches, 1 entry
+    assert entries[0].domain == "embed"
+    assert entries[0].model == "nomic-embed-custom"
+    assert entries[0].elapsed >= 0
 
 
 @pytest.mark.unit

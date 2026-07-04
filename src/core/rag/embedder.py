@@ -97,13 +97,20 @@ def embed_texts(
     client = _embeddings(model)
     out: list[list[float]] = []
     total = len(texts)
+    elapsed_total = 0.0
     for start in range(0, total, batch_size):
         t0 = time.monotonic()
         batch = client.embed_documents(texts[start : start + batch_size])
-        record_timing(model, "embed", time.monotonic() - t0)
+        elapsed_total += time.monotonic() - t0
         out.extend(batch)
         if progress_cb:
             progress_cb(min(start + batch_size, total), total)
+
+    # One entry for the whole call, not one per sub-batch: indexing a large
+    # document can trigger dozens of sub-batches, and model_timing.record_timing
+    # rewrites the whole log on every call — summing here keeps that write off
+    # the hot path (see docs/plans/active/PLANO_CORRECOES_QUARTETO_ML.md, [O2]).
+    record_timing(model, "embed", elapsed_total)
 
     arr = np.asarray(out, dtype=np.float32)
     _check_dim(arr)
