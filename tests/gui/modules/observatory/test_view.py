@@ -34,7 +34,7 @@ def isolate_config(tmp_path, monkeypatch):
 def isolate_model_dir(mocker, tmp_path):
     """Status is a reachable tab from on_mount's click handlers — its apply()
     reads ml.store.model_dir()."""
-    mocker.patch("src.core.ml.classify.model_dir", return_value=tmp_path / "ml")
+    mocker.patch("src.core.ml.classify.labels.model_dir", return_value=tmp_path / "ml")
 
 
 @pytest.fixture(autouse=True)

@@ -50,7 +50,7 @@ def test_apply_does_not_raise(tmp_path, mocker):
     # domain_statuses() reads ml.store.model_dir() by default — isolate it so
     # the test never touches the real ~/.mill-tools/ml directory. ollama_
     # inventory() would otherwise hit the real local Ollama service.
-    mocker.patch("src.core.ml.classify.model_dir", return_value=tmp_path)
+    mocker.patch("src.core.ml.classify.labels.model_dir", return_value=tmp_path)
     mocker.patch("src.core.observatory.status.ollama_inventory")
     mocker.patch(
         "src.gui.modules.observatory.status_tab.threading.Thread", _ImmediateThread
@@ -62,7 +62,7 @@ def test_apply_does_not_raise(tmp_path, mocker):
 @pytest.mark.unit
 def test_apply_populates_rows_via_background_thread(tmp_path, mocker):
     """The heavy work must actually run (in the fake thread) and render rows."""
-    mocker.patch("src.core.ml.classify.model_dir", return_value=tmp_path)
+    mocker.patch("src.core.ml.classify.labels.model_dir", return_value=tmp_path)
     mocker.patch("src.core.observatory.status.ollama_inventory")
     mocker.patch(
         "src.gui.modules.observatory.status_tab.threading.Thread", _ImmediateThread
