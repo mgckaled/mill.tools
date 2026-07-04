@@ -33,6 +33,25 @@ def test_bm25_score_no_match_returns_zeros():
 
 
 @pytest.mark.unit
+def test_bm25_score_ignores_punctuation_glued_to_terms():
+    # A plain `.split()` would tokenize "dog." as one token distinct from the
+    # query's "dog", missing the match entirely at a sentence boundary.
+    from src.core.rag.bm25 import bm25_score, build_bm25_index
+
+    index = build_bm25_index(
+        [
+            "the lazy dog.",
+            "completely unrelated content about cooking recipes",
+            "more filler text with no overlap",
+        ]
+    )
+    scores = bm25_score(index, "dog")
+
+    assert scores[0] > 0
+    assert np.argmax(scores) == 0
+
+
+@pytest.mark.unit
 def test_bm25_score_is_case_insensitive():
     # BM25's IDF is log((N - n + 0.5) / (n + 0.5)) for a term in n of N documents —
     # it hits exactly 0 (or goes negative) once the term isn't a minority across the
