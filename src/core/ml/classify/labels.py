@@ -95,6 +95,22 @@ def labels_signature(labels: dict[str, str]) -> str:
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
 
+def model_signature(labels: dict[str, str], embed_space_id: str) -> str:
+    """Combine the label-set signature with the embedding space id.
+
+    Kept separate from ``labels_signature`` (which stays label-set-only, its
+    own tested contract) so both ``train_supervised`` and
+    ``inference.classify``/``has_supervised_model`` derive the *same*
+    on-disk signature from the *same* two inputs. Without folding in
+    ``embed_space_id`` (model + dim, from ``rag.stats.embed_space_id``), a
+    supervised model trained on one embedding space stayed valid — and kept
+    predicting garbage — after the embed model changed and the corpus was
+    reindexed, because the label set itself hadn't changed (M2).
+    """
+    payload = f"{embed_space_id}\n{labels_signature(labels)}"
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+
 def _training_xy(
     dm: DocumentMatrix, labels: dict[str, str]
 ) -> tuple[np.ndarray, list[str]]:
@@ -117,6 +133,7 @@ def train_supervised(
     directory: Path | None = None,
     min_per_class: int = MIN_PER_CLASS,
     domain: str = DOMAIN_TRANSCRIPTION_PROFILE,
+    embed_space_id: str = "?",
 ):
     """Train + persist a calibrated linear classifier; return it, or ``None``.
 
@@ -125,6 +142,15 @@ def train_supervised(
     Otherwise fits ``LinearSVC(class_weight="balanced")`` wrapped in
     ``CalibratedClassifierCV`` (sigmoid — robust for the small label counts here)
     over ``dm.X`` and saves it via the versioned ``ml.store``.
+
+    Args:
+        embed_space_id: Folded into the persisted signature (via
+            ``model_signature``) so a model trained on one embedding space is
+            never reused after the embed model changes and the corpus is
+            reindexed — ``dm.X`` would then hold vectors from a different
+            space the model was never fit on. Ignored when ``signature`` is
+            passed explicitly. Defaults to ``"?"`` for callers that don't
+            track it (the classify()/maybe_train() chain always does).
 
     Raises:
         RuntimeError: if the ``[ml]`` extra (scikit-learn) is not installed.
@@ -149,7 +175,9 @@ def train_supervised(
     model = CalibratedClassifierCV(base, method="sigmoid", cv=cv)
     model.fit(X, y)
 
-    sig = signature if signature is not None else labels_signature(labels)
+    sig = (
+        signature if signature is not None else model_signature(labels, embed_space_id)
+    )
     save_model(model, _model_name(domain), signature=sig, directory=directory)
     return model
 
@@ -160,11 +188,17 @@ def maybe_train(
     directory: Path | None = None,
     min_per_class: int = MIN_PER_CLASS,
     domain: str = DOMAIN_TRANSCRIPTION_PROFILE,
+    embed_space_id: str = "?",
 ):
     """Train from the recorded labels if enough have accumulated; else ``None``."""
     labels = load_labels(directory=directory, domain=domain)
     if not labels:
         return None
     return train_supervised(
-        dm, labels, directory=directory, min_per_class=min_per_class, domain=domain
+        dm,
+        labels,
+        directory=directory,
+        min_per_class=min_per_class,
+        domain=domain,
+        embed_space_id=embed_space_id,
     )

@@ -131,12 +131,18 @@ def gate_statuses() -> tuple[GateStatus, ...]:
     )
 
 
-def domain_statuses(*, directory=None) -> tuple[DomainStatus, ...]:
+def domain_statuses(
+    *, directory=None, embed_space_id: str | None = None
+) -> tuple[DomainStatus, ...]:
     """Label count + supervised-active flag for every ``classify.py`` domain.
 
     ``directory`` overrides ``ml.store.model_dir()`` (injectable for tests,
     same convention as ``classify.py`` itself) — left ``None`` in production so
-    every domain reads the real on-disk cache.
+    every domain reads the real on-disk cache. ``embed_space_id`` (model + dim
+    of the RAG's current embedding space) is threaded into
+    ``has_supervised_model`` so a domain whose model was trained on a
+    since-changed embed model correctly reports ``supervised=False`` (M2);
+    ``None`` reads it from the real RAG index sidecar.
     """
     from src.core.ml.classify import (
         DOMAIN_DATA,
@@ -146,12 +152,18 @@ def domain_statuses(*, directory=None) -> tuple[DomainStatus, ...]:
         has_supervised_model,
     )
 
+    if embed_space_id is None:
+        from src.core.rag.indexer import index_dir
+        from src.core.rag.stats import embed_space_id as read_embed_space_id
+
+        embed_space_id = read_embed_space_id(index_dir())
+
     domains = (DOMAIN_TRANSCRIPTION_PROFILE, DOMAIN_DATA, DOMAIN_DOCUMENT)
     return tuple(
         DomainStatus(
             d,
             domain_label_count(d, directory=directory),
-            has_supervised_model(d, directory=directory),
+            has_supervised_model(d, directory=directory, embed_space_id=embed_space_id),
         )
         for d in domains
     )

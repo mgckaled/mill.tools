@@ -49,6 +49,29 @@ def test_profile_prototypes_cache_miss_without_embedder_raises(tmp_path):
         cl.profile_prototypes(None, cache_dir=tmp_path)
 
 
+@pytest.mark.unit
+def test_profile_prototypes_invalidated_by_embed_space_change(tmp_path):
+    """M2: switching the embed model (and reindexing) must not silently reuse
+    a prototype matrix embedded in a different model's vector space."""
+    calls = {"n": 0}
+
+    def fake_embed(texts):
+        calls["n"] += 1
+        return np.array([[len(t), i, 1.0] for i, t in enumerate(texts)], dtype=float)
+
+    cl.profile_prototypes(fake_embed, cache_dir=tmp_path, embed_space_id="model-a:768")
+    assert calls["n"] == 1
+
+    # Same class set, same cache_dir, but a different embedding space → miss
+    # (the cache holds one slot per domain, so this also overwrites it).
+    cl.profile_prototypes(fake_embed, cache_dir=tmp_path, embed_space_id="model-b:1024")
+    assert calls["n"] == 2
+
+    # Re-requesting the now-overwritten space is a cache hit again.
+    cl.profile_prototypes(fake_embed, cache_dir=tmp_path, embed_space_id="model-b:1024")
+    assert calls["n"] == 2
+
+
 # ---------------------------------------------------------------------------
 # Zero-shot
 # ---------------------------------------------------------------------------
@@ -172,6 +195,61 @@ def test_supervised_model_trains_predicts_and_is_used(tmp_path):
     assert out.method == "supervised"
     assert out.profile_id == "lecture"
     assert 0.0 <= out.confidence <= 1.0
+
+
+@pytest.mark.unit
+def test_supervised_model_ignored_after_embed_space_changes(tmp_path):
+    """M2: a supervised model trained on one embedding space must not be
+    reused after the embed model changes and the corpus is reindexed — dm.X
+    then holds vectors from a different space the model was never fit on."""
+    pytest.importorskip("sklearn")
+    dm, labels = _labelled_dm()
+    from pathlib import Path
+
+    resolved = {str(Path(p).resolve()): v for p, v in labels.items()}
+    dm = DocumentMatrix(
+        X=dm.X,
+        source_paths=[str(Path(p).resolve()) for p in dm.source_paths],
+        kinds=dm.kinds,
+    )
+    for path, profile in resolved.items():
+        cl.record_label(path, profile, directory=tmp_path)
+    cl.train_supervised(dm, resolved, directory=tmp_path, embed_space_id="model-a:2")
+
+    def fake_embed(texts):
+        return np.array([[i + 1.0, 0.0] for i, _ in enumerate(texts)], dtype=float)
+
+    # Same labels, but the embedding space changed (embed model swapped +
+    # corpus reindexed) → the old model must be rejected, not silently reused.
+    out = cl.classify(
+        _unit([1.0, 0.0]),
+        embed_fn=fake_embed,
+        directory=tmp_path,
+        embed_space_id="model-b:2",
+    )
+    assert out.method == "zeroshot"
+
+
+@pytest.mark.unit
+def test_has_supervised_model_respects_embed_space_id(tmp_path):
+    pytest.importorskip("sklearn")
+    dm, labels = _labelled_dm()
+    from pathlib import Path
+
+    resolved = {str(Path(p).resolve()): v for p, v in labels.items()}
+    dm = DocumentMatrix(
+        X=dm.X,
+        source_paths=[str(Path(p).resolve()) for p in dm.source_paths],
+        kinds=dm.kinds,
+    )
+    for path, profile in resolved.items():
+        cl.record_label(path, profile, directory=tmp_path)
+    cl.train_supervised(dm, resolved, directory=tmp_path, embed_space_id="model-a:2")
+
+    from src.core.ml.classify import has_supervised_model
+
+    assert has_supervised_model(directory=tmp_path, embed_space_id="model-a:2") is True
+    assert has_supervised_model(directory=tmp_path, embed_space_id="model-b:2") is False
 
 
 @pytest.mark.unit

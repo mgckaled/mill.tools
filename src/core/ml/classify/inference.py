@@ -13,7 +13,7 @@ from typing import TYPE_CHECKING, Callable
 import numpy as np
 
 from src.core.ml.classify._naming import DOMAIN_TRANSCRIPTION_PROFILE, _model_name
-from src.core.ml.classify.labels import labels_signature, load_labels
+from src.core.ml.classify.labels import load_labels, model_signature
 from src.core.ml.classify.prototypes import classify_zeroshot, profile_prototypes
 from src.core.ml.store import load_model
 from src.core.ml.types import Classification
@@ -29,21 +29,30 @@ def classify(
     dm: DocumentMatrix | None = None,  # noqa: ARG001 — reserved for future routing
     directory: Path | None = None,
     domain: str = DOMAIN_TRANSCRIPTION_PROFILE,
+    embed_space_id: str = "?",
 ) -> Classification:
     """Classify ``doc_vec`` within ``domain``: trained model if available + valid,
     else zero-shot.
 
     The supervised model is used only when ``ml.store`` holds one whose signature
-    still matches the current label set; any mismatch (labels changed or sklearn
-    upgraded) transparently falls back to the zero-shot prototypes. Passing a
-    non-default ``domain`` (``DOMAIN_DATA``/``DOMAIN_DOCUMENT``) reuses this exact
-    infrastructure for a different class set — see the package docstring.
+    still matches the current label set *and* embedding space; any mismatch
+    (labels changed, embed model changed, or sklearn upgraded) transparently
+    falls back to the zero-shot prototypes. Passing a non-default ``domain``
+    (``DOMAIN_DATA``/``DOMAIN_DOCUMENT``) reuses this exact infrastructure for
+    a different class set — see the package docstring.
+
+    Args:
+        embed_space_id: Identifies the RAG's current embedding space (model +
+            dim, from ``rag.stats.embed_space_id``) — see ``model_signature``/
+            ``profile_prototypes`` for why this matters. Defaults to ``"?"``
+            for callers that don't track it; production call sites pass the
+            real value (see ``cli/ai.py``/``gui/views/profile_section.py``).
     """
     labels = load_labels(directory=directory, domain=domain)
     if labels:
         model = load_model(
             _model_name(domain),
-            signature=labels_signature(labels),
+            signature=model_signature(labels, embed_space_id),
             directory=directory,
         )
         if model is not None:
@@ -62,12 +71,17 @@ def classify(
                 str(classes[order[0]]), confidence, margin, "supervised"
             )
 
-    P, ids = profile_prototypes(embed_fn, cache_dir=directory, domain=domain)
+    P, ids = profile_prototypes(
+        embed_fn, cache_dir=directory, domain=domain, embed_space_id=embed_space_id
+    )
     return classify_zeroshot(doc_vec, P, ids)
 
 
 def has_supervised_model(
-    domain: str = DOMAIN_TRANSCRIPTION_PROFILE, *, directory: Path | None = None
+    domain: str = DOMAIN_TRANSCRIPTION_PROFILE,
+    *,
+    directory: Path | None = None,
+    embed_space_id: str = "?",
 ) -> bool:
     """True if ``domain`` currently has a valid trained model in use (not just
     labels recorded) — i.e. ``classify()`` would take the supervised branch."""
@@ -75,6 +89,8 @@ def has_supervised_model(
     if not labels:
         return False
     model = load_model(
-        _model_name(domain), signature=labels_signature(labels), directory=directory
+        _model_name(domain),
+        signature=model_signature(labels, embed_space_id),
+        directory=directory,
     )
     return model is not None

@@ -85,6 +85,25 @@ def _read_embed_model(directory: Path) -> str:
     return info.get("embed_model") or "?"
 
 
+def embed_space_id(directory: Path) -> str:
+    """Return a short identifier for the index's embedding space (model name +
+    vector width), read from the ``index_info.json`` sidecar only — cheap
+    enough to call on every ``core.ml.classify`` call.
+
+    Meant to be folded into a downstream cache signature (prototype cache,
+    supervised-model signature — see ``core/ml/classify``): switching the
+    embed model and reindexing must invalidate a cache trained on the old
+    embedding space, instead of silently comparing vectors from two
+    incompatible spaces and predicting garbage.
+
+    An index that predates the sidecar reports ``"?:<dim>"`` — a stable but
+    uninformative id. It neither forces a spurious retrain on every call
+    (the id stays constant across reads of that same old index) nor claims to
+    know a model it was never told.
+    """
+    return f"{_read_embed_model(directory)}:{_read_dim(directory)}"
+
+
 def _read_dim(directory: Path) -> int:
     """Read the vector width, preferring the ``index_info.json`` sidecar (a
     few bytes) over loading ``vectors.npz`` — which can be large, and, being

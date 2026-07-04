@@ -179,6 +179,46 @@ def test_index_stats_dim_zero_when_both_vectors_and_sidecar_are_corrupt(tmp_path
 
 
 # ---------------------------------------------------------------------------
+# embed_space_id
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.unit
+def test_embed_space_id_combines_model_and_dim(tmp_path):
+    from src.core.rag.stats import embed_space_id
+
+    _persist_store(tmp_path, embed_model="nomic-embed-custom")
+    assert embed_space_id(tmp_path) == "nomic-embed-custom:3"
+
+
+@pytest.mark.unit
+def test_embed_space_id_stable_placeholder_for_index_without_sidecar(tmp_path):
+    from src.core.rag.stats import embed_space_id
+
+    _persist_store(tmp_path)
+    (tmp_path / "index_info.json").unlink()
+    assert embed_space_id(tmp_path) == "?:3"  # falls back to the npz shape
+
+
+@pytest.mark.unit
+def test_embed_space_id_missing_index_is_question_mark_zero(tmp_path):
+    from src.core.rag.stats import embed_space_id
+
+    assert embed_space_id(tmp_path) == "?:0"
+
+
+@pytest.mark.unit
+def test_embed_space_id_changes_when_model_changes(tmp_path):
+    from src.core.rag.stats import embed_space_id
+
+    _persist_store(tmp_path, embed_model="nomic-embed-custom")
+    id_a = embed_space_id(tmp_path)
+    _persist_store(tmp_path, embed_model="bge-m3")
+    id_b = embed_space_id(tmp_path)
+    assert id_a != id_b
+
+
+# ---------------------------------------------------------------------------
 # fmt_status_line
 # ---------------------------------------------------------------------------
 

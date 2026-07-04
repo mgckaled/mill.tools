@@ -57,6 +57,7 @@ from src.core.ml.classify.labels import domain_label_count as domain_label_count
 from src.core.ml.classify.labels import labels_signature as labels_signature
 from src.core.ml.classify.labels import load_labels as load_labels
 from src.core.ml.classify.labels import maybe_train as maybe_train
+from src.core.ml.classify.labels import model_signature as model_signature
 from src.core.ml.classify.labels import record_label as record_label
 from src.core.ml.classify.labels import train_supervised as train_supervised
 from src.core.ml.classify.prototypes import _load_prototypes as _load_prototypes
@@ -79,6 +80,7 @@ __all__ = [
     "labels_signature",
     "load_labels",
     "maybe_train",
+    "model_signature",
     "profile_prototypes",
     "record_label",
     "train_supervised",

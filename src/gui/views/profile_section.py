@@ -52,8 +52,10 @@ def _classify_path(path: str) -> tuple[str, float, float] | None:
     from src.core.ml.features import load_document_matrix
     from src.core.rag import embedder
     from src.core.rag.indexer import index_dir
+    from src.core.rag.stats import embed_space_id
 
-    dm = load_document_matrix(index_dir())
+    index_directory = index_dir()
+    dm = load_document_matrix(index_directory)
     if len(dm) == 0:
         return None
 
@@ -70,6 +72,7 @@ def _classify_path(path: str) -> tuple[str, float, float] | None:
     result = classify(
         dm.X[idx],
         embed_fn=lambda t: embedder.embed_texts(t, model=embedder.DEFAULT_EMBED_MODEL),
+        embed_space_id=embed_space_id(index_directory),
     )
     return result.profile_id, result.confidence, result.margin
 

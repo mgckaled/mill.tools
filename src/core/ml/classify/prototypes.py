@@ -108,9 +108,17 @@ def _seeds_for_domain(domain: str) -> list[tuple[str, str]]:
     raise ValueError(f"Unknown classification domain: {domain!r}")
 
 
-def _seeds_signature(seeds: list[tuple[str, str]]) -> str:
-    """Stable hash of the profile set — changes only when ids/texts change."""
-    payload = "\n".join(f"{pid}\t{text}" for pid, text in seeds)
+def _seeds_signature(seeds: list[tuple[str, str]], embed_space_id: str) -> str:
+    """Stable hash of the profile set + embedding space.
+
+    Changes when ids/texts change *or* when ``embed_space_id`` changes
+    (model/dim, from ``rag.stats.embed_space_id``) — a cached prototype
+    matrix embedded in one model's space is meaningless cosine-compared
+    against document vectors from a different one; without this, switching
+    the embed model and reindexing left stale prototypes valid and
+    predicting garbage in silence (M2).
+    """
+    payload = f"{embed_space_id}\n" + "\n".join(f"{pid}\t{text}" for pid, text in seeds)
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
 
@@ -159,18 +167,31 @@ def profile_prototypes(
     *,
     cache_dir: Path | None = None,
     domain: str = DOMAIN_TRANSCRIPTION_PROFILE,
+    embed_space_id: str = "?",
 ) -> tuple[np.ndarray, list[str]]:
     """Return the L2-normalized prototype matrix ``(C, D)`` and its class ids.
 
-    Reads the on-disk cache when ``domain``'s class set is unchanged (no
-    embedder needed); otherwise embeds one canonical text per class via
-    ``embed_fn`` (one call, then cached). Raises ``RuntimeError`` on a cache
-    miss without an ``embed_fn`` so the caller can surface the embedder setup
-    hint.
+    Reads the on-disk cache when ``domain``'s class set *and* embedding space
+    are unchanged (no embedder needed); otherwise embeds one canonical text
+    per class via ``embed_fn`` (one call, then cached). Raises ``RuntimeError``
+    on a cache miss without an ``embed_fn`` so the caller can surface the
+    embedder setup hint.
+
+    Args:
+        embed_fn: Embeds the seed texts on a cache miss.
+        cache_dir: Where the prototype cache lives (default ``model_dir()``).
+        domain: Which class set to use.
+        embed_space_id: Identifies the RAG's current embedding space (model +
+            dim, from ``rag.stats.embed_space_id``) — folded into the cache
+            signature so switching the embed model invalidates stale
+            prototypes instead of silently comparing vectors from a different
+            space. Defaults to ``"?"`` for callers that don't track it
+            explicitly (the classify() call chain always does — see
+            ``inference.py``).
     """
     cache_dir = cache_dir or model_dir()
     seeds = _seeds_for_domain(domain)
-    signature = _seeds_signature(seeds)
+    signature = _seeds_signature(seeds, embed_space_id)
     npz_name, json_name = _proto_filenames(domain)
 
     cached = _load_prototypes(

@@ -449,11 +449,13 @@ def _classify(ns: argparse.Namespace) -> None:
     from src.core.ml.features import load_document_matrix
     from src.core.rag import embedder
     from src.core.rag.indexer import index_dir
+    from src.core.rag.stats import embed_space_id
 
     if not ns.target:
         print("Informe o documento: uv run main.py ai classify <arquivo>")
         sys.exit(1)
-    dm = load_document_matrix(index_dir())
+    index_directory = index_dir()
+    dm = load_document_matrix(index_directory)
     if len(dm) == 0:
         print('Índice vazio. Rode "uv run main.py ai index" primeiro.')
         sys.exit(1)
@@ -467,7 +469,9 @@ def _classify(ns: argparse.Namespace) -> None:
     doc_vec = dm.X[dm.source_paths.index(source)]
     try:
         result = classify(
-            doc_vec, embed_fn=lambda t: embedder.embed_texts(t, model=embed_model)
+            doc_vec,
+            embed_fn=lambda t: embedder.embed_texts(t, model=embed_model),
+            embed_space_id=embed_space_id(index_directory),
         )
     except RuntimeError:
         print(
