@@ -44,6 +44,32 @@ def test_add_empty_is_noop():
 
 
 @pytest.mark.unit
+def test_add_rejects_width_mismatch_on_empty_store():
+    """Ollama #10176: a misconfigured embed model can return 8192-dim vectors
+    instead of the expected width. On a fresh (empty) store there is no prior
+    row for np.vstack to reject against — add() must catch it itself instead
+    of silently corrupting self.dim vs. self.vectors."""
+    from src.core.rag.store import VectorStore
+
+    store = VectorStore(dim=768)
+    with pytest.raises(ValueError, match="768"):
+        store.add(np.zeros((2, 8192), dtype=np.float32), [_meta("a", 0), _meta("a", 1)])
+    assert len(store) == 0
+
+
+@pytest.mark.unit
+def test_add_width_mismatch_on_non_empty_store_still_raises():
+    from src.core.rag.store import VectorStore
+
+    store = VectorStore(dim=3)
+    store.add(
+        np.eye(3, dtype=np.float32), [_meta("a", 0), _meta("a", 1), _meta("a", 2)]
+    )
+    with pytest.raises(ValueError):
+        store.add(np.zeros((1, 8), dtype=np.float32), [_meta("b", 0)])
+
+
+@pytest.mark.unit
 def test_search_ranks_identical_above_orthogonal():
     from src.core.rag.store import VectorStore
 
@@ -335,3 +361,32 @@ def test_load_missing_dir_returns_empty_store(tmp_path):
 
     loaded = VectorStore.load(tmp_path / "does-not-exist", dim=3)
     assert len(loaded) == 0
+
+
+@pytest.mark.unit
+def test_persist_leaves_no_tmp_file_behind(tmp_path):
+    from src.core.rag.store import VectorStore
+
+    store = VectorStore(dim=3)
+    store.add(np.array([[0.1, 0.2, 0.3]], dtype=np.float32), [_meta("a.txt")])
+    store.persist(tmp_path)
+
+    assert list(tmp_path.glob("*.tmp")) == []
+    assert (tmp_path / "vectors.npz").exists()
+    assert (tmp_path / "meta.json").exists()
+    assert (tmp_path / "index_info.json").exists()
+
+
+@pytest.mark.unit
+def test_load_tolerates_vectors_without_meta_sidecar(tmp_path, caplog):
+    from src.core.rag.store import VectorStore
+
+    # Simulate an interrupted/tampered persist: vectors.npz without its
+    # meta.json sidecar.
+    np.savez_compressed(tmp_path / "vectors.npz", vectors=np.zeros((1, 3)))
+
+    with caplog.at_level("WARNING"):
+        loaded = VectorStore.load(tmp_path, dim=3)
+
+    assert len(loaded) == 0
+    assert "meta.json sidecar" in caplog.text

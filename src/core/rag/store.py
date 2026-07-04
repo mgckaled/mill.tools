@@ -8,7 +8,9 @@ without changing this interface.
 
 from __future__ import annotations
 
+import io
 import json
+import logging
 import time
 from dataclasses import asdict
 from pathlib import Path
@@ -16,6 +18,7 @@ from pathlib import Path
 import numpy as np
 from rank_bm25 import BM25Okapi
 
+from src.core.io_atomic import write_group
 from src.core.rag.bm25 import bm25_score, build_bm25_index
 from src.core.rag.types import ChunkMeta, RetrievedChunk
 
@@ -46,6 +49,17 @@ class VectorStore:
             raise ValueError(f"vecs/metas length mismatch: {len(vecs)} != {len(metas)}")
         if not len(vecs):
             return
+        # np.vstack already rejects a width mismatch once the store is
+        # non-empty; an empty store has no prior row to check against, so a
+        # wrong-width embed_fn (Ollama #10176: some configs return 8192-dim
+        # vectors instead of 768) would otherwise be silently accepted here,
+        # corrupting self.dim vs. self.vectors — and only surface later as a
+        # confusing shape mismatch deep inside search().
+        if len(self.vectors) == 0 and vecs.shape[1] != self.dim:
+            raise ValueError(
+                f"Embedding width {vecs.shape[1]} does not match store dim "
+                f"{self.dim} (check the embed model — see Ollama #10176)."
+            )
         self.vectors = np.vstack([self.vectors, vecs]) if len(self.vectors) else vecs
         self.meta.extend(metas)
         self._normalized = None
@@ -132,41 +146,60 @@ class VectorStore:
         return [RetrievedChunk(self.meta[i], float(scores[i])) for i in top]
 
     def persist(self, directory: Path, *, embed_model: str | None = None) -> None:
-        """Write the matrix (npz), metadata (json) and an info sidecar.
+        """Write the matrix (npz), metadata (json) and an info sidecar as one
+        atomic unit (:func:`src.core.io_atomic.write_group`).
 
         ``index_info.json`` records the embedding model and vector width so the
         index can be described (``stats.index_stats``) and a future dimension
         mismatch detected (Ollama #10176) without loading the matrix. Older
         indexes lack the sidecar; ``index_stats`` treats that as ``embed_model="?"``.
+
+        Writing the trio as a group means a crash or a concurrent reader never
+        sees a fresh ``vectors.npz`` paired with a stale/missing ``meta.json``.
         """
-        directory.mkdir(parents=True, exist_ok=True)
-        np.savez_compressed(directory / "vectors.npz", vectors=self.vectors)
-        (directory / "meta.json").write_text(
-            json.dumps([asdict(m) for m in self.meta], ensure_ascii=False),
-            encoding="utf-8",
-        )
-        (directory / "index_info.json").write_text(
-            json.dumps(
-                {
-                    "embed_model": embed_model,
-                    "dim": self.dim,
-                    "created_at": time.time(),
-                },
-                ensure_ascii=False,
-            ),
-            encoding="utf-8",
+        vectors_buf = io.BytesIO()
+        np.savez_compressed(vectors_buf, vectors=self.vectors)
+        meta_bytes = json.dumps(
+            [asdict(m) for m in self.meta], ensure_ascii=False
+        ).encode("utf-8")
+        info_bytes = json.dumps(
+            {
+                "embed_model": embed_model,
+                "dim": self.dim,
+                "created_at": time.time(),
+            },
+            ensure_ascii=False,
+        ).encode("utf-8")
+        write_group(
+            [
+                (directory / "vectors.npz", vectors_buf.getvalue()),
+                (directory / "meta.json", meta_bytes),
+                (directory / "index_info.json", info_bytes),
+            ]
         )
 
     @classmethod
     def load(cls, directory: Path, dim: int = 768) -> VectorStore:
-        """Load a store from ``directory``; return an empty one if absent."""
+        """Load a store from ``directory``; return an empty one if absent.
+
+        Tolerates ``vectors.npz`` present without its ``meta.json`` sidecar
+        (an interrupted persist, or manual tampering) — returns an empty store
+        with a warning instead of raising ``FileNotFoundError``.
+        """
         store = cls(dim)
-        if (directory / "vectors.npz").exists():
-            store.vectors = np.load(directory / "vectors.npz")["vectors"].astype(
-                np.float32
+        vectors_path = directory / "vectors.npz"
+        meta_path = directory / "meta.json"
+        if not vectors_path.exists():
+            return store
+        if not meta_path.exists():
+            logging.warning(
+                "[!] %s exists without its meta.json sidecar — treating index as empty.",
+                vectors_path,
             )
-            raw = json.loads((directory / "meta.json").read_text(encoding="utf-8"))
-            store.meta = [ChunkMeta(**m) for m in raw]
-            if store.vectors.shape[1]:
-                store.dim = store.vectors.shape[1]
+            return store
+        store.vectors = np.load(vectors_path)["vectors"].astype(np.float32)
+        raw = json.loads(meta_path.read_text(encoding="utf-8"))
+        store.meta = [ChunkMeta(**m) for m in raw]
+        if store.vectors.shape[1]:
+            store.dim = store.vectors.shape[1]
         return store
