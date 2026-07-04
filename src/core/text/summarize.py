@@ -11,8 +11,11 @@ ignores), and pick the summary sentences via Maximal Marginal Relevance so two
 near-identical high-scoring sentences don't both make the cut. The result is
 returned **in original order** so the summary reads naturally.
 
-O(S²) in sentences, so the count is capped before building the matrix. No new
-dependency: TF-IDF comes from scikit-learn, already pulled by the ``[ml]`` extra.
+O(S²) in sentences, so a very long document is downsampled before building the
+matrix — evenly across its **full length** (see ``_sample_indices``), not
+truncated to the head, so a topic that only resurfaces in the back half of a
+long transcript is still reachable. No new dependency: TF-IDF comes from
+scikit-learn, already pulled by the ``[ml]`` extra.
 """
 
 from __future__ import annotations
@@ -23,8 +26,10 @@ import numpy as np
 
 SETUP_HINT = "Instale o extra de ML: uv sync --extra ml"
 
-# Cap on sentences fed to the O(S²) graph; longer documents are truncated to the
-# first ``_MAX_SENTENCES`` (a summary of the opening is still useful and bounded).
+# Cap on sentences fed to the O(S²) graph. Longer documents are downsampled
+# evenly across their full length (``_sample_indices``) rather than truncated
+# to the first ``_MAX_SENTENCES`` — a 2h lecture's second half used to be
+# structurally invisible to the summary no matter how central its content.
 _MAX_SENTENCES = 400
 
 # Sentence boundary: end punctuation followed by whitespace. Deliberately simple
@@ -85,12 +90,25 @@ def extractive_summary(text: str, *, sentences: int = 5, lang: str = "pt") -> li
     if len(sents) <= sentences:
         return sents
 
-    work = sents[:_MAX_SENTENCES]
+    idx = _sample_indices(len(sents), _MAX_SENTENCES)
+    work = [sents[i] for i in idx]
     sim = _sentence_similarity(work)
     scores = _textrank_scores(sim)
     order = _mmr(scores, sim, sentences)
     # Restored to original order for readability.
     return [work[i] for i in sorted(order)]
+
+
+def _sample_indices(n: int, cap: int) -> list[int]:
+    """Return up to ``cap`` positions, evenly spaced across ``range(n)``.
+
+    A systematic sample instead of a head slice: it keeps the last index
+    reachable, so a document far longer than ``cap`` sentences doesn't lose
+    its entire back half to truncation before the ranking matrix is even built.
+    """
+    if n <= cap:
+        return list(range(n))
+    return sorted({int(i) for i in np.linspace(0, n - 1, num=cap)})
 
 
 def _mmr(

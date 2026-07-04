@@ -90,6 +90,23 @@ def test_sentence_similarity_handles_empty_vocabulary():
 
 
 @pytest.mark.unit
+def test_sample_indices_returns_all_when_under_cap():
+    assert summarize._sample_indices(5, 400) == [0, 1, 2, 3, 4]
+
+
+@pytest.mark.unit
+def test_sample_indices_covers_full_range_not_just_head():
+    # Regression for the old head-truncation bug: a plain `sents[:cap]` slice
+    # never reaches the tail of a document longer than `cap`. The stratified
+    # sample must keep both ends reachable and stay roughly evenly spaced.
+    idx = summarize._sample_indices(1000, 400)
+    assert len(idx) <= 400
+    assert idx[0] == 0
+    assert idx[-1] == 999
+    assert max(b - a for a, b in zip(idx, idx[1:])) <= 4
+
+
+@pytest.mark.unit
 def test_diversifies_near_duplicate_sentences():
     # Two of the three sentences are identical (fully redundant); the third is
     # distinct. Plain top-k by PageRank alone risks picking both duplicates
