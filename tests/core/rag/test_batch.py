@@ -101,3 +101,53 @@ def test_run_batch_empty_sources_returns_empty(mocker):
     )
     assert out == []
     assert not spy.called
+
+
+@pytest.mark.unit
+def test_run_batch_stops_when_cancelled_between_sources(mocker):
+    import src.core.rag.chat as chat
+    from src.core.rag.batch import run_batch
+
+    store = _store(
+        [
+            ([1, 0, 0, 0, 0, 0, 0, 0], "a.txt", "transcription"),
+            ([0, 1, 0, 0, 0, 0, 0, 0], "b.txt", "document"),
+            ([0, 0, 1, 0, 0, 0, 0, 0], "c.txt", "document"),
+        ]
+    )
+    mocker.patch.object(chat, "make_llm", return_value=_fake_llm("R-a", "R-b", "R-c"))
+
+    # Cancel right after the first source is processed.
+    calls = {"n": 0}
+
+    def cancel_after_first():
+        calls["n"] += 1
+        return calls["n"] > 1
+
+    results = run_batch(
+        "resuma",
+        store,
+        lambda _q: np.ones(_W, dtype=np.float32),
+        sources=["a.txt", "b.txt", "c.txt"],
+        cancel_is_set=cancel_after_first,
+    )
+
+    assert [r.source_path for r in results] == ["a.txt"]
+
+
+@pytest.mark.unit
+def test_run_batch_never_cancels_when_cancel_is_set_is_none(mocker):
+    import src.core.rag.chat as chat
+    from src.core.rag.batch import run_batch
+
+    store = _store([([1, 0, 0, 0, 0, 0, 0, 0], "a.txt", "transcription")])
+    mocker.patch.object(chat, "make_llm", return_value=_fake_llm("R-a"))
+
+    results = run_batch(
+        "resuma",
+        store,
+        lambda _q: np.ones(_W, dtype=np.float32),
+        sources=["a.txt"],
+        cancel_is_set=None,
+    )
+    assert [r.source_path for r in results] == ["a.txt"]

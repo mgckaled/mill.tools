@@ -49,6 +49,7 @@ def run_batch(
     model_name: str = DEFAULT_MODEL,
     k: int = 6,
     progress_cb: Callable[[int, int], None] | None = None,
+    cancel_is_set: Callable[[], bool] | None = None,
 ) -> list[BatchResult]:
     """Apply ``instruction`` to each source and collect the per-document answers.
 
@@ -60,13 +61,21 @@ def run_batch(
         model_name: Answer model — Ollama tag or Gemini name.
         k: Chunks to retrieve per document.
         progress_cb: Optional ``(current, total)`` callback, one call per source.
+        cancel_is_set: Optional ``() -> bool``, checked between sources — same
+            convention as ``core.recipes.runner``. ``None`` (the default) never
+            cancels. No current caller wires a real cancellation source (batch
+            runs only through ``cli/ai.py --batch`` today, a synchronous
+            script); this is the seam for the day one does.
 
     Returns:
-        One ``BatchResult`` per source, in input order.
+        One ``BatchResult`` per source processed before cancellation (or every
+        source, if never cancelled), in input order.
     """
     results: list[BatchResult] = []
     total = len(sources)
     for n, source in enumerate(sources, 1):
+        if cancel_is_set is not None and cancel_is_set():
+            break
         hits = retrieve(instruction, store, embed_query_fn, k=k, scope=source)
         result = answer(instruction, hits, model_name=model_name)
         results.append(BatchResult(source, result))
