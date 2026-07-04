@@ -6,21 +6,25 @@ the orchestration layer's job (worker/CLI), same convention as
 ``core/recipes/history.py``'s ``RunRecord``: the pure operations themselves
 never persist anything. Persisted to ``~/.mill-tools/ml_activity.json``,
 capped at the last ``_MAX_ENTRIES``.
+
+Load/append/cap mechanics are shared with ``logs.py``/``model_timing.py``
+via ``_jsonlog.py`` — this module only supplies the dataclass and the cap
+strategy (flat: keep the last ``_MAX_ENTRIES``, regardless of ``module``).
 """
 
 from __future__ import annotations
 
-import json
-import logging
 import time
 from dataclasses import asdict, dataclass
 from pathlib import Path
 
-logger = logging.getLogger(__name__)
+from src.core.observatory import _jsonlog
 
 # Keep the log bounded so the file never grows without limit (same idea as
 # core.recipes.history's _MAX_RUNS).
 _MAX_ENTRIES = 200
+
+_LABEL = "ML activity"
 
 
 @dataclass(frozen=True, slots=True)
@@ -38,36 +42,23 @@ def _store_path() -> Path:
     return Path.home() / ".mill-tools" / "ml_activity.json"
 
 
+def _parse_entry(raw: dict) -> ActivityEntry:
+    return ActivityEntry(
+        module=raw["module"],
+        event=raw["event"],
+        detail=raw["detail"],
+        timestamp=float(raw["timestamp"]),
+    )
+
+
 def load_activity(path: Path | None = None) -> list[ActivityEntry]:
     """Load the activity log in append order (oldest first). ``[]`` on absence
     or corruption.
 
     Individual malformed entries are skipped (logged) rather than aborting the
-    whole load — same convention as ``core.recipes.history.load_runs``.
+    whole load.
     """
-    path = path or _store_path()
-    if not path.exists():
-        return []
-    try:
-        data = json.loads(path.read_text(encoding="utf-8"))
-    except (json.JSONDecodeError, OSError) as exc:
-        logger.warning("[!] Could not read ML activity log %s: %s", path, exc)
-        return []
-
-    entries: list[ActivityEntry] = []
-    for raw in data:
-        try:
-            entries.append(
-                ActivityEntry(
-                    module=raw["module"],
-                    event=raw["event"],
-                    detail=raw["detail"],
-                    timestamp=float(raw["timestamp"]),
-                )
-            )
-        except (KeyError, TypeError, ValueError):
-            logger.warning("[!] Skipping malformed ML activity entry: %r", raw)
-    return entries
+    return _jsonlog.load_entries(path or _store_path(), _parse_entry, label=_LABEL)
 
 
 def log_activity(
@@ -91,18 +82,16 @@ def log_activity(
         timestamp=now if now is not None else time.time(),
     )
     entries = load_activity(path)
-    entries.append(entry)
-    entries = entries[-_MAX_ENTRIES:]
-    try:
-        path.parent.mkdir(parents=True, exist_ok=True)
-        payload = [asdict(e) for e in entries]
-        path.write_text(
-            json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8"
-        )
-    except OSError as exc:
-        logger.debug("[d] Could not write ML activity log: %s", exc)
+    _jsonlog.append_capped(
+        path,
+        entries,
+        entry,
+        asdict,
+        keep=lambda es: es[-_MAX_ENTRIES:],
+        label=_LABEL,
+    )
 
 
 def recent(entries: list[ActivityEntry], *, limit: int = 15) -> list[ActivityEntry]:
     """The most recent ``limit`` entries, newest first (the feed's default view)."""
-    return list(reversed(entries))[:limit]
+    return _jsonlog.recent(entries, limit=limit)

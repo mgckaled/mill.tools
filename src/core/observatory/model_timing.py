@@ -6,21 +6,31 @@ Every call to ``make_llm()`` (LLM/VLM) and to the embedder (embed) writes one
 capped at the last ``_MAX_PER_BUCKET`` entries *per (domain, model) pair* — not
 a flat cut on the whole file, because "llm" is called far more often than
 "vlm"/"embed" and a flat cut would silently evict their history.
+
+Load/append mechanics are shared with ``activity.py``/``logs.py`` via
+``_jsonlog.py``; the per-bucket cap strategy (``_trim_per_bucket``) is kept
+here since it is specific to this module's shape.
+
+The embedding hot path (``embedder.embed_texts``, called once per document
+during indexing) sums the elapsed time of every sub-batch and records a
+*single* entry per call instead of one per sub-batch — otherwise a large
+corpus reindex would trigger dozens of full log rewrites per document. See
+``embedder.py``.
 """
 
 from __future__ import annotations
 
-import json
-import logging
 import time
 from dataclasses import asdict, dataclass
 from pathlib import Path
 
-logger = logging.getLogger(__name__)
+from src.core.observatory import _jsonlog
 
 # Same magnitude as core.recipes.history's _MAX_RUNS — generous enough to span
 # months of personal use without the file growing unbounded.
 _MAX_PER_BUCKET = 500
+
+_LABEL = "model timing"
 
 
 @dataclass(frozen=True, slots=True)
@@ -38,36 +48,23 @@ def _store_path() -> Path:
     return Path.home() / ".mill-tools" / "model_timings.json"
 
 
+def _parse_entry(raw: dict) -> TimingEntry:
+    return TimingEntry(
+        model=raw["model"],
+        domain=raw["domain"],
+        elapsed=float(raw["elapsed"]),
+        timestamp=float(raw["timestamp"]),
+    )
+
+
 def load_timings(path: Path | None = None) -> list[TimingEntry]:
     """Load the log in append order (oldest first). ``[]`` on absence or
     corruption.
 
     Individual malformed entries are skipped (logged) rather than aborting the
-    whole load — same convention as ``core.observatory.activity.load_activity``.
+    whole load.
     """
-    path = path or _store_path()
-    if not path.exists():
-        return []
-    try:
-        data = json.loads(path.read_text(encoding="utf-8"))
-    except (json.JSONDecodeError, OSError) as exc:
-        logger.warning("[!] Could not read model timing log %s: %s", path, exc)
-        return []
-
-    entries: list[TimingEntry] = []
-    for raw in data:
-        try:
-            entries.append(
-                TimingEntry(
-                    model=raw["model"],
-                    domain=raw["domain"],
-                    elapsed=float(raw["elapsed"]),
-                    timestamp=float(raw["timestamp"]),
-                )
-            )
-        except (KeyError, TypeError, ValueError):
-            logger.warning("[!] Skipping malformed timing entry: %r", raw)
-    return entries
+    return _jsonlog.load_entries(path or _store_path(), _parse_entry, label=_LABEL)
 
 
 def _trim_per_bucket(
@@ -110,24 +107,21 @@ def record_timing(
     if elapsed <= 0:
         return
     path = path or _store_path()
-    entries = load_timings(path)
-    entries.append(
-        TimingEntry(
-            model=model,
-            domain=domain,
-            elapsed=float(elapsed),
-            timestamp=now if now is not None else time.time(),
-        )
+    entry = TimingEntry(
+        model=model,
+        domain=domain,
+        elapsed=float(elapsed),
+        timestamp=now if now is not None else time.time(),
     )
-    entries = _trim_per_bucket(entries)
-    try:
-        path.parent.mkdir(parents=True, exist_ok=True)
-        payload = [asdict(e) for e in entries]
-        path.write_text(
-            json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8"
-        )
-    except OSError as exc:
-        logger.debug("[d] Could not write model timing log: %s", exc)
+    entries = load_timings(path)
+    _jsonlog.append_capped(
+        path,
+        entries,
+        entry,
+        asdict,
+        keep=_trim_per_bucket,
+        label=_LABEL,
+    )
 
 
 def timings_by_domain(

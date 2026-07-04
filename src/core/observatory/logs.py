@@ -7,21 +7,25 @@ catches every module's failures without touching any ``worker.py``. User
 cancellations are filtered out before they reach here (they are not failures).
 Persisted to ``~/.mill-tools/ml_logs.json``, capped at the last
 ``_MAX_ENTRIES`` — same convention as ``activity.py``/``model_timing.py``.
+
+Load/append/cap mechanics are shared with those two modules via
+``_jsonlog.py`` — this module only supplies the dataclass and the cap
+strategy (flat: keep the last ``_MAX_ENTRIES``, regardless of ``module``).
 """
 
 from __future__ import annotations
 
-import json
-import logging
 import time
 from dataclasses import asdict, dataclass
 from pathlib import Path
 
-logger = logging.getLogger(__name__)
+from src.core.observatory import _jsonlog
 
 # Explicit cap requested for this log — smaller than activity.py's 200 since
 # failures are rarer and each entry is only useful for near-term debugging.
 _MAX_ENTRIES = 100
+
+_LABEL = "ML failure"
 
 
 @dataclass(frozen=True, slots=True)
@@ -39,36 +43,23 @@ def _store_path() -> Path:
     return Path.home() / ".mill-tools" / "ml_logs.json"
 
 
+def _parse_entry(raw: dict) -> LogEntry:
+    return LogEntry(
+        module=raw["module"],
+        stage=raw["stage"],
+        message=raw["message"],
+        timestamp=float(raw["timestamp"]),
+    )
+
+
 def load_logs(path: Path | None = None) -> list[LogEntry]:
     """Load the log in append order (oldest first). ``[]`` on absence or
     corruption.
 
     Individual malformed entries are skipped (logged) rather than aborting the
-    whole load — same convention as ``core.observatory.activity.load_activity``.
+    whole load.
     """
-    path = path or _store_path()
-    if not path.exists():
-        return []
-    try:
-        data = json.loads(path.read_text(encoding="utf-8"))
-    except (json.JSONDecodeError, OSError) as exc:
-        logger.warning("[!] Could not read ML failure log %s: %s", path, exc)
-        return []
-
-    entries: list[LogEntry] = []
-    for raw in data:
-        try:
-            entries.append(
-                LogEntry(
-                    module=raw["module"],
-                    stage=raw["stage"],
-                    message=raw["message"],
-                    timestamp=float(raw["timestamp"]),
-                )
-            )
-        except (KeyError, TypeError, ValueError):
-            logger.warning("[!] Skipping malformed ML failure entry: %r", raw)
-    return entries
+    return _jsonlog.load_entries(path or _store_path(), _parse_entry, label=_LABEL)
 
 
 def log_error(
@@ -92,18 +83,16 @@ def log_error(
         timestamp=now if now is not None else time.time(),
     )
     entries = load_logs(path)
-    entries.append(entry)
-    entries = entries[-_MAX_ENTRIES:]
-    try:
-        path.parent.mkdir(parents=True, exist_ok=True)
-        payload = [asdict(e) for e in entries]
-        path.write_text(
-            json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8"
-        )
-    except OSError as exc:
-        logger.debug("[d] Could not write ML failure log: %s", exc)
+    _jsonlog.append_capped(
+        path,
+        entries,
+        entry,
+        asdict,
+        keep=lambda es: es[-_MAX_ENTRIES:],
+        label=_LABEL,
+    )
 
 
 def recent(entries: list[LogEntry], *, limit: int = 50) -> list[LogEntry]:
     """The most recent ``limit`` entries, newest first (the feed's default view)."""
-    return list(reversed(entries))[:limit]
+    return _jsonlog.recent(entries, limit=limit)
