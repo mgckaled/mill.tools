@@ -29,6 +29,12 @@ EMBED_BATCH_SIZE = 16
 # Bounded httpx read timeout for the Ollama client: fail with a clear error
 # instead of hanging indefinitely when a runner stalls.
 EMBED_TIMEOUT = 300.0
+# Short timeout for the availability *ping* only — EMBED_TIMEOUT above is sized
+# for real indexing/query requests. Using it for is_available() too meant a
+# stalled Ollama service could hang any caller (e.g. the Observatório's status
+# board) for minutes just to answer "is it up?" — same spirit as
+# observatory.status.ollama_inventory's Client(timeout=5).
+AVAILABILITY_TIMEOUT = 10.0
 
 # Shown when is_available() is False: how to provision the embed model.
 SETUP_HINT = (
@@ -37,25 +43,27 @@ SETUP_HINT = (
 )
 
 
-def _embeddings(model: str):
+def _embeddings(model: str, *, timeout: float = EMBED_TIMEOUT):
     """Build an OllamaEmbeddings client with a bounded request timeout."""
     from langchain_ollama import OllamaEmbeddings
 
-    return OllamaEmbeddings(model=model, client_kwargs={"timeout": EMBED_TIMEOUT})
+    return OllamaEmbeddings(model=model, client_kwargs={"timeout": timeout})
 
 
 def is_available(model: str = DEFAULT_EMBED_MODEL) -> bool:
     """Return True if langchain-ollama is importable and the embed model answers.
 
     Used to gate the GUI/CLI: when False, the caller shows ``SETUP_HINT``
-    instead of failing mid-pipeline.
+    instead of failing mid-pipeline. The ping uses ``AVAILABILITY_TIMEOUT``,
+    not ``EMBED_TIMEOUT`` — a hung Ollama service should fail this check fast
+    rather than block the caller for minutes.
     """
     try:
         from langchain_ollama import OllamaEmbeddings  # noqa: F401
     except ImportError:
         return False
     try:
-        _embeddings(model).embed_query("ping")
+        _embeddings(model, timeout=AVAILABILITY_TIMEOUT).embed_query("ping")
         return True
     except Exception as exc:  # Ollama down or model not pulled
         logging.debug("[d] Embedder unavailable: %s", exc)

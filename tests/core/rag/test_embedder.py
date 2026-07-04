@@ -76,6 +76,22 @@ def test_is_available_false_when_package_missing(mocker):
 
 
 @pytest.mark.unit
+def test_is_available_pings_with_short_timeout_not_embed_timeout(mocker):
+    """A stalled Ollama service must fail the availability check fast — it
+    should never wait on EMBED_TIMEOUT (300s), sized for real requests."""
+    from src.core.rag import embedder
+
+    module = _fake_ollama_module(query_vec=[0.1] * 4)
+    mocker.patch.dict(sys.modules, {"langchain_ollama": module})
+
+    embedder.is_available()
+
+    _args, kwargs = module.OllamaEmbeddings.call_args
+    assert kwargs["client_kwargs"]["timeout"] == embedder.AVAILABILITY_TIMEOUT
+    assert embedder.AVAILABILITY_TIMEOUT < embedder.EMBED_TIMEOUT
+
+
+@pytest.mark.unit
 def test_embed_texts_returns_float32_matrix(mocker):
     from src.core.rag import embedder
 
