@@ -1,67 +1,69 @@
 ---
 name: cli
-description: Guia da CLI modular do mill.tools (subcomandos audio/video/image/document +
-  transcribe, CLIEventBus, padrões de argparse). Invocar ao criar/editar subcomandos em
-  src/cli/, adicionar flags, mexer no dispatcher de main.py ou escrever testes em tests/cli/.
+description: Guia da CLI modular do mill.tools — subcomandos audio/audio-viz/video/image/document/library/ai/recipe/data/observatory + transcribe, CLIEventBus, taxonomia (pipeline+bus vs. read-only), padrões de argparse e gotchas por subcomando. Invocar ao criar/editar subcomandos em src/cli/, adicionar flags, mexer no dispatcher de main.py ou escrever testes em tests/cli/. A referência completa de flags é o `--help` do código; detalhes de RAG/ML → skill ml-rag; receitas de teste de CLI → skill testing.
 ---
 
 # mill.tools — Guia da CLI Modular
+
+> **Referência de flags = `--help` do próprio código** (+ o bloco Comandos do `CLAUDE.md`). Esta skill cobre
+> só o que **não** se descobre pelo `--help`: padrões, taxonomia e gotchas. Receitas de teste →
+> [`testing/mocks-gui-cli.md`](../testing/mocks-gui-cli.md). Detalhes de `ai`/`observatory` → skill `ml-rag`.
 
 ## Visão geral
 
 `main.py` despacha para subcomandos por prefixo do primeiro argumento:
 
 ```python
-_NON_TRANSCRIBE_CMDS = frozenset({"audio", "video", "image", "document", "library", "ai", "recipe", "data"})
+_NON_TRANSCRIBE_CMDS = frozenset({"audio", "video", "image", "document",
+                                  "library", "ai", "recipe", "data", "observatory"})
 
 def main():
     if len(sys.argv) > 1 and sys.argv[1] in _NON_TRANSCRIBE_CMDS:
-        _dispatch_other(sys.argv[1])   # → src/cli/{audio,video,image,document,library,ai,recipes,data}.py
+        _dispatch_other(sys.argv[1])   # → src/cli/<cmd>.py
         return
     # legado: transcrição (parse_args direto)
 ```
 
 `transcribe` como subcomando explícito também é aceito (`sys.argv.pop(1)` antes do parser legado).
-
----
+`audio-viz` é um parser à parte em `cli/audio.py` (não passa pela fila do `audio`).
 
 ## Estrutura de arquivos
 
-```
+```text
 src/cli/
 ├── bus.py            — CLIEventBus: TqdmLoggingHandler + barra tqdm (sem Flet)
 ├── transcription.py  — resolve_input(), build_output_stem()
-├── audio.py          — add_audio_parser() + run_audio_cli()
-├── video.py          — add_video_parser() + run_video_cli()    (sub-subparsers)
-├── image.py          — add_image_parser() + run_image_cli()    (sub-subparsers)
-├── document.py       — add_document_parser() + run_document_cli()  (sub-subparsers)
-├── library.py        — add_library_parser() + run_library_cli()  (read-only, sem CLIEventBus)
-├── ai.py             — add_ai_parser() + run_ai_cli()  (RAG local; index / pergunta / --batch)
-├── recipes.py        — add_recipe_parser() + run_recipe_cli()  (recipe list / run; usa CLIEventBus)
-├── data.py           — add_data_parser() + run_data_cli()  (query/convert/profile/outliers; reusa core direto)
-└── observatory.py    — add_observatory_parser() + run_observatory_cli()  (status/activity/logs/disk-usage, read-only, sem CLIEventBus)
+├── audio.py          — add_audio_parser/run_audio_cli + add_audio_viz_parser/run_audio_viz_cli
+├── video.py          — add_video_parser/run_video_cli        (sub-subparsers)
+├── image.py          — add_image_parser/run_image_cli        (sub-subparsers)
+├── document.py       — add_document_parser/run_document_cli  (sub-subparsers)
+├── library.py        — add_library_parser/run_library_cli    (read-only)
+├── ai.py             — add_ai_parser/run_ai_cli              (RAG local; ver skill ml-rag)
+├── recipes.py        — add_recipe_parser/run_recipe_cli      (sub-subparsers; usa CLIEventBus)
+├── data.py           — add_data_parser/run_data_cli          (sub-subparsers; reusa core direto)
+└── observatory.py    — add_observatory_parser/run_observatory_cli  (read-only; ver skill ml-rag)
 ```
+
+---
+
+## Taxonomia: dois tipos de subcomando
+
+| Tipo | Subcomandos | Como funciona |
+|---|---|---|
+| **Pipeline + `CLIEventBus`** | `audio` · `video` · `image` · `document` · `recipe` | Constroem `XxxArgs`, criam um `CLIEventBus`, chamam `run_X_pipeline(args, bus, cancel, install_log_handler=False)`. Retorno `False` → `sys.exit(1)` (`audio`/`video`/`image` têm essa branch; `document` não). |
+| **Read-only, core direto** | `library` · `ai` · `data` · `observatory` · `audio-viz` | Reusam o core puro **direto** (operações síncronas, sem progresso) → **sem `CLIEventBus`/`run_*_pipeline`**. Reconfiguram `sys.stdout` p/ UTF-8/replace antes de imprimir. |
+
+Ao criar um subcomando, decida a que grupo pertence **antes** de escrever — isso define se há bus, cancel e
+`install_log_handler`, ou se é core-direto com `capsys` nos testes.
 
 ---
 
 ## CLIEventBus (`src/cli/bus.py`)
 
-Substitui o `EventBus` da GUI sem Flet. Exibe progresso via `tqdm` e linhas de texto.
+Substitui o `EventBus` da GUI sem Flet. Exibe progresso via `tqdm` e linhas de texto. Trata `log` (→
+`tqdm.write` com cor ANSI por prefixo), `progress_update` (barra 0–100%), `queue_progress` (label "Item N/M"),
+os `*_op_start/done` de cada módulo (mensagens formatadas), `task_done` (fecha barra) e `task_error`.
 
-```python
-from src.cli.bus import CLIEventBus
-bus = CLIEventBus()
-```
-
-**Eventos tratados:**
-- `log` → `tqdm.write(msg)` com cor ANSI por prefixo
-- `progress_update` → atualiza barra tqdm (0–100%)
-- `queue_progress` → label "Item N/M — nome"
-- `audio_op_start/done`, `video_op_start/done`, `image_op_start/done`, `document_op_start/done` → mensagens formatadas
-- `task_done` → fecha barra
-- `task_error` → mensagem de erro
-
-**Padrão de uso em todos os CLI runners:**
 ```python
 bus = CLIEventBus()
 cancel = threading.Event()
@@ -70,406 +72,72 @@ if not success:
     sys.exit(1)
 ```
 
-`install_log_handler=False` evita que o `LogEventHandler` do worker instale um handler
-no root logger — a CLI já recebe os logs via `tqdm.write` pelo CLIEventBus.
+`install_log_handler=False` evita que o `LogEventHandler` do worker instale um handler no root logger — a CLI
+já recebe os logs via `tqdm.write` pelo CLIEventBus. **Sempre** passe isso nos runners de pipeline.
 
 ---
 
-## `resolve_input` (`src/cli/transcription.py`)
+## `resolve_input` + ramos de entrada
 
-Classifica entrada como URL ou arquivo local:
+`resolve_input` (`src/cli/transcription.py`) classifica a entrada como URL ou arquivo local:
 
 ```python
-kind, value = resolve_input("https://youtu.be/abc")  # → ("url", "https://…")
-kind, value = resolve_input("/path/to/file.mp3")      # → ("local", "/path/…")
+resolve_input("https://youtu.be/abc")  # → ("url", "https://…")
+resolve_input("/path/to/file.mp3")      # → ("local", "/path/…")
 ```
 
-Usado por todos os CLI runners para popular `InputItem(kind, value)`.
+Usado por todos os runners para popular `InputItem(kind, value)`. Dois ramos merecem atenção:
 
-> **`transcribe` (legado) ramifica pelo sufixo do arquivo local** (`main.py`):
-> `.txt`/`.md` → pula download+Whisper, copia para `transcriptions/text/` e roda
-> só `--format`/`--analyze`/`--prompt`; áudio/vídeo local → transcreve (vídeo é
-> decodificado via PyAV); URL → metadata + download. O ramo local checa
-> `kind == "local"` (não `"file"`).
-
-> **`--profile` (perfil de análise)**: `transcribe ... --analyze --profile <id>` escolhe
-> o esquema/prompt da análise (`src/analysis`). `choices=list_profiles()` (import lazy
-> dentro de `parse_args` para não carregar LangChain nos demais subcomandos); repassado a
-> `analyze(profile=...)`. Default `default` (esquema legado de 10 campos). Ids Tier 1:
-> `default`/`lecture`/`interview`/`tutorial`/`scientific`/`administrative`/`notes`. O
-> standalone `uv run -m src ... --profile <id>` também aceita. Nos testes, asserir
-> `ns.profile` no parser (escolha inválida → `SystemExit`).
+- **`transcribe` (legado) ramifica pelo sufixo do arquivo local** (`main.py`): `.txt`/`.md` → pula
+  download+Whisper, copia para `transcriptions/text/` e roda só `--format`/`--analyze`/`--prompt`; áudio/vídeo
+  local → transcreve (vídeo decodificado via PyAV); URL → metadata + download. O ramo local checa
+  `kind == "local"` (não `"file"`).
+- **`--profile` (perfil de análise)**: `choices=list_profiles()` com **import lazy dentro de `parse_args`**
+  (não carregar LangChain nos demais subcomandos). Repassado a `analyze(profile=...)`. Default `default`
+  (esquema legado). Escolha inválida → `SystemExit`.
 
 ---
 
-## Subcomando `audio`
+## Gotchas por subcomando (o que o `--help` não conta)
 
-```bash
-uv run main.py audio <URL_OR_FILE> [opções]
-```
+- **kebab → snake** (`video`/`image`/`document`): a operação vem com hífen no `Namespace`
+  (`ns.image_op == "contact-sheet"`) e o runner converte com `op.replace("-", "_")` p/ o `Args`. Caso especial
+  do vídeo: `"extract-audio"` → `"extract_audio"`. Nos testes, asserte sempre o nome em `snake_case` no `Args`.
+- **UTF-8 no stdout** (todos os read-only + `recipe`): `run_*_cli` reconfigura `sys.stdout` p/ UTF-8/replace —
+  nomes de arquivo com caracteres fora do cp1252 (ex.: `｜`) quebram o console do Windows sem isso.
+- **`data query` é multi-input**: `files` (`nargs="+"`) seguido do positional `question` — argparse reserva o
+  último token p/ a pergunta. `--sql` trata `question` como SQL literal e **pula** o NL→SQL da IA.
+- **`ai --scope` é path-ou-kind**: `_resolve_scope` resolve um caminho existente → absoluto (1 doc); senão
+  trata a string como kind (`transcription`/`document`/`image`). Ver skill `ml-rag` para o resto de `ai`.
+- **`ai related <path>`** resolve o path por absoluto→basename; `ai map --method` aceita `pca|tsne|umap`
+  (TSNE já vem no `[ml]`, sem exigir `[ml-viz]`).
+- **`log_activity` a mockar**: subcomandos que gravam no log do Observatório no caminho de sucesso —
+  `library dedup-images`, `ai dups`, `ai classify`, `data outliers` — chamam
+  `core.observatory.activity.log_activity`. **Mocke** nos testes, senão a suíte escreve no
+  `~/.mill-tools/ml_activity.json` real.
+- **`recipe` tem runner real**: diferente dos outros read-only, Receitas usa `execute_recipe` (mesmo core da
+  GUI) + `CLIEventBus`; `_make_emit` traduz `recipe_start`/`step_*` em linhas de log. `--model` sobrescreve só
+  o Whisper dos passos `transcription.transcribe`.
 
-| Flag | Default | Descrição |
-|---|---|---|
-| `--fmt` | `mp3` | Formato: mp3/m4a/wav/ogg/opus |
-| `--quality` | `best` | Bitrate kbps ou `best` |
-| `--no-meta` | off | Não embutir capa/metadados |
-| `--mono` | off | Downmix p/ 1 canal (`-ac 1`) no encode final |
-| `--sample-rate` | None | Reamostra (`-ar`): 16000/22050/44100/48000 (16k = Whisper) |
-| `--trim-silence` | off | Remove silêncio início/fim/meio (`silenceremove`) |
-| `--silence-threshold` | `-40.0` | Limiar dBFS (só com `--trim-silence`) |
-| `--silence-min` | `0.5` | Silêncio mínimo em s (só com `--trim-silence`) |
-| `--speed` | `1.0` | Velocidade sem pitch (`atempo`), faixa 0.5–4.0 |
-| `--denoise` | off | Spectral gating pós-conversão |
-| `--denoise-adaptive` | off | Ruído adaptativo (não-estacionário) |
-| `--normalize` | off | Loudnorm EBU R128 pós-conversão |
-| `--lufs` | `-14.0` | Alvo LUFS (só com `--normalize`) |
-| `--verbose` | off | Logging DEBUG |
-
-Auto-detecção de operação: URL → download; vídeo local → extração; áudio → conversão. Cadeia de pós-processamento (ordem fixa): silêncio → denoise → velocidade → normalize → encode final (`--mono`/`--sample-rate` + formato).
-
----
-
-## Subcomando `audio-viz`
-
-```bash
-uv run main.py audio-viz <arquivo> [--spectrogram] [--width 1200] [--height PX]
-```
-
-Áudio → imagem (não passa pela fila do `audio`). `add_audio_viz_parser`/`run_audio_viz_cli` em `cli/audio.py`; reusa `core/audio/visualize.py` direto (sem `CLIEventBus`), stdout em UTF-8. Default waveform (`showwavespic`); `--spectrogram` usa `showspectrumpic`. Saída PNG em `output/audio/processed/`.
-
-| Flag | Default | Descrição |
-|---|---|---|
-| `--spectrogram` | off | Espectrograma em vez de waveform |
-| `--width` | `1200` | Largura em px |
-| `--height` | 240 wf / 480 spec | Altura em px |
-
----
-
-## Subcomando `video`
-
-```bash
-uv run main.py video <operação> <entrada> [opções]
-```
-
-Usa sub-subparsers. `ns.video_op` contém a operação. Mapeamento especial: `"extract-audio"` → `"extract_audio"` no `VideoArgs`.
-
-| Operação | Entrada | Flags principais |
-|---|---|---|
-| `download` | URL | `--quality 1080`, `--container mp4`, `--no-meta` |
-| `convert` | arquivo | `--codec copy/h264/h265/vp9`, `--container mp4` |
-| `trim` | arquivo | `--start HH:MM:SS`, `--end HH:MM:SS`, `--reenc` |
-| `compress` | arquivo | `--crf 23`, `--preset medium` |
-| `resize` | arquivo | `--width px`, `--height px` |
-| `extract-audio` | arquivo | `--fmt mp3` |
-| `thumbnail` | arquivo | `--time 00:00:01`, `--fmt jpg` |
-| `subtitle` | arquivo | `--subs PATH` (obrigatório, `.srt`/`.vtt`), `--mode soft\|hard` |
-
----
-
-## Subcomando `image`
-
-```bash
-uv run main.py image <operação> <entrada> [opções]
-```
-
-Usa sub-subparsers. `ns.image_op` contém a operação (com hífen, ex: `"contact-sheet"`). `run_image_cli` converte com `op.replace("-", "_")` para o `ImageArgs`.
-
-`contact-sheet` é o único que aceita múltiplos arquivos (`nargs="+"` em `ns.files`).
-
-| Operação | Flags principais |
-|---|---|
-| `convert` | `--fmt jpg`, `--quality 90` |
-| `resize` | `--mode contain/exact/scale_pct`, `--width`, `--height`, `--scale` |
-| `crop` | `--mode manual/ratio/autotrim/focal`, `--ratio 16:9`, `--trim-color`, `--focal-x`, `--focal-y` (modo `focal` = smart crop) |
-| `rotate` | `--angle 0/90/180/270`, `--flip-h`, `--flip-v`, `--exif` |
-| `watermark` | `--mode text/image/qr`, `--text "texto/payload"`, `--image logo.png`, `--color`, `--size`, `--position` (9-grid \| `tile`), `--opacity`, `--rotation` |
-| `border` | `--padding 20`, `--color #000000`, `--fill-alpha` |
-| `adjust` | `--brightness`, `--contrast`, `--saturation`, `--sharpness` |
-| `filter` | `--type blur/sharpen/autocontrast/equalize/grayscale` |
-| `favicon` | `--sizes 16,32,48,64,128,256` |
-| `contact-sheet` | `files…`, `--cols 4`, `--thumb 200`, `--gap 10`, `--bg-color` |
-| `remove-bg` | `--model u2net/…`, `--bg-mode transparent/color/blur/image`, `--bg-color`, `--bg-blur`, `--bg-image` |
-| `describe` | `--model moondream-custom/gemma3-4b-custom/llava:7b/minicpm-v/glm-4.6v-flash/gemini-2.5-flash` (últimos dois = nuvem, opt-in), `--preset detailed/short/technical/text/objects/narrative` (ignorado se `--prompt` for passado), `--prompt` |
-| `exif` | `--show` \| `--strip` \| `--strip-gps` \| `--artist`/`--copyright`/`--description` (inject), `--out` (read/write direto, sem pipeline) |
-| `ocr` | `--lang por/eng/por+eng/spa` (Tesseract → `<stem>_ocr.txt`, indexável no RAG) |
-
-Todos (exceto `favicon`, `describe`, `contact-sheet`, `exif`, `ocr`) aceitam `--out-fmt` e `--out-quality`. `exif` é direto sobre o core (não passa pelo pipeline/`check_dependencies`).
-
----
-
-## Subcomando `document`
-
-```bash
-uv run main.py document <operação> <entrada> [opções]
-```
-
-Usa sub-subparsers. `ns.document_op` contém a operação. Mapeamento kebab → snake: `op.replace("-", "_")` (ex.: `"pdf-to-images"` → `"pdf_to_images"`).
-
-| Operação | Entrada | Flags principais |
-|---|---|---|
-| `merge` | múltiplos PDFs | `files…` |
-| `split` | PDF | `--pages "1-3,5,8-"` |
-| `compress` | PDF | `--image-quality 75` (50–95) |
-| `rotate` | PDF | `--angle 90/180/270`, `--pages "all"` |
-| `watermark` | PDF | `--text "texto"`, `--opacity 0.3`, `--position center/top/bottom` |
-| `stamp` | PDF | `--text "PAGO"` |
-| `encrypt` | PDF | `--password "senha"` |
-| `extract` | PDF | — |
-| `ocr` | PDF | `--lang por/eng/por+eng/spa` (dest `ocr_lang`), `--dpi 150/300` (dest `ocr_dpi`) |
-| `pdf-to-images` | PDF | `--fmt jpg/png`, `--dpi 72/96/150/300` |
-| `images-to-pdf` | imagens | `files…`, `--name "stem"` |
-| `qr` | texto/URL | `data` (posicional), `--size 300`, `--fmt png/jpg` |
-
-Sem operação `analyze` na CLI (apenas GUI).
-
----
-
-## Subcomando `library`
-
-```bash
-uv run main.py library list [opções]
-uv run main.py library stats [--top 10]
-uv run main.py library dedup-images [--max-distance 8]
-```
-
-**Read-only** — lista tudo sob `output/` numa tabela. Reaproveita o core
-(`scan_library`/`filter_items`/`sort_items`); **não** usa pipeline nem
-`CLIEventBus`. Sub-subparser (`ns.library_op` ∈ {`list`, `stats`, `dedup-images`}).
-
-| Flag | Default | Descrição |
-|---|---|---|
-| `--kind` (`list`) | (todos) | `audio`/`video`/`image`/`transcription`/`document`/`data` |
-| `--since` (`list`) | — | Duração: `7d`, `24h`, `30m` (número puro = dias). `_parse_since` levanta `ValueError` em formato inválido |
-| `--sort` (`list`) | `modified` | `modified`/`name`/`size` |
-| `--top` (`stats`) | `10` | Quantos maiores arquivos exibir (Plano 2) |
-| `--max-distance` (`dedup-images`) | `8` (`image_dedup.DEFAULT_MAX_DISTANCE`) | Distância de Hamming máxima entre dHashes p/ considerar duplicata (Tier A) |
-| `--verbose` | off | Logging DEBUG |
-
-`run_library_cli` reconfigura `sys.stdout` para UTF-8/replace antes de imprimir
-(nomes de arquivo com caracteres fora do cp1252, ex.: `｜`, quebram o console
-do Windows). `dedup-images` filtra o catálogo por `KIND_IMAGE`, roda
-`core.library.image_dedup.near_duplicate_images` e grava um evento no log do
-Observatório (`log_activity`) — mockar em testes que exercitam o caminho de
-sucesso.
-
-> Atenção: `library` foge do padrão dos demais — não há `CLIEventBus`,
-> `install_log_handler` nem `run_*_pipeline` a mockar. Nos testes, mocke
-> `src.cli.library.scan_library` (e `src.cli.library.near_duplicate_images` p/
-> `dedup-images`) e capture stdout via `capsys`.
-
----
-
-## Subcomando `ai`
-
-```bash
-uv run main.py ai index                                  # (re)indexa o corpus
-uv run main.py ai stats                                  # resumo do índice (read-only)
-uv run main.py ai dups [--threshold 0.95] [--scope kind] # duplicatas (ML, read-only)
-uv run main.py ai topics                                 # clusters + rótulos c-TF-IDF ([ml])
-uv run main.py ai map [--method pca|tsne|umap] [--out p.png]  # PNG do mapa semântico ([ml])
-uv run main.py ai related <path> [--k 5]                 # vizinhos por cosseno (numpy)
-uv run main.py ai classify <path>                        # perfil sugerido + confiança/margem (4B)
-uv run main.py ai keywords <path> [--top 10]             # keyphrases YAKE ([nlp], 4B)
-uv run main.py ai summary <path> [--sentences 5]         # resumo extractivo TextRank ([ml], 4B)
-uv run main.py ai entities <path>                        # entidades spaCy NER ([nlp]+modelo, 4B)
-uv run main.py ai "pergunta?"                            # responde, citando fontes
-uv run main.py ai "resuma" --scope output/.../x.txt      # um documento
-uv run main.py ai "liste as ações" --batch --kind transcription
-uv run main.py ai "..." --model gemini-2.5-flash --k 8
-uv run main.py ai "..." --model glm-4.7-flash --k 8
-```
-
-**Um único positional** `query` (não usa sub-subparser): se for o literal
-`index` → (re)indexa e retorna; se for `stats` → imprime o resumo do índice
-(`_stats()`, **read-only**, reaproveita `src.core.rag.stats.index_stats`, **não**
-toca o embedder/Ollama) e retorna; se for `dups` → imprime grupos de documentos
-quase-idênticos (`_dups()`, **read-only/sem embedder** — fundação de ML do Plano 3:
-`features.document_matrix` faz mean-pool do `VectorStore` e `dedup.near_duplicates`
-agrupa por cosseno; `--scope` aqui é só kind, `--threshold` ajusta o limiar) e
-retorna; se for `topics`/`map`/`related` → camada semântica do Plano 4A
-(`_topics`/`_map`/`_related`, read-only/sem embedder): `topics` clusteriza e lista
-os grupos com rótulos c-TF-IDF, `map` salva o PNG do mapa em `--out`
-(default `DATA_DIR/semantic_map.png`, `--method pca|tsne|umap` — TSNE já vem no `[ml]`,
-sem exigir `[ml-viz]`), `related <path>` lista
-vizinhos por cosseno (resolve o path por absoluto→basename). topics/map exigem `[ml]`
-(+ extras de gráfico no map); `related` é numpy-puro. Todos retornam; senão é a
-pergunta — que agora passa por **busca híbrida** (cosseno + BM25 via RRF em
-`retriever.retrieve()`, Tier A) de forma transparente, sem flag nova. Reaproveita o core
-(`scan_library`/`build_index`/`retrieve`/`answer`); **não** usa `CLIEventBus`
-nem `run_*_pipeline` (como `library`). Embeddings **sempre locais** (Ollama);
-Gemini/GLM só no passo de resposta. `run_ai_cli` reconfigura `sys.stdout` p/ UTF-8.
-`dups`/`classify` gravam um evento no log do Observatório (`log_activity`) — mockar
-`src.core.observatory.activity.log_activity` em testes que exercitam o caminho de sucesso.
-
-`ai stats` imprime cabeçalho (docs · chunks · dim · modelo de embedding ·
-tamanho em disco · atualizado em · local) + tabela por documento
-(nome · tipo · #chunks · data). Índice vazio → dica para rodar `ai index`
-(sem `sys.exit`, pois é só leitura).
-
-| Flag | Default | Descrição |
-|---|---|---|
-| `query` (posicional) | — | Pergunta, ou `index`/`stats`/`dups`/`topics`/`map`/`related` (fluxos de ML) |
-| `target` (posicional opcional) | — | Com `related`, o caminho do documento (absoluto ou basename) |
-| `--threshold` | `0.95` | Com `dups`, cosseno mínimo p/ agrupar documentos |
-| `--method` | `pca` | Com `map`, projeção 2D (`pca` / `umap` exige `[ml-viz]`) |
-| `--out` | — | Com `map`, caminho do PNG (default `output/data/semantic_map.png`) |
-| `--scope` | (acervo) | Caminho de arquivo (1 doc) **ou** kind (`transcription`/`document`/`image`). `_resolve_scope` resolve path existente → absoluto; senão trata como kind |
-| `--model` | `qwen7b-custom` | Modelo da resposta — Ollama tag ou nuvem (`gemini-2.5-flash`/`glm-4.7-flash`) |
-| `--embed-model` | `nomic-embed-custom` | Modelo de embedding (sempre local, CPU `num_gpu 0`; ver `ollama/Modelfile.nomic`) |
-| `--k` | `6` | Trechos recuperados |
-| `--reindex` | off | Reindexa antes de responder |
-| `--batch` | off | Aplica a pergunta como instrução a **cada** documento indexado |
-| `--kind` | — | Com `--batch`, restringe a um kind |
-
-> Nos testes (`tests/cli/test_ai_cli.py`): mocke `src.core.rag.embedder.is_available`
-> e os runners `src.cli.ai._build`/`_ask`/`_batch`/`_stats` para validar o dispatch;
-> para `_build`/`_ask`/`_batch` em si, monkeypatch `src.core.rag.indexer.index_dir`
-> p/ `tmp_path`, mocke `embedder.embed_texts`/`embed_query` e
-> `src.core.rag.chat.make_llm` (via `GenericFakeChatModel`). `query == "index"`
-> e os erros (índice vazio / embedder indisponível) chamam `sys.exit(1)` →
-> `pytest.raises(SystemExit)`. Para `_stats`, basta `_persisted_store(tmp_path)` +
-> monkeypatch de `indexer.index_dir` + `capsys` (não toca embedder; índice vazio
-> **não** chama `sys.exit`).
-
----
-
-## Subcomando `recipe`
-
-```bash
-uv run main.py recipe list                                    # presets + receitas salvas
-uv run main.py recipe run "Limpar áudio do YouTube" <URL>     # roda por nome
-uv run main.py recipe run "YouTube → transcrição completa" <URL> --model medium
-```
-
-Usa **sub-subparsers** (`ns.recipe_op` ∈ {`list`, `run`}); `set_defaults(func=run_recipe_cli)`
-no parser `recipe` (os sub-subparsers não redefinem `func`). Diferente de
-`library`/`ai`: Receitas **tem** um runner real (`execute_recipe`), então segue o
-padrão dos runners normais — `run_recipe_cli` resolve a receita (presets +
-`store.load_recipes`), monta `initial_inputs`+`initial_kind` via `resolve_input`
-+ `kind_for` (de `src/core/recipes/inputs.py`), cria um `CLIEventBus` e chama
-`execute_recipe` (mesmo core da GUI). Um `_make_emit` traduz `recipe_start`/
-`step_*` em linhas de log e repassa os genéricos (`progress_*`/`task_done`). UTF-8
-no stdout (nomes com `｜`). `--model` sobrescreve só o Whisper dos passos
-`transcription.transcribe`.
-
-| Flag | Default | Descrição |
-|---|---|---|
-| `recipe_op` (`list`/`run`) | — | sub-subcomando |
-| `name` (posicional de `run`) | — | nome da receita (ver `recipe list`) |
-| `input` (posicional de `run`) | — | URL ou caminho de arquivo |
-| `--model` | — | sobrescreve o Whisper dos passos de transcrição |
-
-> Nos testes (`tests/cli/test_recipe_cli.py`): `_parse(*argv)` com parser isolado;
-> mocke `src.core.recipes.runner.execute_recipe` (importado function-local em
-> `run_recipe_cli`) p/ validar o dispatch (`initial_inputs`/`initial_kind`/`emit`/
-> `cancel_is_set`); `src.core.recipes.store.load_recipes` p/ os ramos de
-> `_find_recipe`/`list`; receita inexistente, saída vazia e arquivo de extensão
-> não suportada chamam `sys.exit(1)` → `pytest.raises(SystemExit)`. `_make_emit`
-> é testável direto com um bus falso.
-
----
-
-## Subcomando `data`
-
-```bash
-uv run main.py data query <arquivos...> "<pergunta>" [--sql] [--out csv|xlsx|json|parquet] [--name] [--limit]
-uv run main.py data convert <arquivo> [--out parquet]
-uv run main.py data profile <arquivo>
-uv run main.py data assess <arquivo> [--model gemma3-4b-custom] [--no-cache]
-uv run main.py data outliers <arquivo> [--contamination 0.05] [--limit 20]
-```
-
-Usa **sub-subparsers** (`ns.data_op` ∈ {`query`, `convert`, `profile`, `assess`, `outliers`}); `set_defaults(func=run_data_cli)`
-no parser `data`. Como `library`/`ai`, **reusa o core puro direto** (`src/core/data/`) — operações
-síncronas, sem progresso → **sem `CLIEventBus`/`run_*_pipeline`**. `run_data_cli` reconfigura
-`sys.stdout` p/ UTF-8 (valores com caracteres fora do cp1252). `query` é **multi-input** (`files`
-`nargs="+"` seguido do positional `question` — argparse reserva o último p/ a pergunta); `--sql`
-pula o NL→SQL; em PT mostra a explicação da IA + o SQL (espelha o cartão de revisão da GUI) antes
-da tabela; `--out` salva em `output/data/`.
-
-| Flag | Default | Descrição |
-|---|---|---|
-| `files` (posicional, `query`) | — | Um ou mais arquivos de dados (CSV/TSV/JSON/Parquet/XLSX) |
-| `question` (posicional, `query`) | — | Pergunta em PT, ou a consulta SQL com `--sql` |
-| `--sql` | off | Trata `question` como SQL literal (pula a IA) |
-| `--model` | `gemma3-4b-custom` | Modelo da tradução PT→SQL |
-| `--out` | — (`csv` no convert) | Formato de saída: `csv`/`tsv`/`json`/`parquet`/`xlsx` |
-| `--name` | `consulta` | Nome do arquivo de saída (sem extensão) |
-| `--limit` | `50` | Linhas exibidas na prévia |
-| `--no-cache` (`assess`) | off | Ignora a avaliação cacheada e força uma nova |
-
-`assess <arquivo>` (PR9.3) roda o parecer de qualidade da IA (esquema + `SUMMARIZE` +
-amostra, nunca as linhas), imprime o Markdown e **cacheia** o resultado em
-`~/.mill-tools/data_assessments.json` (reaproveitado pela indexação); por padrão reusa
-a avaliação cacheada se houver. `--model` = modelo do parecer.
-
-> Nos testes (`tests/cli/test_data_cli.py`): `_parse(*argv)` isolado; mocke `src.cli.data.run_query`/
-> `src.cli.data.nl2sql.to_sql`/`src.cli.data.convert.*`/`src.cli.data.profile.profile_file` p/ o
-> dispatch; `--sql` deve **não** chamar `to_sql`; arquivo inexistente/ não suportado → `sys.exit(1)`.
-> Para `assess`, mocke `src.core.data.assess.load_cached_assessment`/`assess`/`save_assessment`
-> (cache hit não chama `assess`; `--no-cache` força e salva).
-
-`outliers <arquivo>` (Tier A, `docs/plans/implemented/PLANO_ML_NOVAS_FEATURES.md`) lê o arquivo inteiro (não uma
-query filtrada) via `run_query_arrow`/`frames`, roda `core/data/ml.py::detect_outliers`
-(`IsolationForest`, gate `core.ml.deps.is_available()`) e imprime a contagem + prévia das linhas
-mais atípicas (`--limit`, default 20). Grava um evento no log do Observatório
-(`core.observatory.activity.log_activity`) — mockar em testes que exercitam o caminho de sucesso,
-senão a suíte escreve no `~/.mill-tools/ml_activity.json` real.
-
----
-
-## Subcomando `observatory`
-
-```bash
-uv run main.py observatory status
-uv run main.py observatory activity [--limit 15]
-uv run main.py observatory logs [--limit 50]
-uv run main.py observatory disk-usage
-```
-
-Hub read-only (Tier A) — mesmo padrão de `library`: **sub-subparsers**
-(`ns.observatory_op` ∈ {`status`, `activity`, `logs`, `disk-usage`}), sem `CLIEventBus`/`run_*_pipeline`, `run_observatory_cli`
-reconfigura `sys.stdout` p/ UTF-8. `status` imprime, em ordem: gates (`core.observatory.status
-.gate_statuses`, 9 entradas — `[ml]`/`[ml-viz]`/`[nlp]` YAKE/`[nlp]` spaCy/embedder/`[ocr]`/
-`[ai-image]`/`[analysis]`/`[data-plot]`) + glossário de entidades (`entity_glossary_status`);
-inventário de modelos Ollama (`ollama_inventory`, consulta `ollama.Client(timeout=5).list()` —
-degrada p/ "não acessível" sem lançar se o serviço não estiver rodando ou demorar demais); binários
-externos (`binary_statuses` — yt-dlp/ffmpeg/ffprobe/tesseract); provedores de nuvem configurados
-(`cloud_provider_statuses` — só presença de `GOOGLE_API_KEY`/`ZHIPU_API_KEY`, nunca o valor);
-rótulos do classificador por domínio (`domain_statuses`); parâmetros em vigor (`config_snapshot`,
-lidos via `inspect.signature` — nunca uma cópia hardcoded); e timings por modelo
-(`rag.analytics.model_timings`, alimentado por `_answer_times()` que lê `~/.mill-tools/config.json`
-**direto**, não via `gui.settings`, mesma convenção de `cli/ai.py::_answer_times` — a camada CLI
-nunca importa a GUI). `activity` lista as últimas N entradas do log de sucesso cross-módulo
-(`core.observatory.activity.load_activity`/`recent`). `logs` lista as últimas N entradas do log de
-**falhas** (`core.observatory.logs.load_logs`/`recent` — populado por um hook em
-`gui/events.py::EventBus.emit()`, não por esta CLI). `disk-usage` lista cada entrada (arquivo/pasta)
-de `~/.mill-tools/` via `core.observatory.disk_usage.disk_usage()` (scanner genérico, inclui `rag/`)
-+ o total via `fmt_disk_size`.
-
-> Nos testes (`tests/cli/test_observatory_cli.py`): `_parse(*argv)` isolado; mocke
-> `src.core.observatory.status.*`/`src.core.observatory.activity.load_activity`/
-> `src.core.observatory.logs.load_logs`/`src.core.observatory.disk_usage.disk_usage` no ponto de
-> origem (todos acessados via `from X import Y` module-level ou via referência de módulo dentro da
-> função — patchar a origem funciona em todos os casos aqui).
+> Receitas de teste (patch targets por subcomando, `_parse(*argv)`, `sys.exit` branches) →
+> [`testing/mocks-gui-cli.md`](../testing/mocks-gui-cli.md).
 
 ---
 
 ## Como adicionar um novo subcomando
 
 1. Criar `src/cli/novo.py` com:
-   - `add_novo_parser(subparsers)` — registra o parser
-   - `run_novo_cli(ns)` — constrói Args, cria CLIEventBus, chama `run_novo_pipeline(..., install_log_handler=False)`
-2. Em `main.py`:
-   - Adicionar `"novo"` a `_NON_TRANSCRIBE_CMDS`
-   - Importar e registrar em `_dispatch_other`
-3. Adicionar testes em `tests/cli/test_novo_cli.py` com `@pytest.mark.unit`
+   - `add_novo_parser(subparsers)` — registra o parser.
+   - `run_novo_cli(ns)` — decide o tipo (taxonomia acima): pipeline+bus → constrói Args, `CLIEventBus`,
+     `run_novo_pipeline(..., install_log_handler=False)`; read-only → chama o core direto + UTF-8 stdout.
+2. Em `main.py`: adicionar `"novo"` a `_NON_TRANSCRIBE_CMDS` + importar/registrar em `_dispatch_other`.
+3. Testes em `tests/cli/test_novo_cli.py` com `@pytest.mark.unit` (padrão em `testing/mocks-gui-cli.md`).
 
 ---
 
 ## Padrões de argparse
 
-### Sub-subparser (video/image)
+### Sub-subparser (video/image/document/recipe/data/observatory)
 
 ```python
 video_p = subparsers.add_parser("video", ...)
@@ -478,7 +146,7 @@ video_sub = video_p.add_subparsers(dest="video_op", required=True)
 dl = video_sub.add_parser("download", ...)
 dl.add_argument("url", ...)
 dl.add_argument("--quality", default="1080")
-video_p.set_defaults(func=run_video_cli)
+video_p.set_defaults(func=run_video_cli)   # os sub-subparsers não redefinem func
 ```
 
 `ns.func(ns)` é chamado em `_dispatch_other` após `parse_args`.
@@ -487,28 +155,11 @@ video_p.set_defaults(func=run_video_cli)
 
 ```python
 op = ns.image_op.replace("-", "_")  # "contact-sheet" → "contact_sheet"
-# ou para vídeo:
 op = ns.video_op if ns.video_op != "extract-audio" else "extract_audio"
 ```
 
----
+### `ai` é a exceção: um único positional
 
-## Testes CLI
-
-Padrão: criar `_parse(*argv)` localmente com parser isolado, nunca chamar `sys.argv` diretamente.
-
-```python
-def _parse(*argv: str) -> argparse.Namespace:
-    parser = argparse.ArgumentParser()
-    sub = parser.add_subparsers(dest="command", required=True)
-    add_audio_parser(sub)
-    return parser.parse_args(["audio", *argv])
-
-@pytest.mark.unit
-def test_audio_defaults():
-    ns = _parse("https://youtu.be/abc")
-    assert ns.fmt == "mp3"
-    assert callable(ns.func)
-```
-
-Arquivos de teste: `tests/cli/test_audio_cli.py` (5), `test_video_cli.py` (14, inclui `subtitle`), `test_image_cli.py` (15), `test_document_cli.py` (inclui `ocr`), `test_library_cli.py` (parser + `_parse_since` + runner com `scan_library` mockado e `capsys`).
+`ai` **não** usa sub-subparser — tem um positional `query` que é despachado por valor literal (`index`/
+`stats`/`dups`/`topics`/`map`/`related` são fluxos de ML; qualquer outro valor é a pergunta). Ver skill
+`ml-rag`.

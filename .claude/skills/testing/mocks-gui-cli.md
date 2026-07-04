@@ -102,5 +102,35 @@ asserte o nome em `snake_case` no `Args` construído.
 `_pipeline_runner.item_label` é testável diretamente — sempre verificar que `kind="local"` retorna
 `Path(value).name` e `kind="url"` retorna o `netloc` (ver `tests/cli/test_transcription.py`).
 
-> Os subcomandos read-only (`library`/`ai`/`data`/`observatory`) não têm bus — testam o core direto com
-> `capsys`. Ver a skill `cli` para os gotchas por subcomando (UTF-8 no stdout, `log_activity` a mockar).
+Os subcomandos read-only (`library`/`ai`/`data`/`observatory`) não têm bus — testam o core direto com
+`capsys`. A skill `cli` cobre a taxonomia e os gotchas de cada um; os **patch targets** ficam abaixo.
+
+---
+
+## Patch targets por subcomando (read-only e Receitas)
+
+Estes subcomandos reusam o core direto (sem bus) ou têm runner próprio. O que mockar em cada um:
+
+- **`library`** (`tests/cli/test_library_cli.py`): foge do padrão — sem `CLIEventBus`/`install_log_handler`/
+  `run_*_pipeline`. Mocke `src.cli.library.scan_library` (e `src.cli.library.near_duplicate_images` p/
+  `dedup-images`) + `capsys`. `dedup-images` grava no log do Observatório → mocke
+  `src.core.observatory.activity.log_activity` no caminho de sucesso. `_parse_since` levanta `ValueError` em
+  formato inválido.
+- **`ai`** (`tests/cli/test_ai_cli.py`): mocke `src.core.rag.embedder.is_available` e os runners
+  `src.cli.ai._build`/`_ask`/`_batch`/`_stats` p/ o dispatch; para `_build`/`_ask`/`_batch` em si,
+  monkeypatch `src.core.rag.indexer.index_dir` p/ `tmp_path`, mocke `embedder.embed_texts`/`embed_query` e
+  `src.core.rag.chat.make_llm` (via `GenericFakeChatModel`). `query == "index"` e os erros (índice vazio /
+  embedder indisponível) chamam `sys.exit(1)` → `pytest.raises(SystemExit)`. Para `_stats`, basta
+  `_persisted_store(tmp_path)` + monkeypatch de `indexer.index_dir` + `capsys` (não toca embedder; índice
+  vazio **não** chama `sys.exit`). `dups`/`classify` gravam no Observatório → mocke `log_activity`.
+- **`recipe`** (`tests/cli/test_recipe_cli.py`): mocke `src.core.recipes.runner.execute_recipe` (importado
+  function-local) p/ validar o dispatch (`initial_inputs`/`initial_kind`/`emit`/`cancel_is_set`);
+  `src.core.recipes.store.load_recipes` p/ `_find_recipe`/`list`; receita inexistente, saída vazia e extensão
+  não suportada chamam `sys.exit(1)`. `_make_emit` é testável direto com um bus falso.
+- **`data`** (`tests/cli/test_data_cli.py`): mocke `src.cli.data.run_query`/`src.cli.data.nl2sql.to_sql`/
+  `src.cli.data.convert.*`/`src.cli.data.profile.profile_file` p/ o dispatch; `--sql` **não** chama `to_sql`;
+  arquivo inexistente/não suportado → `sys.exit(1)`. Para `assess`, mocke
+  `src.core.data.assess.load_cached_assessment`/`assess`/`save_assessment` (cache hit não chama `assess`;
+  `--no-cache` força e salva). `outliers` grava no Observatório → mocke `log_activity`.
+- **`observatory`** (`tests/cli/test_observatory_cli.py`): mocke `src.core.observatory.status.*`/
+  `activity.load_activity`/`logs.load_logs`/`disk_usage.disk_usage` no ponto de origem.
