@@ -166,6 +166,29 @@ def test_build_index_reconciles_removed_source(tmp_path):
 
 
 @pytest.mark.unit
+def test_indexed_source_path_matches_record_label_path_form(tmp_path):
+    """M6: ChunkMeta.source_path (built by the real indexer) must be in the
+    exact same form as classify.record_label's Path(...).resolve() — a
+    mismatch (raw vs. resolved) silently matches zero labels in
+    classify._training_xy's join, a real gap on Windows."""
+    from src.core.ml.classify import record_label
+    from src.core.rag.indexer import build_index
+
+    f = tmp_path / "aula.txt"
+    f.write_text("conteudo", encoding="utf-8")
+    store = _store()
+    build_index([_item(f)], store, _Embedder())
+
+    record_label(str(f), "lecture", directory=tmp_path)
+    from src.core.ml.classify import load_labels
+
+    labels = load_labels(directory=tmp_path)
+
+    assert store.meta[0].source_path in labels
+    assert labels[store.meta[0].source_path] == "lecture"
+
+
+@pytest.mark.unit
 def test_build_index_reports_progress_per_item(tmp_path):
     from src.core.rag.indexer import build_index
 

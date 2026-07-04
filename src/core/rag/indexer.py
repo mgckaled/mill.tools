@@ -97,6 +97,13 @@ def _index_one(
     - An embed failure (e.g. Ollama restarting mid-job) happens *after*
       ``drop_source`` — the item is left de-indexed until a future
       successful reindex, same outcome as if its content had gone blank.
+
+    ``ChunkMeta.source_path`` is the item's path *resolved* (``Path.resolve()``),
+    not the raw scanner path — this must match ``classify.record_label``'s own
+    ``Path(...).resolve()``, or the two silently diverge on Windows and
+    ``classify._training_xy``'s join against recorded labels matches zero
+    documents (M6). ``build_index``'s incremental/reconciliation checks
+    resolve the same way, so this stays consistent across the module.
     """
     try:
         text = _text_for(item, card_fn)
@@ -104,7 +111,8 @@ def _index_one(
         logging.warning("[!] Could not build text for %s: %s", item.path.name, exc)
         return
 
-    store.drop_source(str(item.path))  # replace any previous chunks
+    resolved_path = str(Path(item.path).resolve())
+    store.drop_source(resolved_path)  # replace any previous chunks
     chunks = [
         c
         for c in split_text(text, chunk_size=CHUNK_SIZE, chunk_overlap=CHUNK_OVERLAP)
@@ -121,7 +129,7 @@ def _index_one(
 
     metas = [
         ChunkMeta(
-            source_path=str(item.path),
+            source_path=resolved_path,
             kind=item.kind,
             mtime=item.modified,
             chunk_idx=i,
@@ -190,14 +198,17 @@ def build_index(
     total = len(text_items)
 
     for n, item in enumerate(text_items, 1):
-        key = (str(item.path), item.modified)
+        # Resolved the same way _index_one stores it (M6) — comparing a raw
+        # scanner path against a resolved ChunkMeta.source_path would treat
+        # every already-indexed item as "changed" on every run.
+        key = (str(Path(item.path).resolve()), item.modified)
         if key not in indexed:  # new or changed → (re)index
             _index_one(item, store, embed_fn, card_fn)
         if progress_cb:
             progress_cb(n, total)
 
     # Reconciliation: drop chunks whose source no longer exists on disk.
-    alive = {str(it.path) for it in items}
+    alive = {str(Path(it.path).resolve()) for it in items}
     for gone in {m.source_path for m in store.meta} - alive:
         logging.debug("[d] Reconciling removed source: %s", gone)
         store.drop_source(gone)
