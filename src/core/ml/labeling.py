@@ -8,11 +8,16 @@ no BERTopic dependency is pulled; scikit-learn is lazy and gated by the ``[ml]``
 extra. A small built-in PT/EN stopword list keeps function words out without a
 new dependency.
 
-``ngram_range=(1, 3)`` lets short discriminative phrases ("aprendizado de
-máquina"), not just single words, surface as cluster labels — BERTopic's own
-guidance for short-text corpora. The class term-frequency also gets
-``reduce_frequent_words`` (BERTopic's square-root dampening) before the IDF
-weighting, softening residual stopwords that survive the list.
+``ngram_range=(1, 3)`` lets short discriminative phrases — contiguous runs of
+non-stopword tokens, e.g. "whisper gpu transcription" — not just single
+words, surface as cluster labels: BERTopic's own guidance for short-text
+corpora. Note ``CountVectorizer`` strips stop words from the token stream
+*before* building n-grams, so a phrase spanning a stop word (e.g.
+"aprendizado de máquina") can never survive intact — the tokens on either
+side of the removed word get glued together instead ("aprendizado
+máquina"), never the original 3-word span. The class term-frequency also
+gets ``reduce_frequent_words`` (BERTopic's square-root dampening) before the
+IDF weighting, softening residual stopwords that survive the list.
 """
 
 from __future__ import annotations
