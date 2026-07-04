@@ -60,7 +60,9 @@ _DEFAULT_LANG = "pt"
 
 # Only these components are needed for NER; everything else is disabled per call.
 # entity_ruler is included so the optional glossary (if loaded) actually runs.
-_NER_PIPES = ("tok2vec", "transformer", "entity_ruler", "ner")
+# No "transformer" here: that component only exists in the forbidden _trf
+# pipelines (see module docstring) — the *_sm models never have one to enable.
+_NER_PIPES = ("tok2vec", "entity_ruler", "ner")
 
 # Lazy singleton cache: one loaded pipeline per language, reused across calls.
 _NLP_CACHE: dict[str, Language] = {}
@@ -95,6 +97,8 @@ def _load_glossary_patterns() -> list[dict]:
 
 def _model_for(lang: str) -> str:
     """Return the spaCy model name for *lang* (falls back to the PT model)."""
+    if lang not in _MODELS:
+        logging.debug("[d] Unrecognized NER language %r, falling back to pt", lang)
     return _MODELS.get(lang, _MODELS[_DEFAULT_LANG])
 
 
@@ -146,7 +150,10 @@ def entities(text: str, *, lang: str = _DEFAULT_LANG) -> list[tuple[str, str]]:
     Raises:
         RuntimeError: if spaCy or the language model is not installed.
     """
-    if not is_available(lang):
+    # Skip the is_available() metadata scan once the pipeline is already
+    # resident (spacy.util.is_package() on every call is dead weight when
+    # nothing changed since the last successful load).
+    if lang not in _NLP_CACHE and not is_available(lang):
         raise RuntimeError(SETUP_HINT)
     if not text.strip():
         return []

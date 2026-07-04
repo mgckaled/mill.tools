@@ -69,15 +69,46 @@ def test_is_available_false_without_spacy(mocker):
 
 @pytest.mark.unit
 def test_gate_raises_when_model_missing(mocker):
+    # entities() skips the is_available() check on a _NLP_CACHE hit — force a
+    # miss so this test exercises the gate regardless of test execution order
+    # (an earlier @_MODEL test may have already cached "pt").
+    entities._NLP_CACHE.pop("pt", None)
     mocker.patch("src.core.text.entities.is_available", return_value=False)
     with pytest.raises(RuntimeError, match="spacy download"):
         entities.entities("Maria foi ao Rio.")
 
 
 @pytest.mark.unit
+def test_cache_hit_skips_is_available_recheck(mocker):
+    # Once a language's pipeline is cached, entities() must not re-run the
+    # spacy.util.is_package() metadata scan on every call.
+    fake_doc = mocker.Mock(ents=[])
+    fake_nlp = mocker.MagicMock()
+    fake_nlp.pipe_names = ["tok2vec", "ner"]
+    fake_nlp.pipe.return_value = [fake_doc]
+
+    entities._NLP_CACHE["pt"] = fake_nlp
+    spy = mocker.patch("src.core.text.entities.is_available")
+    try:
+        assert entities.entities("qualquer texto") == []
+        spy.assert_not_called()
+    finally:
+        entities._NLP_CACHE.pop("pt", None)
+
+
+@pytest.mark.unit
 def test_model_for_falls_back_to_pt():
     assert entities._model_for("xx") == "pt_core_news_sm"
     assert entities._model_for("en") == "en_core_web_sm"
+
+
+@pytest.mark.unit
+def test_model_for_logs_on_unrecognized_language(caplog):
+    import logging
+
+    caplog.set_level(logging.DEBUG, logger=None)
+    entities._model_for("xx")
+    assert any("xx" in r.message for r in caplog.records)
 
 
 @pytest.mark.unit
