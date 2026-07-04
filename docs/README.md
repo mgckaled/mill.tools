@@ -25,9 +25,10 @@ docs/
 1. Um plano novo nasce em [`plans/active/`](plans/active/).
 2. Ao concluir, **move** para [`plans/implemented/`](plans/implemented/) e ganha **uma linha** em
    [`HISTORY.md`](HISTORY.md) (com link).
-3. [`plans/archive/`](plans/archive/) é **só leitura histórica** — material da era pré-mill.tools. Nunca é
-   referenciado por `CLAUDE.md` ou pelas skills, e seus links internos podem estar defasados (apontam para
-   arquivos que já não existem). Não conserte referências dentro do archive.
+3. [`plans/archive/`](plans/archive/) é **só leitura histórica** — material da era pré-mill.tools. Seus
+   links internos podem estar defasados (apontam para arquivos que já não existem) — **não conserte
+   referências dentro do archive**. Os docs vivos quase nunca apontam para o archive; a exceção conhecida é a
+   skill `architecture`, que cita `REFATORACAO_PREVIA.md` como racional da régua de tamanho/coesão.
 
 ## Convenção "fonte única + ponteiro"
 

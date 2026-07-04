@@ -129,6 +129,11 @@ Legendas SRT/VTT, legenda no vídeo (mux/burn-in), OCR híbrido.
 13 ops GUI / 12 CLI + OCR híbrido via pytesseract.
 [`plans/archive/MILL_PR5_DOCUMENTS_PLAN.md`](plans/archive/MILL_PR5_DOCUMENTS_PLAN.md).
 
+### Plano −1 — refatoração prévia ✅
+Aplicou a régua de tamanho/coesão da skill `architecture` a `data/view.py` (→ `tabs/`) e
+`recipes/registry.py` (→ `registry/<módulo>.py`) e fixou a regra da seção 3 no CLAUDE.md — fundação
+estrutural que os planos de dados/ML herdaram. [`plans/archive/REFATORACAO_PREVIA.md`](plans/archive/REFATORACAO_PREVIA.md).
+
 ### Anteriores (era pré-mill.tools e migração)
 Vídeo (PR4), Áudio (PR3), Imagens (PR-IMG), migração para multiferramenta, design system, home screen,
 splash — todos em [`plans/archive/`](plans/archive/) (só leitura histórica).
