@@ -74,7 +74,12 @@ continuar passando com ajustes mínimos de monkeypatch).
 4. **[R4] Persistência**: `store.persist` → escrita atômica em grupo (helper 1.1); `store.load` tolerar
    `vectors.npz` presente + `meta.json` ausente (hoje `FileNotFoundError` cru) → store vazio + warning.
 5. **[R6] Cancelamento no batch**: `run_batch` ganha `cancel_is_set: Callable[[], bool] | None`, checado
-   entre itens (padrão do runner de Receitas). Propagar no worker da GUI e no `cli/ai.py --batch`.
+   entre itens (padrão do runner de Receitas). ~~Propagar no worker da GUI e no `cli/ai.py --batch`~~ —
+   **correção pós-implementação**: não existe worker de GUI que chame `run_batch` hoje (o hub IA só tem a
+   Conversa single-answer; batch é CLI-only) e `cli/ai.py --batch` é um script síncrono sem nenhum mecanismo
+   de cancelamento para plugar (sem `CLIEventBus`, sem signal handler) — Ctrl+C já cobre esse caso. Escopo
+   real implementado: só o seam no core, testado isoladamente, pronto para quando um chamador cancelável de
+   verdade existir (GUI futura, ou um passo de Receita).
 6. **[R7] Extrair `_index_one`** no `indexer.py` (corpo duplicado verbatim entre `index_files` e
    `build_index`); avaliar proteger contra falha do `embed_fn` pós-`drop_source` (hoje só o `card_fn` é
    protegido).
