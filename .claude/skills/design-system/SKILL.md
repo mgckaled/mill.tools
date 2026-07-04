@@ -1,9 +1,12 @@
 ---
 name: design-system
-description: Referência completa do design system da GUI mill.tools (Flet 0.85). Use este skill sempre que estiver criando, editando ou revisando componentes da GUI — especialmente ao importar de `src.gui.theme.components` ou `src.gui.theme.tokens`, usar factories de botões/cards/spinners, aplicar tokens de cor (`Color`), espaçamento (`Space`), raio (`Radius`), animação (`Motion`) ou tipografia (`Type`), configurar cursores (`Cursor.*`), ou integrar o sistema de help/tooltip (`help_icon_for`). Invoque também ao adicionar um novo módulo, criar uma nova view, montar o tema (`apply_theme`) ou qualquer trabalho que envolva o design system do projeto.
+description: Referência completa do design system da GUI mill.tools (Flet 0.85) — imports, factories de botões/cards/spinners, tokens (Color/Space/Radius/Type/Motion/Layout), Cursor, tema, help system e a tabela única de quirks do Flet 0.85. Use ao criar/editar/revisar componentes da GUI, importar de `src.gui.theme.components`/`tokens`, aplicar tokens, configurar cursores ou o help/tooltip (`help_icon_for`), adicionar módulo/view ou montar o tema (`apply_theme`). O contrato de eventos (`PipelineEvent`, payloads por módulo, barra de progresso, thread-safety, abas aninhadas) fica em events.md — abra-o ao emitir/consumir eventos num worker/view.
 ---
 
 # mill.tools — Design System Reference
+
+> **Fonte única de quirks do Flet 0.85 e do contrato de eventos.** Quirks/tokens/factories ficam aqui;
+> payloads de evento em [`events.md`](events.md). O CLAUDE.md e as outras skills apenas apontam para cá.
 
 ## Imports
 
@@ -43,16 +46,16 @@ from src.gui.theme.theme import apply_theme, sync_page_bgcolor
 | `secondary_button(text, icon, on_click)` | `ft.OutlinedButton` | Ação secundária sem preenchimento |
 | `action_button(text, icon, on_click, accent)` | `ft.TextButton` | Link/ação; `accent` padrão = `Color.log.info` (azul) |
 | `danger_button(text, icon, on_click)` | `ft.TextButton` | Ação destrutiva em vermelho; nunca usa o dourado |
-| `segmented_selector(options, value, page, on_change, columns, labels)` | `(grid, get_value, set_disabled)` | Grade N×columns de chips clicáveis; `get_value()→str`, `set_disabled(bool)` |
+| `segmented_selector(options, value, page, on_change, columns, labels)` | `(grid, get_value, set_disabled)` | Grade N×columns de chips clicáveis; `get_value()→str`, `set_disabled(bool)`. `with_setter=True` → 4º elemento `set_value(opt)` (retrocompatível) |
 | `output_card(path, accent, icon, extra_actions)` | `ft.Container` | Card de arquivo de saída com "Abrir pasta"; `accent` padrão = `Color.log.info` |
-| `spinner()` | `(img, start, stop)` | Cata-vento animado; `start()` inicia giro contínuo, `stop()` para. **REGRA DE OURO**: se o spinner vive num container `visible=False` que você acabou de exibir, chame **`page.update()` ANTES de `start()`**. O giro é `_step → img.rotate.angle += 2π → img.update()` encadeado por `on_animation_end`; a animação só dispara se esse `img.update()` chegar a um controle **já montado e visível** no cliente. `start()` antes do `page.update()` manda a 1ª rotação para um controle oculto → nada anima, `on_animation_end` nunca dispara, a cadeia morre (moinho parado). O `progress_view` "funciona" com start-then-update só porque o spinner dele é permanentemente visível. Depois de iniciado, **nenhum `page.update()` global** pode rodar durante o giro (interrompe a animação) — use `control.update()` escopado em tickers/progresso. Ver `modules/data/view.py::_begin`/`_on_index`/`_on_assess`. |
+| `spinner()` | `(img, start, stop)` | Cata-vento animado; `start()` inicia giro contínuo, `stop()` para. **Ver "Regra de ouro do spinner" abaixo.** |
 | `log_line(text)` | `ft.Text` | Linha mono com cor semântica por prefixo (`[i]` `[*]` `[~]` `[✓]` `[!]` `[»]`) |
 | `helper_text(text)` | `ft.Text` | Texto de apoio caption em `ON_SURFACE_VARIANT` |
 | `section_title(text)` | `ft.Text` | Título 22px W600 para seções de resultado |
 | `summary_card(content)` | `ft.Container` | Card com fundo `surface_variant`, borda e raio `lg` |
 | `labeled_field(label, control, helper, help_key, page)` | `ft.Column` | Rótulo + controle + helper opcional; `help_key` adiciona ⓘ automático |
 | `slider_row(label, value, min_val, max_val, divisions, on_change, help_key, page)` | `ft.Column` | Rótulo + slider dourado com `on_change` externo; `help_key` adiciona ⓘ — definido em `inputs.py` |
-| `labeled_slider(*, label, value, min, max, divisions, fmt, on_commit)` | `(ft.Column, ft.Slider)` | Slider com label ao vivo (atualiza a cada tick via `on_change`) e `on_commit` no `on_change_end`; retorna `(coluna, slider)` — ler `slider.value` para o valor atual. Definido em `sliders.py`. Usado nos blocos de imagem (`resize`, `border`, `adjust`, `watermark`, `contact_sheet`, `convert_fmt`). |
+| `labeled_slider(*, label, value, min, max, divisions, fmt, on_commit)` | `(ft.Column, ft.Slider)` | Slider com label ao vivo (atualiza a cada tick via `on_change`) e `on_commit` no `on_change_end`; retorna `(coluna, slider)`. Definido em `sliders.py`. Usado nos blocos de imagem |
 | `switch_row(label, value, on_change, label_size)` | `ft.Switch` | Switch com cor `PRIMARY` e rótulo inline |
 | `hairline(vertical)` | `ft.Divider` \| `ft.VerticalDivider` | Divisor 1.5px em `OUTLINE_VARIANT` |
 | `module_scaffold(form, panel)` | `ft.Row` | Layout padrão: form 380px fixo \| divisor \| painel expand |
@@ -60,6 +63,17 @@ from src.gui.theme.theme import apply_theme, sync_page_bgcolor
 | `section_label(text)` | `ft.Text` | Rótulo 14px W600 `ON_SURFACE_VARIANT` simples (sem ⓘ) |
 | `help_icon(short, long, page, size)` | `ft.Container` | ⓘ construído diretamente; clique abre modal se `long+page` |
 | `help_icon_for(key, page)` | `ft.Container \| None` | ⓘ via registro `help_content.py`; retorna `None` se chave inexistente |
+
+### Regra de ouro do spinner
+
+Se o spinner vive num container `visible=False` que você acabou de exibir, chame **`page.update()` ANTES de
+`start()`**. O giro é `_step → img.rotate.angle += 2π → img.update()` encadeado por `on_animation_end`; a
+animação só dispara se esse `img.update()` chegar a um controle **já montado e visível** no cliente.
+`start()` antes do `page.update()` manda a 1ª rotação para um controle oculto → nada anima,
+`on_animation_end` nunca dispara, a cadeia morre (moinho parado). O `progress_view` "funciona" com
+start-then-update só porque o spinner dele é permanentemente visível. Depois de iniciado, **nenhum
+`page.update()` global** pode rodar durante o giro (interrompe a animação) — use `control.update()` escopado
+em tickers/progresso. Ver `modules/data/view.py::_begin`/`_on_index`/`_on_assess`.
 
 ---
 
@@ -76,10 +90,7 @@ from src.gui.theme.theme import apply_theme, sync_page_bgcolor
 | `Cursor.btn` | `ButtonStyle.mouse_cursor` em botões que podem ser desabilitados |
 
 **Regra:** todo elemento clicável usa `Cursor.*` — nunca escrever `ft.MouseCursor.*` fora de `buttons.py`.
-
-**Atenção — `ink=True`:** absorve eventos de ponteiro e anula o cursor do GestureDetector externo. Nunca usar `ink=True` em containers clicáveis; usar `GestureDetector(mouse_cursor=Cursor.interactive, content=ctr)`.
-
-**NavigationRail:** `ft.NavigationRailDestination` não tem `mouse_cursor`. Envolver o `NavigationRail` num `GestureDetector(mouse_cursor=Cursor.interactive)` e alternar para `Cursor.forbidden` via `page.pubsub` quando pipeline estiver rodando.
+`ink=True` e `NavigationRailDestination` têm quirks próprios — ver a tabela de quirks abaixo.
 
 ---
 
@@ -184,21 +195,6 @@ sync_page_bgcolor(page)    # chamar sempre que theme_mode mudar
 
 `build_theme(dark=True)` retorna `ft.Theme` isolado — útil para testes.
 
-> Nunca atribuir `ft.Colors.SURFACE_VARIANT` ou `ft.Colors.SURFACE_CONTAINER` — não existem no Flet 0.85. Usar `ft.Colors.SURFACE` ou `Color.dark.surface_variant`.
-
----
-
-## Controles verificados (Flet 0.85.2)
-
-| Controle | Situação | Nota |
-|---|---|---|
-| `ft.ReorderableListView` | **existe** (tem `on_reorder` → `e.old_index`/`e.new_index`) | **NÃO** aceita `shrink_wrap`; é um **scrollable** (precisa de `height` fixo). Aninhá-lo num `ft.Column(scroll=...)` é frágil. Para reordenar listas curtas dentro de um formulário rolável, prefira o fallback **↑/↓** (dois `ft.IconButton` por linha trocando posições — determinístico, sem aninhar scroll). Ver `modules/recipes/form_view.py`. |
-| `ft.dropdown.Option(key=, text=)` | existe | `key` é o valor lido em `dd.value`; `text` é o rótulo exibido. Para reabilitar o evento de seleção, usar `on_select` (não `on_change`). |
-| `ft.GestureDetector` hover | `on_enter`/`on_exit` (+ `on_hover`) confirmados | Para **hover e clique no mesmo controle**, use um único `GestureDetector` com `on_enter`/`on_exit` + `on_tap`. `Container.on_hover` (ou um `GestureDetector` aninhado) **não dispara** quando o controle é totalmente coberto por outra região de mouse de mesma área. Padrão crescer-no-hover dos cards da home: ver `src/gui/home.py`. |
-| `ft.AlertDialog` modal | `page.show_dialog(dlg)` abre, `page.pop_dialog()` fecha | Toast: **também** `page.show_dialog(ft.SnackBar(content=..., duration=...))` — `page.open(...)` não existe no 0.85.2. Ver `views/file_viewer.py` (visor) e `settings_dialog.py` (Configurações). |
-| Copiar para a área de transferência | `await ft.Clipboard().set(texto)` (handler precisa ser `async def`) | `page.set_clipboard(...)`/`page.get_clipboard()` não existem no 0.85.2 (`AttributeError`) — a API virou assíncrona via `ft.Clipboard()`; `page.clipboard` (propriedade) ainda funciona mas está deprecated (remoção em 0.90.0). O dispatcher de eventos do Flet 0.85 já dá `await` em handlers `async def` automaticamente. Ver `describe_tab.py`, `file_viewer.py`, `result_view.py`. |
-| Trabalho pesado numa aba/painel (DuckDB, LLM) | **Não** rodar em thread daemon (o `control.update()` não repinta) nem bloquear na UI thread | Rode no event loop da UI via `page.run_task(coro)` e dentro use `await asyncio.to_thread(blocking_fn, ...)`; após o `await` você está de volta no loop e `page.update()`/`control.update()` repinta. Padrão das abas Pré-visualização/Análise do `modules/data/view.py` (prévia DuckDB + parecer da IA). |
-
 ---
 
 ## Help System
@@ -211,49 +207,41 @@ sync_page_bgcolor(page)    # chamar sempre que theme_mode mudar
 
 ---
 
-## Eventos do pipeline (`PipelineEvent`)
+## Quirks críticos do Flet 0.85.2
 
-`PipelineEvent(type, stage, payload, module_id)` é publicado via `page.pubsub.send_all()` (thread-safe; worker thread → callbacks na UI thread). `module_id` ∈ {`"transcription"`, `"audio"`, `"image"`, `"video"`, `"document"`, `"data"`, `"ai"`, `"recipes"`, `""` (legado)}. O `ProgressPanel` ignora eventos cujo `module_id` ≠ `owner_id`; os hubs **IA** e **Receitas** e a ferramenta **Dados** são auto-contidos (assinam os próprios eventos, não usam `ProgressPanel`).
+Tabela única de referência (o CLAUDE.md aponta para cá). Avisos de hardware/GPU (BSOD MX150) **não** são
+design system — ficam no CLAUDE.md.
 
-**`EventBus.emit()` grava falhas no Observatório**: além do `send_all()`, todo evento `task_error` (de qualquer módulo) é gravado em `core/observatory/logs.py` (aba Logs), exceto cancelamentos do usuário (mensagens com "cancel", filtradas por `_is_cancellation()`). É um hook central em `gui/events.py`, não algo que cada `worker.py` precisa chamar — mudar o formato de `payload["message"]` de um `task_error` existente afeta o que aparece nessa aba.
+| Armadilha | Correto |
+|---|---|
+| `ft.Audio` | **não existe** — usar `sounddevice` + ffmpeg (`audio_player.py`) |
+| `ft.ImageFit` | usar `ft.BoxFit` |
+| `ft.Tabs` / `ft.Tab` | não existem — abas manuais: `TextButton` + `visible=` num `ft.Stack` |
+| `ft.Colors.SURFACE_VARIANT` / `SURFACE_CONTAINER` | não existem no 0.85 — usar `ft.Colors.SURFACE` ou `Color.dark.surface_variant` |
+| `surface_container_*` no `ColorScheme(...)` | kwarg inválido → `TypeError`; suportados: `surface`, `on_surface`, `on_surface_variant`, `outline`, `outline_variant` |
+| trocar `Container.content` em runtime | reatribuir a árvore quebra o patcher → toggle `visible` num `ft.Stack` |
+| `page.update()` em cascata | causa `IndexError` no `object_patch` — um update por evento |
+| `ink=True` em Container clicável | absorve eventos de ponteiro, anula o cursor do `GestureDetector` externo — nunca usar; handler em `GestureDetector.on_tap` |
+| `ft.Slider` programático | setar `.value` + `update()` **não** dispara `on_change`; usar `on_change_end` para seek |
+| `ft.Dropdown` evento de seleção | **não** aceita `on_change` no construtor (0.85.2) — usar `on_select` (campos válidos: `on_select`, `on_text_change`). `ft.dropdown.Option(key=, text=)`: `key` é o valor lido em `dd.value` |
+| `control.page` antes do mount | lança `RuntimeError` — proteger com `try/except RuntimeError` |
+| `FilePicker` | `page.services.append(picker)` + `await picker.pick_files(...)` |
+| `Container(box_shadow=...)` | usar `Container(shadow=ft.BoxShadow(...))` — sem prefixo `box_` |
+| `ft.NavigationRailDestination` cursor | sem `mouse_cursor` — envolver o `NavigationRail` num `GestureDetector(mouse_cursor=Cursor.interactive)` e alternar p/ `Cursor.forbidden` via `page.pubsub` quando pipeline rodando |
+| `ft.Image.src` tipo | aceita `Union[str, bytes]` no 0.85 — bytes PNG direto, sem base64 |
+| `ft.Image()` **exige `src` no construtor** | `missing 1 required positional argument: 'src'` se omitido. Comece com placeholder (`_charts.BLANK_PNG`, 1×1) e troque `img.src = png` depois |
+| `ft.Image` updates frequentes | `gapless_playback=True` mantém o frame anterior visível — evita flicker (cursor de waveform) |
+| `Container.on_hover` coberto | **não dispara** quando o Container é totalmente coberto por outra região de mouse. Para hover **e** tap no mesmo card, usar **um único** `ft.GestureDetector` com `on_enter`/`on_exit` (+ `on_tap`) — ver `home.py` |
+| `control.update()` de thread daemon | **não repinta** até o próximo `page.update()` da UI thread — cronômetro/ticker em `threading.Thread` parece travado. Para atualização periódica viva, rodar no event loop da UI via `page.run_task` (corotina async com `await asyncio.sleep`) — ver `ai/view.py`, `home.py`, `library.py` |
+| Trabalho pesado numa aba/painel (DuckDB, LLM) | **Não** rodar em thread daemon (o `control.update()` não repinta) nem bloquear na UI thread. Rode via `page.run_task(coro)` + `await asyncio.to_thread(blocking_fn, ...)` — após o `await` você volta ao loop e `page.update()`/`control.update()` repinta. Ver abas Pré-visualização/Análise do `modules/data/view.py` |
+| `page.open(...)` | **não existe** no 0.85.2 (`AttributeError` em runtime). Diálogos **e** SnackBars (SnackBar é `DialogControl`) vão por `page.show_dialog(...)`; fechar = `page.pop_dialog()`. Nunca `page.snack_bar=`/`page.dialog=` |
+| `page.set_clipboard(...)` / `page.get_clipboard()` | **não existem** no 0.85.2 — API assíncrona: `await ft.Clipboard().set(texto)` / `await ft.Clipboard().get()`. Handler precisa ser `async def` (o Flet 0.85 dá `await` automático). `page.clipboard` (propriedade) está deprecated (remoção 0.90.0) |
+| `ft.ReorderableListView` | **existe** (`on_reorder` → `e.old_index`/`e.new_index`), mas **não** aceita `shrink_wrap` e é um **scrollable** (precisa de `height` fixo). Aninhá-lo num `ft.Column(scroll=...)` é frágil — para listas curtas num formulário rolável, prefira o fallback **↑/↓** (dois `IconButton` por linha). Ver `modules/recipes/form_view.py` |
 
-**Abas aninhadas** (precedente: `observatory/rag_tab.py`): como "aba" no Flet 0.85 deste projeto é só `Row(TextButton) + Stack(visible=)` (não um widget dedicado), aninhar é repetir o mesmo padrão um nível dentro — sem suporte especial do framework, nem necessário. A aba externa (Índice/RAG do Observatório) é ela própria um `(control, apply)` que internamente tem seu próprio `Row`/`Stack`/`_show_subtab`; o `apply()` externo só delega pro sub-apply da sub-aba ativa no momento (mesmo espírito lazy-refresh-on-select das abas de topo). Persistência de estado usa uma chave própria por nível (`last_observatory_tab` fora, `last_observatory_rag_subtab` dentro).
+---
 
-Eventos próprios do **Dados**: `data_scanned` (chips de fonte), `data_sql_ready` (`sql`/`explanation`), `data_result` (`columns`/`rows`/`n_rows`/`elapsed`/`truncated`), `data_saved` (`output_path`); **PR9.3** acrescenta `data_index_start`/`data_index_progress` (`current`/`total`)/`data_indexed` (`added`/`total`/`chunks`) p/ a indexação RAG na aba Pré-visualização e `data_assess_start`/`data_assessed` (`name`/`text`) p/ a Análise com IA. **Plano 1 (PR9.1)** acrescenta `data_plot_start`/`data_plot_done` (`png: bytes`) p/ a aba Gráfico — o render matplotlib roda off-thread (`run_data_plot`: `run_query_arrow → frames.to_pandas → charts.render_png`) e a UI só troca o `src` de um `ft.Image`; falha via `task_error` roteado por `ctx.action[0] == "plot"`. O painel tem **4 abas manuais** (Consulta | Pré-visualização | Análise com IA | Gráfico — padrão `Conversa|Índice` do hub de IA, `visible=` num `Stack`, persistidas em `last_data_tab`), cada uma com **rodapé fixo** (ações) e **progress/log no topo**. **Quirk do spinner**: eventos de progresso emitidos *enquanto o moinho gira* (`data_index_*`, `data_assess_start`, `data_plot_start`, `log`) fazem **update escopado** (`control.update()`) + `return` — nunca o `page.update()` global do fim do handler, que interromperia a animação. A tabela paginada reutilizável é `modules/data/table_view.py` (cabeçalho mostra o tipo por coluna).
+## Eventos do pipeline
 
-`pipeline_log.py` (por módulo) separa "o que emitir" de "como exibir": `worker.py` importa `fmt_*` p/ `emit("log", ...)`; `view.py`/`progress_view.py` importa `resolve_messages()`/`resolve_stage_label()`. Os campos exatos de cada payload são derivados do `worker.py`/`pipeline_log.py` do módulo — as tabelas abaixo são o contrato de referência.
-
-**Genéricos (todos os módulos):**
-
-| Evento | Payload | Efeito na UI |
-|---|---|---|
-| `progress_start` | — | barra indeterminada + inicia spinner |
-| `progress_update` | `current`, `total` (0–1) | barra determinada |
-| `queue_progress` | `current_item`, `total_items`, `item_name` | label "Item 2/5 — arquivo.mp3" |
-| `task_done` | `output_path(s)` | barra 1.0, para spinner, habilita Resultados |
-| `task_error` | `message` | log de erro, para spinner |
-| `log` | `message`, `level`, `mutable: bool` | passthrough colorido; `mutable=True` atualiza a última linha em vez de criar nova (progresso contínuo, ex.: download yt-dlp) |
-
-**Áudio (stage="audio"):** `audio_op_start` (`operation`, `item_name`, `item_idx`, `total`), `audio_op_done` (`output_path`, `elapsed`, `item_idx`, `total`, `src_size_bytes`, `out_size_bytes`, **`source_path`** quando há pós-processamento → A/B, **`loudness_stats`/`loudness_target`** quando há normalize → card de loudness). `operation` ∈ {`download`, `convert`, `extract`, `silence`, `denoise`, `speed`, `normalize`, `encode`}. A cadeia de pós-processamento roda em ordem fixa (silêncio → denoise → velocidade → normalize → **encode** final, que aplica `args.fmt` + mono/sample-rate). O `segmented_selector` aceita `with_setter=True` → retorna um 4º elemento `set_value(opt)` para seleção programática (presets do módulo Áudio); retrocompatível (3-tupla por padrão). A **aba Visualizar** (áudio→imagem) é auto-contida (não usa `ProgressPanel`): gera o PNG off-thread (`page.run_task` + `asyncio.to_thread`) e tem mini-log com cronômetro/previsão (reusa `ai/timing.py`). O **loop do cursor do `audio_player`** roda na UI event loop via `page.run_task` (não thread daemon — senão `page.update()` não repinta até o próximo update da UI thread, atrasando o cursor).
-
-**Vídeo (stage="video"):** `video_op_start` (`operation`, `item_name`, `item_idx`, `total`), `video_op_done` (`output_path`, `elapsed`, `item_idx`, `total`, `src_size_bytes`, `out_size_bytes`), `video_op_error` (`item_name`, `message`). `operation` ∈ {`download`, `convert`, `trim`, `compress`, `resize`, `extract_audio`, `thumbnail`}.
-
-**Imagens (stage="image"):** `image_op_start` (`operation`, `item_name`, `item_idx`, `total_items`, `thumb: bytes|None`), `image_op_done` (`output_path`, `elapsed`, `src_size_bytes`, `out_size_bytes`, `thumb`, `item_idx`, `total_items`), `image_op_error` (`item_name`, `message`).
-
-**Documentos (stage="document"):** `document_op_start` (`operation`, `item_name`, `item_idx`, `total`, `page_count`), `document_op_done` (`output_path`, `elapsed`, `operation`, `item_idx`, `total`, `extra_stats`), `document_op_error` (`item_name`, `message`). `operation` ∈ {`merge`, `split`, `compress`, `rotate`, `watermark`, `stamp`, `encrypt`, `extract`, `ocr`, `pdf_to_images`, `images_to_pdf`, `analyze`, `qr`}.
-
-**Transcrição (stage específico):** `metadata_start/done`, `audio_cached`, `download_start/done`, `whisper_loading/loaded`, `transcribe_started`, `language_detected` (`audio_duration`), `vad_filtered` (`duration`, `duration_after_vad`, `removed` — silêncio pulado pelo VAD; `[i] VAD removed Xs of silence (Y%)`), `transcribe_segment` (`end`, `is_low_confidence`), `transcribe_summary`, `format_*`, `analyze_*`, `translation_*`, `prompt_*`. A resposta da IA emite `answer_done` com `query`/`text`/`sources`/`model_name`/`elapsed` + **`low_confidence`/`best_score`** (Plano 4A — derivado do top-1 do retrieve sem re-embeddar; `True` mostra um banner "o acervo não cobre bem esta pergunta" acima da resposta).
-
-**Receitas (module_id="recipes"):** `recipe_start` (`name`, `total_steps`), `step_start` (`op`, `label`, `idx`, `total`), `step_done` (`op`, `idx`, `total`, `outputs`), `step_error` (`op`, `idx`, `message`); reusa `progress_*`/`task_done`/`task_error` e, no lote, `queue_progress`. Os adaptadores de passo encaminham os eventos das funções de core (ex.: `transcribe_segment`) sob o mesmo `module_id`.
-
-### Barra de progresso (transcrição/genérico)
-
-- **Idle**: oculta, label "Inicie o pipeline pelo formulário →". **Indeterminada**: 1º evento de início (`value=None`).
-- **Determinada**: transcrição `transcribe_segment.end / audio_duration`; áudio `progress_update(current/total)`; chunks LLM `i / total`.
-- **`extra_header` no `build_progress_view`**: `ft.Control | None` opcional entre a barra e o log (Áudio injeta o `AudioPlayer`).
-
-### Thread safety
-
-- `bus.emit()` roda na worker thread; `page.pubsub.send_all()` é thread-safe; callbacks de `subscribe` rodam na UI thread.
-- `pipeline_running[0]` resetado em `finally` (sucesso/erro/cancelamento) — senão a navegação trava.
-- Não chamar `page.update()` em cascata no mesmo evento.
+O contrato de eventos (`PipelineEvent`, payloads por módulo, barra de progresso, thread-safety, abas
+aninhadas, hook do Observatório) é a fonte única em **[`events.md`](events.md)** — abra ao emitir/consumir
+eventos num `worker.py`/`view.py`/`pipeline_log.py`.
