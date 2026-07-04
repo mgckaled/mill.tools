@@ -1,128 +1,55 @@
 ---
 name: testing
-description: Guia para adicionar, corrigir e revisar testes (unitários e de integração) do projeto mill.tools. Invocar quando: escrever novos testes, investigar expected values errados, aumentar cobertura de um módulo, mockar subprocess/ctranslate2/PIL.Image.open/llm_factory/settings/pymupdf/qrcode/urllib/LangChain (GenericFakeChatModel), ou entender por que um teste falha. Também use ao criar fixtures novas (session-scoped ou function-scoped), adicionar testes de integração com ffmpeg, revisar tests/core/ e tests/gui/, ou ajustar config dos plugins (pytest-xdist, pytest-timeout, pytest-clarity, pytest-randomly).
+description: Guia para adicionar, corrigir e revisar testes (unitários e de integração) do projeto mill.tools. Invocar quando: escrever novos testes, investigar expected values errados, aumentar cobertura de um módulo, ou mockar qualquer fronteira. Receitas de mock ficam em 3 arquivos de referência citados aqui — mocks-media.md (subprocess/ffmpeg, WhisperModel, urllib, pytesseract, pymupdf/qrcode), mocks-llm-rag-ml.md (GenericFakeChatModel/LangChain, core RAG, core ML, core Dados/assess/datacard, core Receitas) e mocks-gui-cli.md (workers da GUI com bus falso, testes de CLI). Também use ao criar fixtures novas (session/function-scoped), adicionar testes de integração com ffmpeg, revisar tests/core/ e tests/gui/, ou ajustar config dos plugins (pytest-xdist, pytest-timeout, pytest-clarity, pytest-randomly).
 ---
 
 # mill.tools — Guia de Testes
 
+Este SKILL.md é o "sempre necessário". As **receitas de mock** (as maiores) moram em três arquivos de
+referência na pasta desta skill — abra o que casar com a fronteira que você está testando:
+
+| Arquivo | Abra quando testar… |
+|---|---|
+| [`mocks-media.md`](mocks-media.md) | `subprocess`/ffmpeg, `WhisperModel` (faster-whisper), `urllib`, `PIL.Image.open` (call-count), `pytesseract`, `pymupdf`/`qrcode` |
+| [`mocks-llm-rag-ml.md`](mocks-llm-rag-ml.md) | LangChain (`GenericFakeChatModel`), core RAG (`src/core/rag/`), core ML (`src/core/ml/`, Planos 3/4A/4B), core Dados (`assess`/`datacard`/`ml`), core Receitas |
+| [`mocks-gui-cli.md`](mocks-gui-cli.md) | workers da GUI (bus falso), testes de CLI (`_parse`, runner, kebab→snake) |
+
+> Contexto das camadas de RAG/ML/Observatório → skill `ml-rag`. Onde o código mora e limites de tamanho →
+> skill `architecture`.
+
+---
+
 ## Estrutura de arquivos
 
-```
-tests/
-├── conftest.py                              # fixtures globais — NÃO duplicar aqui
-├── test_utils.py                            # src/utils.py
-├── test_transcriber.py                      # src/transcriber.py — transcribe() via WhisperModel mock + legendas
-├── test_llm_factory.py                      # src/llm_factory.py
-├── test_llm_utils.py                        # src/llm_utils.py — split_text, bypass Gemini
-├── test_formatter.py                        # src/formatter.py — paragraph formatting (GenericFakeChatModel)
-├── test_analyzer.py                         # src/analyzer.py — structured analysis + merge + translation (+ profile=)
-├── test_prompter.py                         # src/prompter.py — condensed digest + merge
-├── analysis/                                # src/analysis/ — perfis de análise (tudo unit, sem Ollama)
-│   ├── __init__.py
-│   ├── test_types.py                       # unit — Field/AnalysisProfile/GroupMeta (frozen, defaults)
-│   ├── test_prompts.py                     # unit — build_*_prompt invoca via GenericFakeChatModel (prova escaping de chaves)
-│   ├── test_report.py                      # unit — format_report por kind + always/empty_text + disclaimer
-│   └── test_profiles.py                    # unit — catálogo Tier 1 (ids/kinds/grupos; default = esquema legado)
-├── cli/
-│   ├── __init__.py
-│   ├── test_transcription.py               # unit — resolve_input, build_output_stem, item_label
-│   ├── test_audio_cli.py                   # unit — add_audio_parser + run_audio_cli (dispatch)
-│   ├── test_video_cli.py                   # unit — sub-subparsers + run_video_cli (dispatch)
-│   ├── test_image_cli.py                   # unit — sub-subparsers + run_image_cli (dispatch)
-│   ├── test_document_cli.py                # unit — sub-subparsers + run_document_cli (dispatch)
-│   ├── test_library_cli.py                 # unit — parser + _parse_since + run_library_cli (scan_library mockado, capsys)
-│   ├── test_recipe_cli.py                   # unit — parser list/run + run_recipe_cli (execute_recipe mockado) + _make_emit
-│   ├── test_transcribe_main.py             # unit — main.parse_args + _subtitle_formats_from_args
-│   └── test_bus.py                         # unit — CLIEventBus (eventos e formatação)
-├── core/
-│   ├── __init__.py
-│   ├── test_ffmpeg.py                      # unit — run_ffmpeg (subprocess mockado)
-│   ├── test_metadata.py                    # unit — format_duration e helpers de metadata
-│   ├── test_subtitles.py                   # unit — SubtitleCue + to_srt + to_vtt + write_subtitles
-│   ├── audio/
-│   │   ├── test_normalizer_parser.py       # unit — _parse_loudnorm_json (sem ffmpeg)
-│   │   ├── test_normalizer_unit.py         # unit — normalize_lufs (subprocess mockado)
-│   │   ├── test_converter.py               # integration — convert_audio, extract_audio
-│   │   ├── test_normalizer_integration.py  # integration — normalize_lufs 2-pass
-│   │   ├── test_denoiser.py                # integration — denoise mono e estéreo
-│   │   ├── test_info.py                    # integration — get_duration_ffprobe
-│   │   └── test_pipeline_e2e.py            # integration — smoke test denoise→normalize
-│   ├── image/
-│   │   ├── test_transform.py               # unit — 9 funções puras Pillow
-│   │   ├── test_converter.py               # unit — convert_image (PIL puro)
-│   │   ├── test_info.py                    # unit — image_info, thumbnail_bytes (PIL puro)
-│   │   └── test_downloader.py              # unit — download_image (urllib mockado)
-│   ├── video/
-│   │   ├── test_info.py                    # integration — get_video_info (VideoInfo dataclass)
-│   │   └── test_converter.py               # integration — convert/trim/compress/resize/extract_audio/thumbnail/add_subtitles
-│   └── document/
-│       ├── test_processor.py               # unit — merge/split/compress/rotate/watermark/stamp/encrypt (pymupdf REAL via sample_pdf)
-│       ├── test_converter.py               # unit — pdf_to_images, images_to_pdf, extract_text (pymupdf REAL)
-│       ├── test_info.py                    # unit — get_pdf_info, PdfInfo (pymupdf REAL)
-│       ├── test_ocr.py                     # unit — ocr_pdf híbrido (pytesseract mockado) + 1 integration real (Tesseract)
-│       └── test_qr.py                      # unit — generate_qr (qrcode REAL — gera PNG em disco)
-│   ├── image/
-│       ├── test_dhash.py                   # unit — dHash + hamming_distance: conteúdo idêntico→distância 0, cores sólidas→mesmo hash todo-zero (limitação conhecida), estruturas distintas→distância > 0
-│       └── test_describe.py                # unit — describe_image: modelo local→ChatOllama (langchain_ollama mockado via sys.modules), glm-*/gemini-*→llm_factory.make_llm (não ChatOllama)
-│   ├── library/
-│   │   ├── test_scanner.py                 # unit — classify_path, scan_library (árvore falsa), filter_items (kind/category/query/since), sort_items
-│   │   ├── test_thumbnails.py              # unit — thumbnail_for (imagem/PDF reais, fallbacks None) + 1 integration (frame de vídeo)
-│   │   └── test_image_dedup.py             # unit — near_duplicate_images: perturbação leve→mesmo grupo, cadeia transitiva A~B~C→1 componente, guard max_images, max_distance=0
-│   ├── rag/                                # RAG local — tudo unit, sem Ollama (embed_fn injetado; LLM via GenericFakeChatModel)
-│       ├── test_bm25.py                    # unit — bm25_score/build_bm25_index: termo exato ranqueia mais alto, sem match → zeros, case-insensitive (corpus ≥3 docs — IDF de 1-2 docs é degenerado/zero)
-│       ├── test_store.py                   # unit — cosseno determinístico, drop_source, persist/load (npz/json), cache de normalização E de bm25 (ambos invalidados por add/drop_source), máscara de search()/dense_scores()/bm25_scores() pré-rank
-│       ├── test_retriever.py               # unit — top-k + filtro de escopo (1 doc / kind / corpus) via máscara pré-rank; embed_query_fn mockado; regressão de recall (escopo pouco competitivo globalmente ainda devolve k hits); fusão RRF surfaça match lexical que o denso sozinho perderia; `.score` reportado continua o cosseno denso, não o valor fundido
-│       ├── test_embedder.py                # unit — is_available (langchain_ollama falso via sys.modules), _check_dim, shape float32
-│       ├── test_indexer.py                 # unit — chunking, header strip, filtro kind/sufixo, skip/reembed por mtime, reconciliação, progresso
-│       ├── test_chat.py                    # unit — build_context numerado [n] + dedupe de fontes; answer via GenericFakeChatModel
-│       ├── test_templates.py               # unit — defaults + merge prompts.json + proteção contra shadowing de default
-│       ├── test_batch.py                   # unit — distinct_sources (dedupe/kind), run_batch (1 answer/doc, progresso)
-│   ├── observatory/                        # Tier A — puro, sem gate próprio
-│       ├── test_activity.py                # unit — log_activity/load_activity round-trip, cap _MAX_ENTRIES, malformado→[], recent() ordena mais-novo-primeiro
-│       ├── test_status.py                  # unit — gate_statuses (reflete extra ausente), domain_statuses (isolamento por diretório, sem tocar model_dir() real), config_snapshot (lê defaults reais via inspect.signature, não uma cópia), ollama_inventory (Client(timeout=...) — dublês aceitam **kwargs)
-│       └── test_disk_usage.py              # unit — disk_usage (diretório ausente→(), soma recursiva de pasta, ordenação desc, resiliente a OSError mid-scan), total_bytes
-│   └── recipes/                            # Receitas — tudo unit; STEP_REGISTRY mockado via patch.dict (sem ffmpeg/Whisper/rede)
-│       ├── test_registry.py                # unit — specs bem-formadas + cada adaptador mockado no ponto de uso; ai.answer (RAG mockado); video.subtitle multi-input; data.outliers (mock log_activity!)
-│       ├── test_runner.py                  # unit — encadeamento, ordem de eventos, cancel, stop_on_error, emit_terminal, execute_recipe_batch, histórico
-│       ├── test_validate.py                # unit — coerência accepts/produces, mismatch, op desconhecida, receita vazia
-│       ├── test_presets.py                 # unit — cada preset válido p/ todo kind aceito pelo 1º passo
-│       ├── test_store.py                   # unit — round-trip JSON em tmp_path, replace/delete, resiliência a malformado/JSON inválido
-│       └── test_inputs.py                  # unit — kind_for (extensão → kind; url; erro em não suportado)
-└── gui/
-    ├── __init__.py
-    ├── test_settings.py                    # unit — src/gui/settings.py
-    ├── test_workers_text.py                # unit — run_pipeline ramo texto (guarda sem análise + analyzer na cópia; LLM mockado)
-    ├── test_file_viewer.py                 # unit — is_viewable (gating do visor in-app .md/.txt)
-    └── modules/
-        ├── test_stepper.py                 # unit — build_stepper: 1 chip/estágio, set_active destaca o atual + marca anteriores com ✓, set_active(None)/chave desconhecida reseta tudo
-        ├── audio/test_pipeline_log.py      # unit — resolve_*, fmt_* (download/convert/extract/denoise/normalize)
-        ├── image/test_pipeline_log.py      # unit — resolve_*, fmt_* (13 operações)
-        ├── video/test_pipeline_log.py      # unit — resolve_*, fmt_* (8 operações, inclui subtitle)
-        ├── document/test_pipeline_log.py   # unit — resolve_messages, resolve_stage_label, fmt_* builders (13 operações, inclui ocr)
-        ├── document/test_worker_analyze.py # unit — _run_analyze ramo .txt (mock analyzer.analyze; pula get_pdf_info)
-        ├── ai/                             # unit — só worker (index/answer via bus falso + core mockado) + pipeline_log (resolve_status/fmt_*); Índice/Painel migraram p/ observatory/
-        ├── observatory/                    # unit — construct-smoke (MagicMock page) p/ status_tab/activity_tab/logs_tab/timing_tab/timing_section/disk_usage_tab/rag_tab/view; isola gui.settings, core.observatory.activity._store_path, core.observatory.logs._store_path E src.core.rag.indexer.index_dir via monkeypatch (on_mount da aba padrão Índice/RAG dispara refresh do índice); status_tab usa uma fake threading.Thread (`.start()` chama `target()` sincronamente) pra exercer o cálculo que hoje roda em thread daemon
-        └── recipes/                        # unit — worker (single/lote/clean/false/exceção via bus falso + execute_recipe(_batch) mockado) + pipeline_log
-```
-
-> **Nota sobre `unit` no módulo document**: ao contrário do que a tabela
-> sugeria em versões antigas desta skill, `tests/core/document/` **não
-> mocka pymupdf**. As fixtures `sample_pdf` e `sample_pdf_with_images`
-> (em `conftest.py`) usam `pytest.importorskip("pymupdf")` e geram PDFs
-> reais em disco. Mantemos o marcador `unit` porque pymupdf é dependência
-> hard (não opcional) e não há `ffmpeg`/rede/GPU envolvidos — o hook de
-> skip do conftest não precisa pular esses testes.
+A árvore de `tests/` **espelha `src/`** e é derivável do repo (`ls`/Glob) — não é reproduzida aqui.
+`src/core/image/transform.py` → `tests/core/image/test_transform.py`.
 
 Regras de estrutura:
-- Espelhar `src/` em `tests/` — `src/core/image/transform.py` → `tests/core/image/test_transform.py`
-- Cada subpasta de `tests/` precisa de `__init__.py` vazio (evita conflito de import com src/)
-- Imports dentro dos testes: `from src.modulo import funcao` (nunca import relativo)
+- Espelhar `src/` em `tests/`.
+- Cada subpasta de `tests/` precisa de `__init__.py` vazio (evita conflito de import com `src/`).
+- Imports dentro dos testes: `from src.modulo import funcao` (nunca import relativo), e **dentro** da função
+  de teste (não no topo) — isola falha de import.
+- Nome do teste descreve o **comportamento**, não a implementação.
+
+---
+
+## Marcadores e plugins
+
+- **Marcadores**: `unit` (Python puro — sem ffmpeg/rede/GPU; DuckDB e pymupdf in-process **qualificam** como
+  unit) · `integration` (requer ffmpeg). `pytest_collection_modifyitems` em `conftest.py` **pula
+  automaticamente** qualquer `@pytest.mark.integration` se `ffmpeg` não estiver no PATH (CI sem ffmpeg).
+- **Regra de commit**: `uv run pytest -m unit` verde **antes de commitar** + `ruff` limpo. Cobertura sobre
+  `src/` (branch on), excluindo `src/gui/` (Flet não testável headless).
+- **Plugins**: `pytest-randomly` (ordem aleatória — `--randomly-seed=NNN` reproduz), `pytest-timeout` (60s
+  default), `pytest-xdist` (`-n auto`), `pytest-clarity` (diffs legíveis).
 
 ---
 
 ## Fixtures globais (`tests/conftest.py`)
 
-### Fixtures function-scoped (padrão — limpas por teste)
+Não duplicar estas fixtures nos testes.
+
+### Function-scoped (padrão — limpas por teste)
 
 | Fixture | O que fornece |
 |---|---|
@@ -137,7 +64,7 @@ src = tmp_path / "portrait.png"
 img.save(src)
 ```
 
-### Fixtures session-scoped (geradas uma vez por sessão via ffmpeg/Pillow)
+### Session-scoped (geradas uma vez via ffmpeg/Pillow — só para `@pytest.mark.integration`)
 
 | Fixture | O que fornece |
 |---|---|
@@ -147,72 +74,11 @@ img.save(src)
 | `sample_wav_stereo` | `Path` → WAV estéreo 44100 Hz 3 s (sine 440 Hz, 2 canais) via ffmpeg |
 | `session_jpg` | `Path` → JPEG RGB 640×480 via Pillow |
 
-Estas fixtures só existem para testes de integração marcados com `@pytest.mark.integration`.
-Não as use em testes unitários — eles não devem depender de ffmpeg.
+Não use fixtures session-scoped em testes unitários (não devem depender de ffmpeg). São **somente leitura** —
+para testes que modificam a entrada, copie com `shutil.copy` para `tmp_path`.
 
-### Hook de skip automático
-
-`pytest_collection_modifyitems` em `conftest.py` pula automaticamente qualquer teste `@pytest.mark.integration` se `ffmpeg` não estiver no PATH (ex.: CI sem ffmpeg).
-
----
-
-## Padrão de teste de CLI (`tests/cli/`)
-
-Nunca chamar `sys.argv` diretamente — criar `_parse(*argv)` local com parser isolado:
-
-```python
-def _parse(*argv: str) -> argparse.Namespace:
-    parser = argparse.ArgumentParser()
-    sub = parser.add_subparsers(dest="command", required=True)
-    add_audio_parser(sub)
-    return parser.parse_args(["audio", *argv])
-
-@pytest.mark.unit
-def test_defaults():
-    ns = _parse("https://youtu.be/abc")
-    assert ns.fmt == "mp3"
-    assert callable(ns.func)
-```
-
-Para testar o **runner** (a função `run_*_cli` que traduz `Namespace` →
-`XxxArgs` e dispara a pipeline), mocke a função de pipeline no
-**caminho onde ela é importada** (não onde é definida — embora aqui
-seja o mesmo arquivo) e a verificação de dependências:
-
-```python
-def test_run_audio_cli_dispatches_to_pipeline(mocker):
-    mocker.patch("src.utils.check_dependencies")  # ou "src.utils.setup_logging" no doc
-    mock_pipeline = mocker.patch(
-        "src.gui.modules.audio.worker.run_audio_pipeline",
-        return_value=True,
-    )
-    ns = _parse("https://youtu.be/abc", "--normalize", "--lufs", "-16")
-    ns.func(ns)
-    assert mock_pipeline.called
-    args = mock_pipeline.call_args.args[0]   # AudioArgs construído pelo runner
-    assert args.normalize is True
-    assert args.normalize_target_lufs == -16.0
-```
-
-Caminhos das pipelines a mockar:
-
-| CLI         | Função a mockar                                     |
-|-------------|-----------------------------------------------------|
-| `audio`     | `src.gui.modules.audio.worker.run_audio_pipeline`   |
-| `video`     | `src.gui.modules.video.worker.run_video_pipeline`   |
-| `image`     | `src.gui.modules.image.worker.run_image_pipeline`   |
-| `document`  | `src.gui.modules.document.worker.run_document_pipeline` |
-
-Quando o runner retorna `False`, ele chama `sys.exit(1)`. Para cobrir
-esse caminho, use `pytest.raises(SystemExit)` (apenas `audio`/`video`/
-`image` têm essa branch — `document` não).
-
-Gotcha kebab → snake: operações como `extract-audio` (CLI) viram
-`extract_audio` em `VideoArgs.operation`. `pdf-to-images` vira
-`pdf_to_images`. `contact-sheet` vira `contact_sheet`. Sempre asserte
-o nome em `snake_case` no `Args` construído.
-
-`_pipeline_runner.item_label` é testável diretamente — sempre verificar que `kind="local"` retorna `Path(value).name` e `kind="url"` retorna o `netloc` (ver `tests/cli/test_transcription.py`).
+Fixtures de dados (`csv_sales`, `csv_people_cp1252`, `json_file`) e de PDF (`sample_pdf`,
+`sample_pdf_with_images`) são locais aos respectivos `conftest.py` de subpasta.
 
 ---
 
@@ -222,8 +88,6 @@ o nome em `snake_case` no `Args` construído.
 
 ```python
 import pytest
-# from pathlib import Path  # se precisar de Path
-# from PIL import Image     # se testar Pillow
 
 
 @pytest.mark.unit
@@ -232,11 +96,6 @@ def test_nome_descritivo(fixture_se_necessario):
     resultado = funcao_alvo(entrada)
     assert resultado == esperado
 ```
-
-Regras:
-- Todo teste unitário deve ter `@pytest.mark.unit`
-- Imports do código testado **dentro** da função de teste (não no topo) — isola falha de import
-- Nome do teste descreve o comportamento, não a implementação
 
 ### Teste de integração (requer ffmpeg)
 
@@ -253,11 +112,7 @@ def test_nome_descritivo(sample_wav, out_dir):
     assert out.stat().st_size > 1000
 ```
 
-Regras:
-- Usar `pytestmark = pytest.mark.integration` no nível do módulo (não por função)
-- Fixtures session-scoped (`sample_wav`, `sample_mp4`, `session_jpg`) são somente leitura — não escrever nelas
-- Para testes que modificam entrada, copiar o fixture com `shutil.copy` para `tmp_path`
-- Rodar isoladamente com `uv run pytest -m integration -v`
+Rodar só integração: `uv run pytest -m integration -v`.
 
 ---
 
@@ -269,76 +124,49 @@ O ponto `.` **não está em `_SANITIZE_INVALID`** — é preservado:
 ```python
 sanitize_filename("Python 3.13 Tutorial")  # → "Python_3.13_Tutorial" não "Python_313_Tutorial"
 ```
-
-`\s+` já colapsa múltiplos espaços em único `_`:
-```python
-sanitize_filename("  a  b  ")  # → "a_b" não "a__b"
-```
+`\s+` já colapsa múltiplos espaços em único `_`: `sanitize_filename("  a  b  ")` → `"a_b"` não `"a__b"`.
 
 ### `crop_image` modo `ratio` — branch `if target_h > ih`
 
-A branch dispara quando `iw * rh / rw > ih`, ou seja, quando a imagem é **mais larga** que a proporção pedida. Exemplo com `jpg_image` (200×150) e ratio `"1:1"`:
-- `target_h = int(200 * 1/1) = 200 > 150` → branch dispara → resultado: 150×150
-
-Uma imagem portrait (100×200) com ratio `"16:9"` **não dispara** a branch (target_h = 56 < 200).
+Dispara quando `iw * rh / rw > ih` (imagem **mais larga** que a proporção pedida). Com `jpg_image` (200×150)
+e ratio `"1:1"`: `target_h = int(200*1/1) = 200 > 150` → resultado 150×150. Uma portrait (100×200) com ratio
+`"16:9"` **não** dispara (`target_h = 56 < 200`).
 
 ### `_save` e o modo `L` (grayscale)
 
-`_save()` converte qualquer modo que não seja RGB para RGB ao salvar como JPEG. Um teste que verifica `im.mode == "L"` **precisa usar `out_fmt="png"`**:
-```python
-out = apply_filter(src, out_dir, filter_type="grayscale", out_fmt="png", quality=85)
-with Image.open(out) as im:
-    assert im.mode == "L"  # ✓ PNG preserva L; JPEG converteria para RGB
-```
+`_save()` converte qualquer modo ≠ RGB para RGB ao salvar JPEG. Um teste que verifica `im.mode == "L"`
+**precisa usar `out_fmt="png"`** (PNG preserva L; JPEG converteria para RGB).
 
 ### `convert_audio` — bitrate sem "k"
 
-`convert_audio` acrescenta "k" internamente: `f"{bitrate}k"`. Passar `"128k"` resulta em `"128kk"` (erro ffmpeg):
-```python
-# ERRADO — gera -b:a 128kk
-convert_audio(src, out_dir, fmt="mp3", bitrate="128k")
-
-# CORRETO — gera -b:a 128k
-convert_audio(src, out_dir, fmt="mp3", bitrate="128")
-```
+`convert_audio` acrescenta "k" internamente (`f"{bitrate}k"`). Passar `"128k"` gera `"128kk"` (erro ffmpeg).
+Passe `bitrate="128"`.
 
 ### `autotrim` com artefatos JPEG
 
-`ImageChops.difference` em imagens JPEG pode ter pixels não-zero em áreas "brancas" por artefatos de compressão. Imagens de teste para autotrim devem ser salvas como **PNG**:
-```python
-src = tmp_path / "border.png"  # ← .png, nunca .jpg para autotrim
-img.save(src)
-```
+`ImageChops.difference` em JPEG pode ter pixels não-zero em áreas "brancas" por artefatos de compressão.
+Imagens de teste para autotrim devem ser salvas como **PNG** (`src = tmp_path / "border.png"`, nunca `.jpg`).
 
 ---
 
-## Padrões de mock
+## Padrões de mock genéricos
 
-### `mocker` (pytest-mock) — para substituir funções/módulos
+As receitas específicas por fronteira estão nos 3 arquivos de referência (tabela no topo). Estes são os dois
+mecanismos de base e o isolamento de config:
 
 ```python
 def test_algo(mocker):
-    # Substituir função em módulo já importado
     mocker.patch("ctranslate2.get_supported_compute_types", return_value=["float32"])
-    mocker.patch("src.llm_factory._make_ollama")  # retorna MagicMock
-    mock = mocker.patch("src.modulo.funcao", side_effect=OSError("falha"))
-```
+    mocker.patch("src.llm_factory._make_ollama")            # retorna MagicMock
+    mocker.patch("src.modulo.funcao", side_effect=OSError("falha"))
 
-### `monkeypatch` — para env vars e atributos de módulo
-
-```python
-def test_algo(monkeypatch):
+def test_env(monkeypatch, tmp_path):
     monkeypatch.setenv("GOOGLE_API_KEY", "fake")
-    monkeypatch.delenv("GOOGLE_API_KEY", raising=False)
     monkeypatch.setattr("src.llm_factory.load_dotenv", lambda *a, **kw: None)
-    # Para módulos já importados:
-    import src.gui.settings as mod
-    monkeypatch.setattr(mod, "_CONFIG_FILE", tmp_path / "config.json")
 ```
 
-### Isolamento de `src/gui/settings.py`
-
-O módulo usa `_CONFIG_DIR` e `_CONFIG_FILE` como globais. Redirecionar antes de chamar `load()`/`save()`:
+**Isolamento de `src/gui/settings.py`** (usa `_CONFIG_DIR`/`_CONFIG_FILE` globais — redirecionar antes de
+`load()`/`save()`):
 ```python
 @pytest.fixture(autouse=True)
 def isolate_config(tmp_path, monkeypatch):
@@ -347,425 +175,9 @@ def isolate_config(tmp_path, monkeypatch):
     monkeypatch.setattr(mod, "_CONFIG_FILE", tmp_path / ".mill-tools" / "config.json")
 ```
 
-### Mock de `subprocess.Popen` — para testar pipelines ffmpeg
-
-Útil para cobrir branches de erro em `converter.py`, `normalizer.py` e `denoiser.py` sem rodar ffmpeg real:
-
-```python
-def _mock_popen(mocker, returncode: int, stdout: list[bytes] = None, stderr: list[bytes] = None):
-    proc = mocker.MagicMock()
-    proc.stdout = iter(stdout or [])   # iterável de bytes (cada linha = um item)
-    proc.stderr = iter(stderr or [])
-    proc.returncode = returncode
-    proc.wait.return_value = None
-    return proc
-
-
-# Falha no segundo passe (returncode != 0)
-mocker.patch("subprocess.run", return_value=mocker.Mock(returncode=0, stderr=b"...", stdout=b""))
-mock_proc = _mock_popen(mocker, returncode=1, stderr=[b"encoder error\n"])
-mocker.patch("subprocess.Popen", return_value=mock_proc)
-
-# Múltiplos calls sequenciais a subprocess.run (ex.: pass 1 + ffprobe):
-mocker.patch("subprocess.run", side_effect=[
-    mocker.Mock(returncode=0, stderr=LOUDNORM_JSON, stdout=b""),  # pass 1
-    mocker.Mock(returncode=0, stdout=b"3.0\n", stderr=b""),       # ffprobe
-])
-```
-
-**Cuidado com threading**: `_drain()` em `normalizer.py` lê `proc.stderr` em thread daemon. O iterador deve ser thread-safe (um simples `iter([b"..."])` funciona). Para `proc.stdout` linhas de progresso, incluir `b"out_time_us=N\n"` para testar o callback.
-
-### Mock de LangChain (`GenericFakeChatModel`) — para analyzer/formatter/prompter
-
-Os módulos `src/analyzer.py`, `src/formatter.py` e `src/prompter.py` usam
-o padrão `chain = ANY_PROMPT | llm` seguido de `chain.invoke({"text": ...})`.
-**Não** use `MagicMock` direto — `RunnableSequence` valida que o operando
-direito do `|` seja um `Runnable`, e MagicMock falha nessa checagem.
-
-Use `GenericFakeChatModel` de `langchain_core.language_models.fake_chat_models`:
-é um `Runnable` real que retorna respostas determinísticas a partir de um
-iterador de `AIMessage`.
-
-```python
-from langchain_core.language_models.fake_chat_models import GenericFakeChatModel
-from langchain_core.messages import AIMessage
-
-
-def _fake_llm(*responses: str):
-    return GenericFakeChatModel(messages=iter([AIMessage(content=r) for r in responses]))
-
-
-def test_format_transcription(tmp_path, mocker):
-    from src import formatter
-    src = tmp_path / "t.txt"
-    src.write_text(_HEADER + "\n\nhello.", encoding="utf-8")
-    mocker.patch.object(
-        formatter, "make_llm",
-        return_value=_fake_llm("formatted content"),
-    )
-    out = formatter.format_transcription(src)
-    assert "formatted content" in out
-```
-
-Para o analyzer, que chama `make_llm` **duas vezes** (uma para análise
-em T=0.4, outra para detecção de idioma em T=0), use `side_effect=[fake1, fake2]`:
-
-```python
-mocker.patch.object(
-    analyzer, "make_llm",
-    side_effect=[
-        _fake_llm(json.dumps(analysis_dict, ensure_ascii=False)),   # análise (1ª chamada)
-        _fake_llm("pt"),                                            # detecção (2ª chamada)
-    ],
-)
-```
-
-Quando o fluxo precisa de N respostas em sequência (multi-chunk + merge),
-empilhe-as na mesma fake e o iterador interno avança a cada `.invoke()`:
-
-```python
-_fake_llm(*([partial_json] * n_chunks), merged_json)
-```
-
-**Gotcha**: a `GenericFakeChatModel` levanta `StopIteration` se a chain
-chamar `.invoke()` mais vezes que o número de mensagens fornecidas. Isso é
-útil — falha imediata se você previu errado quantas chamadas o código faz
-(ex.: esquecer que single-chunk **não** invoca o merge).
-
-**Isolation de output dirs**: redirecione `TRANSCRIPTIONS_DIGEST_DIR` ou
-`TRANSCRIPTIONS_ANALYSIS_DIR` via `monkeypatch.setattr(mod, "ATTR", tmp_path)`
-no nível do módulo — esses atributos são lidos só dentro de `analyze()` /
-`build_prompt_ready()`, então um fixture autouse não é necessário.
-
-### Worker da GUI (`run_pipeline` / `_run_*`) — bus falso + dependências mockadas
-
-Os workers (`src/gui/workers.py`, `src/gui/modules/<m>/worker.py`) **não dependem
-do Flet** — emitem por `bus.emit(type, stage, payload, module_id=...)`. Teste com
-um bus falso que captura `(type, payload)` e mocke as dependências pesadas:
-
-```python
-class _Bus:
-    def __init__(self): self.events = []
-    def emit(self, type, stage, payload, module_id=None):
-        self.events.append((type, payload))
-```
-
-- **Transcrição** (`run_pipeline`): mocke `workers.check_dependencies` e a função
-  LLM no namespace do worker (`workers.analyzer.analyze`); redirecione
-  `workers.TRANSCRIPTIONS_TEXT_DIR` p/ `tmp_path` (o ramo texto **copia** o arquivo
-  para lá, preservando o original). Asserte em `[t for t, _ in bus.events]` —
-  ex.: `.txt` sem nenhuma análise → `task_error`; com `use_analyze` → `task_done`
-  e `analyze` chamado num caminho ≠ do arquivo de origem.
-- **Documentos** (`_run_analyze` etc.): chame o handler direto com um `emit` que
-  acumula numa lista; o worker importa `analyze` **lazy** → mocke
-  `src.analyzer.analyze`. Para fixar o ramo `.txt`, faça `get_pdf_info` levantar
-  via `pytest.fail` e confirme que não foi chamado (`page_count == 0` no
-  `document_op_start`). Ver `tests/gui/test_workers_text.py` e
-  `tests/gui/modules/document/test_worker_analyze.py`.
-- **IA** (`run_ai_index`/`run_ai_answer`): mesmo bus falso (assinatura
-  `emit(type, stage, payload=None, module_id="")`). Passe `install_log_handler=False`
-  p/ não tocar o root logger. Monkeypatch `src.core.rag.indexer.index_dir` p/
-  `tmp_path` (o `from ... import index_dir` é function-local → patchar o atributo
-  do módulo resolve). Mocke `src.core.rag.embedder.is_available`/`embed_texts`/
-  `embed_query` e `src.core.rag.chat.make_llm` (via `GenericFakeChatModel`).
-  Asserte os `bus.types()` (`progress_start`/`index_done`/`answer_done`/`task_done`
-  vs `task_error`). Cancelamento: `cancel_event.set()` antes → `progress_cb` levanta
-  `_Cancelled` → `task_error` "cancelada". Ver `tests/gui/modules/ai/test_worker.py`.
-
-### Core RAG (`src/core/rag/`) — `embed_fn` injetado, sem Ollama
-
-O core do RAG é unit-testável **sem rede**: indexer/retriever/batch recebem
-`embed_fn`/`embed_query_fn` injetados, e `chat.answer` usa `make_llm` (mocável
-via `GenericFakeChatModel`). Padrões:
-
-- **`embedder.is_available`/`embed_texts`**: o `langchain_ollama` é importado
-  **lazy** dentro das funções → substitua o módulo inteiro via
-  `mocker.patch.dict(sys.modules, {"langchain_ollama": _fake_module})` (um
-  `MagicMock` com `.OllamaEmbeddings`). Cubra o ramo "pacote ausente" com
-  `mocker.patch.dict(sys.modules, {"langchain_ollama": None})`.
-- **`store`**: use vetores estreitos (dim 3–8) e `np.eye`/vetores ortogonais —
-  vetor idêntico → score ≈ 1.0, ortogonal → ≈ 0. `persist`/`load` round-trip em
-  `tmp_path`. Serialização usa `dataclasses.asdict` (slots não têm `__dict__`).
-- **`indexer.build_index`**: crie `LibraryItem`s sintéticos apontando p/ `.txt`
-  reais em `tmp_path`; controle o `mtime` pelo **campo `modified`** do item (não
-  pelo mtime do arquivo). `embed_fn` falso retorna `np.ones((n, W))` e conta
-  chamadas — assim você verifica skip incremental (mesmo `(path, mtime)` → 0
-  chamadas novas), reembedding (mtime muda) e reconciliação (item sai da lista).
-  `split_text` roda de verdade (barato).
-- **`index_dir()`**: `monkeypatch.setattr(Path, "home", classmethod(lambda cls: tmp_path))`
-  ou patch direto do atributo do módulo nos callers.
-- **`bm25`/busca híbrida (Tier A)**: `build_bm25_index`/`bm25_score` são puros (`rank_bm25`
-  já é dependência base, sem `importorskip`) — mas cuidado com IDF degenerado em corpus
-  ≤2 docs (`log((N-n+0.5)/(n+0.5))` bate 0/negativo quando o termo não é minoria; use
-  ≥3 documentos nos testes de ranking). `VectorStore._bm25` é um 2º cache lazy ao lado
-  de `_normalized`, invalidado pelos mesmos `add()`/`drop_source()` — teste os dois juntos
-  (mesmo padrão: comparar identidade do objeto, não só o valor). `retriever._reciprocal
-  _rank_fusion` usa `np.lexsort((idx, -scores))`, não `argsort(...)[::-1]`, deliberadamente:
-  a reversão de um argsort ascendente inverte a ordem de desempate em empates, o que pode
-  fazer um sinal totalmente neutro (BM25 sem nenhum match) **cancelar** uma preferência clara
-  do outro sinal quando há poucos candidatos — achado real ao escrever os testes, não uma
-  hipótese.
-
-### Core Receitas (`src/core/recipes/`) — `STEP_REGISTRY` mockado, sem core real
-
-O runner é testável sem tocar ffmpeg/Whisper: substitua os adaptadores reais por
-fakes via `patch.dict` e injete um `emit`/`cancel_is_set` simples.
-
-- **`runner` (encadeamento/cancel/erro/lote)**: `mocker.patch.dict(STEP_REGISTRY,
-  {"t.s1": StepSpec(adapter, frozenset({"url"}), "audio", "S1"), ...})` com
-  adapters que retornam `[tmp_path/"x"]`. `emit=lambda t, p: eventos.append(...)`,
-  `cancel_is_set` com contador p/ disparar no N-ésimo passo. Asserir a ordem dos
-  tipos (`recipe_start → progress_start → step_start/done×N → task_done`),
-  encadeamento (output de um vira input do próximo), `emit_terminal=False`
-  (sem `progress_start`/`task_done`; falha vira `log`), e `execute_recipe_batch`
-  (um `queue_progress` por entrada, `failed_count`, cancel entre entradas).
-- **adaptadores reais (`registry`)**: mocke a função de **core no seu módulo de
-  origem** (`mocker.patch("src.core.audio.normalizer.normalize_lufs", return_value=...)`)
-  — como cada adaptador faz `from X import Y` function-local, patchar a origem
-  funciona **e** um rename de core faz o `patch` falhar (pega drift de assinatura).
-  Para dirs canônicos, `monkeypatch.setattr(src.utils, "TRANSCRIPTIONS_TEXT_DIR", tmp_path)`.
-  `ai.answer`: mocke `embedder.is_available`/`scan_library`/`build_index`/
-  `VectorStore.load`/`retrieve`/`chat.answer` e redirecione `TRANSCRIPTIONS_ANALYSIS_DIR`.
-- **`store`**: round-trip em `tmp_path` (passe `path=` explícito — não toque
-  `~/.mill-tools`); `presets`: valide cada um contra todo kind do `accepts` do 1º passo.
-- **worker GUI** (`tests/gui/modules/recipes/test_worker.py`): bus falso
-  `emit(type, stage, payload, module_id)`; mocke `src.core.recipes.runner.
-  execute_recipe`/`execute_recipe_batch`; `install_log_handler=False`. Verifique
-  forwarding sob `module_id="recipes"`, linhas de log de passo, `clean_intermediates`
-  (escreva arquivos reais em `tmp_path`; só os não-finais somem) e retorno
-  `False` sem saída/em exceção.
-
-### Core ML (`src/core/ml/`) — numpy-puro; sklearn só no `store` (Plano 3)
-
-Fundação de ML, testável sem rede e (na maior parte) sem o extra `[ml]`:
-
-- **`features`/`dedup` (sem `importorskip`)**: numpy-puros. Construa um
-  `VectorStore` sintético com vetores estreitos (dim 3–8) e `source_path`
-  conhecido; `document_matrix` deve fazer mean-pool por documento (ex.: 2 chunks
-  → média), L2-normalizar quando pedido, preservar **ordem first-seen** e
-  `float32`, e devolver `(0, D)` no store vazio. `load_document_matrix` faz
-  round-trip de um `VectorStore` persistido em `tmp_path` (reusa `store.persist`).
-  `dedup.near_duplicates`: plante linhas idênticas/ortogonais (idêntico → grupo no
-  limiar; ortogonal → não agrupa), cadeia transitiva A≈B≈C → um componente, `score`
-  = menor cosseno par-a-par, `max_docs` excedido → `[]` + warning (`caplog`).
-- **`deps`**: `is_available()` True com sklearn; False via
-  `mocker.patch.dict(sys.modules, {"sklearn": None})` (padrão do `embedder`).
-- **`store` (`importorskip("sklearn")`)**: round-trip `save_model`/`load_model` com
-  um estimador pequeno (`StandardScaler().fit(...)`) em `tmp_path` (`directory=`
-  injetável — não toque `~/.mill-tools`); **mismatch de versão** → `None`
-  (`monkeypatch.setattr(store, "_sklearn_version", lambda: "0.0.0")`); **mismatch de
-  signature** → `None`; sidecar ausente/corrompido e artefato `.joblib` corrompido
-  → `None`.
-
-**Plano 4A — semântico (`cluster`/`project`/`labeling`/`recommend`/`cache`/`mapviz`):**
-
-- **`recommend` (sem `importorskip`)**: numpy-puro. `related` — vizinhos plantados no
-  topo, exclui o próprio, respeita `k`, esgota corpus, doc inexistente → `ValueError`;
-  reranking por **MMR** (vetores ortogonais com relevância bem separada → reduz a
-  top-k puro; par quase-duplicado + candidato diverso → MMR prefere o diverso ao
-  invés do duplicado); `in_corpus` — acima/abaixo do limiar, store vazio → `(False, 0.0)`.
-- **`cluster`/`labeling`/`project` (`importorskip("sklearn")`)**: blobs sintéticos
-  ortogonais em dim estreita (jitter pequeno) → `n_clusters` esperado; outlier isolado →
-  `-1`/`n_noise`; k-means com `k`; **k-means com `k=None`**: corpus grande (≥ `_MIN_FOR_AUTO_K`,
-  blobs de k conhecido) → auto-seleção acha o k certo via `silhouette_score`; corpus
-  pequeno → `ValueError` preservado (mesma mensagem de antes); `_auto_k` chamada direta
-  cobre o guarda defensivo do range de candidatos. `M<min_cluster_size` → tudo ruído;
-  método inválido / k-means sem `k` / gate off (`mocker.patch(...is_available,
-  return_value=False)`) → erro. c-TF-IDF (`ngram_range=(1,3)`, `reduce_frequent_words`):
-  vocabulário distinto → termos discriminativos no topo (inclui frases de até 3
-  palavras), `-1` ignorado, stopwords removidas, só-stopwords → vazio. PCA: shape
-  `(M,2)`, **determinismo** (duas execuções idênticas via convenção de sinal), pad
-  degenerado (D=1); **TSNE**: shape `(M,2)`, `_tsne_perplexity` parametrizada (piso 1.0,
-  teto 30.0, sempre `< n_samples`), corpus de 2 documentos não lança, pré-redução PCA
-  exercida com D>50; UMAP → `importorskip("umap")` (pulado sem o extra; `_umap_2d` tem
-  `# pragma: no cover`).
-- **`cache`**: `corpus_signature` estável a reordenação/multiplicidade, muda com mtime;
-  `save_map`/`load_map` round-trip em `tmp_path`; mismatch de signature/versão e arquivos
-  corrompidos (sidecar/npz) → `None`.
-- **`mapviz` (`importorskip("sklearn")`)**: `build_semantic_map` clusteriza+rotula+cacheia
-  (**spy** em `cluster_documents`: 1× com cache, 2× com `use_cache=False`);
-  `cluster_display_name`; `render_semantic_map_png` → PNG válido (Pillow), mapa vazio /
-  charts ausente → erro. **`on_stage` (Tier A)**: callback chamado em
-  `["cluster","project","label"]` nessa ordem exata (a ordem real do código — a prosa do
-  plano original tinha `project`/`label` trocados); **pulado inteiramente** em cache hit
-  (nenhum estágio de fato roda).
-- **`classify` (Tier A — `domain` parametrizado)**: domínio default preserva os nomes de
-  arquivo pré-existentes (`_proto_filenames`/`_model_name`/`_labels_json_name` do domínio
-  `DOMAIN_TRANSCRIPTION_PROFILE` == as constantes antigas — teste de regressão explícito);
-  domínios novos (`DOMAIN_DATA`/`DOMAIN_DOCUMENT`) não vazam ids de protótipo um pro outro;
-  rótulos gravados num domínio não aparecem em `load_labels` de outro (isolamento por
-  arquivo, não por processo).
-- **`charts.render_category_scatter`** (`tests/core/data/test_charts.py`): scatter
-  categórico → PNG válido, vazio/coluna inexistente → erro, >12 categorias sem legenda,
-  thread-safe (dois renders concorrentes).
-- **GUI (Plano 4A)**: `semantic_map_panel` por **construct-smoke** (`build_*` com
-  `MagicMock` pega erro de construtor que o import-smoke não pega) + gates (ml/índice
-  vazio); worker da IA marca `low_confidence` quando o query é ortogonal ao acervo
-  (e não quando coberto), via `hits[0].score` sem re-embeddar.
-
-### Core Dados (`src/core/data/`) — DuckDB in-process (qualifica como `unit`)
-
-DuckDB roda in-process (sem ffmpeg/rede/GPU), então os testes de dados são `unit`
-como os do RAG. Fixtures locais em `tests/core/data/conftest.py` (`csv_sales`,
-`csv_people_cp1252`, `json_file`). Arquivos: `test_validate`/`test_engine`/
-`test_scanner`/`test_convert`/`test_profile`/`test_nl2sql`/`test_store` + (PR9.3)
-`test_assess`/`test_datacard`.
-
-- **`engine.preview`/`reader_expr`/`xlsx_sheet_names`** (`test_engine.py`): use
-  `csv_sales` real; `preview(limit/offset)` janela linhas; `reader_expr(.xlsx,
-  sheet=)` deve emitir `sheet = '...'` (aspas escapadas) e **ignorar** `sheet` em
-  CSV; para `xlsx_sheet_names`, monte um XLSX mínimo com `zipfile` + um
-  `xl/workbook.xml` (declare o ns `r:`!) — zip corrompido / não-XLSX → `[]`.
-- **`profile.summarize_sql`** (puro): abaixo do threshold → `SUMMARIZE "view"`;
-  acima → `SUMMARIZE SELECT * FROM "view" USING SAMPLE n ROWS`. `profile_text`
-  retorna o relatório sem gravar.
-- **`assess`** (`test_assess.py`): LLM via `GenericFakeChatModel` (injete
-  `make_llm_fn=lambda *a, **k: _fake_llm(...)`); o prompt não tem chaves literais
-  (valores com `{` são seguros). Cache: passe `cache_file=tmp_path/...` em
-  `load/save_assessment`; mudar o mtime do arquivo invalida; cache malformado →
-  miss; salvar p/ arquivo inexistente é no-op.
-- **`datacard.build_data_card`** (puro): asserir seções ARQUIVO/SCHEMA/PERFIL/
-  AMOSTRA e que `AVALIAÇÃO DA IA` só aparece com `assessment=`; `card_for_path`
-  lê arquivo real e dobra a avaliação cacheada (mocke `assess._cache_file`).
-- **indexer `kind="data"`** (`tests/core/rag/test_indexer.py`): `build_index(...,
-  card_fn=...)` embeda o cartão (não o arquivo); sem `card_fn`, itens de dados
-  são pulados; `card_fn` que levanta pula só aquele item; `indexable_items`
-  inclui `kind="data"` por kind (qualquer sufixo). **`index_files`** (aditivo,
-  sem reconciliação, usado pelo botão Indexar da aba Pré-visualização): indexar
-  só o arquivo B **não** derruba A já indexado; reembeda a cada chamada (ação
-  explícita, sem skip por mtime); `card_fn` que falha pula só aquele.
-- **`ml.detect_outliers`** (`test_ml.py`, Tier A — `pd = pytest.importorskip("pandas")` +
-  `pytest.importorskip("sklearn")`, sem fixture de arquivo — DataFrame sintético direto):
-  linha bem fora da distribuição → menor `ANOMALY_COLUMN` (mais anômala); ordem de linhas
-  e colunas não-numéricas preservadas; NaN numérico não lança (mean-imputado antes de
-  `IsolationForest`, que rejeita NaN); sem coluna numérica → `ValueError`.
-
-### Mock de `WhisperModel` (faster-whisper) — para testar `transcriber.transcribe`
-
-`src/transcriber.py` instancia `WhisperModel(...)` e chama
-`model.transcribe(...)`, que retorna `(segments, info)` onde
-`segments` é um **generator lazy** e cada `Segment` expõe
-`.start/.end/.text/.avg_logprob/.no_speech_prob`. `info` expõe
-`.language/.language_probability/.duration`.
-
-Para mockar sem carregar Whisper (RAM, CUDA, disco), use stand-ins
-duck-typed e patche o ponto de import:
-
-```python
-class _Seg:
-    """Minimal Segment stand-in matching the faster-whisper API surface used."""
-    def __init__(self, start, end, text, avg_logprob=-0.2, no_speech_prob=0.1):
-        self.start = start
-        self.end = end
-        self.text = text
-        self.avg_logprob = avg_logprob
-        self.no_speech_prob = no_speech_prob
-
-
-class _Info:
-    def __init__(self, language="pt", language_probability=0.99, duration=6.0):
-        self.language = language
-        self.language_probability = language_probability
-        self.duration = duration
-
-
-def _patch_whisper(mocker, segments, info=None):
-    """Patcha WhisperModel + _resolve_device (evita lookup de GPU)."""
-    fake = mocker.MagicMock()
-    # IMPORTANTE: iter() — faster-whisper retorna generator, não list.
-    # Usar list direto faria o teste passar mas mascara bugs de consumo lazy.
-    fake.transcribe.return_value = (iter(segments), info or _Info())
-    mocker.patch("src.transcriber.WhisperModel", return_value=fake)
-    mocker.patch("src.transcriber._resolve_device", return_value=("cpu", "int8"))
-    return fake
-
-
-@pytest.mark.unit
-def test_transcribe_flags_low_logprob(tmp_path, mocker):
-    from src.transcriber import transcribe
-    _patch_whisper(mocker, [
-        _Seg(0.0, 3.0, "ok"),
-        _Seg(3.0, 6.0, "ruim", avg_logprob=-2.0),   # < -1.0 → dispara [?]
-    ])
-    audio = tmp_path / "a.mp3"; audio.write_bytes(b"")
-    out = tmp_path / "o.txt"
-    transcribe(audio_path=audio, output_path=out, meta={"title":"x","duration":6},
-               url="x", model_size="small", language="pt",
-               threads=2, beam_size=1, force_overwrite=True)
-    assert "ruim [?]" in out.read_text(encoding="utf-8")
-```
-
-Gotchas específicos:
-
-- **Patche `src.transcriber.WhisperModel`, não `faster_whisper.WhisperModel`.**
-  O `from faster_whisper import WhisperModel` no topo de `transcriber.py`
-  vincula o símbolo localmente — só o ponto de uso responde ao patch.
-- **`_resolve_device` precisa ser mockado também.** Sem isso, o teste
-  tenta consultar `ctranslate2.get_supported_compute_types("cuda")` —
-  em CI sem GPU funciona, mas é tempo gasto à toa.
-- **Para `KeyboardInterrupt` no meio do loop**, use um generator que
-  yielda e depois levanta:
-  ```python
-  def _raise_after_first():
-      yield _Seg(0.0, 3.0, "primeiro")
-      raise KeyboardInterrupt
-  fake.transcribe.return_value = (_raise_after_first(), _Info())
-  ```
-  O teste valida com `pytest.raises(SystemExit)` (transcriber chama
-  `sys.exit(0)` e remove o arquivo incompleto).
-- **Para legendas** (`subtitle_formats=("srt","vtt")`), redirecione
-  `src.utils.TRANSCRIPTIONS_SUBTITLES_DIR` via `monkeypatch.setattr`
-  para `tmp_path` antes da chamada — o transcriber lê esse atributo
-  lazy dentro do `if subtitle_formats and cues:`.
-
-### Mock de `urllib.request.urlopen` — para testar download_image
-
-`urlopen` é usado como context manager (`with urlopen(...) as resp`).
-Substituir por `@contextmanager` quebra na **segunda chamada** porque
-generators são single-use. Use `MagicMock` (reusável):
-
-```python
-from unittest.mock import MagicMock
-
-def _fake_urlopen(payload: bytes) -> MagicMock:
-    cm = MagicMock()
-    cm.__enter__.return_value.read.return_value = payload
-    cm.__exit__.return_value = False
-    return cm
-
-def test_download_image(mocker, out_dir):
-    from src.core.image.downloader import download_image
-    mocker.patch("urllib.request.urlopen", return_value=_fake_urlopen(png_bytes))
-    out = download_image("https://example.com/img.png", out_dir)
-    assert out.exists()
-```
-
-Para erros de rede, use `side_effect=ConnectionError("...")` — o
-downloader empacota qualquer `Exception` num `ValueError` com
-mensagem "Falha ao baixar". Para HTML/404 (resposta válida mas não-imagem),
-passe bytes de HTML como payload — `Image.open(io.BytesIO(html)).verify()`
-levanta exceção e o downloader produz "URL não contém uma imagem válida".
-
-### Mock com contagem de chamadas (`side_effect` com lista)
-
-Para fazer `Image.open` falhar apenas na segunda chamada:
-```python
-from PIL import Image as PILImage
-original = PILImage.open
-n = {"count": 0}
-
-def selective(path, *a, **kw):
-    n["count"] += 1
-    if n["count"] == 2:
-        raise OSError("falha simulada")
-    return original(path, *a, **kw)
-
-mocker.patch("PIL.Image.open", side_effect=selective)
-```
-
 ---
 
-## Verificar cobertura de um módulo
+## Cobertura
 
 ```bash
 # Cobertura de um módulo específico (usar pontos, não barras)
@@ -774,148 +186,28 @@ uv run pytest tests/core/audio/test_normalizer_unit.py \
 
 # Cobertura unitária apenas (rápido, sem ffmpeg)
 uv run pytest -m "not integration" --cov=src --cov-report=term-missing
-
-# Cobertura completa (unit + integration — requer ffmpeg)
-uv run pytest --cov=src --cov-report=term-missing
 ```
 
-O alvo é **≥ 90%** por módulo. Total agregado: **88%** com branch. Estado atual:
+Alvo **≥ 90%** por módulo; agregado **~88%** com branch. **Não** mantemos uma tabela de cobertura por módulo
+aqui — ela é snapshot manual que envelhece; o `--cov-report=term-missing` gera o estado real sob demanda.
 
-| Módulo | Cobertura (com branch) |
-|---|---|
-| `formatter.py` | **100%** |
-| `prompter.py` | **100%** |
-| `llm_utils.py` | **100%** |
-| `core/subtitles.py` | **100%** |
-| `core/audio/normalizer.py` | **100%** |
-| `core/audio/info.py` | **100%** |
-| `core/ffmpeg.py` | **100%** |
-| `core/library/types.py` | **100%** |
-| `core/library/thumbnails.py` | **100%** |
-| `core/rag/types.py` | **100%** |
-| `core/rag/embedder.py` | **100%** |
-| `core/rag/retriever.py` | **100%** |
-| `core/rag/indexer.py` | **100%** |
-| `core/rag/chat.py` | **100%** |
-| `core/rag/batch.py` | **100%** |
-| `core/ml/features.py` | **100%** |
-| `core/ml/dedup.py` | **100%** |
-| `core/ml/deps.py` | **100%** |
-| `core/ml/store.py` | **100%** |
-| `core/ml/types.py` | **100%** |
-| `core/ml/recommend.py` | **100%** |
-| `core/ml/cluster.py` | **100%** |
-| `core/ml/labeling.py` | **100%** |
-| `core/ml/cache.py` | **100%** |
-| `core/ml/project.py` | **100%** (UMAP sob `# pragma`) |
-| `core/ml/mapviz.py` | **100%** |
-| `core/rag/bm25.py` | **100%** (Tier A) |
-| `core/image/dhash.py` | **100%** (Tier A) |
-| `core/library/image_dedup.py` | **100%** (Tier A) |
-| `core/data/ml.py` | **100%** (Tier A) |
-| `core/observatory/status.py` | **100%** (Tier A) |
-| `core/observatory/activity.py` | 94% (Tier A — write-failure/log branches) |
-| `analyzer.py` | 99% |
-| `cli/ai.py` | 98% |
-| `core/rag/store.py` | 98% |
-| `core/rag/templates.py` | 98% |
-| `cli/document.py` | 98% |
-| `core/library/scanner.py` | 98% |
-| `transcriber.py` | 97% |
-| `core/video/converter.py` | 97% (2 partial branches) |
-| `cli/video.py` | 97% |
-| `core/document/info.py` | 94% (render_first_page_png: except interno) |
-| `cli/library.py` | ~93% |
-| `core/document/ocr.py` | 97% (2 partial branches) |
-| `core/image/downloader.py` | 96% |
-| `cli/image.py` | 94% |
-| `core/audio/converter.py` | 93% |
-| `core/document/converter.py` | 91% |
-| `core/image/transform.py` | 91% |
-| `core/document/processor.py` | 91% |
-| `core/document/qr.py` | 90% |
-| `core/image/info.py` | 89% |
-| `cli/bus.py` | 82% |
-| `utils.py` | 82% |
-| `llm_factory.py` | 81% |
-| `core/audio/denoiser.py` | 80% |
-| `core/metadata.py` | 76% |
-| `core/image/converter.py` | 71% |
-| `core/image/background.py` | 32% (extra `[ai-image]` — sem teste de uso real) |
-| `core/image/describe.py` | 23% (vision LLM — sem teste de uso real) |
-| `core/audio/downloader.py` | 14% (yt-dlp não mockado) |
-| `core/video/downloader.py` | 12% (yt-dlp não mockado) |
+Lacunas conhecidas e justificáveis (não perseguir):
+- `audio/downloader.py` + `video/downloader.py` — yt-dlp só tem valor real em E2E (que não fazemos); smoke
+  de mock daria <40%, retorno pequeno.
+- `image/background.py` + `image/describe.py` — extras opcionais `[ai-image]`/vision LLM, sem teste de uso real.
 
-Lacunas conhecidas e justificáveis:
-- `audio/downloader.py` + `video/downloader.py` — yt-dlp tem valor real em E2E (que não fazemos). Smoke test de mock daria <40%, retorno pequeno.
-- `image/background.py` + `image/describe.py` — extras opcionais `[ai-image]`. Smoke tests de lazy import seriam baratos mas ainda não escritos.
+Linhas impossíveis de cobrir sem desinstalar dependências (ex.: branch `ImportError` de `is_available()`) →
+`# pragma: no cover`.
 
-### pymupdf nos testes do módulo document — uso REAL via fixture
+---
 
-Os testes em `tests/core/document/` **não mockam pymupdf** — usam as
-fixtures de sessão `sample_pdf` e `sample_pdf_with_images` (em
-`conftest.py`), que geram PDFs reais em disco com
-`pytest.importorskip("pymupdf")` no topo (skip elegante se a
-dependência sumir).
+## Regra de projeto: pymupdf/DuckDB são usados de verdade nos testes `unit`
 
-Justificativa: `pymupdf` é dependência hard do projeto (não está num
-extra opcional), e nenhum desses testes depende de ffmpeg/rede/GPU.
-Portanto eles ficam corretamente marcados como `unit` e exercitam
-o comportamento real de `merge_pdfs`, `split_pdf`, `compress_pdf`,
-`pdf_to_images`, etc.
+Os testes de `tests/core/document/` **não mockam pymupdf** — usam as fixtures `sample_pdf` /
+`sample_pdf_with_images` (com `pytest.importorskip("pymupdf")`), que geram PDFs reais em disco. O mesmo vale
+para DuckDB em `tests/core/data/`. Justificativa: ambos são dependência **hard** (não opcional) e nenhum
+desses testes toca ffmpeg/rede/GPU — logo ficam corretamente marcados como `unit` e exercem o comportamento
+real (`merge_pdfs`, `split_pdf`, `run_query`, …).
 
-Se você precisar testar uma função document **sem** invocar
-operações reais (caminho de erro, lazy imports, branches de
-disponibilidade), mocke pontualmente via `mocker.patch.dict`:
-
-```python
-import sys
-from unittest.mock import MagicMock
-
-mocker.patch.dict("sys.modules", {"pymupdf": MagicMock()})
-```
-
-Para `qrcode` (mesmo padrão de lazy import em `qr.py`) o `test_qr.py`
-também usa a biblioteca real — gera PNG em disco e valida o tamanho
-da imagem com Pillow. Mockar só faz sentido para cobrir branches de
-erro:
-
-```python
-mocker.patch.dict("sys.modules", {"qrcode": MagicMock(), "qrcode.constants": MagicMock()})
-```
-
-Linhas impossíveis de cobrir sem desinstalar dependências (ex.: `is_available()` no `denoiser.py` — branch `ImportError`) devem ser marcadas como `# pragma: no cover`.
-
-### Mock de `pytesseract` (OCR) — `tests/core/document/test_ocr.py`
-
-`core/document/ocr.py` é gateado por `is_available()` (extra `[ocr]` +
-binário Tesseract) e importa `pytesseract` **lazy** dentro de `ocr_pdf`.
-Os testes unit não dependem da instalação real: mockam o módulo via
-`sys.modules` e o resolvedor do binário.
-
-```python
-import sys
-from unittest.mock import MagicMock
-
-def _patch_tesseract(mocker, ocr_text="texto reconhecido"):
-    fake = MagicMock()
-    fake.image_to_string.return_value = ocr_text
-    mocker.patch.dict(sys.modules, {"pytesseract": fake})
-    mocker.patch("src.core.document.ocr._resolve_tesseract_cmd", return_value="tesseract")
-    return fake
-```
-
-Gotchas:
-
-- **Fluxo híbrido**: páginas com texto nativo (`sample_pdf`) **não**
-  invocam `image_to_string` (assert `assert_not_called()`); páginas só-imagem
-  (`sample_pdf_with_images`) caem no OCR. pymupdf/PIL rodam de verdade —
-  só o `image_to_string` é mockado.
-- **`word_count` inclui o cabeçalho** `--- Página N ---` (como `extract_text`);
-  não asserte contagens exatas frágeis — use `>= N`.
-- **`is_available()` False**: mockar `shutil.which → None` **e**
-  `_WINDOWS_FALLBACKS → ()` (a máquina de dev tem o binário no local padrão,
-  então o fallback acharia mesmo sem PATH).
-- **Integration real**: 1 teste `@pytest.mark.integration` renderiza texto
-  num PDF só-imagem e roda Tesseract de verdade; `pytest.skip` se
-  `not ocr.is_available()`.
+Mocke pymupdf/qrcode/DuckDB **pontualmente** só para cobrir caminhos de erro ou branches de disponibilidade —
+receitas em [`mocks-media.md`](mocks-media.md) e [`mocks-llm-rag-ml.md`](mocks-llm-rag-ml.md).
