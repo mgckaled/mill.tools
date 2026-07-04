@@ -219,3 +219,40 @@ def test_run_logs_empty(mocker, capsys):
     ns = _parse("logs")
     ns.func(ns)
     assert "Nenhuma falha" in capsys.readouterr().out
+
+
+@pytest.mark.unit
+def test_disk_usage_parser_defaults():
+    ns = _parse("disk-usage")
+    assert ns.observatory_op == "disk-usage"
+    assert callable(ns.func)
+
+
+@pytest.mark.unit
+def test_run_disk_usage_prints_entries_and_total(mocker, capsys):
+    from src.core.observatory.disk_usage import DiskUsageEntry
+
+    mocker.patch(
+        "src.core.observatory.disk_usage.disk_usage",
+        return_value=(
+            DiskUsageEntry("rag", 2048, True),
+            DiskUsageEntry("config.json", 100, False),
+        ),
+    )
+
+    ns = _parse("disk-usage")
+    ns.func(ns)
+
+    out = capsys.readouterr().out
+    assert "rag" in out
+    assert "config.json" in out
+    assert "2.0 KB" in out
+    assert "Total:" in out
+
+
+@pytest.mark.unit
+def test_run_disk_usage_empty(mocker, capsys):
+    mocker.patch("src.core.observatory.disk_usage.disk_usage", return_value=())
+    ns = _parse("disk-usage")
+    ns.func(ns)
+    assert "Nenhum arquivo" in capsys.readouterr().out

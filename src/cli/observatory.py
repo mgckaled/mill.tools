@@ -18,7 +18,8 @@ _DOMAIN_LABELS = {
 
 
 def add_observatory_parser(subparsers) -> None:
-    """Register the `observatory` subcommand and its `status`/`activity` ops."""
+    """Register the `observatory` subcommand and its `status`/`activity`/`logs`/
+    `disk-usage` ops."""
     p = subparsers.add_parser(
         "observatory",
         help="Observatório de ML — atividade e status cross-módulo (leitura)",
@@ -52,6 +53,11 @@ def add_observatory_parser(subparsers) -> None:
         help="Quantidade de falhas exibidas (default: 50)",
     )
     logs_p.add_argument("--verbose", action="store_true", help="Logging DEBUG")
+
+    disk_p = sub.add_parser(
+        "disk-usage", help="Tamanho de cada arquivo/pasta em ~/.mill-tools/"
+    )
+    disk_p.add_argument("--verbose", action="store_true", help="Logging DEBUG")
 
     p.set_defaults(func=run_observatory_cli)
 
@@ -157,8 +163,24 @@ def _run_logs(ns: argparse.Namespace) -> None:
         print(f"{_fmt_time(e.timestamp)}  {e.module:<12}  {e.stage:<14}  {e.message}")
 
 
+def _run_disk_usage(ns: argparse.Namespace) -> None:
+    """Run the `observatory disk-usage` operation."""
+    from src.core.observatory.disk_usage import disk_usage, total_bytes
+    from src.core.rag.stats import fmt_disk_size
+
+    entries = disk_usage()
+    if not entries:
+        print("Nenhum arquivo em ~/.mill-tools/ ainda.")
+        return
+    for e in entries:
+        kind = "dir " if e.is_dir else "file"
+        print(f"  [{kind}] {e.name:<30}  {fmt_disk_size(e.size_bytes)}")
+    print(f"\nTotal: {fmt_disk_size(total_bytes(entries))}")
+
+
 def run_observatory_cli(ns: argparse.Namespace) -> None:
-    """Dispatch the `observatory` subcommand: `status`, `activity` or `logs`."""
+    """Dispatch the `observatory` subcommand: `status`, `activity`, `logs` or
+    `disk-usage`."""
     try:
         sys.stdout.reconfigure(encoding="utf-8", errors="replace")
     except Exception:
@@ -168,5 +190,7 @@ def run_observatory_cli(ns: argparse.Namespace) -> None:
         _run_status(ns)
     elif ns.observatory_op == "activity":
         _run_activity(ns)
-    else:
+    elif ns.observatory_op == "logs":
         _run_logs(ns)
+    else:
+        _run_disk_usage(ns)
