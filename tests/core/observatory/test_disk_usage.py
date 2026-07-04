@@ -26,8 +26,28 @@ def test_disk_usage_lists_files_and_directories(tmp_path):
 
     assert by_name["ml_activity.json"].size_bytes == 10
     assert by_name["ml_activity.json"].is_dir is False
-    assert by_name["rag"].size_bytes == 120  # summed recursively
+    assert by_name["ml_activity.json"].children == ()
+    assert by_name["rag"].size_bytes == 120  # summed from children
     assert by_name["rag"].is_dir is True
+
+    rag_children = {c.name: c for c in by_name["rag"].children}
+    assert rag_children["vectors.npz"].size_bytes == 100
+    assert rag_children["meta.json"].size_bytes == 20
+
+
+@pytest.mark.unit
+def test_disk_usage_nests_grandchildren_too(tmp_path):
+    nested_dir = tmp_path / "ml" / "sub"
+    nested_dir.mkdir(parents=True)
+    (nested_dir / "model.npz").write_bytes(b"x" * 50)
+
+    entries = disk_usage(directory=tmp_path)
+    ml_entry = next(e for e in entries if e.name == "ml")
+    assert ml_entry.size_bytes == 50
+    sub_entry = ml_entry.children[0]
+    assert sub_entry.name == "sub"
+    assert sub_entry.is_dir is True
+    assert sub_entry.children[0].name == "model.npz"
 
 
 @pytest.mark.unit

@@ -14,11 +14,13 @@ from pathlib import Path
 
 @dataclass(frozen=True, slots=True)
 class DiskUsageEntry:
-    """One direct child of ``~/.mill-tools/`` — a file or a whole subdirectory."""
+    """One entry under ``~/.mill-tools/`` — a file, or a subdirectory with its
+    own direct children (``rag/``, ``ml/``) nested one level deep."""
 
     name: str
     size_bytes: int
     is_dir: bool
+    children: tuple["DiskUsageEntry", ...] = ()
 
 
 def mill_tools_dir() -> Path:
@@ -26,20 +28,27 @@ def mill_tools_dir() -> Path:
     return Path.home() / ".mill-tools"
 
 
-def _dir_size(path: Path) -> int:
-    """Recursively sum file sizes under ``path`` (skips unreadable entries)."""
-    total = 0
-    for child in path.rglob("*"):
-        if child.is_file():
-            try:
-                total += child.stat().st_size
-            except OSError:
-                continue
-    return total
+def _scan_dir(path: Path) -> tuple[DiskUsageEntry, ...]:
+    """Entries of ``path``, largest first — directories recurse into their own
+    children so nested stores (``rag/``, ``ml/``) aren't just a single summed row.
+    """
+    entries = []
+    for child in path.iterdir():
+        try:
+            if child.is_dir():
+                nested = _scan_dir(child)
+                size = sum(e.size_bytes for e in nested)
+                entries.append(DiskUsageEntry(child.name, size, True, nested))
+            elif child.is_file():
+                entries.append(DiskUsageEntry(child.name, child.stat().st_size, False))
+        except OSError:
+            continue  # e.g. deleted or permission-denied mid-scan
+    entries.sort(key=lambda e: -e.size_bytes)
+    return tuple(entries)
 
 
 def disk_usage(*, directory: Path | None = None) -> tuple[DiskUsageEntry, ...]:
-    """Size of every direct child of ``~/.mill-tools/``, largest first.
+    """Size of every entry under ``~/.mill-tools/``, largest first.
 
     Args:
         directory: Overrides ``mill_tools_dir()`` (injectable for tests);
@@ -52,18 +61,10 @@ def disk_usage(*, directory: Path | None = None) -> tuple[DiskUsageEntry, ...]:
     root = directory if directory is not None else mill_tools_dir()
     if not root.exists():
         return ()
-
-    entries = []
-    for child in root.iterdir():
-        try:
-            if child.is_dir():
-                entries.append(DiskUsageEntry(child.name, _dir_size(child), True))
-            elif child.is_file():
-                entries.append(DiskUsageEntry(child.name, child.stat().st_size, False))
-        except OSError:
-            continue  # e.g. deleted or permission-denied mid-scan
-    entries.sort(key=lambda e: -e.size_bytes)
-    return tuple(entries)
+    try:
+        return _scan_dir(root)
+    except OSError:
+        return ()
 
 
 def total_bytes(entries: tuple[DiskUsageEntry, ...]) -> int:

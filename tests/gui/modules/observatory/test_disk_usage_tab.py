@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock
 
+import flet as ft
 import pytest
 
 from src.gui.modules.observatory.disk_usage_tab import build_disk_usage_tab
@@ -49,3 +50,120 @@ def test_apply_lists_entries_and_total(mocker):
     apply()
     entries_col = control.controls[2]
     assert len(entries_col.controls) == 2
+
+
+@pytest.mark.unit
+def test_apply_renders_children_indented_below_their_parent(mocker):
+    from src.core.observatory.disk_usage import DiskUsageEntry
+
+    entries = (
+        DiskUsageEntry(
+            "rag",
+            120,
+            True,
+            children=(
+                DiskUsageEntry("vectors.npz", 100, False),
+                DiskUsageEntry("meta.json", 20, False),
+            ),
+        ),
+    )
+    mocker.patch(
+        "src.gui.modules.observatory.disk_usage_tab.disk_usage",
+        return_value=entries,
+    )
+    control, apply = build_disk_usage_tab(MagicMock())
+    apply()
+    entries_col = control.controls[2]
+    assert len(entries_col.controls) == 3  # rag + 2 children, all flattened
+
+    # The parent has no left padding; children are indented past it.
+    assert entries_col.controls[0].padding.left == 0
+    assert entries_col.controls[1].padding.left > 0
+    assert entries_col.controls[2].padding.left == entries_col.controls[1].padding.left
+
+
+@pytest.mark.unit
+def test_icon_for_dispatches_by_extension():
+    from src.core.observatory.disk_usage import DiskUsageEntry
+    from src.gui.modules.observatory.disk_usage_tab import _icon_for
+
+    assert _icon_for(DiskUsageEntry("rag", 0, True)) == ft.Icons.FOLDER_OUTLINED
+    assert (
+        _icon_for(DiskUsageEntry("config.json", 0, False))
+        == ft.Icons.DATA_OBJECT_OUTLINED
+    )
+    assert _icon_for(DiskUsageEntry("vectors.npz", 0, False)) == ft.Icons.DATA_ARRAY
+    assert (
+        _icon_for(DiskUsageEntry("something.bin", 0, False))
+        == ft.Icons.INSERT_DRIVE_FILE_OUTLINED
+    )
+
+
+@pytest.mark.unit
+def test_apply_populates_glossary_only_for_known_present_files(mocker):
+    from src.core.observatory.disk_usage import DiskUsageEntry
+
+    entries = (
+        DiskUsageEntry("config.json", 10, False),
+        DiskUsageEntry("mystery_file.bin", 5, False),  # no glossary entry
+    )
+    mocker.patch(
+        "src.gui.modules.observatory.disk_usage_tab.disk_usage",
+        return_value=entries,
+    )
+    control, apply = build_disk_usage_tab(MagicMock())
+    apply()
+    glossary_col = control.controls[5]
+    names = [c.controls[0].value for c in glossary_col.controls]
+    assert names == ["config.json"]  # mystery_file.bin silently omitted
+
+
+def _walk(control):
+    yield control
+    for attr in ("controls", "content"):
+        child = getattr(control, attr, None)
+        if isinstance(child, list):
+            for c in child:
+                yield from _walk(c)
+        elif child is not None and not isinstance(child, (str, bytes)):
+            yield from _walk(child)
+
+
+@pytest.mark.unit
+def test_apply_wraps_a_described_folder_in_an_accent_bordered_card(mocker):
+    from src.core.observatory.disk_usage import DiskUsageEntry
+
+    entries = (
+        DiskUsageEntry(
+            "rag",
+            120,
+            True,
+            children=(
+                DiskUsageEntry("vectors.npz", 100, False),
+                DiskUsageEntry("meta.json", 20, False),
+            ),
+        ),
+        DiskUsageEntry("config.json", 10, False),
+    )
+    mocker.patch(
+        "src.gui.modules.observatory.disk_usage_tab.disk_usage",
+        return_value=entries,
+    )
+    control, apply = build_disk_usage_tab(MagicMock())
+    apply()
+    glossary_col = control.controls[5]
+
+    # One card for rag/, one plain row for config.json.
+    assert len(glossary_col.controls) == 2
+    card = glossary_col.controls[0]
+    assert card.border is not None
+    assert card.border.left.color == ft.Colors.with_opacity(0.6, ft.Colors.PRIMARY)
+
+    texts = [getattr(c, "value", "") for c in _walk(card)]
+    assert any("Pasta RAG" in str(t) for t in texts)
+    assert any("Índice semântico do RAG" in str(t) for t in texts)
+    assert any("vectors.npz" in str(t) for t in texts)
+    assert any("meta.json" in str(t) for t in texts)
+
+    plain_row = glossary_col.controls[1]
+    assert not isinstance(plain_row, ft.Container)
