@@ -30,3 +30,16 @@ def test_blank_file_yields_empty(tmp_path):
     f = tmp_path / "empty.txt"
     f.write_text("   \n  ", encoding="utf-8")
     assert read_document_text(f) == ""
+
+
+@pytest.mark.unit
+def test_ignores_separator_look_alike_deep_in_a_plain_document(tmp_path):
+    # A plain (non-transcription) document with no real header can still
+    # coincidentally contain a run of 64+ dashes far into its own body (e.g.
+    # a markdown horizontal rule). That must not be mistaken for a header
+    # separator and silently discard everything before it.
+    body_before = "Paragrafo real com conteudo. " * 200
+    text = f"{body_before}\n{_SEP}\nMais texto depois da linha."
+    f = tmp_path / "doc.md"
+    f.write_text(text, encoding="utf-8")
+    assert read_document_text(f) == text.strip()

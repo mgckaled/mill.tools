@@ -167,6 +167,18 @@ def test_extract_transcription_body_no_separator():
     assert _extract_transcription_body("just body") == "just body"
 
 
+def test_extract_transcription_body_ignores_separator_look_alike_deep_in_body():
+    from src.analyzer import _extract_transcription_body
+
+    # A plain text with no real metadata header can still coincidentally
+    # contain a run of 64+ dashes far into its own body — must not be
+    # mistaken for the header separator and silently drop everything before it.
+    sep = "-" * 64
+    body_before = "Paragrafo real com conteudo. " * 200
+    text = f"{body_before}\n{sep}\nMais texto depois."
+    assert _extract_transcription_body(text) == text.strip()
+
+
 # ── _parse_header ────────────────────────────────────────────────────────────
 
 
@@ -183,6 +195,15 @@ def test_parse_header_no_separator_returns_empty():
     from src.analyzer import _parse_header
 
     assert _parse_header("no separator here") == {}
+
+
+def test_parse_header_ignores_separator_look_alike_deep_in_body():
+    from src.analyzer import _parse_header
+
+    sep = "-" * 64
+    body_before = "Paragrafo real com conteudo. " * 200
+    text = f"{body_before}\n{sep}\nMais texto depois."
+    assert _parse_header(text) == {}
 
 
 def test_parse_header_skips_lines_without_colon():

@@ -14,10 +14,18 @@ from pathlib import Path
 # Transcription metadata header separator (see analyzer._extract_transcription_body).
 _HEADER_SEP = "-" * 64
 
+# The real header (title/channel/date/duration/language/tags/url) is a handful
+# of short lines, always well under this. Bounding the search to a prefix
+# window avoids treating a coincidental run of 64 dashes deep in a plain
+# document's own body (e.g. a markdown rule) as a header separator, which
+# would silently discard everything before it as "metadata".
+_HEADER_SEARCH_WINDOW = 4096
+
 
 def read_document_text(path: str | Path) -> str:
     """Return the plain-text body of a document (transcription header stripped)."""
     raw = Path(path).read_text(encoding="utf-8", errors="replace")
-    if _HEADER_SEP in raw:
-        return raw.split(_HEADER_SEP, 1)[1].strip()
+    idx = raw.find(_HEADER_SEP)
+    if 0 <= idx <= _HEADER_SEARCH_WINDOW:
+        return raw[idx + len(_HEADER_SEP) :].strip()
     return raw.strip()

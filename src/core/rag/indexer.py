@@ -38,6 +38,12 @@ CHUNK_OVERLAP = 150
 # no header, so the whole file is indexed.
 _HEADER_SEP = "-" * 64
 
+# The real header is a handful of short lines, always well under this. Bounds
+# the separator search to a prefix window so a coincidental run of 64 dashes
+# deep in a plain document's own body isn't mistaken for a header and doesn't
+# silently drop everything before it.
+_HEADER_SEARCH_WINDOW = 4096
+
 
 def index_dir() -> Path:
     """Return the canonical on-disk index location (~/.mill-tools/rag/).
@@ -67,8 +73,9 @@ def indexable_items(items: list[LibraryItem]) -> list[LibraryItem]:
 def _read_indexable_text(item: LibraryItem) -> str:
     """Return the plain-text body of a Library item (header stripped if present)."""
     raw = Path(item.path).read_text(encoding="utf-8", errors="replace")
-    if _HEADER_SEP in raw:
-        return raw.split(_HEADER_SEP, 1)[1].strip()
+    idx = raw.find(_HEADER_SEP)
+    if 0 <= idx <= _HEADER_SEARCH_WINDOW:
+        return raw[idx + len(_HEADER_SEP) :].strip()
     return raw.strip()
 
 

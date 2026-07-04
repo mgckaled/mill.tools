@@ -43,6 +43,12 @@ DEFAULT_PROFILE = "default"
 CHUNK_SIZE = 4500
 CHUNK_OVERLAP = 300
 
+# The real metadata header is a handful of short lines, always well under
+# this. Bounds the separator search to a prefix window so a coincidental run
+# of 64 dashes deep in a plain document's own body isn't mistaken for a
+# header — which would silently drop everything before it as "metadata".
+_HEADER_SEARCH_WINDOW = 4096
+
 DETECT_LANGUAGE_PROMPT = ChatPromptTemplate.from_messages(
     [
         (
@@ -170,8 +176,9 @@ def _extract_transcription_body(raw_text: str) -> str:
         The transcription body without metadata header.
     """
     separator = "-" * 64
-    if separator in raw_text:
-        return raw_text.split(separator, 1)[1].strip()
+    idx = raw_text.find(separator)
+    if 0 <= idx <= _HEADER_SEARCH_WINDOW:
+        return raw_text[idx + len(separator) :].strip()
     return raw_text.strip()
 
 
@@ -186,10 +193,11 @@ def _parse_header(raw_text: str) -> dict:
         Empty dict if no header separator is found.
     """
     separator = "-" * 64
-    if separator not in raw_text:
+    idx = raw_text.find(separator)
+    if not (0 <= idx <= _HEADER_SEARCH_WINDOW):
         return {}
 
-    header_text = raw_text.split(separator, 1)[0]
+    header_text = raw_text[:idx]
     meta = {}
     for line in header_text.splitlines():
         if ":" in line:

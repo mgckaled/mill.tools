@@ -91,6 +91,22 @@ def test_build_index_strips_transcription_header(tmp_path):
 
 
 @pytest.mark.unit
+def test_read_indexable_text_ignores_separator_look_alike_deep_in_body(tmp_path):
+    from src.core.rag.indexer import _read_indexable_text
+
+    # A plain document with no real header can coincidentally contain a run
+    # of 64+ dashes far into its own body — that must not be mistaken for a
+    # header separator and silently discard everything before it.
+    sep = "-" * 64
+    body_before = "Paragrafo real com conteudo. " * 200
+    text = f"{body_before}\n{sep}\nMais texto depois da linha."
+    f = tmp_path / "doc.md"
+    f.write_text(text, encoding="utf-8")
+
+    assert _read_indexable_text(_item(f, kind="document")) == text.strip()
+
+
+@pytest.mark.unit
 def test_indexable_items_keeps_only_text_kinds_and_suffixes(tmp_path):
     from src.core.rag.indexer import indexable_items
 
