@@ -30,6 +30,14 @@ DEFAULT_IN_CORPUS_THRESHOLD = 0.35
 # near-duplicate documents when the corpus has a tight cluster around a topic.
 _MMR_LAMBDA = 0.6
 
+# related()'s pairwise similarity matrix is O(pool^2 * D) — unlike dedup.py's
+# near_duplicates (which has a max_docs guard and simply skips the run above
+# it), related() always needs to return *something* for a single-document
+# query, so it narrows to this many top-relevance candidates (by cheap plain
+# cosine, O(M*D)) before the quadratic MMR step, instead of aborting on a
+# large corpus (M4).
+_MMR_POOL_SIZE = 200
+
 
 def _mmr(
     relevance: np.ndarray,
@@ -68,6 +76,7 @@ def related(
     *,
     k: int = 5,
     lambda_: float = _MMR_LAMBDA,
+    pool_size: int = _MMR_POOL_SIZE,
 ) -> list[tuple[str, float]]:
     """Return the top-``k`` documents most similar to ``source_path``, diversified.
 
@@ -82,6 +91,14 @@ def related(
         k: how many neighbours to return.
         lambda_: MMR relevance/diversity trade-off (higher favors plain top-k
             by relevance; lower favors diversity).
+        pool_size: MMR only reranks the top ``pool_size`` candidates by plain
+            cosine — the pairwise similarity matrix it builds is
+            ``O(pool_size^2 * D)``, so bounding the pool keeps that cost
+            constant regardless of corpus size (M4). Above this many
+            candidates, the least relevant ones never entered the diversity
+            step to begin with — the same trade-off ``dedup.near_duplicates``
+            makes with its ``max_docs`` guard, but returning a (still
+            relevance-ranked) result instead of aborting the run.
 
     Returns:
         ``(source_path, cosine)`` pairs — cosine to the anchor, MMR-ordered.
@@ -100,6 +117,13 @@ def related(
 
     cand_X = dm.X[candidates]
     query_sim = cand_X @ dm.X[i]
+
+    if len(candidates) > pool_size:
+        top_pool = np.argsort(query_sim)[::-1][:pool_size]
+        candidates = [candidates[p] for p in top_pool]
+        cand_X = cand_X[top_pool]
+        query_sim = query_sim[top_pool]
+
     pairwise_sim = cand_X @ cand_X.T
     order = _mmr(query_sim, pairwise_sim, k, lambda_=lambda_)
     return [(dm.source_paths[candidates[o]], float(query_sim[o])) for o in order]

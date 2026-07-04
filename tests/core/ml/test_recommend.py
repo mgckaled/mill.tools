@@ -101,6 +101,33 @@ def test_related_matches_plain_top_k_without_redundancy():
     assert [p for p, _ in out] == ["b.txt", "c.txt"]
 
 
+@pytest.mark.unit
+def test_related_pool_size_bounds_candidates_before_mmr():
+    """M4: candidates outside the top-pool_size (by plain cosine) never enter
+    the MMR step — bounds the O(pool^2) pairwise matrix regardless of corpus
+    size, at the cost of the least-relevant candidates never getting a shot
+    at diversifying the result."""
+    import math
+
+    def _vec(deg: float) -> list[float]:
+        rad = math.radians(deg)
+        return [math.cos(rad), math.sin(rad)]
+
+    dm = _dm(
+        [
+            ("anchor.txt", [1.0, 0.0]),
+            ("close1.txt", _vec(5)),
+            ("close2.txt", _vec(10)),
+            ("close3.txt", _vec(15)),
+            ("far.txt", _vec(89)),  # far worse cosine — excluded by the pool
+        ]
+    )
+    out = related(dm, "anchor.txt", k=4, pool_size=3)
+    sources = [p for p, _ in out]
+    assert "far.txt" not in sources
+    assert len(sources) == 3  # only the 3 pooled candidates were ever available
+
+
 def _store_one(vec: list[float]) -> VectorStore:
     store = VectorStore(dim=len(vec))
     store.add(
