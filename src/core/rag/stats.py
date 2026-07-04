@@ -86,10 +86,32 @@ def _read_embed_model(directory: Path) -> str:
 
 
 def _read_dim(directory: Path) -> int:
-    """Read the vector width from vectors.npz without keeping the matrix around."""
+    """Read the vector width, preferring the ``index_info.json`` sidecar (a
+    few bytes) over loading ``vectors.npz`` — which can be large, and, being
+    written with ``savez_compressed``, fully decompresses just to expose
+    ``.shape``.
+
+    ``vectors.npz`` still gates the result: its plain *existence* is checked
+    first (0 when absent, same as before), but once it exists the sidecar's
+    ``dim`` is trusted without decompressing the matrix to double-check it —
+    detecting bit rot in the matrix's binary content is not this field's job.
+    Falls back to loading the npz for older indexes that predate the sidecar,
+    or when the sidecar is missing/malformed/lacks a usable ``dim``.
+    """
     vectors_path = directory / "vectors.npz"
     if not vectors_path.exists():
         return 0
+
+    info_path = directory / "index_info.json"
+    if info_path.exists():
+        try:
+            info = json.loads(info_path.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            info = {}
+        dim = info.get("dim")
+        if isinstance(dim, int) and dim > 0:
+            return dim
+
     try:
         import numpy as np
 

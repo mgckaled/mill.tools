@@ -148,11 +148,33 @@ def test_index_stats_meta_without_vectors(tmp_path):
 
 
 @pytest.mark.unit
-def test_index_stats_corrupt_vectors_dim_zero(tmp_path):
+def test_index_stats_trusts_sidecar_dim_even_if_vectors_content_is_corrupt(tmp_path):
+    """dim is read from the sidecar without decompressing vectors.npz to
+    double-check it — bit rot in the matrix's binary content is not this
+    field's job to detect, as long as the sidecar is present and valid."""
     from src.core.rag.stats import index_stats
 
     _persist_store(tmp_path)
     (tmp_path / "vectors.npz").write_bytes(b"not a real npz archive")
+    assert index_stats(tmp_path).dim == 3
+
+
+@pytest.mark.unit
+def test_index_stats_dim_falls_back_to_npz_when_sidecar_missing(tmp_path):
+    from src.core.rag.stats import index_stats
+
+    _persist_store(tmp_path)
+    (tmp_path / "index_info.json").unlink()
+    assert index_stats(tmp_path).dim == 3
+
+
+@pytest.mark.unit
+def test_index_stats_dim_zero_when_both_vectors_and_sidecar_are_corrupt(tmp_path):
+    from src.core.rag.stats import index_stats
+
+    _persist_store(tmp_path)
+    (tmp_path / "vectors.npz").write_bytes(b"not a real npz archive")
+    (tmp_path / "index_info.json").write_text("{ broken", encoding="utf-8")
     assert index_stats(tmp_path).dim == 0
 
 
