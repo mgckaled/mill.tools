@@ -92,3 +92,21 @@ def test_corrupt_npz_returns_none(tmp_path):
     save_map(_map(), "sig-1", directory=tmp_path)
     (tmp_path / "semantic_map.npz").write_bytes(b"not an npz")
     assert load_map("sig-1", directory=tmp_path) is None
+
+
+@pytest.mark.unit
+def test_bad_zip_npz_returns_none(tmp_path):
+    """A zip-signature-prefixed but truncated/malformed npz raises
+    zipfile.BadZipFile, a distinct exception type from the plain ValueError
+    np.load() raises for non-zip garbage (see test_corrupt_npz_returns_none)."""
+    save_map(_map(), "sig-1", directory=tmp_path)
+    (tmp_path / "semantic_map.npz").write_bytes(b"PK\x03\x04" + b"garbage" * 5)
+    assert load_map("sig-1", directory=tmp_path) is None
+
+
+@pytest.mark.unit
+def test_npz_missing_expected_key_returns_none(tmp_path):
+    save_map(_map(), "sig-1", directory=tmp_path)
+    # A valid npz, but without the "coords"/"labels" keys load_map expects.
+    np.savez_compressed(tmp_path / "semantic_map.npz", something_else=np.zeros(3))
+    assert load_map("sig-1", directory=tmp_path) is None

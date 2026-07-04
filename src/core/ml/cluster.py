@@ -137,12 +137,12 @@ def _kmeans(x: np.ndarray, k: int | None, m: int) -> np.ndarray:
     if k is None:
         if m < _MIN_FOR_AUTO_K:
             raise ValueError(
-                f"k-means requires a positive --k below {_MIN_FOR_AUTO_K} "
+                f"k-means requires a positive k below {_MIN_FOR_AUTO_K} "
                 "documents (too few for automatic k selection)."
             )
         k = _auto_k(x, m)
     elif k < 1:
-        raise ValueError("k-means requires a positive --k.")
+        raise ValueError("k-means requires a positive k.")
 
     model = KMeans(n_clusters=min(k, m), random_state=_RANDOM_STATE, n_init="auto")
     return model.fit_predict(x).astype(int)

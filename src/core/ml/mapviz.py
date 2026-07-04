@@ -29,7 +29,12 @@ if TYPE_CHECKING:
     from src.core.data.charts import ChartPalette
     from src.core.rag.store import VectorStore
 
-# Display name for the noise/orphan cluster (HDBSCAN label -1).
+# Display name for the noise/orphan cluster (HDBSCAN label -1). PT-BR is
+# intentional here (same precedent as rag/templates.py): this is a
+# user-facing label shown directly in the Biblioteca's Mapa view and the CLI
+# `ai map`/`ai topics` output, not a log/comment — core's "code in English"
+# convention doesn't apply to display text. The "grupo {id}" fallback in
+# cluster_display_name() below is PT-BR for the same reason.
 ORPHAN_LABEL = "órfãos"
 
 

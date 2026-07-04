@@ -72,6 +72,26 @@ def test_profile_prototypes_invalidated_by_embed_space_change(tmp_path):
     assert calls["n"] == 2
 
 
+@pytest.mark.unit
+def test_profile_prototypes_bad_zip_npz_re_embeds(tmp_path):
+    """A zip-signature-prefixed but malformed npz raises zipfile.BadZipFile —
+    a distinct exception type from the plain ValueError np.load() raises for
+    non-zip garbage. Both must be treated as a cache miss, not propagate."""
+    calls = {"n": 0}
+
+    def fake_embed(texts):
+        calls["n"] += 1
+        return np.array([[len(t), i, 1.0] for i, t in enumerate(texts)], dtype=float)
+
+    cl.profile_prototypes(fake_embed, cache_dir=tmp_path)
+    assert calls["n"] == 1
+
+    (tmp_path / cl._PROTO_NPZ).write_bytes(b"PK\x03\x04" + b"garbage" * 5)
+
+    cl.profile_prototypes(fake_embed, cache_dir=tmp_path)
+    assert calls["n"] == 2  # cache miss → re-embedded, not raised
+
+
 # ---------------------------------------------------------------------------
 # Zero-shot
 # ---------------------------------------------------------------------------

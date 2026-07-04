@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import zipfile
 from pathlib import Path
 from typing import Callable
 
@@ -147,7 +148,12 @@ def _load_prototypes(
     npz_name: str = _PROTO_NPZ,
     json_name: str = _PROTO_JSON,
 ) -> tuple[np.ndarray, list[str]] | None:
-    """Load cached prototypes only if their signature still matches the profiles."""
+    """Load cached prototypes only if their signature still matches the profiles.
+
+    A corrupt ``.npz`` (``zipfile.BadZipFile``) or one missing the expected
+    key is treated the same as any other cache miss — same parity as
+    ``ml.cache.load_map``.
+    """
     npz_path = directory / npz_name
     json_path = directory / json_name
     if not (npz_path.exists() and json_path.exists()):
@@ -157,7 +163,7 @@ def _load_prototypes(
         if payload.get("signature") != signature:
             return None
         P = np.load(npz_path)["P"]
-    except (OSError, ValueError, KeyError):
+    except (OSError, ValueError, KeyError, zipfile.BadZipFile):
         return None
     return P, payload["ids"]
 

@@ -17,6 +17,7 @@ from __future__ import annotations
 import hashlib
 import json
 import time
+import zipfile
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -90,7 +91,9 @@ def load_map(signature: str, *, directory: Path | None = None) -> SemanticMap | 
     """Load the cached map only if its signature and sklearn version still match.
 
     Returns ``None`` (forcing a recompute) when the sidecar is absent, the corpus
-    signature differs, the scikit-learn version changed, or a file is unreadable.
+    signature differs, the scikit-learn version changed, or a file is unreadable
+    — including a corrupt ``.npz`` (``zipfile.BadZipFile``) or one missing an
+    expected key (``KeyError``), same parity as ``classify.prototypes._load_prototypes``.
     """
     from src.core.ml.types import SemanticMap
 
@@ -111,12 +114,12 @@ def load_map(signature: str, *, directory: Path | None = None) -> SemanticMap | 
     try:
         arrays = np.load(npz_path)
         payload = json.loads(json_path.read_text(encoding="utf-8"))
-    except (OSError, ValueError):
+        return SemanticMap(
+            coords=arrays["coords"],
+            labels=arrays["labels"],
+            cluster_names={int(k): v for k, v in payload["cluster_names"].items()},
+            source_paths=payload["source_paths"],
+            kinds=payload["kinds"],
+        )
+    except (OSError, ValueError, KeyError, zipfile.BadZipFile):
         return None
-    return SemanticMap(
-        coords=arrays["coords"],
-        labels=arrays["labels"],
-        cluster_names={int(k): v for k, v in payload["cluster_names"].items()},
-        source_paths=payload["source_paths"],
-        kinds=payload["kinds"],
-    )

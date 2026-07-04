@@ -1,11 +1,15 @@
 """Embedding accessor — turns the persisted RAG store into ML-ready matrices.
 
-This is the heart of the ML foundation and the **only** module that knows the
-``VectorStore`` layout: if the RAG ever migrates its storage (e.g. to
-``sqlite-vec``, already noted as the upgrade path in ``rag/store.py``), only this
-file changes. numpy-pure — no scikit-learn, no Ollama, no re-embedding. The
-chunk vectors were already computed and persisted by the RAG indexer; here we
-only read and pool them.
+This is the heart of the ML foundation: it turns the persisted RAG
+``VectorStore`` into ML-ready matrices (chunk-level and pooled per-document).
+If the RAG ever migrates its storage (e.g. to ``sqlite-vec``, already noted
+as the upgrade path in ``rag/store.py``), this is the one place every
+``core/ml`` consumer needs updated for — not literally the only code that
+reads the store's shape (``rag/stats.py``/``rag/analytics.py`` also do), but
+the only one that turns it into the pooled document-vector abstraction the
+rest of ``core/ml`` builds on. numpy-pure — no scikit-learn, no Ollama, no
+re-embedding. The chunk vectors were already computed and persisted by the
+RAG indexer; here we only read and pool them.
 
 Two matrix levels, decided once here and inherited by every consumer:
 
