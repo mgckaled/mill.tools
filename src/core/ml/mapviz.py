@@ -105,14 +105,20 @@ def render_semantic_map_png(
         RuntimeError: if the chart extras are missing.
         ValueError: if the map is empty.
     """
-    import pandas as pd
+    from src.core.data import charts, frames
 
-    from src.core.data import charts
-
-    if not charts.is_available():
+    # charts.is_available() only probes matplotlib ([data-plot]); this
+    # function also needs pandas ([analysis]), which frames.is_available()
+    # probes for (polars+pyarrow, installed alongside pandas by the same
+    # extra). Checking both — before the `import pandas` below — turns a
+    # missing [analysis] into the same friendly RuntimeError + SETUP_HINT as
+    # a missing [data-plot], instead of a raw ImportError (M3).
+    if not frames.is_available() or not charts.is_available():
         raise RuntimeError(charts.SETUP_HINT)
     if len(sm) == 0:
         raise ValueError("Mapa vazio: nada para projetar.")
+
+    import pandas as pd
 
     display = [cluster_display_name(int(c), sm.cluster_names) for c in sm.labels]
     df = pd.DataFrame({"x": sm.coords[:, 0], "y": sm.coords[:, 1], "cluster": display})

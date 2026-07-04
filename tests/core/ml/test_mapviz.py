@@ -141,6 +141,19 @@ def test_render_raises_when_charts_extra_missing(tmp_path, mocker):
 
 
 @pytest.mark.unit
+def test_render_raises_friendly_error_when_analysis_extra_missing(tmp_path, mocker):
+    """M3: charts.is_available() only probes matplotlib — pandas ([analysis])
+    missing must still raise the friendly RuntimeError + SETUP_HINT, not a
+    raw ImportError from the `import pandas` line."""
+    from src.core.ml.mapviz import render_semantic_map_png
+
+    sm = build_semantic_map(_store_two_themes(), cache_dir=tmp_path)
+    mocker.patch("src.core.data.frames.is_available", return_value=False)
+    with pytest.raises(RuntimeError):
+        render_semantic_map_png(sm)
+
+
+@pytest.mark.unit
 def test_render_empty_map_raises(tmp_path):
     pytest.importorskip("matplotlib")
     from src.core.ml.mapviz import render_semantic_map_png
