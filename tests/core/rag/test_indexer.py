@@ -340,6 +340,59 @@ def test_index_files_skips_failing_card(tmp_path):
 
 
 @pytest.mark.unit
+def test_build_index_skips_item_when_embed_fn_raises(tmp_path):
+    """One document's embed failure (e.g. Ollama restarting mid-job) must not
+    abort the whole indexing run — the healthy item still indexes."""
+    from src.core.rag.indexer import build_index
+
+    good = tmp_path / "ok.txt"
+    good.write_text("texto", encoding="utf-8")
+    bad = tmp_path / "broken.txt"
+    bad.write_text("outro texto", encoding="utf-8")
+
+    def _embed(texts):
+        if any("outro" in t for t in texts):
+            raise RuntimeError("Ollama down mid-batch")
+        return np.ones((len(texts), _EMBED_W), dtype=np.float32)
+
+    store = build_index([_item(good), _item(bad)], _store(), _embed)
+    assert {m.source_path for m in store.meta} == {str(good)}
+
+
+@pytest.mark.unit
+def test_build_index_embed_failure_leaves_previous_chunks_dropped(tmp_path):
+    """A re-embed failure on a changed file leaves it de-indexed (its stale
+    chunks were already dropped) rather than crashing — same outcome as if
+    the file's content had gone blank; it recovers on the next successful run."""
+    from src.core.rag.indexer import build_index
+
+    f = tmp_path / "doc.txt"
+    f.write_text("v1", encoding="utf-8")
+    store = build_index([_item(f, mtime=1.0)], _store(), _Embedder())
+    assert len(store) == 1
+
+    def _failing_embed(_texts):
+        raise RuntimeError("Ollama down")
+
+    store = build_index([_item(f, mtime=2.0)], store, _failing_embed)
+    assert len(store) == 0
+
+
+@pytest.mark.unit
+def test_index_files_skips_item_when_embed_fn_raises(tmp_path):
+    from src.core.rag.indexer import index_files
+
+    f = tmp_path / "broken.txt"
+    f.write_text("texto", encoding="utf-8")
+
+    def _failing_embed(_texts):
+        raise RuntimeError("Ollama down")
+
+    store = index_files([_item(f)], _store(), _failing_embed)
+    assert len(store) == 0
+
+
+@pytest.mark.unit
 def test_index_dir_resolves_under_home(monkeypatch, tmp_path):
     from src.core.rag.indexer import index_dir
 

@@ -79,6 +79,60 @@ def _text_for(item: LibraryItem, card_fn: Callable[[LibraryItem], str] | None) -
     return _read_indexable_text(item)
 
 
+def _index_one(
+    item: LibraryItem,
+    store: VectorStore,
+    embed_fn: Callable[[list[str]], np.ndarray],
+    card_fn: Callable[[LibraryItem], str] | None,
+) -> None:
+    """Chunk, embed and store one item, replacing any of its existing chunks.
+
+    Shared by :func:`index_files` and :func:`build_index` — their per-item
+    bodies were verbatim duplicates. A failure is logged and skipped rather
+    than raised, so one bad item never aborts the whole indexing run:
+
+    - A text-building failure (bad/locked file, or a data card hitting a
+      broken DuckDB read) happens *before* ``drop_source`` runs, so the
+      item's existing chunks are left intact.
+    - An embed failure (e.g. Ollama restarting mid-job) happens *after*
+      ``drop_source`` — the item is left de-indexed until a future
+      successful reindex, same outcome as if its content had gone blank.
+    """
+    try:
+        text = _text_for(item, card_fn)
+    except Exception as exc:  # bad/locked file — skip, don't crash
+        logging.warning("[!] Could not build text for %s: %s", item.path.name, exc)
+        return
+
+    store.drop_source(str(item.path))  # replace any previous chunks
+    chunks = [
+        c
+        for c in split_text(text, chunk_size=CHUNK_SIZE, chunk_overlap=CHUNK_OVERLAP)
+        if c.strip()
+    ]
+    if not chunks:
+        return
+
+    try:
+        vecs = embed_fn(chunks)
+    except Exception as exc:  # e.g. Ollama down mid-batch — skip, don't crash
+        logging.warning("[!] Could not embed %s: %s", item.path.name, exc)
+        return
+
+    metas = [
+        ChunkMeta(
+            source_path=str(item.path),
+            kind=item.kind,
+            mtime=item.modified,
+            chunk_idx=i,
+            text=c,
+        )
+        for i, c in enumerate(chunks)
+    ]
+    store.add(vecs, metas)
+    logging.debug("[d] Indexed %s → %d chunk(s)", item.path.name, len(chunks))
+
+
 def index_files(
     items: list[LibraryItem],
     store: VectorStore,
@@ -96,36 +150,7 @@ def index_files(
     """
     total = len(items)
     for n, item in enumerate(items, 1):
-        try:
-            text = _text_for(item, card_fn)
-        except Exception as exc:  # bad/locked file — skip, don't crash
-            logging.warning("[!] Could not build text for %s: %s", item.path.name, exc)
-            if progress_cb:
-                progress_cb(n, total)
-            continue
-
-        store.drop_source(str(item.path))  # replace any previous chunks
-        chunks = [
-            c
-            for c in split_text(
-                text, chunk_size=CHUNK_SIZE, chunk_overlap=CHUNK_OVERLAP
-            )
-            if c.strip()
-        ]
-        if chunks:
-            vecs = embed_fn(chunks)
-            metas = [
-                ChunkMeta(
-                    source_path=str(item.path),
-                    kind=item.kind,
-                    mtime=item.modified,
-                    chunk_idx=i,
-                    text=c,
-                )
-                for i, c in enumerate(chunks)
-            ]
-            store.add(vecs, metas)
-            logging.debug("[d] Indexed %s → %d chunk(s)", item.path.name, len(chunks))
+        _index_one(item, store, embed_fn, card_fn)
         if progress_cb:
             progress_cb(n, total)
     return store
@@ -166,45 +191,8 @@ def build_index(
 
     for n, item in enumerate(text_items, 1):
         key = (str(item.path), item.modified)
-        if key in indexed:  # unchanged → skip
-            if progress_cb:
-                progress_cb(n, total)
-            continue
-
-        # Resolve the text first (a data card may hit DuckDB); a failure leaves
-        # any existing chunks intact rather than dropping then failing to re-add.
-        try:
-            text = _text_for(item, card_fn)
-        except Exception as exc:  # bad/locked data file — skip, don't crash index
-            logging.warning("[!] Could not build text for %s: %s", item.path.name, exc)
-            if progress_cb:
-                progress_cb(n, total)
-            continue
-
-        store.drop_source(str(item.path))  # changed → replace stale chunks
-        chunks = [
-            c
-            for c in split_text(
-                text,
-                chunk_size=CHUNK_SIZE,
-                chunk_overlap=CHUNK_OVERLAP,
-            )
-            if c.strip()
-        ]
-        if chunks:
-            vecs = embed_fn(chunks)
-            metas = [
-                ChunkMeta(
-                    source_path=str(item.path),
-                    kind=item.kind,
-                    mtime=item.modified,
-                    chunk_idx=i,
-                    text=c,
-                )
-                for i, c in enumerate(chunks)
-            ]
-            store.add(vecs, metas)
-            logging.debug("[d] Indexed %s → %d chunk(s)", item.path.name, len(chunks))
+        if key not in indexed:  # new or changed → (re)index
+            _index_one(item, store, embed_fn, card_fn)
         if progress_cb:
             progress_cb(n, total)
 
