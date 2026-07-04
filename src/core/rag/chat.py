@@ -19,7 +19,7 @@ from src.llm_factory import make_llm
 if TYPE_CHECKING:
     from src.core.rag.types import RetrievedChunk
 
-DEFAULT_MODEL = "qwen7b-custom"
+DEFAULT_MODEL = "gemma3-4b-custom"
 
 # Strict grounding prompt: answer only from the supplied context, cite sources by
 # number, and admit when the context does not contain the answer. Reduces
