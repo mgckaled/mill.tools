@@ -13,8 +13,9 @@ def isolate_config(tmp_path, monkeypatch):
 
     _on_mount() writes to both (last_ml_activity_seen/last_observatory_tab via
     settings.set, plus reads the activity log) — neither may touch the real
-    ~/.mill-tools during a test. Status is now the default tab, so its
-    apply() also runs on every on_mount() — isolate ml.store.model_dir() too.
+    ~/.mill-tools during a test. Índice/RAG is now the default tab, so its
+    apply() also runs on every on_mount() — isolate ml.store.model_dir() and
+    the RAG index_dir() too.
     """
     import src.core.observatory.activity as activity_mod
     import src.core.observatory.logs as logs_mod
@@ -31,8 +32,16 @@ def isolate_config(tmp_path, monkeypatch):
 
 @pytest.fixture(autouse=True)
 def isolate_model_dir(mocker, tmp_path):
-    """Status is the default tab — its apply() reads ml.store.model_dir()."""
+    """Status is a reachable tab from on_mount's click handlers — its apply()
+    reads ml.store.model_dir()."""
     mocker.patch("src.core.ml.classify.model_dir", return_value=tmp_path / "ml")
+
+
+@pytest.fixture(autouse=True)
+def isolate_rag_index_dir(mocker, tmp_path):
+    """Índice/RAG is the default tab — its apply() reads the real RAG index
+    dir unless isolated."""
+    mocker.patch("src.core.rag.indexer.index_dir", return_value=tmp_path / "rag")
 
 
 @pytest.mark.unit
@@ -49,7 +58,7 @@ def test_observatory_module_builds():
 
 
 @pytest.mark.unit
-def test_on_mount_defaults_to_status_tab_and_does_not_raise():
+def test_on_mount_defaults_to_rag_tab_and_does_not_raise():
     from src.gui.modules.observatory.view import build_observatory_module
 
     module = build_observatory_module(
@@ -57,13 +66,25 @@ def test_on_mount_defaults_to_status_tab_and_does_not_raise():
     )
     module.on_mount({})  # must not raise with an empty activity/failure log
 
-    status_view, activity_view, logs_view, timing_view = module.control.controls[
-        2
-    ].content.controls
-    assert status_view.visible is True
+    rag_view, status_view, activity_view, logs_view, timing_view = (
+        module.control.controls[2].content.controls
+    )
+    assert rag_view.visible is True
+    assert status_view.visible is False
     assert activity_view.visible is False
     assert logs_view.visible is False
     assert timing_view.visible is False
+
+
+@pytest.mark.unit
+def test_switching_to_status_tab_does_not_raise():
+    from src.gui.modules.observatory.view import build_observatory_module
+
+    module = build_observatory_module(
+        MagicMock(), MagicMock(), MagicMock(), [False], []
+    )
+    module.on_mount({})
+    module.control.controls[0].controls[1].on_click(MagicMock())  # tab_status
 
 
 @pytest.mark.unit
@@ -74,7 +95,7 @@ def test_switching_to_logs_tab_does_not_raise():
         MagicMock(), MagicMock(), MagicMock(), [False], []
     )
     module.on_mount({})
-    module.control.controls[0].controls[2].on_click(MagicMock())  # tab_logs
+    module.control.controls[0].controls[3].on_click(MagicMock())  # tab_logs
 
 
 @pytest.mark.unit
@@ -89,7 +110,7 @@ def test_switching_to_timing_tab_does_not_raise(tmp_path, monkeypatch):
         MagicMock(), MagicMock(), MagicMock(), [False], []
     )
     module.on_mount({})
-    module.control.controls[0].controls[3].on_click(MagicMock())  # tab_timing
+    module.control.controls[0].controls[4].on_click(MagicMock())  # tab_timing
 
 
 @pytest.mark.unit
@@ -109,3 +130,31 @@ def test_on_mount_records_last_seen_timestamp(tmp_path, monkeypatch):
     module.on_mount({})
 
     assert settings.get("last_ml_activity_seen") == 123.0
+
+
+@pytest.mark.unit
+def test_reindex_bridges_through_nav_to_the_ai_hub():
+    from src.gui.modules.observatory.view import build_observatory_module
+
+    nav_calls = []
+    nav = [lambda target, payload: nav_calls.append((target, payload))]
+    module = build_observatory_module(
+        MagicMock(), MagicMock(), MagicMock(), [False], nav
+    )
+    module.on_mount({})
+
+    def _walk(control):
+        yield control
+        for attr in ("controls", "content"):
+            child = getattr(control, attr, None)
+            if isinstance(child, list):
+                for c in child:
+                    yield from _walk(c)
+            elif child is not None and not isinstance(child, (str, bytes)):
+                yield from _walk(child)
+
+    reindex_btn = next(
+        c for c in _walk(module.control) if getattr(c, "content", None) == "Reindexar"
+    )
+    reindex_btn.on_click(MagicMock())
+    assert nav_calls == [("ai", {"trigger_reindex": True})]

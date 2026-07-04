@@ -1,10 +1,12 @@
-"""Analytics tab for the AI hub (Plano 2): index health.
+"""RAG analytics ("Painel") sub-tab of the Observatório hub's Índice/RAG tab.
 
-A third tab beside Conversa | Índice. Answers one actionable question from
-data the hub already keeps: which documents dominate the index (top by
-chunks). Numbers come from the pure ``core/rag/analytics`` core; the bar chart
-reuses the Plano 1 path via ``_charts`` and is gated on the extras (graceful
-degradation).
+Migrated here from the AI hub (Plano 2), which now only shows Conversa —
+Índice/Painel are RAG-index inspection, not chat, and Observatório is where
+the rest of the app's ML-transparency surface already lives. Answers one
+actionable question from data the hub already keeps: which documents
+dominate the index (top by chunks). Numbers come from the pure
+``core/rag/analytics`` core; the bar chart reuses the Plano 1 path via
+``_charts`` and is gated on the extras (graceful degradation).
 
 Per-model response timing used to live here too (Tier "model timing"), but it
 duplicated the same data shown in the Observatório hub's Status tab — and
@@ -12,9 +14,9 @@ Observatório is the one that also covers VLM/embed, not just this RAG-scoped
 LLM number. It was removed from this tab; see
 ``gui/modules/observatory/timing_section.py``.
 
-``apply`` is invoked off the UI thread (from ``view._refresh_status``'s daemon
-worker, like ``index_tab.apply``), so the matplotlib render runs synchronously
-there — never on the UI thread — and the controls are refreshed via a scoped
+``apply`` is invoked off the UI thread (from ``rag_tab``'s daemon worker, like
+``index_tab.apply``), so the matplotlib render runs synchronously there —
+never on the UI thread — and the controls are refreshed via a scoped
 ``control.update()``. The chart only renders when this tab is the visible one,
 so a hidden panel never pays for a render.
 """
@@ -147,7 +149,7 @@ def build_analytics_tab(page: ft.Page) -> AnalyticsTab:
             color=ft.Colors.ON_SURFACE,
         ),
     ]
-    _help = help_icon_for("ai", page)
+    _help = help_icon_for("observatory.rag_panel", page)
     if _help is not None:
         header_controls.append(_help)
 

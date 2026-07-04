@@ -26,12 +26,12 @@ import flet as ft
 from src.gui import settings
 from src.gui.events import PipelineEvent
 from src.gui.modules.ai import timing
-from src.gui.modules.ai.analytics_tab import build_analytics_tab
 from src.gui.modules.ai.form_view import build_ai_form
-from src.gui.modules.ai.index_tab import build_index_tab
 from src.gui.modules.ai.pipeline_log import resolve_status
 from src.gui.modules.ai.worker import start_ai_answer, start_ai_index
 from src.gui.modules.base import Module
+from src.gui.modules.observatory.index_tab import build_index_tab
+from src.gui.modules.observatory.rag_analytics_tab import build_analytics_tab
 from src.gui.theme.components import (
     Cursor,
     action_button,

@@ -1,10 +1,11 @@
-"""Index inspector tab for the AI module (PR7.2.3).
+"""Index inspector sub-tab of the Observatório hub's Índice/RAG tab (PR7.2.3).
 
 A scrollable, paginated view of the persisted RAG index: a global summary card
 plus a per-document table with a chunk drill-down. The data comes from the pure
 core (``src.core.rag.stats``); this file only builds Flet controls and is not
-unit-tested headless. The view computes ``IndexStats`` off the UI thread and
-hands it to ``IndexTab.apply``.
+unit-tested headless. Migrated here from the AI hub (which now only shows
+Conversa) — indexing itself still lives there, so "Reindexar" bridges over via
+``on_reindex`` instead of running a pipeline in this read-only hub.
 """
 
 from __future__ import annotations
@@ -145,7 +146,7 @@ def build_index_tab(page: ft.Page, *, on_reindex: Callable[[], None]) -> IndexTa
         ft.Container(expand=True),
         reindex_btn,
     ]
-    _help = help_icon_for("ai.index", page)
+    _help = help_icon_for("observatory.rag_index", page)
     if _help is not None:
         header_controls.insert(2, _help)
     header_row = ft.Row(

@@ -257,14 +257,23 @@ HELP_SHORT: dict[str, str] = {
         "Pergunte em linguagem natural sobre o que você já processou. "
         "A resposta usa apenas o seu acervo e cita as fontes [n]."
     ),
-    "ai.index": (
-        "Índice semântico local do seu acervo. Reindexar embute só os arquivos "
-        "novos ou alterados (incremental, por mtime)."
-    ),
     "ai": (
         "Converse com o seu próprio acervo — RAG 100% local. Indexa transcrições, "
         "textos de PDF, descrições de imagem e cartões de dados, e responde "
         "citando as fontes."
+    ),
+    # --- Observatório: aba Índice/RAG ---
+    "observatory.rag_index": (
+        "Índice semântico local do seu acervo. Reindexar embute só os arquivos "
+        "novos ou alterados (incremental, por mtime)."
+    ),
+    "observatory.rag_panel": (
+        "Quais documentos dominam o índice (mais chunks) — ajuda a identificar "
+        "arquivos grandes ou redundantes no acervo indexado."
+    ),
+    "observatory.disk_usage": (
+        "Tamanho de cada arquivo/pasta em ~/.mill-tools/ — onde o espaço em "
+        "disco do app está sendo usado."
     ),
     # --- Dados ---
     "data": (
@@ -490,15 +499,43 @@ HELP_LONG: dict[str, str] = {
         "da resposta — ela ainda é gerada, você decide se confia.\n\n"
         "Escopo: pergunte ao acervo inteiro, a um tipo (transcrições, "
         "documentos, descrições de imagem, dados) ou a um único documento.\n\n"
-        "Abas do painel: Conversa · Índice (inspetor de documentos/chunks "
-        "indexados) · Painel (saúde do índice e tempo médio de resposta por "
-        "modelo).\n\n"
+        "Este painel mostra só a Conversa — o inspetor de índice e o painel de "
+        "saúde do índice migraram para o hub Observatório (aba Índice/RAG); "
+        '"Reindexar" por lá volta pra cá e dispara a indexação.\n\n'
         "Privacidade: os embeddings são sempre locais. Se você escolher um "
         "modelo Gemini, apenas os trechos recuperados são enviados à nuvem no "
         "passo de resposta.\n\n"
         "Pré-requisito: ollama pull nomic-embed-text && "
         "ollama create nomic-embed-custom -f ollama/Modelfile.nomic. "
         'Paridade na linha de comando: uv run main.py ai "sua pergunta".'
+    ),
+    "observatory.rag_index": (
+        "Inspetor do índice RAG — o mesmo índice usado pela Conversa do hub "
+        "de IA, só que aqui é leitura pura (sem perguntar nada).\n\n"
+        "Mostra um resumo global (documentos, chunks, dimensão do embedding, "
+        "modelo, tamanho em disco, última atualização) e uma tabela por "
+        "documento com contagem de chunks/caracteres; clique na lupa de uma "
+        "linha para abrir o drill-down dos chunks daquele documento.\n\n"
+        '"Reindexar" aqui não roda a indexação neste hub (o Observatório é só '
+        "leitura, como a Biblioteca) — ele navega para o hub de IA e dispara "
+        "a reindexação por lá."
+    ),
+    "observatory.rag_panel": (
+        "Quais documentos concentram mais chunks no índice — útil para achar "
+        "arquivos muito grandes ou repetitivos que podem estar inflando o "
+        "acervo indexado sem agregar muita informação nova.\n\n"
+        "Os números vêm do mesmo índice do RAG; o gráfico de barras é "
+        "opcional (extra [data-plot]) e degrada para só a tabela sem ele."
+    ),
+    "observatory.disk_usage": (
+        "Tamanho de cada arquivo/pasta em ~/.mill-tools/ — todos os stores "
+        "persistentes do app num só lugar: o índice do RAG (rag/), logs de "
+        "atividade/falhas, histórico de receitas, tempos de resposta por "
+        "modelo, modelos de ML treinados, avaliações de qualidade de dados "
+        "em cache, entre outros.\n\n"
+        "A lista é genérica (varre o diretório na hora, não uma lista fixa) — "
+        "um store novo aparece sozinho aqui assim que grava seu primeiro "
+        "arquivo, sem precisar atualizar esta tela."
     ),
     "recipes": (
         "Receitas — automação entre módulos.\n\n"
