@@ -3,6 +3,10 @@
 Flet is not testable headless, so this builds the control with a MagicMock
 page and exercises apply()'s non-raising path against a real tmp_path
 directory (no thread involved here — disk_usage() is cheap).
+
+``build_disk_usage_tab`` returns a ``ft.Container`` (extra right padding so
+the scrollbar doesn't crowd the right-aligned size values) wrapping the real
+``ft.Column`` body — tests reach the body via ``control.content``.
 """
 
 from __future__ import annotations
@@ -30,7 +34,7 @@ def test_apply_shows_empty_state_when_directory_is_missing(mocker):
     )
     control, apply = build_disk_usage_tab(MagicMock())
     apply()
-    entries_col = control.controls[2]
+    entries_col = control.content.controls[1]
     assert "Nenhum arquivo" in entries_col.controls[0].value
 
 
@@ -48,7 +52,7 @@ def test_apply_lists_entries_and_total(mocker):
     )
     control, apply = build_disk_usage_tab(MagicMock())
     apply()
-    entries_col = control.controls[2]
+    entries_col = control.content.controls[1]
     assert len(entries_col.controls) == 2
 
 
@@ -73,7 +77,7 @@ def test_apply_renders_children_indented_below_their_parent(mocker):
     )
     control, apply = build_disk_usage_tab(MagicMock())
     apply()
-    entries_col = control.controls[2]
+    entries_col = control.content.controls[1]
     assert len(entries_col.controls) == 3  # rag + 2 children, all flattened
 
     # The parent has no left padding; children are indented past it.
@@ -113,7 +117,7 @@ def test_apply_populates_glossary_only_for_known_present_files(mocker):
     )
     control, apply = build_disk_usage_tab(MagicMock())
     apply()
-    glossary_col = control.controls[5]
+    glossary_col = control.content.controls[4]
     names = [c.controls[0].value for c in glossary_col.controls]
     assert names == ["config.json"]  # mystery_file.bin silently omitted
 
@@ -151,7 +155,7 @@ def test_apply_wraps_a_described_folder_in_an_accent_bordered_card(mocker):
     )
     control, apply = build_disk_usage_tab(MagicMock())
     apply()
-    glossary_col = control.controls[5]
+    glossary_col = control.content.controls[4]
 
     # One card for rag/, one plain row for config.json.
     assert len(glossary_col.controls) == 2
@@ -167,3 +171,23 @@ def test_apply_wraps_a_described_folder_in_an_accent_bordered_card(mocker):
 
     plain_row = glossary_col.controls[1]
     assert not isinstance(plain_row, ft.Container)
+
+
+@pytest.mark.unit
+def test_header_shows_path_beside_help_icon_not_as_its_own_row(mocker):
+    """The path moved off its own row to save vertical space (lives in the
+    header, next to the help icon) — this is the layout contract other tests
+    rely on via fixed indices into control.content.controls."""
+    mocker.patch(
+        "src.gui.modules.observatory.disk_usage_tab.disk_usage",
+        return_value=(),
+    )
+    control, apply = build_disk_usage_tab(MagicMock())
+    apply()
+    body = control.content
+    header_row = body.controls[0]
+    texts = [getattr(c, "value", "") for c in header_row.controls]
+    assert "~/.mill-tools/" in texts
+    # 5 rows total: header, entries, hairline, glossary label, glossary — no
+    # standalone path row eating a 6th slot.
+    assert len(body.controls) == 5

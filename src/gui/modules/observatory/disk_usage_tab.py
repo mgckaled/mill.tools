@@ -269,22 +269,33 @@ def build_disk_usage_tab(page: ft.Page) -> tuple[ft.Control, Callable[[], None]]
             weight=ft.FontWeight.W_600,
             color=ft.Colors.ON_SURFACE,
         ),
-        ft.Container(expand=True),
-        ft.Text("Total:", size=Type.small.size, color=ft.Colors.ON_SURFACE_VARIANT),
-        total_text,
     ]
     _help = help_icon_for("observatory.disk_usage", page)
     if _help is not None:
-        header_controls.insert(2, _help)
+        header_controls.append(_help)
+    # The path lives beside the help icon (not its own section row) to save
+    # vertical space — the list below is the whole point of this tab.
+    header_controls.append(
+        ft.Text(
+            "~/.mill-tools/",
+            size=Type.caption.size,
+            color=ft.Colors.ON_SURFACE_VARIANT,
+            font_family=Type.FONT_MONO,
+        )
+    )
+    header_controls.append(ft.Container(expand=True))
+    header_controls.append(
+        ft.Text("Total:", size=Type.small.size, color=ft.Colors.ON_SURFACE_VARIANT)
+    )
+    header_controls.append(total_text)
 
-    control = ft.Column(
+    body = ft.Column(
         controls=[
             ft.Row(
                 header_controls,
                 spacing=Space.sm,
                 vertical_alignment=ft.CrossAxisAlignment.CENTER,
             ),
-            section_label("~/.mill-tools/"),
             entries_col,
             hairline(),
             section_label("Glossário de arquivos"),
@@ -293,6 +304,13 @@ def build_disk_usage_tab(page: ft.Page) -> tuple[ft.Control, Callable[[], None]]
         scroll=ft.ScrollMode.AUTO,
         expand=True,
         spacing=Space.md,
+    )
+    # Extra right padding so the right-aligned size values (and the scrollbar
+    # itself) don't crowd each other.
+    control = ft.Container(
+        content=body,
+        padding=ft.Padding(left=0, right=Space.lg, top=0, bottom=0),
+        expand=True,
     )
 
     def apply() -> None:

@@ -143,7 +143,7 @@ def build_analytics_tab(page: ft.Page) -> AnalyticsTab:
     header_controls: list[ft.Control] = [
         ft.Icon(ft.Icons.INSIGHTS_OUTLINED, size=IconSize.lg, color=ft.Colors.PRIMARY),
         ft.Text(
-            "Painel da IA",
+            "Painel do índice",
             size=Type.heading.size,
             weight=ft.FontWeight.W_600,
             color=ft.Colors.ON_SURFACE,
