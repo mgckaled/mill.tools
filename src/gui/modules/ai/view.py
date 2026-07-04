@@ -30,8 +30,6 @@ from src.gui.modules.ai.form_view import build_ai_form
 from src.gui.modules.ai.pipeline_log import resolve_status
 from src.gui.modules.ai.worker import start_ai_answer, start_ai_index
 from src.gui.modules.base import Module
-from src.gui.modules.observatory.index_tab import build_index_tab
-from src.gui.modules.observatory.rag_analytics_tab import build_analytics_tab
 from src.gui.theme.components import (
     Cursor,
     action_button,
@@ -223,10 +221,6 @@ def build_ai_module(
                 status_text.value = fmt_status_line(stats)
             else:
                 status_text.value = "Índice vazio — clique em Reindexar para começar."
-
-            if stats:
-                index_tab.apply(stats)  # keep the inspector tab in sync
-                analytics_tab.apply(stats)  # keep the panel in sync
 
             form.set_available(available)
             if not available:
@@ -619,9 +613,9 @@ def build_ai_module(
     session_area = ft.Stack([session_list, empty_state], expand=True)
 
     # ------------------------------------------------------------------
-    # Panel: manual "Conversa | Índice" tabs over a Stack (Flet 0.85 has no
-    # ft.Tabs). The Conversa view is the existing chat; the Índice view is the
-    # RAG index inspector, kept in sync by _refresh_status → index_tab.apply.
+    # Panel: just the chat now — the RAG index inspector and analytics panel
+    # (formerly "Índice"/"Painel" tabs beside this one) moved to the
+    # Observatório hub's nested Índice/RAG tab.
     # ------------------------------------------------------------------
 
     conversa_view = ft.Column(
@@ -636,63 +630,6 @@ def build_ai_module(
         spacing=Space.sm,
     )
 
-    index_tab = build_index_tab(page, on_reindex=lambda: _reindex_from_index())
-    index_view = index_tab.control
-    index_view.visible = False
-
-    analytics_tab = build_analytics_tab(page)
-    analytics_view = analytics_tab.control
-    analytics_view.visible = False
-
-    def _tab_style(active: bool) -> ft.ButtonStyle:
-        return ft.ButtonStyle(
-            color=ft.Colors.PRIMARY if active else ft.Colors.ON_SURFACE_VARIANT,
-            mouse_cursor=Cursor.interactive,
-        )
-
-    tab_conversa = ft.TextButton(
-        "Conversa", icon=ft.Icons.CHAT_OUTLINED, style=_tab_style(True)
-    )
-    tab_indice = ft.TextButton(
-        "Índice", icon=ft.Icons.INVENTORY_2_OUTLINED, style=_tab_style(False)
-    )
-    tab_painel = ft.TextButton(
-        "Painel", icon=ft.Icons.INSIGHTS_OUTLINED, style=_tab_style(False)
-    )
-
-    def _show_tab(name: str, *, refresh: bool = True) -> None:
-        conversa_view.visible = name == "conversa"
-        index_view.visible = name == "indice"
-        analytics_view.visible = name == "painel"
-        tab_conversa.style = _tab_style(name == "conversa")
-        tab_indice.style = _tab_style(name == "indice")
-        tab_painel.style = _tab_style(name == "painel")
-        settings.set("last_ai_tab", name)
-        if name in ("indice", "painel") and refresh:
-            _refresh_status()  # recompute stats → index_tab / analytics_tab.apply
-        page.update()
-
-    def _reindex_from_index() -> None:
-        # Reindex triggered from the Índice tab — jump to Conversa to show progress.
-        _show_tab("conversa", refresh=False)
-        _on_reindex()
-
-    tab_conversa.on_click = lambda _e: _show_tab("conversa")
-    tab_indice.on_click = lambda _e: _show_tab("indice")
-    tab_painel.on_click = lambda _e: _show_tab("painel")
-
-    body_stack = ft.Stack([conversa_view, index_view, analytics_view], expand=True)
-
-    panel = ft.Column(
-        controls=[
-            ft.Row([tab_conversa, tab_indice, tab_painel], spacing=Space.xs),
-            hairline(),
-            body_stack,
-        ],
-        expand=True,
-        spacing=Space.sm,
-    )
-
     # ------------------------------------------------------------------
     # Split layout form | panel
     # ------------------------------------------------------------------
@@ -702,7 +639,7 @@ def build_ai_module(
             ft.Container(content=form.control, width=380),
             ft.VerticalDivider(width=2, thickness=1.5, color=ft.Colors.OUTLINE_VARIANT),
             ft.Container(
-                content=panel,
+                content=conversa_view,
                 expand=True,
                 padding=ft.Padding(
                     left=Space.sm, right=Space.sm, top=Space.sm, bottom=Space.sm
@@ -723,10 +660,12 @@ def build_ai_module(
         # pre-selects the "this document" scope.
         file = payload.get("file") if payload else None
         form.bind_document(str(file) if file else None)
-        # A document bridge means the user wants to ask → land on Conversa.
-        saved = "conversa" if file else settings.load().get("last_ai_tab", "conversa")
-        _show_tab(saved, refresh=False)
-        _refresh_status()  # computes stats once, updating both status line + tab
+        _refresh_status()  # computes stats once, updating the status line
+        # Bridge from the Observatório hub's Índice/RAG tab: its own
+        # "Reindexar" can't run a pipeline there (that hub stays read-only),
+        # so it navigates here and asks us to kick off the reindex.
+        if payload and payload.get("trigger_reindex"):
+            _on_reindex()
 
     return Module(
         id=_MODULE_ID,
