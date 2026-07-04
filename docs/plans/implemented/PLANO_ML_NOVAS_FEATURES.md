@@ -2,7 +2,7 @@
 
 **Documento de execução — plano de implementação (teor técnico elevado)**
 Data: 1 de julho de 2026 · Escopo: capacidades **novas** de ML (não refinamento — ver
-`docs/plan/PLANO_REFINAMENTO_ML_TEXTO_RAG.md` para isso) · Restrição: torch-free, preferência
+`docs/plans/implemented/PLANO_REFINAMENTO_ML_TEXTO_RAG.md` para isso) · Restrição: torch-free, preferência
 forte por zero dependência nova; quando uma dependência nova for genuinamente necessária, ela
 deve ser pequena, pura (sem binário C a compilar) e gateada por extra opcional.
 
@@ -35,7 +35,7 @@ deve ser pequena, pura (sem binário C a compilar) e gateada por extra opcional.
 Diferente do plano de refinamento (que só melhorou lógica já existente), este plano traz
 **capacidades novas**: busca híbrida no RAG, detecção de anomalias tabulares, deduplicação de
 imagens, reuso do classificador em novos domínios, visibilidade dos processos de ML na GUI, e a
-conclusão revisada dos Planos 5/6/7 que o `docs/ROADMAP_ML_DADOS.md` original nomeou mas nunca
+conclusão revisada dos Planos 5/6/7 que o `docs/ROADMAP.md` original nomeou mas nunca
 detalhou (e cujas escolhas de dependência ficaram desatualizadas — ver seção 4).
 
 **No escopo:** Tier A (seção 3, prioridade imediata) e Tier B (seção 4, ondas seguintes). **Fora
@@ -377,7 +377,7 @@ livre fica no Tier C (seção 5) — desproporcional.
 
 ## 4. Tier B — ondas maiores do roadmap (Planos 5/6/7, revisados)
 
-O `docs/ROADMAP_ML_DADOS.md` original nomeou os Planos 5 (tabular), 6 (mídia) e 7 (operacional)
+O `docs/ROADMAP.md` original nomeou os Planos 5 (tabular), 6 (mídia) e 7 (operacional)
 mas errou a escolha de dependência em dois pontos — corrigido aqui:
 
 - **XGBoost/LightGBM → `HistGradientBoostingClassifier`/`Regressor`** (dentro do `[ml]` desde o
@@ -443,7 +443,7 @@ adiantado como 3.3 — e implementado sem essa dependência, ver a correção na
   resultado prático (marcadores de capítulo) a custo zero. Se um dia quiser detecção por conteúdo
   semântico (não só corte visual), aí sim entraria ML de verdade — não uma necessidade agora.
 - **VAD leve em Áudio** — condicional a implementar primeiro o item #11 do
-  `docs/PLANO_AUDIO_TIER3_RESUMO.md` (split por silêncio via `silencedetect`); só se esse recurso
+  `docs/plans/active/PLANO_AUDIO_TIER3_RESUMO.md` (split por silêncio via `silencedetect`); só se esse recurso
   mostrar problemas em gravações ruidosas, trocar por `webrtcvad-wheels` (fork com wheels
   pré-compiladas p/ Windows, sem exigir compilador C) — wrapper de ~1 arquivo sobre o WebRTC VAD
   do Google, sem modelo para baixar, tempo real em CPU. Prioridade condicional, não uma entrega
@@ -457,8 +457,8 @@ adiantado como 3.3 — e implementado sem essa dependência, ver a correção na
 |---|---|
 | XGBoost/LightGBM | `HistGradientBoosting*` do sklearn já cobre o mesmo terreno, sem dependência nova, nos volumes processados (ver 4.1) |
 | CLIP/busca visual por conteúdo | Mesmo em ONNX, exige baixar um modelo de ~300MB+ e manter pipeline de inferência — desproporcional ao uso pessoal atual |
-| BPM/key detection, vocal isolation por phase-cancellation | Já avaliado e rejeitado no Áudio Tier 3 (`docs/PLANO_AUDIO_TIER3_RESUMO.md`) — decisão original mantida |
-| Diarização, upscale, denoise neural | Exigem torch (modelos grandes); já coberto em `docs/RELATORIO_CENARIO_TORCH.md` — a MX150 de 2GB não tem folga; veredito "opcional, não base" continua válido |
+| BPM/key detection, vocal isolation por phase-cancellation | Já avaliado e rejeitado no Áudio Tier 3 (`docs/plans/active/PLANO_AUDIO_TIER3_RESUMO.md`) — decisão original mantida |
+| Diarização, upscale, denoise neural | Exigem torch (modelos grandes); já coberto em `docs/reference/RELATORIO_CENARIO_TORCH.md` — a MX150 de 2GB não tem folga; veredito "opcional, não base" continua válido |
 | Canvas de nós livre (estilo ComfyUI) para visualizar ML | Desproporcional ao tamanho real dos pipelines do projeto (4–6 estágios fixos, não grafos grandes/dinâmicos) e ao immediate-mode do Flet (sem hit-test/zoom/drag nativo) — ver 3.5 |
 
 ---

@@ -46,10 +46,9 @@ output/**
 # personal notes
 notes.md
 
-# implementation plans (working artifacts, not versioned)
-docs/*.md
-# ...except docs/plan/: living, multi-session plans actively being executed
-# (tracked across commits/tiers) -- versioned on purpose.
-!docs/plan/
+# Documentation tree is curated and versioned: README/HISTORY/ROADMAP,
+# reference/ and plans/{active,implemented,archive}. Only the transient
+# scratch area (grep baseline, in-flight reorg notes) stays out of git.
+docs/new/
 # Dados de teste ad-hoc do modulo Dados (scratch local)
 test_data/

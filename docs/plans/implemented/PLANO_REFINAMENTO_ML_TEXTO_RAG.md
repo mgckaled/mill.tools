@@ -1,7 +1,7 @@
 # Refinamento de qualidade — `core/ml` + `core/text` + RAG — plano de implementação
 
 **Documento de execução — plano de implementação (teor técnico elevado)**
-Data: 1 de julho de 2026 · Escopo: refinar a lógica já implementada nos Planos 3/4A/4B (`docs/PLANO_3_FUNDACAO_ML.md`, `docs/PLANO_4A_SEMANTICO.md`, `docs/PLANO_4B_SUPERVISIONADO_TEXTUAL.md`) e no RAG (PR7) · Restrição: **zero dependência nova** — só recursos mais elaborados de `scikit-learn`, `numpy`, `yake` e `spaCy`, já instalados.
+Data: 1 de julho de 2026 · Escopo: refinar a lógica já implementada nos Planos 3/4A/4B (`docs/plans/implemented/PLANO_3_FUNDACAO_ML.md`, `docs/plans/implemented/PLANO_4A_SEMANTICO.md`, `docs/plans/implemented/PLANO_4B_SUPERVISIONADO_TEXTUAL.md`) e no RAG (PR7) · Restrição: **zero dependência nova** — só recursos mais elaborados de `scikit-learn`, `numpy`, `yake` e `spaCy`, já instalados.
 
 > **Origem.** Este plano nasceu de uma pergunta direta: dá para ganhar qualidade/performance só refinando a lógica de ML existente, sem trazer biblioteca nova? A resposta é sim — os itens abaixo foram verificados por leitura do código atual **e** por pesquisa técnica dirigida (Context7 + web) sobre cada dependência já instalada, o que **corrigiu duas hipóteses iniciais** (documentado na seção 2).
 
@@ -28,7 +28,7 @@ Data: 1 de julho de 2026 · Escopo: refinar a lógica já implementada nos Plano
 
 Nenhuma capacidade nova nasce aqui — este plano refina a **qualidade e a eficiência** de capacidades já entregues: pooling de embeddings (`core/ml/features.py`), clustering/projeção (`cluster.py`/`project.py`), classificação (`classify.py`), recomendação (`recommend.py`), extração de palavras-chave (`text/keywords.py`), resumo (`text/summarize.py`), entidades (`text/entities.py`) e recuperação do RAG (`rag/retriever.py`/`rag/store.py`).
 
-**No escopo:** os itens dos Tiers 1–3 (seções 3–5), todos sem dependência nova. **Fora do escopo:** qualquer item do Tier 4 (seção 6) — registrado para referência futura, não agendado. **Fora do escopo também:** as features de ML inteiramente novas discutidas anteriormente (Planos 5/6/7 do `docs/ROADMAP_ML_DADOS.md` — tabular, mídia, operacional) — este plano é só refinamento do que já existe.
+**No escopo:** os itens dos Tiers 1–3 (seções 3–5), todos sem dependência nova. **Fora do escopo:** qualquer item do Tier 4 (seção 6) — registrado para referência futura, não agendado. **Fora do escopo também:** as features de ML inteiramente novas discutidas anteriormente (Planos 5/6/7 do `docs/ROADMAP.md` — tabular, mídia, operacional) — este plano é só refinamento do que já existe.
 
 ---
 

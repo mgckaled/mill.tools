@@ -6,7 +6,7 @@ description: Guia de arquitetura e estrutura de código do mill.tools — camada
   (core → extra/gate → CLI → GUI → testes) e como adicionar um módulo novo. Invocar ao criar/editar
   módulos, mover código entre camadas, decidir onde um arquivo novo deve morar, dividir arquivos grandes
   ou de baixa coesão, adicionar um extra opcional com gate, ou implementar qualquer plano do roadmap
-  (docs/ROADMAP_ML_DADOS.md, docs/REFATORACAO_PREVIA.md). Para detalhes de subcomandos use a skill `cli`;
+  (docs/ROADMAP.md, docs/plans/archive/REFATORACAO_PREVIA.md). Para detalhes de subcomandos use a skill `cli`;
   de componentes/eventos de GUI use `design-system`; de testes use `testing` — esta skill orquestra e delega.
 ---
 
@@ -74,7 +74,7 @@ vai em `gui/`. Só tradução de `Namespace`→Args vai em `cli/`.
 ## 3. Limites de tamanho e coesão
 
 A régua combina **tamanho** e **coesão** — os dois sintomas juntos é que reprovam (ver
-`docs/REFATORACAO_PREVIA.md`).
+`docs/plans/archive/REFATORACAO_PREVIA.md`).
 
 | Tipo de arquivo                                  | Alvo         | Teto (refatorar acima) |
 | ------------------------------------------------ | ------------ | ---------------------- |
@@ -182,14 +182,14 @@ Ferramenta entra na `NavigationRail`; hub entra no `AppBar` (excluído de `_RAIL
 
 ## 9. Ao implementar os planos do roadmap
 
-Para `docs/ROADMAP_ML_DADOS.md`, esta skill é o ponto de partida de cada plano:
+Para `docs/ROADMAP.md`, esta skill é o ponto de partida de cada plano:
 
 - **Plano −1 (refatoração prévia)** — aplicar a seção 4 a `data/view.py` (→ `tabs/`) e `recipes/registry.py`
-  (→ `registry/<módulo>.py`); fixar a regra da seção 3 no `CLAUDE.md`. Ver `docs/REFATORACAO_PREVIA.md`.
+  (→ `registry/<módulo>.py`); fixar a regra da seção 3 no `CLAUDE.md`. Ver `docs/plans/archive/REFATORACAO_PREVIA.md`.
 - **Plano 0 (fundação de dados) ✅** — `core/data/frames.py` é a **única fronteira de DataFrame** (espelha o
   `engine.py`): Polars no miolo, pandas só na borda (`to_pandas`), handoff **Arrow zero-copy** via
   `engine.run_query_arrow`. polars/pandas/pyarrow só sob `TYPE_CHECKING` (extra `[analysis]`); o `engine`
-  segue DuckDB-puro e a GUI só fala `QueryResult`. Ver `docs/PLANO_0_FUNDACAO_DADOS.md`.
+  segue DuckDB-puro e a GUI só fala `QueryResult`. Ver `docs/plans/implemented/PLANO_0_FUNDACAO_DADOS.md`.
 - **Plano 1 (gráficos) ✅** — apenas **consome** o `frames` (gráfico = `to_pandas`→matplotlib→**PNG** num `ft.Image`).
 - **Plano 2 (painéis dos hubs) ✅** — núcleos de agregação puros, um por hub (`core/library/analytics.py` ·
   `core/rag/analytics.py` · `core/recipes/history.py`), devolvendo métricas + `QueryResult`; **números em stdlib**
@@ -197,13 +197,13 @@ Para `docs/ROADMAP_ML_DADOS.md`, esta skill é o ponto de partida de cada plano:
   como **modo/aba novo** (seção 4), dividindo ao tocar (`library/analytics_panel.py`, `ai/analytics_tab.py`,
   `recipes/history_tab.py`) — sem inflar os builders. Histórico de Receitas: persistência nova efeito-colateral da
   **orquestração** (worker/CLI gravam `RunRecord` no evento terminal); o `runner` puro fica intocado.
-  Ver `docs/PLANO_2_PAINEIS_HUBS.md`.
+  Ver `docs/plans/implemented/PLANO_2_PAINEIS_HUBS.md`.
 - **Plano 3 (fundação de ML) ✅** — pacote puro `core/ml/` espelhando `core/rag/`: acessor de embeddings
   (`features.py`, **numpy-puro**) que faz mean-pool do `VectorStore` em vetores de documento (única decisão
   de pooling/normalização, herdada pelos consumidores); dedup por cosseno (`dedup.py`, prova de vida);
   gate `[ml]` (`deps.is_available`) e persistência de modelos versionada por `sklearn.__version__`+signature
   (`store.py`, invalida no mismatch — joblib v1). Acessor/dedup **não** gateiam (só os algoritmos do Plano 4/5).
-  CLI `ai dups`; GUI deferida ao Plano 4. Ver `docs/PLANO_3_FUNDACAO_ML.md`.
+  CLI `ai dups`; GUI deferida ao Plano 4. Ver `docs/plans/implemented/PLANO_3_FUNDACAO_ML.md`.
 - **Plano 4A (semântico não-supervisionado) ✅** — só geometria de embeddings, reusa `features.document_matrix`
   (Plano 3) e o `charts` (Plano 1). Núcleo `core/ml/`: `cluster` (HDBSCAN/k-means), `labeling` (c-TF-IDF),
   `project` (PCA default / UMAP sob `[ml-viz]`), `recommend` (related/in_corpus, **numpy-puro, sem gate**),
@@ -211,7 +211,7 @@ Para `docs/ROADMAP_ML_DADOS.md`, esta skill é o ponto de partida de cada plano:
   `render_category_scatter` (**estendido, não duplicado** — segue a única fronteira matplotlib). GUI: Biblioteca
   modo **Mapa** (`semantic_map_panel.py`, "divide-se ao tocar" — `view.py` só pluga no Stack) + aviso de
   fora-de-escopo na IA; CLI `ai topics`/`map`/`related`. Nenhuma dep obrigatória nova (só `[ml-viz]`).
-  Ver `docs/PLANO_4A_SEMANTICO.md`.
+  Ver `docs/plans/implemented/PLANO_4A_SEMANTICO.md`.
 - **Plano 4B (supervisionado + textual) ✅** — a camada que precisa de **rótulo** ou de **NLP textual**.
   `core/ml/classify.py` (zero-shot por protótipo de perfil → supervisionado `LinearSVC`+`CalibratedClassifierCV`
   conforme rótulos chegam; reusa `features`/`store`). Pacote novo `core/text/` (puro, **independente do
@@ -220,7 +220,7 @@ Para `docs/ROADMAP_ML_DADOS.md`, esta skill é o ponto de partida de cada plano:
   sem dep nova. "Divide-se ao tocar" aplicado: `form_view` fatiado (`form_env`/`profile_section`), Insights como
   `insights_panel`, auto-tags em `core/library/tags.py` + `filter_items(tag_index=…)`. Rótulo de ouro capturado
   pelo **worker** (`record_label`), nunca por etapa de rotulagem dedicada. CLI `ai classify/keywords/summary/
-  entities`. Entrega os motores que o **Plano 4C** vai compor. Ver `docs/PLANO_4B_SUPERVISIONADO_TEXTUAL.md`.
+  entities`. Entrega os motores que o **Plano 4C** vai compor. Ver `docs/plans/implemented/PLANO_4B_SUPERVISIONADO_TEXTUAL.md`.
 - **Planos 4C–7** — cada feature pela seção 5; ao tocar `ai/view.py`/`library/view.py`/builder de Receitas,
   **dividir ao tocar** (seção 3) antes de adicionar a aba/recurso.
 - **Novas features de ML — Tier A ✅** — busca híbrida (BM25+RRF, `rank-bm25` **base**, não atrás de extra —
@@ -235,7 +235,7 @@ Para `docs/ROADMAP_ML_DADOS.md`, esta skill é o ponto de partida de cada plano:
   um deles. Stepper reusável (`gui/modules/_stepper.py`) + hook `mapviz.build_semantic_map(on_stage=…)`
   prontos; wiring nas 3 telas de origem (RAG/Mapa/Insights) requer ponte thread-safe (`page.pubsub`) por
   causa de `asyncio.to_thread` — deixado para uma passagem dedicada. CLI `observatory status/activity`,
-  `library dedup-images`, `data outliers`. Ver `docs/plan/PLANO_ML_NOVAS_FEATURES.md`.
+  `library dedup-images`, `data outliers`. Ver `docs/plans/implemented/PLANO_ML_NOVAS_FEATURES.md`.
   - **Fast-follow — GUI write-through + Status ampliado ✅** — fechou o gap em que só a CLI gravava em
     `log_activity` (a aba Atividade ficava vazia para quem só usa a GUI): `views/profile_section.py` e
     `gui/workers.py` passaram a gravar eventos de auto-sugestão/confirmação de perfil. Novo

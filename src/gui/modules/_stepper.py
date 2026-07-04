@@ -1,7 +1,7 @@
 """Shared "stepper" chip row — highlights the active stage of a short, fixed
 sequence (RAG Buscar→Contexto→Responder, Mapa Agrupar→Projetar→Rotular,
 Insights Palavras-chave→Resumo→Entidades). Item 3.5 (Observatório) of
-``docs/plan/PLANO_ML_NOVAS_FEATURES.md``.
+``docs/plans/implemented/PLANO_ML_NOVAS_FEATURES.md``.
 
 Only ever driven by real events from the worker/orchestration layer that
 already knows the sequence — never a fabricated timer (the plan's explicit

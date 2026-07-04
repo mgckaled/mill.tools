@@ -1,0 +1,193 @@
+---
+name: architecture
+description: Guia de arquitetura e estrutura de código do mill.tools — camadas (core/cli/gui), regras de
+  pureza e injeção de dependências, limites de tamanho e coesão por arquivo, padrões de decomposição
+  (blocks/ · tabs/ · index_tab · pipeline_log · _state), fluxo de "adicionar feature de ponta a ponta"
+  (core → extra/gate → CLI → GUI → testes) e como adicionar um módulo novo. Invocar ao criar/editar
+  módulos, mover código entre camadas, decidir onde um arquivo novo deve morar, dividir arquivos grandes
+  ou de baixa coesão, adicionar um extra opcional com gate, ou implementar qualquer plano do roadmap
+  (docs/ROADMAP_ML_DADOS.md, docs/REFATORACAO_PREVIA.md). Para detalhes de subcomandos use a skill `cli`;
+  de componentes/eventos de GUI use `design-system`; de testes use `testing` — esta skill orquestra e delega.
+---
+
+# mill.tools — Arquitetura e Estrutura de Código
+
+Esta skill é o **orquestrador estrutural** do projeto. Ela define onde o código mora, quão grande pode ser
+e como crescer sem desvirtuar do padrão. Os detalhes de cada domínio ficam nas skills irmãs:
+
+- **`cli`** — subcomandos, argparse, `CLIEventBus`, testes de CLI.
+- **`design-system`** — componentes de GUI, tokens, quirks do Flet 0.85, eventos `PipelineEvent`, thread-safety.
+- **`testing`** — estrutura de testes, fixtures, mocks, cobertura.
+
+Sempre que um detalhe pertencer a uma delas, **delegue** — não duplique aqui.
+
+---
+
+## 1. Princípios invioláveis
+
+Estes são os contratos que não se quebram. Violação = revisão reprovada.
+
+1. **`src/core/` é PURO** — sem `import flet`, sem estado de UI, sem `print`. Reutilizável por CLI e GUI.
+   Se uma função de core precisa "avisar progresso", ela recebe um callback/emit por parâmetro — nunca
+   conhece o `EventBus` nem o `page`.
+2. **Injeção de dependências na fronteira de rede/modelo.** A única função que toca a rede/modelo é
+   injetável, como `embed_fn` no RAG, `make_llm_fn` no `assess`, o motor no módulo Dados. O resto é
+   unit-testável sem Ollama/DuckDB/ffmpeg.
+3. **Idioma do código em inglês** — docstrings, logs, comentários, nomes. Português **só** em textos
+   visíveis da GUI (labels). Ao tocar um arquivo com PT em docstring/log, corrigir para EN na mesma passagem.
+4. **Logging via handler dedicado — nunca `print()`** para logs.
+5. **`subprocess` sempre em modo binário** (sem `text=True`); decodificar com `.decode("utf-8", errors="replace")`.
+6. **Degradação graciosa de extras** — recurso opcional ausente desabilita o card/flag com dica, nunca quebra.
+
+---
+
+## 2. Camadas: onde cada coisa mora e quem pode importar quem
+
+```
+src/
+├── core/   PURO — lógica reutilizável (audio · video · image · document · library · rag · recipes · data · [ml])
+├── cli/    1 módulo por subcomando + bus.py (CLIEventBus)
+└── gui/    camada Flet — app · home · modules/ · views/ · components/ · theme/
+```
+
+**Regra de importação (direção única):**
+
+| Camada | PODE importar | NUNCA importa |
+|---|---|---|
+| `core/` | outros `core/`, stdlib, libs puras | `gui/`, `cli/`, `flet` |
+| `cli/` | `core/`, `cli/bus.py` | `gui/` (exceto reusar `gui/modules/<m>/worker.py` puro, que não depende de Flet) |
+| `gui/` | `core/`, `gui/*` | — |
+
+> O worker (`gui/modules/<m>/worker.py`) **não depende de Flet** — emite por `bus.emit(...)`. Por isso a CLI
+> pode reusá-lo. Mantenha-o assim: lógica de orquestração + emit, zero controles Flet.
+
+**Superfícies de evento (não misturar):**
+- CLI → `CLIEventBus` (tqdm), `install_log_handler=False`. Ver skill `cli`.
+- GUI → `PipelineEvent(type, stage, payload, module_id)` via `page.pubsub`. Ver skill `design-system`.
+
+Antes de criar um arquivo, pergunte: **"isto é lógica pura?"** Se sim, vai em `core/`. Só amarração de UI
+vai em `gui/`. Só tradução de `Namespace`→Args vai em `cli/`.
+
+---
+
+## 3. Limites de tamanho e coesão
+
+A régua combina **tamanho** e **coesão** — os dois sintomas juntos é que reprovam (ver
+`docs/REFATORACAO_PREVIA.md`).
+
+| Tipo de arquivo | Alvo | Teto (refatorar acima) |
+|---|---|---|
+| Builder de GUI (`build_X_module`/`build_X_view`) | ≤ 400 linhas | ~500 |
+| Módulo de `core/` | ≤ 300 linhas | ~400 |
+| Worker / form_view | ≤ 350 linhas | ~450 |
+
+**Coesão (vale mesmo abaixo do teto):** um arquivo = **uma** responsabilidade. Sinais de baixa coesão que
+exigem divisão independentemente do tamanho:
+
+- Uma função-builder com muitas closures cobrindo **abas/seções distintas** (ex.: o antigo
+  `data/view.py` com 47 closures e 3 abas).
+- Um arquivo que reúne adaptadores/handlers de **vários módulos** (ex.: o antigo `recipes/registry.py`
+  com 33 adaptadores de 7 módulos).
+- Comentários de seção (`# ----`) que claramente separam "mundos" diferentes no mesmo arquivo.
+
+**Regra operacional "divide-se ao tocar":** não refatore preventivamente a base inteira (isso é retrabalho).
+Divida um arquivo grande **no momento** em que um plano for estendê-lo, ou quando ele já estourou o teto hoje.
+
+---
+
+## 4. Padrões de decomposição já consagrados no projeto
+
+Não invente padrão novo — estes já existem e são testados. Ao dividir, use o que couber:
+
+| Padrão | Onde já existe | Quando usar |
+|---|---|---|
+| **`blocks/`** — `build_X_block(page) → (ft.Column, XRefs)` (XRefs = NamedTuple de `get_*`) | `gui/modules/image/blocks/`, `document/blocks/` | Quebrar um formulário grande em blocos independentes |
+| **`tabs/`** — `build_X_tab(...) → (controle, refs/handlers)` | proposto p/ `data/view.py` (`query_tab`/`preview_tab`/`analysis_tab`) | Quebrar um painel multi-aba |
+| **`index_tab.py`** — uma aba extraída para arquivo próprio | `gui/modules/ai/index_tab.py` | Aba pesada/autônoma dentro de um hub |
+| **`_state.py`** — estado transversal compartilhado entre abas/blocos | proposto p/ `data/` (cronômetros, `_scoped_update`, seleção de fonte) | Estado que várias abas dividem |
+| **`pipeline_log.py`** — separa "o que emitir" (`fmt_*`) de "como exibir" (`resolve_*`) | todos os módulos | Sempre que houver eventos/log de pipeline |
+| **`registry/<módulo>.py`** + `__init__` que monta o registro | proposto p/ `recipes/registry/` | Coleções de adaptadores/handlers de múltiplos módulos |
+
+Princípio comum: cada sub-builder **devolve o controle e seus acessores/handlers**; o builder principal só
+monta o estado compartilhado e encaixa as partes. O builder principal deve ficar enxuto (centenas, não milhares).
+
+---
+
+## 5. Adicionar uma feature de ponta a ponta (checklist)
+
+Toda feature nova nasce com as duas interfaces e segue esta ordem. Marque cada item:
+
+1. **Núcleo puro** em `src/core/<área>/` — função(ões) sem Flet, com a dependência de rede/modelo
+   **injetável**. Docstrings em EN.
+2. **Dependência nova?** → extra opcional no `pyproject.toml` (`[ml]`, `[ml-audio]`, …) + **import preguiçoso**
+   (dentro da função, não no topo) + **gate** `is_available()` no padrão de `embedder.is_available()` /
+   `ocr.is_available()`.
+3. **Cache?** → `~/.mill-tools/...`, chaveado por `(path, mtime)`, no padrão de `data_assessments.json`.
+4. **CLI** — subcomando ou flag novo seguindo a skill `cli` (parser + runner; `CLIEventBus` se houver progresso;
+   `install_log_handler=False`; UTF-8 no stdout se imprimir nomes de arquivo).
+5. **GUI** — nova operação/aba seguindo a skill `design-system` (worker emite com `module_id` correto;
+   eventos no padrão das tabelas de `PipelineEvent`; regra de ouro do spinner; abas manuais `visible=`).
+6. **Testes** — espelhar `src/` em `tests/`, `@pytest.mark.unit`, mocks no padrão da skill `testing`.
+   Lógica pura ganha teste; amarração Flet não é testável headless → extrair a lógica pura para testá-la.
+7. **Saídas** — gravar no dir canônico do módulo sob `output/` (alimenta Biblioteca e RAG).
+8. **Verde antes de commitar** — `uv run pytest -m unit` + `ruff` limpos.
+
+Se a feature **não couber** em nenhum módulo existente, vá para a seção 6.
+
+---
+
+## 6. Adicionar um módulo novo de GUI
+
+`MODULES` (em `gui/app.py`) é fonte única — adicionar módulo = **uma entrada** na lista. Passos:
+
+1. Pasta `gui/modules/<novo>/` com o padrão: `form_view.py` · `worker.py` · `view.py` · `pipeline_log.py`
+   (e `blocks/`/`tabs/` se o formulário/painel for grande — ver seção 4).
+2. Uma `Module` (dataclass de `modules/base.py`): `id/label/icon/selected_icon/control/on_mount/on_unmount`.
+   O `control` é construído **uma vez** (trocar de aba não destrói estado).
+3. `navigate_to(module_id, payload)` alterna **visibilidade** num `ft.Stack` (nunca reatribui `content` —
+   quebra o patcher do Flet 0.85).
+4. Escopo de eventos: o painel ignora `module_id` ≠ `owner_id`. Hubs são auto-contidos.
+5. CLI correspondente (skill `cli`) + testes (skill `testing`).
+
+Ferramenta entra na `NavigationRail`; hub entra no `AppBar` (excluído de `_RAIL_MODULES` via `_HUB_IDS`).
+
+---
+
+## 7. Convenções de dependências e extras
+
+- Dependência pesada/opcional → **extra** no `pyproject.toml`, nunca no base. Núcleo clássico de ML: `[ml]`;
+  extração de mídia mais pesada: extras próprios (`[ml-audio]`, `[ml-image]`), como `[ai-image]`/`[ocr]` hoje.
+- **Import preguiçoso** sempre (carregar só ao acionar o recurso) — preserva a partida rápida.
+- **Gate** `is_available()` resolve a dependência (pacote + binário/serviço) e o card/flag desabilita com dica.
+- Linhas impossíveis de cobrir sem desinstalar dependências → `# pragma: no cover` (ver skill `testing`).
+
+---
+
+## 8. Checklist de revisão (antes de commitar)
+
+- [ ] `core/` tocado continua **puro** (sem Flet/`print`); dependência de rede/modelo **injetável**.
+- [ ] Nenhum arquivo novo/editado passou do teto da seção 3; baixa coesão → dividido pelo padrão da seção 4.
+- [ ] Builder de GUI grande foi quebrado em `blocks/`/`tabs/` em vez de inchar.
+- [ ] Extra opcional + import preguiçoso + gate, se houver dependência nova.
+- [ ] CLI **e** GUI cobertas; eventos com `module_id` certo.
+- [ ] Testes espelham `src/`; `uv run pytest -m unit` verde; `ruff` limpo.
+- [ ] Docstrings/logs/comentários em EN nos trechos tocados (PT→EN oportunista).
+- [ ] Saídas no dir canônico sob `output/`.
+
+---
+
+## 9. Ao implementar os planos do roadmap
+
+Para `docs/ROADMAP_ML_DADOS.md`, esta skill é o ponto de partida de cada plano:
+
+- **Plano −1 (refatoração prévia)** — aplicar a seção 4 a `data/view.py` (→ `tabs/`) e `recipes/registry.py`
+  (→ `registry/<módulo>.py`); fixar a regra da seção 3 no `CLAUDE.md`. Ver `docs/REFATORACAO_PREVIA.md`.
+- **Planos 0–2 (dados/análise)** — núcleo novo em `core/data/` (camada pandas/Polars) ao lado de `engine.py`;
+  painéis dos hubs como **abas novas** (seção 4), não inflando os builders existentes.
+- **Plano 3 (fundação de ML)** — novo pacote puro `core/ml/` espelhando `core/rag/` (gate, injeção, cache);
+  acessor que reusa o `VectorStore` existente.
+- **Planos 4–7** — cada feature pela seção 5; ao tocar `ai/view.py`/`library/view.py`/builder de Receitas,
+  **dividir ao tocar** (seção 3) antes de adicionar a aba/recurso.
+
+A regra de ouro do roadmap vale também para o código: **pagar uma fundação pequena uma vez (camadas, limites,
+padrões) para não pagar retrabalho muitas vezes.**

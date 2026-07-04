@@ -4,7 +4,7 @@ The class set is **not** invented here: for the default domain
 (``transcription_profile``) it is exactly the analysis profiles the app already
 exposes via ``--profile`` (``src/analysis/profiles/``). The same
 prototype+cosine+upgrade infrastructure is reused, keyed by ``domain``, for two
-more domains added in Tier A of ``docs/plan/PLANO_ML_NOVAS_FEATURES.md``:
+more domains added in Tier A of ``docs/plans/implemented/PLANO_ML_NOVAS_FEATURES.md``:
 ``data_domain`` (financial/research/log/people/catalog, for Dados) and
 ``document_type`` (invoice/minutes/article/contract/correspondence, for
 Documentos). Every public function defaults ``domain=DOMAIN_TRANSCRIPTION_PROFILE``
@@ -51,7 +51,7 @@ if TYPE_CHECKING:
 # filenames are the pre-existing ones (no "transcription_profile_" prefix) so
 # upgrading to multi-domain classification invalidates nothing on disk.
 DOMAIN_TRANSCRIPTION_PROFILE = "transcription_profile"
-# Tier A domains (docs/plan/PLANO_ML_NOVAS_FEATURES.md, item 3.4).
+# Tier A domains (docs/plans/implemented/PLANO_ML_NOVAS_FEATURES.md, item 3.4).
 DOMAIN_DATA = "data_domain"
 DOMAIN_DOCUMENT = "document_type"
 

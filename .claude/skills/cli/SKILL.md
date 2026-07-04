@@ -409,7 +409,7 @@ a avaliação cacheada se houver. `--model` = modelo do parecer.
 > Para `assess`, mocke `src.core.data.assess.load_cached_assessment`/`assess`/`save_assessment`
 > (cache hit não chama `assess`; `--no-cache` força e salva).
 
-`outliers <arquivo>` (Tier A, `docs/plan/PLANO_ML_NOVAS_FEATURES.md`) lê o arquivo inteiro (não uma
+`outliers <arquivo>` (Tier A, `docs/plans/implemented/PLANO_ML_NOVAS_FEATURES.md`) lê o arquivo inteiro (não uma
 query filtrada) via `run_query_arrow`/`frames`, roda `core/data/ml.py::detect_outliers`
 (`IsolationForest`, gate `core.ml.deps.is_available()`) e imprime a contagem + prévia das linhas
 mais atípicas (`--limit`, default 20). Grava um evento no log do Observatório
