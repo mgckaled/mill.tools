@@ -89,6 +89,24 @@ def test_answer_with_empty_retrieval_still_calls_llm(mocker):
 
 
 @pytest.mark.unit
+def test_answer_tolerates_content_as_list_of_text_blocks(mocker):
+    """Some providers (Gemini/tool-call-shaped responses) return
+    resp.content as a list of blocks instead of a plain str — AnswerResult
+    .text must still come back as a str, never leak the list."""
+    from src.core.rag import chat
+
+    llm = _fake_llm("placeholder")
+    llm.messages = iter(
+        [AIMessage(content=[{"type": "text", "text": "A resposta [1]."}])]
+    )
+    mocker.patch.object(chat, "make_llm", return_value=llm)
+
+    result = chat.answer("pergunta?", [_chunk("a.txt", "ctx", 0)])
+    assert result.text == "A resposta [1]."
+    assert isinstance(result.text, str)
+
+
+@pytest.mark.unit
 def test_answer_emits_start_and_done_events(mocker):
     from src.core.rag import chat
 
