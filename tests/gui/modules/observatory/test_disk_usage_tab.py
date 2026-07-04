@@ -4,9 +4,10 @@ Flet is not testable headless, so this builds the control with a MagicMock
 page and exercises apply()'s non-raising path against a real tmp_path
 directory (no thread involved here — disk_usage() is cheap).
 
-``build_disk_usage_tab`` returns a ``ft.Container`` (extra right padding so
-the scrollbar doesn't crowd the right-aligned size values) wrapping the real
-``ft.Column`` body — tests reach the body via ``control.content``.
+``build_disk_usage_tab`` returns the scrollable ``ft.Column`` itself (so its
+scrollbar sits at the tab's normal edge); the actual content — with its own
+right-padding Container — is the column's single child. Tests reach it via
+``_body(control)``.
 """
 
 from __future__ import annotations
@@ -17,6 +18,10 @@ import flet as ft
 import pytest
 
 from src.gui.modules.observatory.disk_usage_tab import build_disk_usage_tab
+
+
+def _body(control):
+    return control.controls[0].content
 
 
 @pytest.mark.unit
@@ -34,7 +39,7 @@ def test_apply_shows_empty_state_when_directory_is_missing(mocker):
     )
     control, apply = build_disk_usage_tab(MagicMock())
     apply()
-    entries_col = control.content.controls[1]
+    entries_col = _body(control).controls[1]
     assert "Nenhum arquivo" in entries_col.controls[0].value
 
 
@@ -52,7 +57,7 @@ def test_apply_lists_entries_and_total(mocker):
     )
     control, apply = build_disk_usage_tab(MagicMock())
     apply()
-    entries_col = control.content.controls[1]
+    entries_col = _body(control).controls[1]
     assert len(entries_col.controls) == 2
 
 
@@ -77,7 +82,7 @@ def test_apply_renders_children_indented_below_their_parent(mocker):
     )
     control, apply = build_disk_usage_tab(MagicMock())
     apply()
-    entries_col = control.content.controls[1]
+    entries_col = _body(control).controls[1]
     assert len(entries_col.controls) == 3  # rag + 2 children, all flattened
 
     # The parent has no left padding; children are indented past it.
@@ -117,7 +122,7 @@ def test_apply_populates_glossary_only_for_known_present_files(mocker):
     )
     control, apply = build_disk_usage_tab(MagicMock())
     apply()
-    glossary_col = control.content.controls[4]
+    glossary_col = _body(control).controls[4]
     names = [c.controls[0].value for c in glossary_col.controls]
     assert names == ["config.json"]  # mystery_file.bin silently omitted
 
@@ -155,7 +160,7 @@ def test_apply_wraps_a_described_folder_in_an_accent_bordered_card(mocker):
     )
     control, apply = build_disk_usage_tab(MagicMock())
     apply()
-    glossary_col = control.content.controls[4]
+    glossary_col = _body(control).controls[4]
 
     # One card for rag/, one plain row for config.json.
     assert len(glossary_col.controls) == 2
@@ -177,17 +182,30 @@ def test_apply_wraps_a_described_folder_in_an_accent_bordered_card(mocker):
 def test_header_shows_path_beside_help_icon_not_as_its_own_row(mocker):
     """The path moved off its own row to save vertical space (lives in the
     header, next to the help icon) — this is the layout contract other tests
-    rely on via fixed indices into control.content.controls."""
+    rely on via fixed indices into _body(control).controls."""
     mocker.patch(
         "src.gui.modules.observatory.disk_usage_tab.disk_usage",
         return_value=(),
     )
     control, apply = build_disk_usage_tab(MagicMock())
     apply()
-    body = control.content
+    body = _body(control)
     header_row = body.controls[0]
     texts = [getattr(c, "value", "") for c in header_row.controls]
     assert "~/.mill-tools/" in texts
     # 5 rows total: header, entries, hairline, glossary label, glossary — no
     # standalone path row eating a 6th slot.
     assert len(body.controls) == 5
+
+
+@pytest.mark.unit
+def test_scrollbar_stays_at_the_normal_edge_not_pushed_by_padding():
+    """Only the inner content Container gets right padding — the outer
+    scrollable Column (whose bounding box is what the scrollbar tracks) has
+    none, so the scrollbar itself isn't dragged inward with the content."""
+    control, _apply = build_disk_usage_tab(MagicMock())
+    assert isinstance(control, ft.Column)
+    assert control.scroll == ft.ScrollMode.AUTO
+    assert getattr(control, "padding", None) is None
+    inner_container = control.controls[0]
+    assert inner_container.padding.right > 0

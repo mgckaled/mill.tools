@@ -130,11 +130,11 @@ _HUB_CARDS: list[dict] = [
         "title": "IA",
         "icon": ft.Icons.AUTO_AWESOME_OUTLINED,
         "accent": Color.log.step,
-        "desc": "Converse com seu acervo, RAG local",
+        "desc": "Converse com seu acervo — RAG 100 % local",
         "features": [
-            "Pergunte sobre todo o seu acervo",
+            "Pergunte sobre tudo, um tipo ou um documento",
             "Respostas citando as fontes [n]",
-            "Embeddings 100 % locais",
+            "Índice e status de ML moram no Observatório",
         ],
     },
     {
@@ -154,11 +154,11 @@ _HUB_CARDS: list[dict] = [
         "title": "Observatório",
         "icon": ft.Icons.QUERY_STATS_OUTLINED,
         "accent": Color.log.info,
-        "desc": "Tudo que o ML já fez, num só lugar",
+        "desc": "Índice do RAG, atividade e status de ML, num só lugar",
         "features": [
-            "Atividade de ML de todos os módulos",
-            "Status de gates, classificador e índice",
-            "Parâmetros em vigor, para transparência",
+            "Índice do RAG: inspetor, painel e uso de disco",
+            "Status de gates, modelos Ollama e binários",
+            "Atividade, falhas e tempo de resposta por modelo",
         ],
     },
 ]

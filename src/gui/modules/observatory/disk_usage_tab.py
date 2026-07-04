@@ -11,6 +11,11 @@ not just how much. Below the listing, a short glossary explains what each
 file actually is; the glossary only shows entries that are present in the
 current scan (``_FILE_DESCRIPTIONS`` is a lookup, not a schema — an
 undocumented future file just doesn't get an explanation yet).
+
+The returned control is the scrollable ``ft.Column`` itself, not a wrapper —
+its right padding lives on the inner content ``Container`` instead, so the
+scrollbar (owned by the outer Column) stays at the tab's normal edge instead
+of being dragged inward along with the content.
 """
 
 from __future__ import annotations
@@ -289,29 +294,30 @@ def build_disk_usage_tab(page: ft.Page) -> tuple[ft.Control, Callable[[], None]]
     )
     header_controls.append(total_text)
 
-    body = ft.Column(
-        controls=[
-            ft.Row(
-                header_controls,
-                spacing=Space.sm,
-                vertical_alignment=ft.CrossAxisAlignment.CENTER,
-            ),
-            entries_col,
-            hairline(),
-            section_label("Glossário de arquivos"),
-            glossary_col,
-        ],
-        scroll=ft.ScrollMode.AUTO,
-        expand=True,
-        spacing=Space.md,
-    )
-    # Extra right padding so the right-aligned size values (and the scrollbar
-    # itself) don't crowd each other.
-    control = ft.Container(
-        content=body,
+    # The right padding lives on this inner Container, nested *inside* the
+    # scrollable Column below — that shifts the content left without moving
+    # the scrollbar, which belongs to the outer Column and stays at the
+    # tab's normal edge. Padding the outer Column itself (a Container
+    # wrapping it) would shrink the whole scrollable area, dragging the
+    # scrollbar in with the content — not what we want here.
+    content = ft.Container(
         padding=ft.Padding(left=0, right=Space.lg, top=0, bottom=0),
-        expand=True,
+        content=ft.Column(
+            controls=[
+                ft.Row(
+                    header_controls,
+                    spacing=Space.sm,
+                    vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                ),
+                entries_col,
+                hairline(),
+                section_label("Glossário de arquivos"),
+                glossary_col,
+            ],
+            spacing=Space.md,
+        ),
     )
+    control = ft.Column(controls=[content], scroll=ft.ScrollMode.AUTO, expand=True)
 
     def apply() -> None:
         entries = disk_usage()
