@@ -62,6 +62,12 @@ def test_save_load_round_trip(tmp_path):
 
 
 @pytest.mark.unit
+def test_save_map_leaves_no_tmp_file_behind(tmp_path):
+    save_map(_map(), "sig-1", directory=tmp_path)
+    assert list(tmp_path.glob("*.tmp")) == []
+
+
+@pytest.mark.unit
 def test_signature_mismatch_returns_none(tmp_path):
     save_map(_map(), "sig-1", directory=tmp_path)
     assert load_map("sig-2", directory=tmp_path) is None

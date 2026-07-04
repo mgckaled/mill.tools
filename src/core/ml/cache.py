@@ -15,6 +15,7 @@ changes.
 from __future__ import annotations
 
 import hashlib
+import io
 import json
 import time
 import zipfile
@@ -23,6 +24,7 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 
+from src.core.io_atomic import write_group
 from src.core.ml.store import model_dir
 
 if TYPE_CHECKING:
@@ -56,33 +58,40 @@ def _sklearn_version() -> str:
 
 
 def save_map(sm: SemanticMap, signature: str, *, directory: Path | None = None) -> Path:
-    """Persist *sm* with a signature + version sidecar; return the npz path."""
+    """Persist *sm* with a signature + version sidecar; return the npz path.
+
+    The npz + both JSON sidecars are written as one atomic unit
+    (:func:`src.core.io_atomic.write_group`) — a crash mid-write never leaves
+    a fresh map paired with a stale/missing sidecar.
+    """
     directory = directory or model_dir()
-    directory.mkdir(parents=True, exist_ok=True)
+    npz_buf = io.BytesIO()
+    np.savez_compressed(npz_buf, coords=sm.coords, labels=sm.labels)
+    map_bytes = json.dumps(
+        {
+            # JSON keys are strings; cluster ids are restored to int on load.
+            "cluster_names": {str(k): v for k, v in sm.cluster_names.items()},
+            "source_paths": sm.source_paths,
+            "kinds": sm.kinds,
+        },
+        ensure_ascii=False,
+    ).encode("utf-8")
+    info_bytes = json.dumps(
+        {
+            "signature": signature,
+            "sklearn_version": _sklearn_version(),
+            "created_at": time.time(),
+        },
+        ensure_ascii=False,
+    ).encode("utf-8")
+
     npz_path = directory / _MAP_NPZ
-    np.savez_compressed(npz_path, coords=sm.coords, labels=sm.labels)
-    (directory / _MAP_JSON).write_text(
-        json.dumps(
-            {
-                # JSON keys are strings; cluster ids are restored to int on load.
-                "cluster_names": {str(k): v for k, v in sm.cluster_names.items()},
-                "source_paths": sm.source_paths,
-                "kinds": sm.kinds,
-            },
-            ensure_ascii=False,
-        ),
-        encoding="utf-8",
-    )
-    (directory / _MAP_INFO).write_text(
-        json.dumps(
-            {
-                "signature": signature,
-                "sklearn_version": _sklearn_version(),
-                "created_at": time.time(),
-            },
-            ensure_ascii=False,
-        ),
-        encoding="utf-8",
+    write_group(
+        [
+            (npz_path, npz_buf.getvalue()),
+            (directory / _MAP_JSON, map_bytes),
+            (directory / _MAP_INFO, info_bytes),
+        ]
     )
     return npz_path
 

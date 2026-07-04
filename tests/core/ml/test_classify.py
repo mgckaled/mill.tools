@@ -42,6 +42,8 @@ def test_profile_prototypes_embeds_once_and_caches(tmp_path):
     assert ids2 == ids
     np.testing.assert_allclose(P2, P)
 
+    assert list(tmp_path.glob("*.tmp")) == []
+
 
 @pytest.mark.unit
 def test_profile_prototypes_cache_miss_without_embedder_raises(tmp_path):

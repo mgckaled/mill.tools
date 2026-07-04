@@ -19,11 +19,14 @@ training corpus so a changed corpus invalidates the saved model.
 
 from __future__ import annotations
 
+import io
 import json
 import logging
 import time
 from pathlib import Path
 from typing import Any
+
+from src.core.io_atomic import write_group
 
 
 def model_dir() -> Path:
@@ -47,24 +50,30 @@ def save_model(
     """Persist ``model`` with a version + signature sidecar; return the model path.
 
     Writes ``<name>.joblib`` (the model) and ``<name>.json`` (``sklearn_version``,
-    ``signature``, ``created_at``) under ``directory`` (default ``model_dir()``).
+    ``signature``, ``created_at``) under ``directory`` (default ``model_dir()``),
+    as one atomic unit (:func:`src.core.io_atomic.write_group`) — a crash
+    mid-write never leaves a fresh model paired with a stale/missing sidecar.
     """
     import joblib
 
     directory = directory or model_dir()
-    directory.mkdir(parents=True, exist_ok=True)
+    model_buf = io.BytesIO()
+    joblib.dump(model, model_buf)
+    info_bytes = json.dumps(
+        {
+            "sklearn_version": _sklearn_version(),
+            "signature": signature,
+            "created_at": time.time(),
+        },
+        ensure_ascii=False,
+    ).encode("utf-8")
+
     model_path = directory / f"{name}.joblib"
-    joblib.dump(model, model_path)
-    (directory / f"{name}.json").write_text(
-        json.dumps(
-            {
-                "sklearn_version": _sklearn_version(),
-                "signature": signature,
-                "created_at": time.time(),
-            },
-            ensure_ascii=False,
-        ),
-        encoding="utf-8",
+    write_group(
+        [
+            (model_path, model_buf.getvalue()),
+            (directory / f"{name}.json", info_bytes),
+        ]
     )
     return model_path
 

@@ -16,6 +16,7 @@ See ``classify/__init__.py`` for the still-flat public API.
 from __future__ import annotations
 
 import hashlib
+import io
 import json
 import zipfile
 from pathlib import Path
@@ -23,6 +24,7 @@ from typing import Callable
 
 import numpy as np
 
+from src.core.io_atomic import write_group
 from src.core.ml.classify._naming import (
     DOMAIN_DATA,
     DOMAIN_DOCUMENT,
@@ -132,12 +134,18 @@ def _save_prototypes(
     npz_name: str = _PROTO_NPZ,
     json_name: str = _PROTO_JSON,
 ) -> None:
-    """Persist the prototype matrix + ids + signature (npz/json, no pickle)."""
-    directory.mkdir(parents=True, exist_ok=True)
-    np.savez_compressed(directory / npz_name, P=P)
-    (directory / json_name).write_text(
-        json.dumps({"ids": ids, "signature": signature}, ensure_ascii=False),
-        encoding="utf-8",
+    """Persist the prototype matrix + ids + signature (npz/json, no pickle),
+    as one atomic unit (:func:`src.core.io_atomic.write_group`)."""
+    npz_buf = io.BytesIO()
+    np.savez_compressed(npz_buf, P=P)
+    json_bytes = json.dumps(
+        {"ids": ids, "signature": signature}, ensure_ascii=False
+    ).encode("utf-8")
+    write_group(
+        [
+            (directory / npz_name, npz_buf.getvalue()),
+            (directory / json_name, json_bytes),
+        ]
     )
 
 

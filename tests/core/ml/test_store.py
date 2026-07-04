@@ -83,3 +83,9 @@ def test_corrupt_model_artifact_returns_none(tmp_path):
 def test_model_dir_is_under_mill_tools(monkeypatch, tmp_path):
     monkeypatch.setattr("pathlib.Path.home", lambda: tmp_path)
     assert model_dir() == tmp_path / ".mill-tools" / "ml"
+
+
+@pytest.mark.unit
+def test_save_model_leaves_no_tmp_file_behind(tmp_path):
+    save_model(_fitted_model(), "scaler", signature="sig-1", directory=tmp_path)
+    assert list(tmp_path.glob("*.tmp")) == []
