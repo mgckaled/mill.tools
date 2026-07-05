@@ -179,14 +179,19 @@ def _needs_excel(paths: Iterable[Path]) -> bool:
     return any(p.suffix.lower() in _XLSX_EXTS for p in paths)
 
 
-def describe_file(path: Path) -> tuple[int, list[ColumnInfo]]:
+def describe_file(
+    path: Path, *, connect_fn: Callable = _connect
+) -> tuple[int, list[ColumnInfo]]:
     """Return ``(row_count, columns)`` for a file. Used by the scanner.
 
     Schema comes from ``DESCRIBE`` (cheap: reads only the header/sniff sample);
     the row count is a ``count(*)`` (metadata-only for Parquet, a scan for CSV —
-    acceptable for the file sizes this tool targets).
+    acceptable for the file sizes this tool targets). ``connect_fn`` is
+    injectable like every other engine entry point (``preview``/``run_query``/
+    ``export_query``/``convert_file``) — this was the one boundary without the
+    seam.
     """
-    con = _connect()
+    con = connect_fn()
     try:
         if _needs_excel([path]):
             _ensure_excel(con)

@@ -77,3 +77,19 @@ def test_profile_text_returns_report_without_writing(csv_sales):
     text = profile_text(csv_sales)
     assert "Linhas: 3" in text
     assert "produto" in text
+
+
+@pytest.mark.unit
+def test_profile_text_accepts_an_already_scanned_data_file(csv_sales, mocker):
+    """Passing a pre-scanned DataFile must skip the internal scan_file call
+    (the seam the data-card builder uses to avoid a 2nd DESCRIBE/count(*))."""
+    from src.core.data import scanner
+    from src.core.data.profile import profile_text
+
+    file = scanner.scan_file(csv_sales)
+    spy = mocker.spy(scanner, "scan_file")
+
+    text = profile_text(file)
+
+    assert spy.call_count == 0
+    assert "Linhas: 3" in text

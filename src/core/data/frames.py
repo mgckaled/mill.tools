@@ -34,6 +34,12 @@ def is_available() -> bool:
 
     Gate for the DataFrame layer, mirroring ``embedder.is_available``: callers
     show ``SETUP_HINT`` instead of failing when the extra is absent. Never raises.
+
+    Does not probe pandas even though :func:`to_pandas` needs it: the
+    ``[analysis]`` extra in ``pyproject.toml`` always installs polars, pandas
+    and pyarrow together, so a missing pandas here would mean a broken/partial
+    install rather than a real "extra not selected" state — not worth a 3rd
+    import just to special-case an environment this project does not support.
     """
     try:
         import polars  # noqa: F401

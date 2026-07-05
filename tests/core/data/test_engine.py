@@ -37,6 +37,23 @@ def test_describe_file_counts_rows_and_columns(csv_sales):
 
 
 @pytest.mark.unit
+def test_describe_file_uses_injected_connect_fn(csv_sales):
+    """Regression: describe_file was the one engine entry point without the
+    connect_fn seam that preview/run_query/export_query/convert_file all have."""
+    from src.core.data.engine import _connect, describe_file
+
+    calls: list[int] = []
+
+    def spy_connect():
+        calls.append(1)
+        return _connect()
+
+    n_rows, _columns = describe_file(csv_sales, connect_fn=spy_connect)
+    assert n_rows == 3
+    assert calls == [1]
+
+
+@pytest.mark.unit
 def test_run_query_join_and_aggregate(csv_sales):
     from src.core.data.engine import run_query
     from src.core.data.scanner import scan_files

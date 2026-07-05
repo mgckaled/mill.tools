@@ -84,6 +84,19 @@ def test_card_for_path_reads_real_file(csv_sales):
 
 
 @pytest.mark.unit
+def test_card_for_path_scans_the_file_only_once(csv_sales, mocker):
+    """Regression: card_for_path used to scan the file twice (its own scan_file
+    plus a second one inside profile_text) before profile_text learned to
+    accept an already-scanned DataFile."""
+    from src.core.data import scanner
+    from src.core.data.datacard import card_for_path
+
+    spy = mocker.spy(scanner, "scan_file")
+    card_for_path(csv_sales)
+    assert spy.call_count == 1
+
+
+@pytest.mark.unit
 def test_card_for_path_folds_in_cached_assessment(csv_sales, tmp_path, mocker):
     from src.core.data import assess, datacard
 

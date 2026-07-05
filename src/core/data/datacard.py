@@ -92,7 +92,7 @@ def card_for_path(path: Path) -> str:
 
     path = Path(path)
     file = scan_file(path)
-    prof = profile_text(path)
+    prof = profile_text(file)  # reuse the scan above instead of a 2nd DESCRIBE/count(*)
     sample = preview(path, limit=SAMPLE_ROWS)
     cached = None
     try:

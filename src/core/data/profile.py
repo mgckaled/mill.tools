@@ -98,14 +98,20 @@ def format_profile(file: DataFile, summary: QueryResult) -> str:
     return "\n".join(lines).rstrip() + "\n"
 
 
-def profile_text(path: Path) -> str:
-    """Profile *path* and return the report as text (no file written).
+def profile_text(path_or_file: Path | DataFile) -> str:
+    """Profile a file and return the report as text (no file written).
 
-    Shared by :func:`profile_file` (writes it) and the data card builder (embeds
-    it). The SUMMARIZE is sampled for large files via :func:`summarize_sql`.
+    Accepts either a path (scanned internally, the convenience path used by
+    :func:`profile_file`) or an already-scanned :class:`DataFile` — the data
+    card builder passes the ``DataFile`` it already has so the file's
+    ``DESCRIBE``/``count(*)`` does not run a second time. The SUMMARIZE is
+    sampled for large files via :func:`summarize_sql`.
     """
-    path = Path(path)
-    file = scan_file(path)
+    file = (
+        path_or_file
+        if isinstance(path_or_file, DataFile)
+        else scan_file(Path(path_or_file))
+    )
     summary = run_query([file], summarize_sql(file.view_name, file.n_rows))
     return format_profile(file, summary)
 
