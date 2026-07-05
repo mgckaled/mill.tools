@@ -1,4 +1,4 @@
-"""Descrição de imagem via VLM — Ollama local ou Gemini/GLM em nuvem (LangChain). Import lazy."""
+"""Image description via VLM — local Ollama or cloud Gemini/GLM (LangChain). Lazy import."""
 
 from __future__ import annotations
 
@@ -47,7 +47,7 @@ DESCRIBE_PRESETS: dict[str, str] = {
 
 
 def is_available() -> bool:
-    """True se langchain_ollama instalado (já é dep do projeto)."""
+    """True if langchain_ollama is installed (already a project dependency)."""
     try:
         from langchain_ollama import ChatOllama  # noqa: F401
 
