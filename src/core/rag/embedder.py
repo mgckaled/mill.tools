@@ -117,7 +117,7 @@ def embed_texts(
     # One entry for the whole call, not one per sub-batch: indexing a large
     # document can trigger dozens of sub-batches, and model_timing.record_timing
     # rewrites the whole log on every call — summing here keeps that write off
-    # the hot path (see docs/plans/active/PLANO_CORRECOES_QUARTETO_ML.md, [O2]).
+    # the hot path (see docs/plans/implemented/PLANO_CORRECOES_QUARTETO_ML.md, [O2]).
     record_timing(model, "embed", elapsed_total)
 
     arr = np.asarray(out, dtype=np.float32)

@@ -11,13 +11,32 @@ ficam em [`ROADMAP.md`](ROADMAP.md) e [`plans/active/`](plans/active/).
 
 ## Entregas (marcos)
 
+### Correções do quarteto ML — rag · ml · text · observatory (jul/2026)
+Revisão exploratória arquivo-a-arquivo dos 4 pacotes (37 arquivos, ~4.370 linhas) virou um plano de 6 fases,
+implementado sessão a sessão direto no `main`: **infra compartilhada** (escrita atômica em
+`core/io_atomic.py`; log JSON genérico em `observatory/_jsonlog.py`, incl. mitigação do hot path de
+`record_timing`); **`core/rag/`** (bug real do `index_health` que nunca marcava documento stale; tokenização
+BM25 sem pontuação; timeout curto (`10s`) do gate do embedder; persistência em grupo atômica; `store.load`
+tolera `meta.json` ausente; `cancel_is_set` no `batch.run_batch`; `_index_one` extraída do duplicado
+`index_files`/`build_index`; pula fusão RRF quando o BM25 não tem match); **`core/ml/`** (`classify.py`
+dividido em pacote `classify/`; cegueira ao embed model corrigida nas assinaturas de cache de
+protótipos/SVM via `embed_space_id`; canonicalização de path simétrica em `record_label`/`ChunkMeta`; gate do
+`mapviz` antes do `import pandas`; guarda quadrática em `related()`; miudezas de robustez do `cache`/`store`);
+**`core/text/`** (marcadores de idioma ambíguos removidos de `_PT_MARKERS`; amostragem estratificada no
+resumo de textos longos — o item de maior impacto de produto do plano; `"transformer"` morto removido de
+`_NER_PIPES`; `entities()` não re-checa `is_available` com pipeline em cache; edge case do separador de
+header de 64 traços limitado a uma janela de prefixo); **`core/observatory/`** (docstring do `__init__.py`
+para os 5 módulos reais; `disk_usage` blindado contra ciclo de symlink; ausência de lock inter-processo nos
+logs documentada e aceita). Decisões pontuais de produto/arquitetura ficam em entradas próprias (abaixo).
+Plano: [`plans/implemented/PLANO_CORRECOES_QUARTETO_ML.md`](plans/implemented/PLANO_CORRECOES_QUARTETO_ML.md).
+
 ### Decisão — `MLConfigSnapshot` reporta os dois `_MMR_LAMBDA` (jul/2026)
 Fase 4 do plano do quarteto ML (item T3/O5): `core/observatory/status.py::config_snapshot()` só lia
 `recommend._MMR_LAMBDA`, deixando `summarize._MMR_LAMBDA` (`core/text`) invisível no board do Observatório —
 mesmo nome, mesmo valor hoje (0.6), mas constantes independentes por design (ver decisão abaixo). Decisão:
 reportar as duas (`mmr_lambda` + `mmr_lambda_summary`) em vez de esconder uma; não move nenhuma constante
 entre camadas, só lê ambas para exibição. CLI (`observatory status`) e a aba Status do hub Observatório
-mostram as duas linhas. [`plans/active/PLANO_CORRECOES_QUARTETO_ML.md`](plans/active/PLANO_CORRECOES_QUARTETO_ML.md).
+mostram as duas linhas. [`plans/implemented/PLANO_CORRECOES_QUARTETO_ML.md`](plans/implemented/PLANO_CORRECOES_QUARTETO_ML.md).
 
 ### Decisão — duplicação aceita entre `core/text` × `core/ml` (jul/2026)
 Revisão arquivo-a-arquivo do quarteto ML (rag·ml·text·observatory) encontrou três pequenas duplicações na
@@ -26,7 +45,7 @@ fronteira entre `core/text` e `core/ml`: separador de cabeçalho `"-" * 64` (`co
 `core/text/summarize.py`) e o gate `is_available()` de scikit-learn (`core/ml/deps.py`,
 `core/text/summarize.py`). Decisão: manter — `core/text` é independente de `core/ml` por design (Plano 4B)
 e o acoplamento de extrair uma camada comum para ~3 linhas repetidas não compensa. Não "consertar" uma
-cópia isolada sem revisitar esta nota. [`plans/active/PLANO_CORRECOES_QUARTETO_ML.md`](plans/active/PLANO_CORRECOES_QUARTETO_ML.md).
+cópia isolada sem revisitar esta nota. [`plans/implemented/PLANO_CORRECOES_QUARTETO_ML.md`](plans/implemented/PLANO_CORRECOES_QUARTETO_ML.md).
 
 ### Reorganização da documentação técnica (jul/2026)
 Consolidação dos três locais de plano (`docs/` raiz, `docs/plan/`, `.claude/plans/`) numa árvore única

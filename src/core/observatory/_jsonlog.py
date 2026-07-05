@@ -22,7 +22,7 @@ corrupted file. Accepted rather than fixed: these logs are best-effort
 observability (activity/failure feeds, latency samples), not a system of
 record, and neither process is long-running enough for the race to matter in
 practice. Real cross-process locking is out of scope (see
-``docs/plans/active/PLANO_CORRECOES_QUARTETO_ML.md``, "Fora do escopo").
+``docs/plans/implemented/PLANO_CORRECOES_QUARTETO_ML.md``, "Fora do escopo").
 """
 
 from __future__ import annotations
