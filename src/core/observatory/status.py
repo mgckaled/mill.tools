@@ -9,6 +9,10 @@ from __future__ import annotations
 
 import inspect
 from dataclasses import dataclass
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 
 @dataclass(frozen=True, slots=True)
@@ -140,7 +144,7 @@ def gate_statuses() -> tuple[GateStatus, ...]:
 
 
 def domain_statuses(
-    *, directory=None, embed_space_id: str | None = None
+    *, directory: Path | None = None, embed_space_id: str | None = None
 ) -> tuple[DomainStatus, ...]:
     """Label count + supervised-active flag for every ``classify.py`` domain.
 

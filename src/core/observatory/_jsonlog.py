@@ -12,6 +12,17 @@ The on-disk shape (a single JSON array, pretty-printed) is unchanged from
 before this refactor — only the write itself is now atomic (temp file +
 ``os.replace`` via :mod:`src.core.io_atomic`), so a crash or a concurrent
 reader never observes a half-written log.
+
+**Accepted gap — no inter-process lock.** ``append_capped`` is a
+read-modify-write: the caller loads the current entries, then this module
+writes the merged, capped list back. Atomicity only covers the write itself;
+if the GUI and a CLI run concurrently and both log around the same instant,
+one's read can miss the other's not-yet-written entry — a lost update, not a
+corrupted file. Accepted rather than fixed: these logs are best-effort
+observability (activity/failure feeds, latency samples), not a system of
+record, and neither process is long-running enough for the race to matter in
+practice. Real cross-process locking is out of scope (see
+``docs/plans/active/PLANO_CORRECOES_QUARTETO_ML.md``, "Fora do escopo").
 """
 
 from __future__ import annotations
