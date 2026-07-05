@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+import logging
 from pathlib import Path
+
+logger = logging.getLogger(__name__)
 
 MODELS = ("u2net", "u2netp", "silueta", "isnet-general-use", "u2net_human_seg")
 
@@ -61,6 +64,7 @@ def replace_background(
     from src.core.image.transform import _hex_rgb, _out_path
 
     with Image.open(src) as im:
+        im = ImageOps.exif_transpose(im)
         original = im.convert("RGB")
         cutout = rembg.remove(im, session=session).convert("RGBA")
 
@@ -73,12 +77,20 @@ def replace_background(
     if bg_mode == "blur":
         radius = max(1, int(bg_blur))
         bg = original.resize((w, h)).filter(ImageFilter.GaussianBlur(radius))
-    elif bg_mode == "image" and bg_image is not None and Path(bg_image).exists():
-        with Image.open(bg_image) as bgi:
-            bg = ImageOps.fit(
-                bgi.convert("RGB"), (w, h), method=Image.Resampling.LANCZOS
+    elif bg_mode == "image":
+        if bg_image is not None and Path(bg_image).exists():
+            with Image.open(bg_image) as bgi:
+                bg = ImageOps.fit(
+                    bgi.convert("RGB"), (w, h), method=Image.Resampling.LANCZOS
+                )
+        else:
+            logger.warning(
+                "[!] bg_mode='image' but bg_image is missing or invalid (%s) — "
+                "falling back to solid color",
+                bg_image,
             )
-    else:  # "color" (and fallback)
+            bg = Image.new("RGB", (w, h), _hex_rgb(bg_color))
+    else:  # "color" (and unknown-mode fallback)
         bg = Image.new("RGB", (w, h), _hex_rgb(bg_color))
 
     canvas = bg.convert("RGBA")

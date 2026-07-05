@@ -66,6 +66,7 @@ def describe_image(src: Path, model: str = "moondream-custom", prompt: str = "")
         make_llm,
         timing_callbacks,
     )
+    from src.llm_utils import extract_llm_text
 
     with open(src, "rb") as f:
         img_b64 = base64.b64encode(f.read()).decode()
@@ -100,7 +101,7 @@ def describe_image(src: Path, model: str = "moondream-custom", prompt: str = "")
         ]
     )
     response = llm.invoke([message])
-    return response.content
+    return extract_llm_text(response.content)
 
 
 def save_description(src: Path, out_dir: Path, text: str) -> Path:

@@ -45,6 +45,25 @@ def test_describe_image_glm_routes_through_make_llm(jpg_image, mocker):
 
 
 @pytest.mark.unit
+def test_describe_image_handles_list_shaped_response_content(jpg_image, mocker):
+    """Some Gemini/tool-call-shaped responses return .content as a list of
+    blocks instead of a plain str — describe_image must join it via
+    extract_llm_text instead of leaking the raw list."""
+    from src.core.image.describe import describe_image
+
+    fake_response = MagicMock(
+        content=[{"type": "text", "text": "uma descrição "}, "em blocos"]
+    )
+    fake_llm = MagicMock()
+    fake_llm.invoke.return_value = fake_response
+    mocker.patch("src.llm_factory.make_llm", return_value=fake_llm)
+
+    result = describe_image(jpg_image, model="gemini-2.5-flash")
+
+    assert result == "uma descrição em blocos"
+
+
+@pytest.mark.unit
 def test_describe_image_gemini_routes_through_make_llm(jpg_image, mocker):
     """A gemini-* model name must route through llm_factory.make_llm, not ChatOllama."""
     from src.core.image.describe import describe_image
