@@ -11,6 +11,14 @@ ficam em [`ROADMAP.md`](ROADMAP.md) e [`plans/active/`](plans/active/).
 
 ## Entregas (marcos)
 
+### Decisão — mensagens de exceção user-facing do core podem ser em PT (jul/2026)
+Fase 0 da revisão exploratória do `core/data/` (14 arquivos, ~1.450 linhas): o pacote é todo PT em mensagens
+de exceção (`DataEngineError`, `ConvertError`, `ValueError` dos charts), enquanto `core/ml` é EN — inconsistência
+não resolvida entre pacotes. Decisão: exceções *user-facing* (as que chegam cruas à GUI/CLI, sem
+transformação) podem ficar em PT — são texto de interface, não código; docstrings/logs/comentários continuam
+em EN sem exceção. Formalizado em CLAUDE.md §Convenções e na skill `architecture` §1.3.
+[`plans/active/PLANO_CORRECOES_CORE_DATA.md`](plans/active/PLANO_CORRECOES_CORE_DATA.md).
+
 ### Correções do quarteto ML — rag · ml · text · observatory (jul/2026)
 Revisão exploratória arquivo-a-arquivo dos 4 pacotes (37 arquivos, ~4.370 linhas) virou um plano de 6 fases,
 implementado sessão a sessão direto no `main`: **infra compartilhada** (escrita atômica em

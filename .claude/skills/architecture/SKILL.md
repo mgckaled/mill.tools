@@ -35,7 +35,10 @@ Estes são os contratos que não se quebram. Violação = revisão reprovada.
    injetável, como `embed_fn` no RAG, `make_llm_fn` no `assess`, o motor no módulo Dados. O resto é
    unit-testável sem Ollama/DuckDB/ffmpeg.
 3. **Idioma do código em inglês** — docstrings, logs, comentários, nomes. Português **só** em textos
-   visíveis da GUI (labels). Ao tocar um arquivo com PT em docstring/log, corrigir para EN na mesma passagem.
+   visíveis da GUI (labels) **e em mensagens de exceção *user-facing* do core** (ex.: `DataEngineError`,
+   `ConvertError`, `ValueError` dos charts) — essas chegam cruas à GUI/CLI, então são texto de interface, não
+   código. Ao tocar um arquivo com PT em docstring/log (não em mensagem de exceção user-facing), corrigir
+   para EN na mesma passagem.
 4. **Logging via handler dedicado — nunca `print()`** para logs.
 5. **`subprocess` sempre em modo binário** (sem `text=True`); decodificar com `.decode("utf-8", errors="replace")`.
 6. **Degradação graciosa de extras** — recurso opcional ausente desabilita o card/flag com dica, nunca quebra.

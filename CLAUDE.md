@@ -233,6 +233,10 @@ uv run main.py observatory status | observatory activity | observatory logs | ob
 
 - **Idioma do código em inglês** (docstrings/logs/comentários/nomes); português **só** em labels da GUI. Ao
   tocar um arquivo com PT em docstring/log, corrigir p/ EN na mesma passagem.
+- **Exceção — mensagens de exceção *user-facing* no core podem ser em PT.** Elas chegam cruas à GUI/CLI (ex.:
+  `DataEngineError`, `ConvertError`, `ValueError` dos charts) — são texto de interface, não código. Decisão
+  registrada na Fase 0 do `PLANO_CORRECOES_CORE_DATA.md` (`core/data` já seguia isso; formalizado aqui em
+  vez de renomear módulos inteiros).
 - **Core (`src/core/`) é puro**: sem Flet, sem `print` (logging via handler dedicado), dependência de
   rede/modelo **injetável**. Detalhe de camadas/tamanho/decomposição → skill `architecture`.
 - **`subprocess` sempre em modo binário** (`Popen`/`run` sem `text=True`); decodificar com
