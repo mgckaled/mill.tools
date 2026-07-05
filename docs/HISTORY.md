@@ -11,13 +11,31 @@ ficam em [`ROADMAP.md`](ROADMAP.md) e [`plans/active/`](plans/active/).
 
 ## Entregas (marcos)
 
+### Correções do `core/data/` (jul/2026)
+Revisão exploratória arquivo-a-arquivo do pacote (14 arquivos, ~1.450 linhas), mesmo formato do quarteto ML,
+implementada fase a fase direto no `main`: **3 bugs reais** (`validate.ensure_select` rejeitava a própria
+receita pt-BR recomendada pelo docstring de `engine.reader_expr` — `"replace"` como palavra-chave proibida
+colidia com a função pura `replace()`; um `;` dentro de literal de string era confundido com um segundo
+statement porque o strip de literais rodava depois do check; `nl2sql._extract_payload` usava o índice errado
+no fallback de SQL cru em bloco cercado, nunca funcionando no caso pra que foi escrito); **robustez** (`store`/
+`assess` migrados para o `io_atomic` do quarteto ML; `resp.content` como lista de blocos — Gemini/tool-call —
+agora tolerado por `nl2sql`/`assess` via `extract_llm_text`, promovido de `core/rag/chat._extract_text` p/
+`src/llm_utils.py`; `ml.detect_outliers` dropa coluna numérica 100% NaN antes do `fillna(mean)`); **perf/seams**
+(`profile.profile_text` aceita um `DataFile` já escaneado — `datacard.card_for_path` parou de escanear o
+arquivo 2×; `engine.describe_file` ganhou `connect_fn` injetável, único ponto do engine sem o seam); **miudezas**
+(`view_name_for` prefixa stems que colidem com keyword SQL — `select.csv` → view `t_select`; `charts._line`
+coage o eixo X via `_numeric` só quando a coluna é de fato numérica, sem quebrar o eixo temporal). Decisão de
+convenção de idioma em entrada própria (abaixo). Pendências de baixo risco registradas no `ROADMAP.md` §8
+(sheet de XLSX não propagado em consultas; `charts.py`/`engine.py` acima do alvo de tamanho — dividir ao
+tocar). Plano: [`plans/implemented/PLANO_CORRECOES_CORE_DATA.md`](plans/implemented/PLANO_CORRECOES_CORE_DATA.md).
+
 ### Decisão — mensagens de exceção user-facing do core podem ser em PT (jul/2026)
 Fase 0 da revisão exploratória do `core/data/` (14 arquivos, ~1.450 linhas): o pacote é todo PT em mensagens
 de exceção (`DataEngineError`, `ConvertError`, `ValueError` dos charts), enquanto `core/ml` é EN — inconsistência
 não resolvida entre pacotes. Decisão: exceções *user-facing* (as que chegam cruas à GUI/CLI, sem
 transformação) podem ficar em PT — são texto de interface, não código; docstrings/logs/comentários continuam
 em EN sem exceção. Formalizado em CLAUDE.md §Convenções e na skill `architecture` §1.3.
-[`plans/active/PLANO_CORRECOES_CORE_DATA.md`](plans/active/PLANO_CORRECOES_CORE_DATA.md).
+[`plans/implemented/PLANO_CORRECOES_CORE_DATA.md`](plans/implemented/PLANO_CORRECOES_CORE_DATA.md).
 
 ### Correções do quarteto ML — rag · ml · text · observatory (jul/2026)
 Revisão exploratória arquivo-a-arquivo dos 4 pacotes (37 arquivos, ~4.370 linhas) virou um plano de 6 fases,
