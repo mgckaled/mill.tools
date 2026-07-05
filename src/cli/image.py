@@ -65,7 +65,7 @@ def add_image_parser(subparsers: argparse._SubParsersAction) -> None:
         type=int,
         default=90,
         metavar="Q",
-        help="Quality for lossy formats 50–100 (default 90)",
+        help="Quality for lossy formats: 1-95 for jpg/webp, 1-100 for avif (default 90)",
     )
 
     # ── resize ────────────────────────────────────────────────────────────────

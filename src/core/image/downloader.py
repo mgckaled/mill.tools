@@ -1,4 +1,4 @@
-"""Download de imagens via URL (urllib stdlib)."""
+"""Image download via URL (urllib stdlib)."""
 
 from __future__ import annotations
 
@@ -25,23 +25,28 @@ _EXT_BY_FORMAT = {
     "AVIF": ".avif",
 }
 
+# A single image should never be this large — caps memory use against a
+# misbehaving/malicious server (whole response is read into RAM below).
+_MAX_DOWNLOAD_BYTES = 100 * 1024 * 1024
+
 
 def download_image(url: str, out_dir: Path, timeout: float = 15.0) -> Path:
-    """GET HTTP direto da imagem. Salva em out_dir.
+    """Direct HTTP GET of the image. Saves it into out_dir.
 
-    Valida que é imagem abrindo com Pillow; levanta ValueError com mensagem
-    amigável se for HTML/404/não-imagem.
+    Validates that the content is an image by opening it with Pillow; raises
+    ValueError with a friendly message if it's HTML/404/not an image.
 
     Args:
-        url: URL direta da imagem.
-        out_dir: Diretório de destino.
-        timeout: Timeout da requisição em segundos.
+        url: Direct image URL.
+        out_dir: Destination directory.
+        timeout: Request timeout in seconds.
 
     Returns:
-        Path do arquivo salvo.
+        Path of the saved file.
 
     Raises:
-        ValueError: Se a URL não retornar uma imagem válida.
+        ValueError: If the URL doesn't return a valid image, or the image
+            exceeds ``_MAX_DOWNLOAD_BYTES``.
     """
     out_dir.mkdir(parents=True, exist_ok=True)
 
@@ -51,11 +56,25 @@ def download_image(url: str, out_dir: Path, timeout: float = 15.0) -> Path:
     )
     try:
         with urllib.request.urlopen(req, timeout=timeout) as resp:
-            data = resp.read()
+            content_length = resp.headers.get("Content-Length")
+            if content_length and int(content_length) > _MAX_DOWNLOAD_BYTES:
+                raise ValueError(
+                    f"Imagem em '{url}' excede o limite de "
+                    f"{_MAX_DOWNLOAD_BYTES // (1024 * 1024)} MB "
+                    f"(Content-Length={content_length})"
+                )
+            data = resp.read(_MAX_DOWNLOAD_BYTES + 1)
+            if len(data) > _MAX_DOWNLOAD_BYTES:
+                raise ValueError(
+                    f"Imagem em '{url}' excede o limite de "
+                    f"{_MAX_DOWNLOAD_BYTES // (1024 * 1024)} MB"
+                )
+    except ValueError:
+        raise
     except Exception as exc:
         raise ValueError(f"Falha ao baixar '{url}': {exc}") from exc
 
-    # Valida que o conteúdo é uma imagem real
+    # Validate that the content is a real image
     try:
         with Image.open(io.BytesIO(data)) as im:
             im.verify()
@@ -66,7 +85,7 @@ def download_image(url: str, out_dir: Path, timeout: float = 15.0) -> Path:
             f"URL não contém uma imagem válida (possível HTML/404): {exc}"
         ) from exc
 
-    # Nome do arquivo: tenta extrair da URL, senão usa formato detectado
+    # Filename: try extracting it from the URL, else use the detected format
     parsed_name = Path(urlparse(url).path).name
     if parsed_name and "." in parsed_name:
         name = parsed_name

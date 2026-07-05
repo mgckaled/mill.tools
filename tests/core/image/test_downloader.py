@@ -103,3 +103,30 @@ def test_download_image_network_error_raises_value_error(mocker, out_dir):
     )
     with pytest.raises(ValueError, match="Falha ao baixar"):
         download_image("https://example.com/x.png", out_dir)
+
+
+def test_download_image_content_length_too_large_raises(mocker, out_dir):
+    """A server-declared Content-Length above the cap must fail fast, before
+    ever reading the (huge) body into memory."""
+    from src.core.image.downloader import download_image
+
+    cm = _fake_urlopen(_png_bytes())
+    cm.__enter__.return_value.headers.get.return_value = str(200 * 1024 * 1024)
+    mocker.patch("urllib.request.urlopen", return_value=cm)
+
+    with pytest.raises(ValueError, match="excede o limite"):
+        download_image("https://example.com/huge.png", out_dir)
+
+
+def test_download_image_oversized_body_without_content_length_raises(mocker, out_dir):
+    """No Content-Length header (or a server lying about it): the actual bytes
+    read are still capped, so a giant file never fully enters RAM."""
+    from src.core.image.downloader import download_image
+
+    mocker.patch("src.core.image.downloader._MAX_DOWNLOAD_BYTES", 10)
+    cm = _fake_urlopen(b"x" * 100)
+    cm.__enter__.return_value.headers.get.return_value = None
+    mocker.patch("urllib.request.urlopen", return_value=cm)
+
+    with pytest.raises(ValueError, match="excede o limite"):
+        download_image("https://example.com/huge.png", out_dir)

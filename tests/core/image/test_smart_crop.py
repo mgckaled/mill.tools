@@ -52,3 +52,22 @@ def test_box_inside_image() -> None:
 
 def test_degenerate_inputs() -> None:
     assert focal_crop_box(0, 0, 1.0, 0.5, 0.5) == (0, 0, 0, 0)
+
+
+def test_box_never_exceeds_image_bounds_across_many_ratios() -> None:
+    """Regression: rounding new_w/new_h could theoretically land 1px over the
+    image, and the crop would silently pad with black. Sweep a wide grid of
+    dimensions/ratios/focal points and assert the invariant holds everywhere."""
+    sizes = [(100, 100), (333, 250), (1920, 1080), (1, 1000), (1000, 1), (7, 13)]
+    ratios = [1 / 1, 4 / 3, 3 / 2, 16 / 9, 21 / 9, 1 / 3, 7 / 3]
+    focals = [0.0, 0.5, 1.0, 0.3, 0.8]
+
+    for width, height in sizes:
+        for ratio in ratios:
+            for fx in focals:
+                for fy in focals:
+                    left, top, right, bottom = focal_crop_box(
+                        width, height, ratio, fx, fy
+                    )
+                    assert 0 <= left <= right <= width
+                    assert 0 <= top <= bottom <= height

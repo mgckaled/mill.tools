@@ -27,11 +27,11 @@ def focal_crop_box(
     if current > target_ratio:
         # Image is wider than target → limit width.
         new_h = height
-        new_w = max(1, round(height * target_ratio))
+        new_w = max(1, min(width, round(height * target_ratio)))
     else:
         # Image is taller/narrower → limit height.
         new_w = width
-        new_h = max(1, round(width / target_ratio))
+        new_h = max(1, min(height, round(width / target_ratio)))
 
     fx = min(max(focal_x, 0.0), 1.0)
     fy = min(max(focal_y, 0.0), 1.0)
