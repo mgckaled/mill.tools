@@ -14,8 +14,9 @@ from pathlib import Path
 
 @dataclass(frozen=True, slots=True)
 class DiskUsageEntry:
-    """One entry under ``~/.mill-tools/`` — a file, or a subdirectory with its
-    own direct children (``rag/``, ``ml/``) nested one level deep."""
+    """One entry under ``~/.mill-tools/`` — a file, or a directory whose own
+    children (``rag/``, ``ml/``, ...) are nested in full, recursively all the
+    way down (not just one level)."""
 
     name: str
     size_bytes: int
@@ -31,11 +32,19 @@ def mill_tools_dir() -> Path:
 def _scan_dir(path: Path) -> tuple[DiskUsageEntry, ...]:
     """Entries of ``path``, largest first — directories recurse into their own
     children so nested stores (``rag/``, ``ml/``) aren't just a single summed row.
+
+    Symlinks are never followed: a directory symlink that (directly or via a
+    longer cycle) points back to one of its own ancestors would otherwise
+    recurse forever — ``RecursionError``, not an ``OSError``, so it would
+    escape the ``except OSError`` here and in :func:`disk_usage`. A symlink is
+    listed as a leaf using its own (unresolved) size instead.
     """
     entries = []
     for child in path.iterdir():
         try:
-            if child.is_dir():
+            if child.is_symlink():
+                entries.append(DiskUsageEntry(child.name, child.lstat().st_size, False))
+            elif child.is_dir():
                 nested = _scan_dir(child)
                 size = sum(e.size_bytes for e in nested)
                 entries.append(DiskUsageEntry(child.name, size, True, nested))

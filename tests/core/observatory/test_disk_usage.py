@@ -80,6 +80,23 @@ def test_disk_usage_ignores_unreadable_entries(tmp_path, mocker):
 
 
 @pytest.mark.unit
+def test_disk_usage_does_not_follow_a_symlink_cycle(tmp_path):
+    # A directory symlink pointing back to an ancestor would recurse forever
+    # (RecursionError, not an OSError) if followed like a real directory.
+    (tmp_path / "real.json").write_bytes(b"x" * 5)
+    loop = tmp_path / "loop"
+    try:
+        loop.symlink_to(tmp_path, target_is_directory=True)
+    except OSError:
+        pytest.skip("symlink creation not permitted on this platform/user")
+
+    entries = disk_usage(directory=tmp_path)
+    by_name = {e.name: e for e in entries}
+    assert by_name["loop"].is_dir is False  # never recursed into
+    assert by_name["loop"].children == ()
+
+
+@pytest.mark.unit
 def test_total_bytes_sums_every_entry(tmp_path):
     (tmp_path / "a.json").write_bytes(b"x" * 10)
     (tmp_path / "b.json").write_bytes(b"x" * 20)
