@@ -85,6 +85,24 @@ def test_max_images_guard_skips_large_batches(tmp_path, caplog):
 
 
 @pytest.mark.unit
+def test_corrupted_image_is_skipped_not_fatal(tmp_path, caplog):
+    """One unreadable image must not abort the whole batch — the rest still group."""
+    from src.core.library.image_dedup import near_duplicate_images
+
+    a = _gradient(tmp_path, "a.png")
+    b = _gradient(tmp_path, "b.png", angle_offset=5)
+    corrupt = tmp_path / "broken.png"
+    corrupt.write_bytes(b"not a real image")
+
+    with caplog.at_level("WARNING"):
+        groups = near_duplicate_images([a, b, corrupt])
+
+    assert len(groups) == 1
+    assert set(groups[0].paths) == {a, b}
+    assert "Skipping unreadable image" in caplog.text
+
+
+@pytest.mark.unit
 def test_transitive_chain_forms_one_component(tmp_path):
     """A~B and B~C (but A and C themselves over the threshold) still merge into
     one group via the shared B — same transitivity ml.dedup.near_duplicates has."""

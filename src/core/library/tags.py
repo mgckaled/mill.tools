@@ -17,6 +17,7 @@ import logging
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from src.core.io_atomic import atomic_write_text
 from src.core.text import keywords
 from src.core.text.lang import detect_lang
 from src.core.text.reader import read_document_text
@@ -88,10 +89,7 @@ def save_tags(path: Path, tags: list[str], *, cache_file: Path | None = None) ->
     data = _load_cache(cache_file)
     data[str(path.resolve())] = {"mtime": mtime, "tags": tags}
     try:
-        cache_file.parent.mkdir(parents=True, exist_ok=True)
-        cache_file.write_text(
-            json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8"
-        )
+        atomic_write_text(cache_file, json.dumps(data, ensure_ascii=False, indent=2))
     except OSError as exc:
         logging.debug("[d] Could not write tag cache: %s", exc)
 

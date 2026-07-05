@@ -108,3 +108,21 @@ def test_thumbnail_for_video_returns_bytes(sample_mp4):
 
     data = thumbnail_for(_item(sample_mp4, KIND_VIDEO))
     assert isinstance(data, bytes) and len(data) > 0
+
+
+@pytest.mark.unit
+def test_thumbnail_for_video_hung_ffmpeg_returns_none(tmp_path, mocker):
+    """subprocess.run hanging on a corrupted video must not block forever."""
+    import subprocess
+
+    from src.core.library.thumbnails import thumbnail_for
+    from src.core.library.types import KIND_VIDEO
+
+    video = tmp_path / "corrupt.mp4"
+    video.write_bytes(b"not really a video")
+    mocker.patch(
+        "subprocess.run",
+        side_effect=subprocess.TimeoutExpired(cmd="ffmpeg", timeout=30),
+    )
+
+    assert thumbnail_for(_item(video, KIND_VIDEO)) is None

@@ -68,6 +68,11 @@ def near_duplicate_images(
     Returns:
         Duplicate groups (each with >=2 images), ordered by ascending
         ``max_distance``; empty when nothing duplicates or the guard trips.
+
+    Corrupted/unreadable images are skipped individually (logged as a
+    warning) instead of aborting the whole batch — one bad file shouldn't
+    hide duplicates among the rest, same convention as ``image.transform``'s
+    ``contact_sheet``.
     """
     n = len(paths)
     if n < 2:
@@ -81,18 +86,30 @@ def near_duplicate_images(
         )
         return []
 
-    hashes = [dhash(p) for p in paths]
+    valid_paths: list[Path] = []
+    hashes = []
+    for p in paths:
+        try:
+            hashes.append(dhash(p))
+            valid_paths.append(p)
+        except Exception as exc:
+            logging.warning("[!] Skipping unreadable image for dedup: %s (%s)", p, exc)
+
+    m = len(valid_paths)
+    if m < 2:
+        return []
+
     edges = [
         (i, j)
-        for i in range(n)
-        for j in range(i + 1, n)
+        for i in range(m)
+        for j in range(i + 1, m)
         if hamming_distance(hashes[i], hashes[j]) <= max_distance
     ]
     if not edges:
         return []
 
     groups: list[ImageDuplicateGroup] = []
-    for component in _connected_components(n, edges):
+    for component in _connected_components(m, edges):
         if len(component) < 2:
             continue
         idx = sorted(component)
@@ -102,7 +119,7 @@ def near_duplicate_images(
             for b in range(a + 1, len(idx))
         )
         groups.append(
-            ImageDuplicateGroup(paths=[paths[i] for i in idx], max_distance=worst)
+            ImageDuplicateGroup(paths=[valid_paths[i] for i in idx], max_distance=worst)
         )
 
     groups.sort(key=lambda g: g.max_distance)

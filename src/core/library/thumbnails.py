@@ -19,6 +19,7 @@ from src.core.library.types import (
 
 _THUMB_PX = 256
 _PDF_ZOOM = 1.2  # ~86dpi — a touch crisper than the 72dpi viewer thumb
+_FRAME_TIMEOUT_S = 30  # a corrupted video must not hang the thumbnail thread forever
 
 # Raster suffixes Pillow can open — mirrors the GUI's image-picker allowlist
 # (src/gui/modules/image/describe_tab.py), duplicated here since core/ never
@@ -65,7 +66,10 @@ def _video_frame(path, *, seek: str = "00:00:01") -> bytes | None:
             "-loglevel",
             "quiet",
         ]
-        result = subprocess.run(cmd, capture_output=True)
+        try:
+            result = subprocess.run(cmd, capture_output=True, timeout=_FRAME_TIMEOUT_S)
+        except subprocess.TimeoutExpired:
+            return None
         data = result.stdout
         return data if (result.returncode == 0 and data) else None
 
