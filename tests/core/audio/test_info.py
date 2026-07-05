@@ -40,3 +40,40 @@ def test_get_duration_ffprobe_nonexistent_returns_none():
 
     result = get_duration_ffprobe(Path("/nonexistent/file.wav"))
     assert result is None
+
+
+def test_get_sample_rate_ffprobe_wav(sample_wav):
+    """ffprobe deve retornar 44100 Hz para o fixture WAV."""
+    from src.core.audio.info import get_sample_rate_ffprobe
+
+    assert get_sample_rate_ffprobe(sample_wav) == 44100
+
+
+def test_get_sample_rate_ffprobe_nonexistent_returns_none():
+    """Arquivo inexistente não deve lançar exceção — retorna None."""
+    from src.core.audio.info import get_sample_rate_ffprobe
+
+    result = get_sample_rate_ffprobe(Path("/nonexistent/file.wav"))
+    assert result is None
+
+
+def test_get_audio_codec_ffprobe_mp3(sample_mp3):
+    """ffprobe deve retornar 'mp3' como codec_name para o fixture MP3."""
+    from src.core.audio.info import get_audio_codec_ffprobe
+
+    assert get_audio_codec_ffprobe(sample_mp3) == "mp3"
+
+
+def test_get_audio_codec_ffprobe_mp4(sample_mp4):
+    """ffprobe deve retornar 'aac' como codec_name para o fixture MP4 (áudio aac)."""
+    from src.core.audio.info import get_audio_codec_ffprobe
+
+    assert get_audio_codec_ffprobe(sample_mp4) == "aac"
+
+
+def test_get_audio_codec_ffprobe_nonexistent_returns_none():
+    """Arquivo inexistente não deve lançar exceção — retorna None."""
+    from src.core.audio.info import get_audio_codec_ffprobe
+
+    result = get_audio_codec_ffprobe(Path("/nonexistent/file.wav"))
+    assert result is None

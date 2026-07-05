@@ -11,6 +11,28 @@ ficam em [`ROADMAP.md`](ROADMAP.md) e [`plans/active/`](plans/active/).
 
 ## Entregas (marcos)
 
+### Correções do `core/audio/` (jul/2026)
+Revisão exploratória arquivo-a-arquivo do pacote (10 arquivos, ~745 linhas), mesmo formato do quarteto ML e
+do `core/data`, implementada fase a fase direto no `main`. Fase 1 foi de **verificação guiada via context7**
+antes de decidir o fix — os dois suspeitos eram de comportamento do ffmpeg/yt-dlp, não bugs óbvios de código:
+**loudnorm** (`normalizer.normalize_lufs`) caía em silêncio no modo dinâmico quando o passe 1 de medição
+falhava (returncode nunca checado) — a doc do ffmpeg confirma que o modo dinâmico upsampleia a saída p/ 192
+kHz; agora loga warning claro e força `-ar` da fonte no passe 2 p/ conter o efeito colateral; **EmbedThumbnail**
+com `fmt="best"` arriscava abortar o download inteiro — sem reencode, o container final é escolhido pelo
+yt-dlp (frequentemente webm), que o `EmbedThumbnailPP` do próprio yt-dlp rejeita (não está na lista de
+extensões suportadas) — thumbnail agora é pulada para `fmt="best"`. **Robustez**: timeouts nos subprocessos
+ffmpeg sem timeout (decode do denoiser, passe 1 do normalizer); `sf.read` com `dtype="float32"` no denoiser
+(corta o pico de RAM pela metade); nome do tmp WAV via `mkstemp` (evita colisão entre execuções concorrentes);
+`_parse_loudnorm_json` valida as 5 chaves lidas pelo passe 2 (JSON incompleto virava `KeyError` cru);
+`socket_timeout` no downloader; cleanup do `.tmp_encode_` órfão no converter se o encode falhar. **Perf**: o
+passe 2 do normalizer (que duplicava à mão o Popen+thread+parse de progresso que `core/ffmpeg.run_ffmpeg` já
+oferece) foi consolidado nesse helper; `extract_audio` ganhou fast path `-acodec copy` quando o codec de
+origem já casa com o fmt alvo (ex.: AAC de um MP4 → m4a), com fallback automático pro reencode se o copy
+falhar. **Convenção**: docstrings/comentários PT→EN nos arquivos tocados; `__init__.py` do pacote atualizado
+p/ as 8 capacidades reais (download, convert/extract, silence, denoise, speed, normalize, visualize).
+Pendência de baixo risco registrada no `ROADMAP.md` §9 (processamento em chunks do `denoiser` p/ áudio muito
+longo). Plano: [`plans/active/PLANO_CORRECOES_CORE_AUDIO.md`](plans/active/PLANO_CORRECOES_CORE_AUDIO.md).
+
 ### Correções do `core/data/` (jul/2026)
 Revisão exploratória arquivo-a-arquivo do pacote (14 arquivos, ~1.450 linhas), mesmo formato do quarteto ML,
 implementada fase a fase direto no `main`: **3 bugs reais** (`validate.ensure_select` rejeitava a própria
