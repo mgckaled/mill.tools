@@ -15,8 +15,12 @@ from src.utils import sanitize_filename
 
 logger = logging.getLogger(__name__)
 
-# Formatos que não suportam thumbnail embutida de forma confiável
-_NO_COVER_FMTS = {"ogg", "opus"}
+# Formatos que não suportam thumbnail embutida de forma confiável.
+# "best" skips re-encoding, so the final container is whatever yt-dlp's bestaudio
+# selection picked — frequently webm, which yt-dlp's EmbedThumbnail postprocessor
+# rejects outright (raises, aborting the whole download). Since the final
+# extension isn't known ahead of time, cover embedding is skipped for "best".
+_NO_COVER_FMTS = {"ogg", "opus", "best"}
 
 # Extensões de thumbnail geradas pelo yt-dlp — ignoradas ao procurar o arquivo de áudio
 _THUMB_EXTS = {".jpg", ".jpeg", ".png", ".webp"}

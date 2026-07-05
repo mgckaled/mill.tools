@@ -33,7 +33,7 @@ def _mock_popen(
 
 
 @pytest.mark.unit
-def test_normalize_lufs_stats_none_uses_fallback_af(tmp_path, mocker):
+def test_normalize_lufs_stats_none_uses_fallback_af(tmp_path, mocker, caplog):
     """Quando pass 1 não retorna JSON (stats=None), o filtro fallback é usado e Popen é chamado."""
     from src.core.audio.normalizer import normalize_lufs
 
@@ -48,8 +48,67 @@ def test_normalize_lufs_stats_none_uses_fallback_af(tmp_path, mocker):
     mocker.patch("subprocess.Popen", return_value=mock_proc)
 
     # RuntimeError vindo do returncode=1 prova que Popen foi chamado com o fallback af
-    with pytest.raises(RuntimeError):
-        normalize_lufs(fake_src, tmp_path / "out", target_lufs=-14.0)
+    with caplog.at_level("WARNING"):
+        with pytest.raises(RuntimeError):
+            normalize_lufs(fake_src, tmp_path / "out", target_lufs=-14.0)
+
+    assert "falling back to dynamic loudnorm" in caplog.text
+
+
+@pytest.mark.unit
+def test_normalize_lufs_pass1_nonzero_returncode_logs_reason(tmp_path, mocker, caplog):
+    """Warning do fallback cita o código de saída quando o passe 1 falha (não só JSON ausente)."""
+    from src.core.audio.normalizer import normalize_lufs
+
+    fake_src = tmp_path / "input.wav"
+    fake_src.write_bytes(b"")
+
+    mocker.patch(
+        "subprocess.run",
+        return_value=mocker.Mock(returncode=5, stderr=b"boom", stdout=b""),
+    )
+    mock_proc = _mock_popen(mocker, returncode=1)
+    mocker.patch("subprocess.Popen", return_value=mock_proc)
+
+    with caplog.at_level("WARNING"):
+        with pytest.raises(RuntimeError):
+            normalize_lufs(fake_src, tmp_path / "out", target_lufs=-14.0)
+
+    assert "exited with code 5" in caplog.text
+
+
+@pytest.mark.unit
+def test_normalize_lufs_dynamic_fallback_forces_source_sample_rate(tmp_path, mocker):
+    """No ramo dinâmico, -ar da fonte é injetado no comando do passe 2 (mitiga upsample p/ 192kHz)."""
+    from src.core.audio.normalizer import normalize_lufs
+
+    fake_src = tmp_path / "input.wav"
+    fake_src.write_bytes(b"")
+
+    mocker.patch(
+        "subprocess.run",
+        side_effect=[
+            mocker.Mock(returncode=0, stderr=b"", stdout=b""),  # pass 1 sem JSON
+            mocker.Mock(
+                returncode=0, stdout=b"44100\n", stderr=b""
+            ),  # ffprobe sample rate
+        ],
+    )
+    captured_cmd: list[str] = []
+
+    def _fake_popen(cmd, **kwargs):
+        captured_cmd.extend(cmd)
+        return _mock_popen(mocker, returncode=0)
+
+    mocker.patch("subprocess.Popen", side_effect=_fake_popen)
+    (tmp_path / "out").mkdir()
+    out_path = (tmp_path / "out") / "input_normalized.wav"
+    out_path.write_bytes(b"")
+
+    normalize_lufs(fake_src, tmp_path / "out", target_lufs=-14.0)
+
+    assert "-ar" in captured_cmd
+    assert captured_cmd[captured_cmd.index("-ar") + 1] == "44100"
 
 
 @pytest.mark.unit

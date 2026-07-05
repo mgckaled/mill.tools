@@ -1,8 +1,8 @@
 # Testing — mocks de mídia e binários
 
 Receitas de mock para as fronteiras de mídia/binário: `subprocess`/ffmpeg, `WhisperModel`
-(faster-whisper), `urllib`, `PIL.Image.open` com contagem de chamadas, `pytesseract` (OCR) e
-`pymupdf`/`qrcode`. Abra este arquivo ao escrever/consertar testes que tocam qualquer uma dessas
+(faster-whisper), `urllib`, `yt_dlp.YoutubeDL`, `PIL.Image.open` com contagem de chamadas, `pytesseract`
+(OCR) e `pymupdf`/`qrcode`. Abra este arquivo ao escrever/consertar testes que tocam qualquer uma dessas
 fronteiras. Padrões genéricos (`mocker` vs `monkeypatch`, isolamento de `settings`) ficam no `SKILL.md`.
 
 ---
@@ -190,6 +190,54 @@ Gotchas:
   dev tem o binário no local padrão, então o fallback acharia mesmo sem PATH).
 - **Integration real**: 1 teste `@pytest.mark.integration` renderiza texto num PDF só-imagem e roda
   Tesseract de verdade; `pytest.skip` se `not ocr.is_available()`.
+
+---
+
+## Mock de `yt_dlp.YoutubeDL` — para testar montagem de `ydl_opts`/postprocessors
+
+`core/audio/downloader.py` e `core/video/downloader.py` não têm teste de rede (custo/retorno ruim — ver
+`SKILL.md`), mas a **montagem** de `postprocessors`/`ydl_opts` por `fmt`/flag é lógica pura e vale testar.
+Substitua a classe inteira (não só `extract_info`) para capturar o dict de opções passado ao construtor:
+
+```python
+from pathlib import Path
+
+
+class _FakeYDL:
+    captured_opts: dict | None = None
+
+    def __init__(self, opts):
+        self.opts = opts
+        _FakeYDL.captured_opts = opts
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        return False
+
+    def extract_info(self, url, download=True):
+        # Deriva tmp_dir do outtmpl já montado pela função — sem tocar rede — e larga
+        # um arquivo fake lá, para o move/cleanup real do downloader seguir intacto.
+        out_dir = Path(self.opts["outtmpl"]).parent
+        fake_file = out_dir / "video.mp3"
+        fake_file.write_bytes(b"fake-audio")
+        return {"requested_downloads": [{"filepath": str(fake_file)}]}
+
+
+def test_download_audio_fmt_best_skips_thumbnail(tmp_path, mocker):
+    from src.core.audio.downloader import download_audio
+
+    mocker.patch("yt_dlp.YoutubeDL", _FakeYDL)
+    out = download_audio("https://example.com/watch", tmp_path, fmt="best")
+
+    opts = _FakeYDL.captured_opts
+    assert "EmbedThumbnail" not in [pp["key"] for pp in opts["postprocessors"]]
+    assert out.exists()
+```
+
+`tempfile.mkdtemp`/`shutil.move`/`shutil.rmtree` do downloader rodam de verdade (I/O local, sem ffmpeg/rede) —
+ainda qualifica como `unit`. Ver `tests/core/audio/test_downloader.py`.
 
 ---
 

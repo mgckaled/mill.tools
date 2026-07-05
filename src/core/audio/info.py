@@ -26,3 +26,30 @@ def get_duration_ffprobe(src: Path) -> float | None:
         return float(result.stdout.decode("utf-8", errors="replace").strip())
     except (ValueError, subprocess.TimeoutExpired, FileNotFoundError):
         return None
+
+
+def get_sample_rate_ffprobe(src: Path) -> int | None:
+    """Retorna a taxa de amostragem (Hz) do primeiro stream de áudio.
+
+    None se ffprobe falhar ou stream sem metadata.
+    """
+    try:
+        result = subprocess.run(
+            [
+                "ffprobe",
+                "-v",
+                "quiet",
+                "-select_streams",
+                "a:0",
+                "-show_entries",
+                "stream=sample_rate",
+                "-of",
+                "default=noprint_wrappers=1:nokey=1",
+                str(src),
+            ],
+            capture_output=True,
+            timeout=10,
+        )
+        return int(result.stdout.decode("utf-8", errors="replace").strip())
+    except (ValueError, subprocess.TimeoutExpired, FileNotFoundError):
+        return None
