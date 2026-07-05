@@ -1,4 +1,4 @@
-"""Conversão de imagens via Pillow (formato + qualidade)."""
+"""Image conversion via Pillow (format + quality)."""
 
 from __future__ import annotations
 
@@ -7,10 +7,16 @@ from pathlib import Path
 
 from PIL import Image, ImageOps
 
+from src.core.image._paths import unique_path
+
 logger = logging.getLogger(__name__)
 
-# Formatos cujo slider de qualidade faz sentido (com perda)
+# Lossy formats whose quality slider makes sense, capped at 95 (Pillow accepts
+# up to 100, but past 95 the file size grows fast for a barely-visible gain).
 LOSSY_FMTS: frozenset[str] = frozenset({"jpg", "jpeg", "webp"})
+# Also quality-aware, but honoring Pillow's full 0-100 AVIF range instead of
+# the 95 cap above — AVIF doesn't have the same "95+ is pointless" behavior.
+_FULL_RANGE_QUALITY_FMTS: frozenset[str] = frozenset({"avif"})
 
 _PILLOW_FMT: dict[str, str] = {
     "jpg": "JPEG",
@@ -26,7 +32,7 @@ _PILLOW_FMT: dict[str, str] = {
 
 _OUT_EXT: dict[str, str] = {
     "jpg": "jpg",
-    "jpeg": "jpg",  # normaliza para .jpg
+    "jpeg": "jpg",  # normalize to .jpg
     "png": "png",
     "webp": "webp",
     "avif": "avif",
@@ -38,59 +44,63 @@ _OUT_EXT: dict[str, str] = {
 
 
 def convert_image(src: Path, out_dir: Path, fmt: str, quality: int = 90) -> Path:
-    """Converte src → out_dir/{stem}.{ext}.
+    """Convert src → out_dir/{stem}.{ext}.
 
     Args:
-        src: Arquivo de origem.
-        out_dir: Diretório de saída.
-        fmt: Formato alvo (ex.: 'jpg', 'webp', 'png').
-        quality: Qualidade 50–100 para formatos lossy (jpg/webp). Ignorado nos demais.
+        src: Source file.
+        out_dir: Output directory.
+        fmt: Target format (e.g. 'jpg', 'webp', 'png').
+        quality: Quality for lossy formats — 1-95 for jpg/webp, 1-100 for avif
+            (each format's own valid range in Pillow). Ignored otherwise.
 
     Returns:
-        Path do arquivo convertido.
+        Path of the converted file.
     """
     fmt_key = fmt.lower().strip(".")
     pillow_fmt = _PILLOW_FMT.get(fmt_key, fmt_key.upper())
     out_ext = _OUT_EXT.get(fmt_key, fmt_key)
 
     out_dir.mkdir(parents=True, exist_ok=True)
-    out_path = _unique_path(out_dir, src.stem, out_ext)
+    out_path = unique_path(out_dir, src.stem, out_ext)
 
     with Image.open(src) as im:
-        # Corrige orientação EXIF (fotos de câmera)
-        im = ImageOps.exif_transpose(im)
+        im = ImageOps.exif_transpose(im)  # fix camera EXIF orientation
 
-        # JPEG não suporta canal alpha — achata sobre fundo branco
         if pillow_fmt == "JPEG":
-            if im.mode == "P":
-                im = im.convert("RGBA")
-            if im.mode in ("RGBA", "LA"):
-                bg = Image.new("RGB", im.size, (255, 255, 255))
-                bg.paste(im, mask=im.split()[-1])
-                im = bg
-            elif im.mode != "RGB":
-                im = im.convert("RGB")
+            im = _ensure_rgb(im)  # JPEG can't carry an alpha channel
 
-        save_kwargs: dict = {}
-        if fmt_key in LOSSY_FMTS:
-            save_kwargs["quality"] = max(1, min(95, quality))
-        elif pillow_fmt == "PNG":
-            save_kwargs["optimize"] = True
+        im.save(
+            out_path, format=pillow_fmt, **_save_kwargs(fmt_key, pillow_fmt, quality)
+        )
 
-        im.save(out_path, format=pillow_fmt, **save_kwargs)
-
-    logger.info("[✓] Convertido: %s → %s", src.name, out_path.name)
+    logger.info("[ok] Converted: %s -> %s", src.name, out_path.name)
     return out_path
 
 
-def _unique_path(directory: Path, stem: str, ext: str) -> Path:
-    """Retorna path sem colisão, anexando _1, _2… se necessário."""
-    candidate = directory / f"{stem}.{ext}"
-    if not candidate.exists():
-        return candidate
-    counter = 1
-    while True:
-        candidate = directory / f"{stem}_{counter}.{ext}"
-        if not candidate.exists():
-            return candidate
-        counter += 1
+def _ensure_rgb(im: Image.Image) -> Image.Image:
+    """Flatten palette/alpha modes to opaque RGB over a white background.
+
+    Shared by convert_image's JPEG branch and transform.py's _save/
+    apply_filter_im/make_contact_sheet — JPEG can't carry alpha, and
+    autocontrast/equalize/canvas-paste all need a plain RGB source.
+    """
+    if im.mode == "P":
+        im = im.convert("RGBA")
+    if im.mode in ("RGBA", "LA"):
+        bg = Image.new("RGB", im.size, (255, 255, 255))
+        bg.paste(im, mask=im.split()[-1])
+        return bg
+    if im.mode != "RGB":
+        return im.convert("RGB")
+    return im
+
+
+def _save_kwargs(fmt_key: str, pillow_fmt: str, quality: int) -> dict:
+    """Pillow save() kwargs for a format: quality clamp, or PNG optimize."""
+    if fmt_key in LOSSY_FMTS:
+        return {"quality": max(1, min(95, quality))}
+    if fmt_key in _FULL_RANGE_QUALITY_FMTS:
+        return {"quality": max(0, min(100, quality))}
+    if pillow_fmt == "PNG":
+        return {"optimize": True}
+    return {}

@@ -5,6 +5,44 @@ import pytest
 
 
 @pytest.mark.unit
+def test_save_description_writes_text_file(tmp_path):
+    from src.core.image.describe import save_description
+
+    src = tmp_path / "photo.jpg"
+    src.write_bytes(b"")
+    out = save_description(src, tmp_path, "uma descrição qualquer")
+
+    assert out == tmp_path / "photo_description.txt"
+    assert out.read_text(encoding="utf-8") == "uma descrição qualquer"
+
+
+@pytest.mark.unit
+def test_save_description_avoids_collision(tmp_path):
+    from src.core.image.describe import save_description
+
+    src = tmp_path / "photo.jpg"
+    src.write_bytes(b"")
+    first = save_description(src, tmp_path, "primeira")
+    second = save_description(src, tmp_path, "segunda")
+
+    assert first == tmp_path / "photo_description.txt"
+    assert second == tmp_path / "photo_description_1.txt"
+
+
+@pytest.mark.unit
+def test_save_description_sanitizes_stem(tmp_path):
+    """Regression: save_description used to build its name from raw src.stem,
+    the one writer in the package that didn't sanitize (unlike ocr.py)."""
+    from src.core.image.describe import save_description
+
+    src = tmp_path / "bad<photo>.jpg"
+    out = save_description(src, tmp_path, "texto")
+
+    assert "<" not in out.name
+    assert ">" not in out.name
+
+
+@pytest.mark.unit
 def test_describe_image_local_uses_chatollama(jpg_image, mocker):
     """A non-GLM model name must route through ChatOllama with pinned num_ctx."""
     from src.core.image.describe import describe_image

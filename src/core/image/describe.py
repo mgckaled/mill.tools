@@ -5,6 +5,8 @@ from __future__ import annotations
 import base64
 from pathlib import Path
 
+from src.core.image._paths import unique_path
+
 _DEFAULT_PROMPT = (
     "Descreva detalhadamente o que está nesta imagem em português: "
     "objetos presentes, contexto, cores dominantes, texto visível (se houver)."
@@ -105,11 +107,7 @@ def describe_image(src: Path, model: str = "moondream-custom", prompt: str = "")
 
 
 def save_description(src: Path, out_dir: Path, text: str) -> Path:
-    """Salva descrição como <stem>_description.txt em out_dir."""
-    out_path = out_dir / f"{src.stem}_description.txt"
-    i = 1
-    while out_path.exists():
-        out_path = out_dir / f"{src.stem}_description_{i}.txt"
-        i += 1
+    """Save the description as <stem>_description.txt in out_dir."""
+    out_path = unique_path(out_dir, f"{src.stem}_description", "txt")
     out_path.write_text(text, encoding="utf-8")
     return out_path

@@ -1,90 +1,16 @@
-"""Operações de manipulação de imagens via Pillow (puro, sem Flet)."""
+"""Resize, crop, rotate, border, adjust, filter, favicon and contact-sheet ops."""
 
 from __future__ import annotations
 
+import logging
 from datetime import datetime
 from pathlib import Path
 
-from PIL import (
-    Image,
-    ImageChops,
-    ImageDraw,
-    ImageEnhance,
-    ImageFilter,
-    ImageFont,
-    ImageOps,
-)
+from PIL import Image, ImageChops, ImageEnhance, ImageFilter, ImageOps
 
-from src.core.image.converter import LOSSY_FMTS, _PILLOW_FMT
+from src.core.image.transform._shared import _ensure_rgb, _hex_rgb, _out_path, _save
 
-
-# ---------------------------------------------------------------------------
-# Helpers internos
-# ---------------------------------------------------------------------------
-
-
-def _out_path(src: Path, out_dir: Path, out_fmt: str | None) -> Path:
-    """Caminho de saída sem colisão. out_fmt=None → usa extensão de src."""
-    ext = out_fmt.lower().strip(".") if out_fmt else src.suffix.lstrip(".")
-    if ext == "jpeg":
-        ext = "jpg"
-    out_dir.mkdir(parents=True, exist_ok=True)
-    candidate = out_dir / f"{src.stem}.{ext}"
-    if not candidate.exists():
-        return candidate
-    counter = 1
-    while True:
-        candidate = out_dir / f"{src.stem}_{counter}.{ext}"
-        if not candidate.exists():
-            return candidate
-        counter += 1
-
-
-def _save(im: Image.Image, path: Path, out_fmt: str | None, quality: int) -> None:
-    """Salva im em path replicando a lógica de converter.py."""
-    ext = path.suffix.lstrip(".").lower()
-    pillow_fmt = _PILLOW_FMT.get(ext, ext.upper())
-    if pillow_fmt == "JPEG":
-        if im.mode == "P":
-            im = im.convert("RGBA")
-        if im.mode in ("RGBA", "LA"):
-            bg = Image.new("RGB", im.size, (255, 255, 255))
-            bg.paste(im, mask=im.split()[-1])
-            im = bg
-        elif im.mode != "RGB":
-            im = im.convert("RGB")
-    kwargs: dict = {}
-    if ext in LOSSY_FMTS:
-        kwargs["quality"] = max(1, min(95, quality))
-    elif pillow_fmt == "PNG":
-        kwargs["optimize"] = True
-    im.save(path, format=pillow_fmt, **kwargs)
-
-
-def _hex_rgb(color: str) -> tuple[int, int, int]:
-    """'#rrggbb' ou '#rgb' → (r, g, b)."""
-    c = color.strip("#")
-    if len(c) == 3:
-        c = "".join(x * 2 for x in c)
-    return int(c[0:2], 16), int(c[2:4], 16), int(c[4:6], 16)
-
-
-def _ensure_rgb(im: Image.Image) -> Image.Image:
-    """Converte para RGB achando alpha sobre branco."""
-    if im.mode == "P":
-        im = im.convert("RGBA")
-    if im.mode in ("RGBA", "LA"):
-        bg = Image.new("RGB", im.size, (255, 255, 255))
-        bg.paste(im, mask=im.split()[-1])
-        return bg
-    if im.mode != "RGB":
-        return im.convert("RGB")
-    return im
-
-
-# ---------------------------------------------------------------------------
-# Funções públicas
-# ---------------------------------------------------------------------------
+logger = logging.getLogger(__name__)
 
 
 def resize_image(
@@ -98,7 +24,7 @@ def resize_image(
     out_fmt: str | None,
     quality: int,
 ) -> Path:
-    """Redimensiona src. Modos: contain, exact, scale_pct."""
+    """Resize src. Modes: contain, exact, scale_pct."""
     out_path = _out_path(src, out_dir, out_fmt)
     with Image.open(src) as im:
         im = ImageOps.exif_transpose(im)
@@ -134,7 +60,7 @@ def crop_image(
     focal_x: float = 0.5,
     focal_y: float = 0.5,
 ) -> Path:
-    """Recorta src. Modos: manual, ratio, autotrim, focal."""
+    """Crop src. Modes: manual, ratio, autotrim, focal."""
     from src.core.image.smart_crop import focal_crop_box
 
     out_path = _out_path(src, out_dir, out_fmt)
@@ -183,160 +109,18 @@ def rotate_image(
     out_fmt: str | None,
     quality: int,
 ) -> Path:
-    """Rotaciona e/ou espelha src."""
+    """Rotate and/or mirror src."""
     out_path = _out_path(src, out_dir, out_fmt)
     with Image.open(src) as im:
         if exif_auto:
             im = ImageOps.exif_transpose(im)
         if angle:
-            im = im.rotate(-angle, expand=True)  # sentido horário
+            im = im.rotate(-angle, expand=True)  # clockwise
         if flip_h:
             im = ImageOps.mirror(im)
         if flip_v:
             im = ImageOps.flip(im)
         _save(im, out_path, out_fmt, quality)
-    return out_path
-
-
-def _wm_coords(
-    iw: int, ih: int, ww: int, wh: int, position: str, margin: int = 10
-) -> tuple[int, int]:
-    """9-grid placement from a position name like 'top-left'/'center'/'bottom-right'."""
-    if "left" in position:
-        x = margin
-    elif "right" in position:
-        x = iw - ww - margin
-    else:
-        x = (iw - ww) // 2
-    if "top" in position:
-        y = margin
-    elif "bottom" in position:
-        y = ih - wh - margin
-    else:
-        y = (ih - wh) // 2
-    return x, y
-
-
-def _qr_rgba(data: str) -> Image.Image:
-    """Build an RGBA QR code image in memory (mirrors core/document/qr settings)."""
-    import qrcode  # type: ignore[import-untyped]
-
-    qr = qrcode.QRCode(
-        version=None,
-        error_correction=qrcode.constants.ERROR_CORRECT_M,
-        box_size=10,
-        border=4,
-    )
-    qr.add_data(data)
-    qr.make(fit=True)
-    return qr.make_image(fill_color="black", back_color="white").convert("RGBA")
-
-
-def _build_wm_stamp(
-    wm_mode: str,
-    text: str,
-    text_color: str,
-    text_size: int,
-    wm_path: Path | None,
-    opacity: float,
-    base_size: tuple[int, int],
-) -> Image.Image | None:
-    """Render the watermark content (text/image/qr) as a tight RGBA stamp."""
-    iw, ih = base_size
-    alpha = int(opacity * 255)
-
-    if wm_mode == "text":
-        if not text:
-            return None
-        try:
-            font = ImageFont.load_default(size=text_size)
-        except TypeError:
-            font = ImageFont.load_default()
-        probe = ImageDraw.Draw(Image.new("RGBA", (1, 1)))
-        bbox = probe.textbbox((0, 0), text, font=font)
-        tw, th = bbox[2] - bbox[0], bbox[3] - bbox[1]
-        stamp = Image.new("RGBA", (max(1, tw + 4), max(1, th + 4)), (0, 0, 0, 0))
-        ImageDraw.Draw(stamp).text(
-            (2 - bbox[0], 2 - bbox[1]),
-            text,
-            font=font,
-            fill=(*_hex_rgb(text_color), alpha),
-        )
-        return stamp
-
-    logo: Image.Image | None = None
-    if wm_mode == "qr":
-        if not text:
-            return None
-        logo = _qr_rgba(text)
-    elif wm_path and wm_path.exists():
-        with Image.open(wm_path) as wm:
-            logo = wm.convert("RGBA")
-    if logo is None:
-        return None
-
-    logo.thumbnail((max(1, iw // 4), max(1, ih // 4)), Image.Resampling.LANCZOS)
-    r, g, b, a = logo.split()
-    a = a.point(lambda p: int(p * alpha / 255))
-    logo.putalpha(a)
-    return logo
-
-
-def _tile_watermark(base: Image.Image, stamp: Image.Image) -> Image.Image:
-    """Repeat the stamp across the whole image with spacing."""
-    iw, ih = base.size
-    sw, sh = stamp.size
-    gap_x = sw + max(sw // 2, 20)
-    gap_y = sh + max(sh // 2, 20)
-    layer = Image.new("RGBA", base.size, (0, 0, 0, 0))
-    y = 0
-    while y < ih:
-        x = 0
-        while x < iw:
-            layer.alpha_composite(stamp, (x, y))
-            x += gap_x
-        y += gap_y
-    return Image.alpha_composite(base, layer)
-
-
-def watermark_image(
-    src: Path,
-    out_dir: Path,
-    *,
-    wm_mode: str,
-    text: str,
-    text_color: str,
-    text_size: int,
-    wm_path: Path | None,
-    position: str,
-    opacity: float,
-    out_fmt: str | None,
-    quality: int,
-    rotation: int = 0,
-) -> Path:
-    """Aplica marca d'água de texto, imagem ou QR; 9-grid, tiling e rotação."""
-    out_path = _out_path(src, out_dir, out_fmt)
-    with Image.open(src) as im:
-        im = ImageOps.exif_transpose(im)
-        base = im.convert("RGBA")
-        iw, ih = base.size
-
-        stamp = _build_wm_stamp(
-            wm_mode, text, text_color, text_size, wm_path, opacity, (iw, ih)
-        )
-        if stamp is not None:
-            if rotation:
-                stamp = stamp.rotate(
-                    rotation, expand=True, resample=Image.Resampling.BICUBIC
-                )
-            if position == "tile":
-                base = _tile_watermark(base, stamp)
-            else:
-                sw, sh = stamp.size
-                x, y = _wm_coords(iw, ih, sw, sh, position)
-                base.alpha_composite(stamp, (x, y))
-
-        _save(base, out_path, out_fmt, quality)
     return out_path
 
 
@@ -350,7 +134,7 @@ def add_border(
     out_fmt: str | None,
     quality: int,
 ) -> Path:
-    """Adiciona borda sólida em torno de src."""
+    """Add a solid border around src."""
     out_path = _out_path(src, out_dir, out_fmt)
     with Image.open(src) as im:
         im = ImageOps.exif_transpose(im)
@@ -378,7 +162,7 @@ def adjust_image(
     out_fmt: str | None,
     quality: int,
 ) -> Path:
-    """Ajusta brilho, contraste, saturação e nitidez de src."""
+    """Adjust brightness, contrast, saturation and sharpness of src."""
     out_path = _out_path(src, out_dir, out_fmt)
     with Image.open(src) as im:
         im = ImageOps.exif_transpose(im)
@@ -418,7 +202,7 @@ def apply_filter(
     out_fmt: str | None,
     quality: int,
 ) -> Path:
-    """Aplica filtro de imagem: blur, sharpen, autocontrast, equalize, grayscale."""
+    """Apply an image filter: blur, sharpen, autocontrast, equalize, grayscale."""
     out_path = _out_path(src, out_dir, out_fmt)
     with Image.open(src) as im:
         im = ImageOps.exif_transpose(im)
@@ -428,7 +212,7 @@ def apply_filter(
 
 
 def make_favicon(src: Path, out_dir: Path, *, sizes: list[int]) -> Path:
-    """Gera .ico com múltiplas resoluções embutidas. Ignora out_fmt."""
+    """Generate a multi-resolution .ico. Ignores out_fmt."""
     out_dir.mkdir(parents=True, exist_ok=True)
     out_path = _out_path(src, out_dir, "ico")
     with Image.open(src) as im:
@@ -452,11 +236,7 @@ def make_contact_sheet(
     out_fmt: str,
     quality: int,
 ) -> Path:
-    """Monta grade de miniaturas (N→1). Arquivos inválidos são ignorados."""
-    import logging
-
-    _log = logging.getLogger(__name__)
-
+    """Build an N→1 thumbnail grid. Invalid files are ignored."""
     ts = datetime.now().strftime("%Y%m%d_%H%M%S")
     ext = out_fmt.lower().strip(".") if out_fmt else "png"
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -469,7 +249,7 @@ def make_contact_sheet(
                 _chk.verify()
             valid.append(s)
         except Exception:
-            _log.warning("[!] Ignorando arquivo inválido: %s", s.name)
+            logger.warning("[!] Ignoring invalid file: %s", s.name)
 
     if not valid:
         raise ValueError("Nenhum arquivo válido para montar a colagem.")

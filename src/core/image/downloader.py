@@ -10,6 +10,8 @@ from urllib.parse import urlparse
 
 from PIL import Image
 
+from src.core.image._paths import unique_path
+
 logger = logging.getLogger(__name__)
 
 _EXT_BY_FORMAT = {
@@ -72,22 +74,7 @@ def download_image(url: str, out_dir: Path, timeout: float = 15.0) -> Path:
         ext = _EXT_BY_FORMAT.get(fmt or "", ".img")
         name = f"image{ext}"
 
-    out_path = _unique_path(out_dir, name)
+    out_path = unique_path(out_dir, Path(name).stem, Path(name).suffix)
     out_path.write_bytes(data)
-    logger.info("[✓] Imagem baixada: %s", out_path.name)
+    logger.info("[ok] Image downloaded: %s", out_path.name)
     return out_path
-
-
-def _unique_path(directory: Path, name: str) -> Path:
-    """Retorna path sem colisão, anexando _1, _2… se necessário."""
-    candidate = directory / name
-    if not candidate.exists():
-        return candidate
-    stem = Path(name).stem
-    ext = Path(name).suffix
-    counter = 1
-    while True:
-        candidate = directory / f"{stem}_{counter}{ext}"
-        if not candidate.exists():
-            return candidate
-        counter += 1
