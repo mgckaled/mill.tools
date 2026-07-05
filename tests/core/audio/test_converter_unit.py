@@ -92,3 +92,22 @@ def test_convert_audio_inplace_transform_uses_tempfile(tmp_path, mocker):
     assert captured["out_path"].name.startswith(".tmp_encode_")
     move.assert_called_once()
     assert out == tmp_path / "song.mp3"
+
+
+def test_convert_audio_inplace_transform_cleans_tmp_on_failure(tmp_path, mocker):
+    """Se run_ffmpeg falhar no ramo in-place, o .tmp_encode_ órfão é removido."""
+    from src.core.audio.converter import convert_audio
+
+    src = tmp_path / "song.mp3"
+    src.write_bytes(b"")
+
+    def _fake_fail(cmd, out_path, **kwargs):
+        out_path.write_bytes(b"partial")  # simula encode parcialmente escrito
+        raise RuntimeError("ffmpeg boom")
+
+    mocker.patch("src.core.audio.converter.run_ffmpeg", side_effect=_fake_fail)
+
+    with pytest.raises(RuntimeError):
+        convert_audio(src, tmp_path, fmt="mp3", channels=1)
+
+    assert list(tmp_path.glob(".tmp_encode_*")) == []

@@ -116,7 +116,8 @@ def normalize_lufs(
         for raw in proc.stderr:
             stderr_lines.append(raw.decode("utf-8", errors="replace").rstrip())
 
-    threading.Thread(target=_drain, daemon=True).start()
+    stderr_thread = threading.Thread(target=_drain, daemon=True)
+    stderr_thread.start()
 
     for raw in proc.stdout:
         line = raw.decode("utf-8", errors="replace").strip()
@@ -128,6 +129,7 @@ def normalize_lufs(
                 pass
 
     proc.wait()
+    stderr_thread.join(timeout=2)
     if proc.returncode != 0:
         tail = "\n".join(stderr_lines[-10:]) if stderr_lines else "(sem detalhes)"
         raise RuntimeError(f"ffmpeg loudnorm retornou {proc.returncode}: {tail}")
@@ -138,8 +140,22 @@ def normalize_lufs(
     return out_path, stats
 
 
+_REQUIRED_STATS_KEYS = {
+    "input_i",
+    "input_tp",
+    "input_lra",
+    "input_thresh",
+    "target_offset",
+}
+
+
 def _parse_loudnorm_json(stderr: str) -> dict | None:
-    """Extrai o bloco JSON de estatísticas loudnorm do stderr do ffmpeg."""
+    """Extrai o bloco JSON de estatísticas loudnorm do stderr do ffmpeg.
+
+    Returns None if the block is missing, malformed, or lacks any of the keys
+    the second pass reads directly (a partial block would otherwise surface as
+    a bare KeyError deep in the af= string build).
+    """
     lines = stderr.splitlines()
     start = next((i for i, ln in enumerate(lines) if ln.strip() == "{"), None)
     if start is None:
@@ -150,6 +166,9 @@ def _parse_loudnorm_json(stderr: str) -> dict | None:
     if end is None:
         return None
     try:
-        return json.loads("\n".join(lines[start : end + 1]))
+        data = json.loads("\n".join(lines[start : end + 1]))
     except json.JSONDecodeError:
         return None
+    if not _REQUIRED_STATS_KEYS.issubset(data.keys()):
+        return None
+    return data

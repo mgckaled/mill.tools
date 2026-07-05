@@ -72,3 +72,18 @@ def test_parse_loudnorm_json_partial_block():
     stderr = '{\n  "input_i": "-18.27"\n'  # sem fechar
     result = _parse_loudnorm_json(stderr)
     assert result is None
+
+
+@pytest.mark.unit
+def test_parse_loudnorm_json_missing_required_key_returns_none():
+    """JSON bem formado mas faltando uma das 5 chaves lidas pelo passe 2 → None."""
+    stderr = """\
+{
+    "input_i" : "-18.27",
+    "input_tp" : "-3.21",
+    "input_lra" : "8.10",
+    "input_thresh" : "-28.36"
+}
+"""
+    # "target_offset" ausente — sem essa validação, o passe 2 quebraria com KeyError.
+    assert _parse_loudnorm_json(stderr) is None

@@ -2,8 +2,12 @@
 
 from __future__ import annotations
 
+import os
 import subprocess
+import tempfile
 from pathlib import Path
+
+_DECODE_TIMEOUT_S = 1800  # 30 min — generoso o bastante p/ não policiar lentidão
 
 
 def is_available() -> bool:
@@ -37,17 +41,25 @@ def denoise(src: Path, out_dir: Path, stationary: bool = True) -> Path:
 
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    # Decodifica para WAV PCM temporário (lida com MP3/M4A/qualquer fmt)
-    tmp_wav = out_dir / f".tmp_denoise_{src.stem}.wav"
+    # Decodifica para WAV PCM temporário (lida com MP3/M4A/qualquer fmt). Nome
+    # único (mkstemp) evita colisão entre execuções concorrentes no mesmo stem.
+    fd, tmp_wav_str = tempfile.mkstemp(
+        suffix=".wav", prefix=f".tmp_denoise_{src.stem}_", dir=out_dir
+    )
+    os.close(fd)
+    tmp_wav = Path(tmp_wav_str)
     subprocess.run(
         ["ffmpeg", "-y", "-i", str(src), str(tmp_wav)],
         check=True,
         capture_output=True,
+        timeout=_DECODE_TIMEOUT_S,
     )
 
     try:
         meta = sf.info(str(tmp_wav))
-        audio, sr = sf.read(str(tmp_wav))
+        # float32 corta pela metade o pico de RAM de sf.read frente ao default
+        # float64 — relevante p/ áudio longo (2h estéreo ≈ 5GB em float64).
+        audio, sr = sf.read(str(tmp_wav), dtype="float32")
 
         if audio.ndim == 2:
             channels = [

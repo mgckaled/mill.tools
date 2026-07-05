@@ -68,7 +68,12 @@ def convert_audio(
     cmd += ["-progress", "pipe:1", "-nostats", str(target)]
 
     total_secs = get_duration_ffprobe(src) if progress_cb else None
-    run_ffmpeg(cmd, target, total_secs=total_secs, progress_cb=progress_cb)
+    try:
+        run_ffmpeg(cmd, target, total_secs=total_secs, progress_cb=progress_cb)
+    except Exception:
+        if tmp is not None:
+            tmp.unlink(missing_ok=True)
+        raise
     if tmp is not None:
         shutil.move(str(tmp), str(out_path))
     return out_path

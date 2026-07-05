@@ -82,6 +82,17 @@ def test_download_audio_ogg_opus_skip_thumbnail(tmp_path, mocker, fmt):
     assert "EmbedThumbnail" not in _pp_names(opts)
 
 
+def test_download_audio_sets_socket_timeout(tmp_path, mocker):
+    """ydl_opts deve incluir socket_timeout — yt-dlp não tem timeout de rede por padrão."""
+    from src.core.audio.downloader import download_audio
+
+    mocker.patch("yt_dlp.YoutubeDL", _FakeYDL)
+
+    download_audio("https://example.com/watch", tmp_path, fmt="mp3")
+
+    assert _FakeYDL.captured_opts["socket_timeout"] == 30
+
+
 def test_download_audio_embed_meta_false_skips_all_metadata_pps(tmp_path, mocker):
     """embed_meta=False: nem FFmpegMetadata nem EmbedThumbnail são adicionados."""
     from src.core.audio.downloader import download_audio

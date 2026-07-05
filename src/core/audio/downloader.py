@@ -105,6 +105,9 @@ def download_audio(
         "noplaylist": True,
         "quiet": True,
         "no_warnings": True,
+        # yt-dlp has no default read timeout — a stalled connection would hang
+        # the whole pipeline indefinitely.
+        "socket_timeout": 30,
     }
     # Browser cookies (anti-bot gate) — shared resolver, no-op when disabled.
     ydl_opts.update(cookie_ydl_opts())

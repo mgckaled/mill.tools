@@ -205,3 +205,16 @@ em vez de expandir o escopo da correção:
   seria heurísticas puras × renderers matplotlib) e `core/data/engine.py` ficou acima do alvo (~410 linhas,
   após a Fase 1-4 deste plano). Nenhum dos dois tem baixa coesão hoje (arquitetura §3) — dividir **ao tocar**
   na próxima feature que os estender, não preventivamente.
+
+---
+
+## 9. Pendências pontuais — revisão exploratória do `core/audio/` (jul/2026)
+
+Item de baixo risco, deliberadamente não corrigido na revisão arquivo-a-arquivo do `core/audio/`
+([`plans/active/PLANO_CORRECOES_CORE_AUDIO.md`](plans/active/PLANO_CORRECOES_CORE_AUDIO.md)):
+
+- **`denoiser.denoise` processa o arquivo inteiro em memória**: mesmo com `dtype="float32"` (Fase 2 do plano
+  corta o pico pela metade frente ao `float64` default), um áudio de várias horas ainda carrega tudo de uma
+  vez via `sf.read`. Processamento em chunks (janela deslizante com overlap, reduce_noise por bloco) resolveria
+  o caso extremo, mas é reestruturação real do pipeline — vale a pena só se surgir um caso de uso concreto de
+  áudio muito longo, não como correção isolada.
