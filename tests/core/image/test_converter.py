@@ -102,3 +102,21 @@ def test_ensure_rgb_passthrough_for_rgb():
 
     im = Image.new("RGB", (10, 10), (1, 2, 3))
     assert _ensure_rgb(im) is im
+
+
+def test_ensure_rgb_flattens_palette_mode():
+    """Palette (mode 'P') images go through the RGBA-then-flatten branch too."""
+    from src.core.image.converter import _ensure_rgb
+
+    im = Image.new("P", (10, 10))
+    out = _ensure_rgb(im)
+    assert out.mode == "RGB"
+
+
+def test_ensure_rgb_converts_grayscale_directly():
+    """A mode with no alpha (e.g. 'L') skips the paste branch, converts directly."""
+    from src.core.image.converter import _ensure_rgb
+
+    im = Image.new("L", (10, 10), 128)
+    out = _ensure_rgb(im)
+    assert out.mode == "RGB"

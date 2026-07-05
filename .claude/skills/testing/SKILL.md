@@ -22,10 +22,16 @@ referência na pasta desta skill — abra o que casar com a fronteira que você 
 ## Estrutura de arquivos
 
 A árvore de `tests/` **espelha `src/`** e é derivável do repo (`ls`/Glob) — não é reproduzida aqui.
-`src/core/image/transform.py` → `tests/core/image/test_transform.py`.
+`src/core/audio/normalizer.py` → `tests/core/audio/test_normalizer_unit.py`.
 
 Regras de estrutura:
 - Espelhar `src/` em `tests/`.
+- **Exceção — subpacote interno com API flat via `__init__`**: quando um módulo grande é dividido em
+  arquivos internos (ex.: `core/image/transform.py` → pacote `transform/` com `_shared.py`/`watermark.py`/
+  `ops.py`, reexportados por `__init__.py`), os testes **não** precisam espelhar os arquivos internos —
+  continuam testando a API pública via `from src.core.image.transform import X` num único
+  `tests/core/image/test_transform.py`. Espelhar 1:1 só faz sentido quando cada arquivo interno tem
+  responsabilidade e testes genuinamente independentes.
 - Cada subpasta de `tests/` precisa de `__init__.py` vazio (evita conflito de import com `src/`).
 - Imports dentro dos testes: `from src.modulo import funcao` (nunca import relativo), e **dentro** da função
   de teste (não no topo) — isola falha de import.

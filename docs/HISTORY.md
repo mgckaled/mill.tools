@@ -11,6 +11,32 @@ ficam em [`ROADMAP.md`](ROADMAP.md) e [`plans/active/`](plans/active/).
 
 ## Entregas (marcos)
 
+### Correções do `core/image/` (jul/2026)
+Revisão exploratória arquivo-a-arquivo do pacote (13 arquivos, ~1.320 linhas), mesmo formato dos planos
+anteriores, implementada fase a fase direto no `main`. **Bugs de comportamento** (Fase 1):
+`background.replace_background` não aplicava `ImageOps.exif_transpose` antes do rembg — as outras 11
+transforms do pacote já faziam isso; uma foto de celular em retrato saía com o recorte rotacionado 90° e o
+EXIF descartado; `bg_mode="image"` com `bg_image` ausente caía em silêncio para cor sólida, agora loga
+warning; `describe.describe_image` retornava `response.content` cru (mesmo fix do quarteto ML/core-data
+não propagado até aqui) — usa `llm_utils.extract_llm_text`. `background.py` não tinha nenhum teste; ganhou
+os dois primeiros. **Estrutural** (Fase 2): `transform.py` (496 linhas, acima do teto de ~400 da régua de
+arquitetura) dividido em pacote `transform/` (`_shared.py`/`watermark.py`/`ops.py`, `__init__.py` reexporta
+a API flat — nenhum call site externo mudou); a lógica de "path único sem colisão", duplicada 4× (
+`downloader`/`converter`/`transform`/`describe`), consolidada num único `_paths.unique_path` (que também
+sanitiza o stem, fechando a lacuna que só `describe.save_description` tinha); o flatten de alpha p/ JPEG,
+duplicado entre `converter.convert_image` e `transform._save`/`_ensure_rgb`, virou um único
+`converter._ensure_rgb` compartilhado. **Decisão tomada com o usuário**: a pesquisa no Pillow via context7
+(exigida para EXIF/ICO/AVIF) revelou que `LOSSY_FMTS` não incluía `"avif"` — o slider de qualidade da GUI
+não tinha nenhum efeito ao exportar AVIF (sempre saía na qualidade 75 default do Pillow); AVIF ganhou seu
+próprio range de quality (0-100, sem o teto de 95 do jpg/webp, que existe só p/ conter o crescimento de
+arquivo desses dois formatos além do ganho visível). **Robustez** (Fase 3): `downloader.download_image`
+ganhou cap de 100MB (Content-Length checado antes de ler o corpo + leitura limitada contra servidor que
+mente/omite o header); `smart_crop.focal_crop_box` clampa `new_w`/`new_h` às dimensões da imagem após o
+`round()` (não reproduzido numa busca exaustiva, mas protegido mesmo assim — teste de invariante cobrindo
+uma grade ampla de dimensões/ratios/focos); texto de ajuda do `--quality` na CLI alinhado ao clamp real.
+Cobertura do pacote `transform/` fechou em 94% (era 91% no arquivo único). Plano:
+[`plans/active/PLANO_CORRECOES_CORE_IMAGE.md`](plans/active/PLANO_CORRECOES_CORE_IMAGE.md).
+
 ### Correções do `core/library/` (jul/2026)
 Revisão exploratória arquivo-a-arquivo do pacote (7 arquivos, ~636 linhas) — o mais novo e mais limpo dos
 avaliados nesta rodada (mesmo formato do quarteto ML, core/data e core/audio), implementada fase a fase

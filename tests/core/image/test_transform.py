@@ -411,6 +411,22 @@ def test_out_path_no_collision(jpg_image, out_dir):
     assert p1 != p2
 
 
+@pytest.mark.unit
+def test_out_path_normalizes_jpeg_to_jpg(jpg_image, out_dir):
+    from src.core.image.transform import _out_path
+
+    out = _out_path(jpg_image, out_dir, "jpeg")
+    assert out.suffix == ".jpg"
+
+
+@pytest.mark.unit
+def test_hex_rgb_expands_3_digit_shorthand():
+    from src.core.image.transform import _hex_rgb
+
+    assert _hex_rgb("#f00") == (255, 0, 0)
+    assert _hex_rgb("#ff0000") == (255, 0, 0)
+
+
 # ── crop_image — branches adicionais ─────────────────────────────────────────
 
 
