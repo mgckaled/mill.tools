@@ -5,11 +5,11 @@ from __future__ import annotations
 import json
 import logging
 import subprocess
-import threading
 from pathlib import Path
 from typing import Callable
 
 from src.core.audio.info import get_duration_ffprobe, get_sample_rate_ffprobe
+from src.core.ffmpeg import run_ffmpeg
 from src.utils import sanitize_filename
 
 logger = logging.getLogger(__name__)
@@ -108,34 +108,7 @@ def normalize_lufs(
     ]
 
     total_secs = get_duration_ffprobe(src) if progress_cb else None
-    proc = subprocess.Popen(apply_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-
-    stderr_lines: list[str] = []
-
-    def _drain() -> None:
-        for raw in proc.stderr:
-            stderr_lines.append(raw.decode("utf-8", errors="replace").rstrip())
-
-    stderr_thread = threading.Thread(target=_drain, daemon=True)
-    stderr_thread.start()
-
-    for raw in proc.stdout:
-        line = raw.decode("utf-8", errors="replace").strip()
-        if line.startswith("out_time_us=") and progress_cb and total_secs:
-            try:
-                ratio = min(int(line.split("=", 1)[1]) / 1_000_000 / total_secs, 1.0)
-                progress_cb(ratio)
-            except (ValueError, IndexError):
-                pass
-
-    proc.wait()
-    stderr_thread.join(timeout=2)
-    if proc.returncode != 0:
-        tail = "\n".join(stderr_lines[-10:]) if stderr_lines else "(sem detalhes)"
-        raise RuntimeError(f"ffmpeg loudnorm retornou {proc.returncode}: {tail}")
-
-    if not out_path.exists():
-        raise FileNotFoundError(f"Arquivo não encontrado após loudnorm: {out_path}")
+    run_ffmpeg(apply_cmd, out_path, total_secs=total_secs, progress_cb=progress_cb)
 
     return out_path, stats
 

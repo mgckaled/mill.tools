@@ -128,7 +128,7 @@ def test_normalize_lufs_second_pass_nonzero_raises_runtime_error(tmp_path, mocke
     )
     mocker.patch("subprocess.Popen", return_value=mock_proc)
 
-    with pytest.raises(RuntimeError, match="ffmpeg loudnorm retornou 1"):
+    with pytest.raises(RuntimeError, match="ffmpeg returned 1"):
         normalize_lufs(fake_src, tmp_path / "out", target_lufs=-14.0)
 
 
