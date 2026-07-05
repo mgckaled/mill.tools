@@ -17,6 +17,21 @@ def test_view_name_for_sanitizes_and_dedupes():
 
 
 @pytest.mark.unit
+def test_view_name_for_prefixes_sql_keyword_collisions():
+    """Regression: a stem like "select" registers a view the NL->SQL model
+    then writes as unquoted `FROM select`, which DuckDB rejects."""
+    from pathlib import Path
+
+    from src.core.data.engine import view_name_for
+
+    taken: set[str] = set()
+    assert view_name_for(Path("select.csv"), taken) == "t_select"
+    assert view_name_for(Path("Order.csv"), taken) == "t_order"
+    # A non-keyword stem is untouched.
+    assert view_name_for(Path("vendas.csv"), taken) == "vendas"
+
+
+@pytest.mark.unit
 def test_detect_encoding_utf8_and_cp1252(csv_sales, csv_people_cp1252):
     from src.core.data.engine import detect_encoding
 

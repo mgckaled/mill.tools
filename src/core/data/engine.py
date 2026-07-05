@@ -37,6 +37,23 @@ _DUCKDB_ENCODINGS = {"utf-8", "utf-16", "latin-1"}
 
 _IDENT_INVALID = re.compile(r"[^0-9a-z]+")
 
+# Common DuckDB reserved keywords a file stem could plausibly collide with
+# (e.g. "select.csv"). The engine always quotes the view name it registers, so
+# a colliding name is never unsafe — but the NL→SQL model only ever sees the
+# bare name in the schema text and writes unquoted SQL, so "FROM select" then
+# fails. Not the full reserved-word list from DuckDB's own duckdb_keywords()
+# (querying it would need a live connection for what is otherwise a pure
+# function); just the handful an English/Portuguese file name is likely to hit.
+_SQL_RESERVED = frozenset(
+    "select from where group order table view index column insert update "
+    "delete create drop alter join union case when then else end null true "
+    "false and or not in is like between exists distinct having limit "
+    "offset with as on using into values default check primary key foreign "
+    "references constraint unique cross left right full inner natural "
+    "except intersect all any some array row date time cast filter over "
+    "partition window asc desc collate returning user current".split()
+)
+
 
 class DataEngineError(RuntimeError):
     """Raised when a file cannot be read or a query fails to execute."""
@@ -57,15 +74,19 @@ def _quote_str(value: str) -> str:
 def view_name_for(path: Path, taken: set[str]) -> str:
     """Derive a unique, valid SQL identifier from a file stem.
 
-    Lowercased, non-alphanumeric runs collapsed to ``_``; a leading digit is
-    prefixed with ``t_`` (identifiers cannot start with a digit). Empty results
-    fall back to ``data``. Collisions get a numeric suffix so two files named the
-    same in different folders still register distinctly.
+    Lowercased, non-alphanumeric runs collapsed to ``_``; a leading digit or a
+    name that collides with a common SQL keyword (e.g. ``select.csv``) is
+    prefixed with ``t_`` — the engine always quotes the view name it
+    registers, so this is not a safety fix, only so the NL→SQL model (which
+    sees the bare name in the schema text and writes unquoted SQL) does not
+    have to know to quote it. Empty results fall back to ``data``. Collisions
+    get a numeric suffix so two files named the same in different folders
+    still register distinctly.
     """
     base = _IDENT_INVALID.sub("_", path.stem.lower()).strip("_")
     if not base:
         base = "data"
-    if base[0].isdigit():
+    if base[0].isdigit() or base in _SQL_RESERVED:
         base = f"t_{base}"
     name = base
     i = 2

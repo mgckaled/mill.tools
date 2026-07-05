@@ -187,3 +187,21 @@ Três pontos merecem atenção ao executar a cadeia.
 O primeiro é a **disciplina dos extras**: à medida que as dependências crescem, é essencial mantê-las atrás dos extras opcionais e dos portões de disponibilidade, sob pena de inflar a instalação base e contrariar a filosofia de leveza do projeto. O segundo é a **fronteira de conversão pandas/Polars**, que deve permanecer no único ponto definido no Plano 0; espalhá-la é a forma mais comum de introduzir o retrabalho que este roadmap busca evitar. O terceiro é a **adequação à máquina**: todos os planos rodam na CPU e respeitam a restrição sem PyTorch; os volumes envolvidos nos hubs são pequenos e instantâneos, e o cuidado de desempenho concentra-se no módulo Dados, onde a regra de ouro (o DuckDB encolhe antes da bancada explorar) e o eventual uso do Polars dão a margem necessária com os 16 GB de memória disponíveis.
 
 Por fim, vale alinhar dois itens já presentes no roadmap do projeto: o **PR9.1 (gráficos)** é realizado pelo Plano 1, e o **PR9.2 (encadeamento em estágios)** conversa diretamente com o Plano 5, em que as saídas tabulares de ML ganham mais valor se puderem virar novas fontes. Tratá-los em conjunto evita esforço duplicado.
+
+---
+
+## 8. Pendências pontuais — revisão exploratória do `core/data/` (jul/2026)
+
+Itens de baixo risco, deliberadamente não corrigidos na revisão arquivo-a-arquivo do `core/data/`
+([`plans/active/PLANO_CORRECOES_CORE_DATA.md`](plans/active/PLANO_CORRECOES_CORE_DATA.md)) — registrados aqui
+em vez de expandir o escopo da correção:
+
+- **XLSX multi-planilha em consultas**: `engine.register_views` não repassa `sheet` — uma consulta (via NL→SQL
+  ou SQL manual) sobre um arquivo XLSX de várias abas sempre lê a planilha padrão; só o `preview` (modal de
+  pré-visualização) aceita selecionar a aba. Propagar `sheet` exigiria um campo novo em `DataFile` e
+  atravessar `scanner`/GUI/CLI — vale a pena quando um plano futuro precisar de fato de consultas
+  multi-planilha, não como correção isolada.
+- **Tamanho de arquivo**: `core/data/charts.py` está no teto da régua de tamanho (~430 linhas — corte natural
+  seria heurísticas puras × renderers matplotlib) e `core/data/engine.py` ficou acima do alvo (~410 linhas,
+  após a Fase 1-4 deste plano). Nenhum dos dois tem baixa coesão hoje (arquitetura §3) — dividir **ao tocar**
+  na próxima feature que os estender, não preventivamente.

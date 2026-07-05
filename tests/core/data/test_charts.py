@@ -200,6 +200,39 @@ def test_render_png_bar_with_decimal_y():
 
 
 @pytest.mark.unit
+def test_render_png_line_with_decimal_x():
+    """A GROUP BY key that is itself a DuckDB aggregate/DECIMAL must still
+    render as a line chart's x-axis (regression: _line used to pass the raw
+    object/Decimal column straight to ax.plot, unlike _bar/_scatter)."""
+    import decimal
+
+    df = pd.DataFrame(
+        {
+            "total": [decimal.Decimal("1"), decimal.Decimal("2"), decimal.Decimal("3")],
+            "preco": [1.5, 0.8, 4.0],
+        }
+    )
+    out = charts.render_png(df, charts.ChartSpec(kind="line", x="total", y="preco"))
+    _assert_valid_png(out)
+
+
+@pytest.mark.unit
+def test_render_png_line_with_temporal_x_is_untouched():
+    """A datetime x-axis must not be coerced to float (that would wreck
+    matplotlib's date axis) — only Decimal/object numeric columns are."""
+    import datetime
+
+    df = pd.DataFrame(
+        {
+            "dia": [datetime.date(2026, 1, 1), datetime.date(2026, 1, 2)],
+            "vendas": [10.0, 20.0],
+        }
+    )
+    out = charts.render_png(df, charts.ChartSpec(kind="line", x="dia", y="vendas"))
+    _assert_valid_png(out)
+
+
+@pytest.mark.unit
 def test_render_png_non_numeric_y_raises_friendly_error():
     df = pd.DataFrame({"categoria": ["a", "b"], "rotulo": ["x", "y"]})
     with pytest.raises(ValueError, match="não é numérica"):

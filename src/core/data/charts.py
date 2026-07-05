@@ -17,6 +17,7 @@ imports neither Polars nor DuckDB — only matplotlib.
 from __future__ import annotations
 
 import datetime as _dt
+import decimal
 from dataclasses import dataclass
 
 CHART_KINDS = ("bar", "line", "hist", "scatter")
@@ -253,6 +254,27 @@ def _numeric(df, col: str):
         raise ValueError(f"A coluna '{col}' não é numérica.") from exc
 
 
+def _numeric_x(df, col: str):
+    """Coerce an x-axis column via :func:`_numeric`, but only if it holds numbers.
+
+    Unlike y (always required numeric for line/scatter), a line chart's x is
+    routinely temporal (``suggest_spec``'s own line heuristic is
+    temporal+numeric) — coercing a datetime column to float would wreck
+    matplotlib's date axis. So this only applies the same Decimal/object fix
+    ``_bar``/``_scatter`` need when the column's first value is actually a
+    number; a temporal or plain categorical x passes through untouched.
+    """
+    series = df[col]
+    sample = series.dropna()
+    if len(sample):
+        first = sample.iloc[0]
+        if not isinstance(first, bool) and isinstance(
+            first, (int, float, decimal.Decimal)
+        ):
+            return _numeric(df, col)
+    return series
+
+
 def _bar(ax, df, spec: ChartSpec, palette: ChartPalette) -> None:
     if spec.y:
         labels = [str(v) for v in df[spec.x].tolist()]
@@ -276,7 +298,11 @@ def _bar(ax, df, spec: ChartSpec, palette: ChartPalette) -> None:
 
 def _line(ax, df, spec: ChartSpec, palette: ChartPalette) -> None:
     ax.plot(
-        df[spec.x], _numeric(df, spec.y), color=palette.accent, marker="o", markersize=3
+        _numeric_x(df, spec.x),
+        _numeric(df, spec.y),
+        color=palette.accent,
+        marker="o",
+        markersize=3,
     )
     ax.set_xlabel(spec.x)
     ax.set_ylabel(spec.y)
