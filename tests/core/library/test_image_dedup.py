@@ -103,6 +103,20 @@ def test_corrupted_image_is_skipped_not_fatal(tmp_path, caplog):
 
 
 @pytest.mark.unit
+def test_only_one_image_survives_corruption_filtering_returns_no_groups(tmp_path):
+    """Enough corrupted images can drop the valid count below 2 after filtering."""
+    from src.core.library.image_dedup import near_duplicate_images
+
+    a = _gradient(tmp_path, "a.png")
+    corrupt1 = tmp_path / "broken1.png"
+    corrupt1.write_bytes(b"not an image")
+    corrupt2 = tmp_path / "broken2.png"
+    corrupt2.write_bytes(b"also not an image")
+
+    assert near_duplicate_images([a, corrupt1, corrupt2]) == []
+
+
+@pytest.mark.unit
 def test_transitive_chain_forms_one_component(tmp_path):
     """A~B and B~C (but A and C themselves over the threshold) still merge into
     one group via the shared B — same transitivity ml.dedup.near_duplicates has."""

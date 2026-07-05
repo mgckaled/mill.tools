@@ -142,9 +142,11 @@ PDF + QR via pymupdf (sem ffmpeg). 13 operações GUI / 12 CLI (sem `analyze`, s
 
 Hub navegável de tudo sob `output/`. **Read-only** (sem worker/pipeline) — ações disparam navegação/abertura.
 
-- `core/library/`: `scanner.py` mapeia cada dir de saída → `(kind, category)`; `thumbnails.py` despacha por
-  kind. GUI: 4 modos (Grade·Lista·**Painel**·**Mapa**), filtro/busca/categoria; thumbnails numa thread daemon
-  com update **escopado** (nunca `page.update()`).
+- `core/library/`: `scanner.py` mapeia cada dir de saída → `(kind, category)` (inclui `transcription/
+  subtitles`); `thumbnails.py` despacha primeiro por **suffix de imagem** (qualquer kind — cobre o PNG de
+  waveform/espectrograma do Áudio), depois por kind (document/video). GUI: 4 modos (Grade·Lista·**Painel**·
+  **Mapa**), filtro/busca/categoria; thumbnails numa thread daemon com update **escopado** (nunca
+  `page.update()`).
 - **Ações**: Abrir (texto → visor in-app `file_viewer.py`; demais → `os.startfile`), bridges. CLI `library
   list/stats/dedup-images`. Auto-tags, mapa semântico e dedup de imagens → skill `ml-rag`.
 

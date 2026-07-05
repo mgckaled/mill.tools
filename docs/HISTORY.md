@@ -11,6 +11,28 @@ ficam em [`ROADMAP.md`](ROADMAP.md) e [`plans/active/`](plans/active/).
 
 ## Entregas (marcos)
 
+### Correções do `core/library/` (jul/2026)
+Revisão exploratória arquivo-a-arquivo do pacote (7 arquivos, ~636 linhas) — o mais novo e mais limpo dos
+avaliados nesta rodada (mesmo formato do quarteto ML, core/data e core/audio), implementada fase a fase
+direto no `main`. **Bug real** (Fase 1): `tags.tags_for_item` cacheava o `[]` que `tags_for_text` devolve
+quando o extra `[nlp]` está ausente, carimbado com o mtime atual — ao instalar `[nlp]` depois, o cache
+continuava servindo `[]` para sempre (mtime não mudou) e as auto-tags nunca apareciam para arquivos já
+escaneados; fix: só persiste quando `keywords.is_available()` é `True` (um `[]` legítimo de texto vazio
+continua sendo cacheado). **Lacunas de produto** (Fase 2): `TRANSCRIPTIONS_SUBTITLES_DIR` (`.srt`/`.vtt`
+gravados pelo transcriber) não entrava nos roots do scanner — violava a premissa do hub ("tudo sob
+`output/` aparece"); `thumbnails.thumbnail_for` despachava só por `item.kind`, então o waveform/espectrograma
+PNG do módulo Áudio (kind `audio`) caía no ícone genérico apesar de ser imagem de verdade — dispatch agora
+checa o suffix de imagem primeiro, qualquer kind. **Robustez** (Fase 3): `thumbnails._video_frame` ganhou
+timeout no ffmpeg (vídeo corrompido não pendura mais a thread de thumbnails); `image_dedup.near_duplicate_images`
+tolera uma imagem corrompida por item (skip + warning) em vez de derrubar o lote inteiro; `tags.save_tags`
+migrado para `io_atomic.atomic_write_text`. **Duplicação aceita library×ml**: o union-find de
+`image_dedup.py` duplica (não importa) `core/ml/dedup.py::near_duplicates` — decisão de independência já
+documentada no próprio `types.py`, mas nunca registrada aqui (o quarteto ML só tinha registrado a
+duplicação text×ml); registrada agora, mesmo racional. Cache `(path, mtime)→JSON` duplicado entre
+`core/data/assess.py` e `core/library/tags.py` registrado como pendência de baixo risco no `ROADMAP.md`
+§10 (extração de helper genérico tocaria `core/data` de novo, fora do escopo deste plano). Plano:
+[`plans/active/PLANO_CORRECOES_CORE_LIBRARY.md`](plans/active/PLANO_CORRECOES_CORE_LIBRARY.md).
+
 ### Correções do `core/audio/` (jul/2026)
 Revisão exploratória arquivo-a-arquivo do pacote (10 arquivos, ~745 linhas), mesmo formato do quarteto ML e
 do `core/data`, implementada fase a fase direto no `main`. Fase 1 foi de **verificação guiada via context7**

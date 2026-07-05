@@ -218,3 +218,18 @@ Item de baixo risco, deliberadamente não corrigido na revisão arquivo-a-arquiv
   vez via `sf.read`. Processamento em chunks (janela deslizante com overlap, reduce_noise por bloco) resolveria
   o caso extremo, mas é reestruturação real do pipeline — vale a pena só se surgir um caso de uso concreto de
   áudio muito longo, não como correção isolada.
+
+---
+
+## 10. Pendências pontuais — revisão exploratória do `core/library/` (jul/2026)
+
+Item de baixo risco, deliberadamente não corrigido na revisão arquivo-a-arquivo do `core/library/`
+([`plans/active/PLANO_CORRECOES_CORE_LIBRARY.md`](plans/active/PLANO_CORRECOES_CORE_LIBRARY.md)):
+
+- **Cache `(path, mtime) → JSON` duplicado entre `core/data/assess.py` e `core/library/tags.py`**: os dois
+  módulos implementam a mesma tríade `_load_cache`/`load_cached_*`/`save_*` (carrega JSON tolerando arquivo
+  ausente/malformado, valida frescor pelo mtime, grava via `io_atomic`), diferindo só no tipo do valor
+  cacheado (`text: str` vs `tags: list[str]`). Extrair um helper genérico exigiria um módulo novo em
+  `core/` compartilhado pelos dois pacotes e tocar `core/data` de novo fora do escopo deste plano — mantido
+  como duplicação aceita (mesmo racional de `core/text` × `core/ml` já registrado no HISTORY). Vale a pena
+  se um terceiro consumidor do mesmo padrão aparecer.
