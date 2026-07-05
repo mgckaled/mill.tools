@@ -113,5 +113,11 @@ def tags_for_item(item: LibraryItem, *, cache_file: Path | None = None) -> list[
         logging.debug("[d] Could not read %s for tags: %s", item.path, exc)
         return []
     tags = tags_for_text(text, lang=detect_lang(text))
-    save_tags(item.path, tags, cache_file=cache_file)
+    # Only persist a result computed with the [nlp] extra actually present. A
+    # gate-off "[]" is not a real extraction — caching it would poison the
+    # entry: the mtime doesn't change when the user later installs [nlp], so
+    # the stale "[]" would keep being served forever. A gate-on "[]" (genuinely
+    # empty text) is a legitimate result and still gets cached below.
+    if keywords.is_available():
+        save_tags(item.path, tags, cache_file=cache_file)
     return tags

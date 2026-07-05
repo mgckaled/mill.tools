@@ -99,6 +99,43 @@ def test_cache_invalidated_on_mtime_change(tmp_path, mocker):
 
 
 @pytest.mark.unit
+def test_gate_off_result_is_not_cached_then_appears_when_gate_on(tmp_path, mocker):
+    """Bug: [] do gate ausente não pode ser cacheado — senão nunca some depois."""
+    f = _write(tmp_path / "doc.txt", "conteúdo qualquer sobre juros")
+    cache = tmp_path / "tags.json"
+
+    # [nlp] ausente: tags_for_item devolve [] mas NÃO deve gravar no cache.
+    mocker.patch("src.core.library.tags.keywords.is_available", return_value=False)
+    out1 = tags.tags_for_item(_item(f), cache_file=cache)
+    assert out1 == []
+    assert tags.load_cached_tags(f, cache_file=cache) is None
+
+    # [nlp] instalado depois, mesmo arquivo/mtime: tags reais devem aparecer.
+    mocker.patch("src.core.library.tags.keywords.is_available", return_value=True)
+    mocker.patch(
+        "src.core.library.tags.keywords.keyphrases",
+        return_value=[("juros", 0.01)],
+    )
+    out2 = tags.tags_for_item(_item(f), cache_file=cache)
+    assert out2 == ["juros"]
+
+
+@pytest.mark.unit
+def test_legitimately_empty_text_with_gate_on_is_still_cached(tmp_path, mocker):
+    """[] de texto vazio (gate ligado) é resultado real — continua sendo cacheado."""
+    f = _write(tmp_path / "empty.txt", "   ")
+    cache = tmp_path / "tags.json"
+    mocker.patch("src.core.library.tags.keywords.is_available", return_value=True)
+    kp = mocker.patch("src.core.library.tags.keywords.keyphrases")
+
+    out = tags.tags_for_item(_item(f), cache_file=cache)
+
+    assert out == []
+    kp.assert_not_called()  # tags_for_text short-circuits antes de chamar keyphrases
+    assert tags.load_cached_tags(f, cache_file=cache) == []
+
+
+@pytest.mark.unit
 def test_non_text_item_yields_empty(tmp_path):
     png = LibraryItem(
         path=tmp_path / "b.png",
