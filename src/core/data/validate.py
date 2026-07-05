@@ -43,7 +43,6 @@ _FORBIDDEN = (
     "create",
     "drop",
     "alter",
-    "replace",
     "truncate",
     "export",
     "import",
@@ -56,6 +55,11 @@ _FORBIDDEN = (
     "commit",
     "rollback",
 )
+# NOTE: "replace" is deliberately absent. As a bare word it is DuckDB's
+# read-only replace() string function (engine.reader_expr's own XLSX docstring
+# recommends CAST(replace(replace(col,'.',''),',','.') AS DOUBLE) for pt-BR
+# numbers) — it mutates nothing. The dangerous form, "CREATE OR REPLACE ...",
+# is already caught by the "create" entry above.
 
 _LINE_COMMENT = re.compile(r"--[^\n]*")
 _BLOCK_COMMENT = re.compile(r"/\*.*?\*/", re.DOTALL)
@@ -84,11 +88,16 @@ def ensure_select(sql: str) -> str:
     if not sql or not sql.strip():
         raise UnsafeQueryError("Consulta vazia.")
 
-    stripped = _strip_comments(sql)
+    # Strip string literals *before* looking for statement separators or
+    # forbidden keywords, so a ';' or a keyword-looking substring sitting
+    # inside a literal (e.g. WHERE col = 'a;b') is never mistaken for real SQL
+    # structure. Everything from here on operates on this scrubbed text; the
+    # original, untouched *sql* is only ever the return value.
+    scannable = _STRING_LITERAL.sub(" ", _strip_comments(sql))
 
     # Reject multiple statements: anything after the first ';' (other than
     # trailing whitespace) means a second statement was smuggled in.
-    body, _, rest = stripped.partition(";")
+    body, _, rest = scannable.partition(";")
     if rest.strip():
         raise UnsafeQueryError("Apenas uma consulta SELECT é permitida (sem ';').")
 
@@ -101,10 +110,9 @@ def ensure_select(sql: str) -> str:
             "Apenas consultas de leitura (SELECT/WITH/FROM/DESCRIBE) são permitidas."
         )
 
-    # Scan for forbidden keywords, ignoring those inside string literals.
-    scannable = _STRING_LITERAL.sub(" ", body).lower()
+    body_lower = body.lower()
     for word in _FORBIDDEN:
-        if re.search(rf"\b{word}\b", scannable):
+        if re.search(rf"\b{word}\b", body_lower):
             raise UnsafeQueryError(
                 f"Palavra-chave não permitida em consulta de leitura: '{word}'."
             )

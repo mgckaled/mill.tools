@@ -14,6 +14,12 @@ import pytest
         "DESCRIBE SELECT * FROM t",
         "SUMMARIZE t",
         "SELECT 'DELETE inside a string literal' AS note FROM t",
+        # replace() is a pure string function, not a mutating statement — the
+        # canonical pt-BR-number cast recommended by engine.reader_expr's own
+        # docstring must not be rejected.
+        "SELECT CAST(replace(replace(col,'.',''),',','.') AS DOUBLE) FROM t",
+        # A ';' inside a string literal is not a second statement.
+        "SELECT * FROM t WHERE col = 'a;b'",
     ],
 )
 def test_safe_selects_pass(sql):
@@ -36,6 +42,7 @@ def test_safe_selects_pass(sql):
         "ATTACH 'x.db'",
         "PRAGMA database_list",
         "CREATE TABLE t AS SELECT 1",
+        "CREATE OR REPLACE TABLE t AS SELECT 1",  # the dangerous form of "replace"
         "SELECT 1; DELETE FROM t",  # multiple statements
         "",
         "   ",
@@ -47,6 +54,15 @@ def test_unsafe_queries_rejected(sql):
     assert not is_safe_select(sql)
     with pytest.raises(UnsafeQueryError):
         ensure_select(sql)
+
+
+@pytest.mark.unit
+def test_second_statement_after_literal_with_semicolon_is_still_caught():
+    from src.core.data.validate import is_safe_select
+
+    # The literal's ';' must not swallow a genuine second statement that
+    # follows it — only semicolons *inside* a literal are ignored.
+    assert not is_safe_select("SELECT * FROM t WHERE col = 'a;b'; DELETE FROM t")
 
 
 @pytest.mark.unit

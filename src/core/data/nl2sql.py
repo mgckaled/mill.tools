@@ -79,7 +79,10 @@ def _extract_payload(text: str) -> tuple[str, str]:
             return str(data["sql"]).strip(), str(data.get("explicacao", "")).strip()
 
     # Last resort: the model returned a bare SQL string (or a fenced SQL block).
-    bare = candidates[1] if fenced else text.strip()
+    # candidates[0] is the fenced block's content when one was found (inserted
+    # above); candidates[1] would be the raw text *with* the surrounding
+    # fences/prose, which never starts with a SQL keyword.
+    bare = candidates[0] if fenced else text.strip()
     if bare.lower().lstrip().startswith(("select", "with", "from")):
         return bare.strip(), ""
 

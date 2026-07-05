@@ -47,6 +47,27 @@ def test_to_sql_extracts_from_fenced_block():
 
 
 @pytest.mark.unit
+def test_to_sql_accepts_fenced_sql_without_json():
+    """Regression: a fenced ```sql block with no JSON wrapper must not raise.
+
+    _extract_payload's bare-SQL fallback used to grab candidates[1] (the raw
+    text with the surrounding fences/prose) instead of candidates[0] (the
+    fenced block's actual content), so this exact shape always raised
+    NL2SQLError even though it is the case the fallback exists for.
+    """
+    from src.core.data.nl2sql import to_sql
+
+    response = "Aqui está a consulta:\n```sql\nSELECT a FROM vendas\n```"
+    sql, explanation = to_sql(
+        "vendas: a INT",
+        "pergunta",
+        make_llm_fn=lambda *a, **k: _fake_llm(response),
+    )
+    assert sql == "SELECT a FROM vendas"
+    assert explanation == ""
+
+
+@pytest.mark.unit
 def test_to_sql_accepts_bare_sql_fallback():
     from src.core.data.nl2sql import to_sql
 
