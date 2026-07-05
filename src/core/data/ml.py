@@ -48,6 +48,14 @@ def detect_outliers(df: pd.DataFrame, *, contamination: float = 0.05) -> pd.Data
     if numeric.shape[1] == 0:
         raise ValueError("Nenhuma coluna numérica para detectar anomalias.")
 
+    # An all-NaN numeric column survives fillna(mean) as NaN (the mean of an
+    # empty series is itself NaN) and then trips IsolationForest with a
+    # cryptic sklearn error — drop it before imputing, same as a column that
+    # was never numeric to begin with.
+    numeric = numeric.dropna(axis=1, how="all")
+    if numeric.shape[1] == 0:
+        raise ValueError("Nenhuma coluna numérica para detectar anomalias.")
+
     filled = numeric.fillna(numeric.mean())
     model = IsolationForest(contamination=contamination, random_state=_RANDOM_STATE)
     model.fit(filled)

@@ -59,3 +59,32 @@ def test_detect_outliers_raises_without_numeric_columns():
     df = pd.DataFrame({"texto": ["a", "b", "c"]})
     with pytest.raises(ValueError):
         ml.detect_outliers(df)
+
+
+@pytest.mark.unit
+def test_detect_outliers_drops_all_nan_numeric_column():
+    """An all-NaN numeric column used to survive fillna(mean) as NaN (mean of
+    an empty series is NaN) and crash IsolationForest with a cryptic sklearn
+    error instead of the module's own, clear ValueError."""
+    df = pd.DataFrame(
+        {
+            "valor": [1, 2, 3, 4, 100],
+            "vazio": pd.Series([float("nan")] * 5, dtype="float64"),
+        }
+    )
+    result = ml.detect_outliers(df)
+
+    assert ml.ANOMALY_COLUMN in result.columns
+    assert "vazio" in result.columns  # untouched, just not scored on
+
+
+@pytest.mark.unit
+def test_detect_outliers_raises_when_all_numeric_columns_are_all_nan():
+    df = pd.DataFrame(
+        {
+            "vazio": pd.Series([float("nan")] * 3, dtype="float64"),
+            "texto": ["a", "b", "c"],
+        }
+    )
+    with pytest.raises(ValueError):
+        ml.detect_outliers(df)

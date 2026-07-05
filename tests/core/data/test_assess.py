@@ -29,6 +29,27 @@ def test_assess_invokes_chain_and_returns_markdown():
 
 
 @pytest.mark.unit
+def test_assess_tolerates_content_as_list_of_text_blocks():
+    """Some providers (Gemini/tool-call-shaped responses) return resp.content
+    as a list of blocks instead of a plain str; assess must still return the
+    plain-text narrative (mirrors rag.chat.answer's tolerance for the shape)."""
+    from src.core.data import assess
+
+    llm = GenericFakeChatModel(messages=iter([]))
+    llm.messages = iter(
+        [AIMessage(content=[{"type": "text", "text": "- consistente"}])]
+    )
+
+    out = assess.assess(
+        schema="vendas (3 linhas): produto VARCHAR",
+        profile_text="produto: VARCHAR",
+        sample_text="produto\nmaca",
+        make_llm_fn=lambda *a, **k: llm,
+    )
+    assert out == "- consistente"
+
+
+@pytest.mark.unit
 def test_assess_prompt_has_no_unescaped_braces():
     from src.core.data.assess import build_assessment_prompt
 

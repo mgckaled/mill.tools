@@ -15,6 +15,7 @@ from langchain_core.prompts import ChatPromptTemplate
 
 from src.core.rag.types import AnswerResult
 from src.llm_factory import make_llm
+from src.llm_utils import extract_llm_text
 
 if TYPE_CHECKING:
     from src.core.rag.types import RetrievedChunk
@@ -64,26 +65,6 @@ def build_context(retrieved: list[RetrievedChunk]) -> tuple[str, list[Path]]:
     return context, sources
 
 
-def _extract_text(content: str | list) -> str:
-    """Return the LLM response's content as a plain string.
-
-    Most providers return ``resp.content`` as a ``str``, but some (seen with
-    certain Gemini/tool-call-shaped responses) return a list of content
-    blocks instead — each block a dict with a ``"text"`` key, or occasionally
-    a bare string. Joining handles both shapes so ``AnswerResult.text``
-    (typed ``str``) never leaks a list to its callers (GUI/CLI rendering).
-    """
-    if isinstance(content, str):
-        return content
-    parts: list[str] = []
-    for block in content:
-        if isinstance(block, str):
-            parts.append(block)
-        elif isinstance(block, dict):
-            parts.append(str(block.get("text", "")))
-    return "".join(parts)
-
-
 def answer(
     query: str,
     retrieved: list[RetrievedChunk],
@@ -120,4 +101,4 @@ def answer(
     resp = chain.invoke({"context": context, "question": query})
 
     _emit("answer_done", {"n_sources": len(sources)})
-    return AnswerResult(text=_extract_text(resp.content), sources=sources)
+    return AnswerResult(text=extract_llm_text(resp.content), sources=sources)

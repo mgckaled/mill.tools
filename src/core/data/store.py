@@ -11,6 +11,8 @@ import logging
 from dataclasses import asdict, dataclass
 from pathlib import Path
 
+from src.core.io_atomic import atomic_write_text
+
 logger = logging.getLogger(__name__)
 
 
@@ -76,7 +78,6 @@ def delete_query(name: str, path: Path | None = None) -> bool:
 
 
 def _write(queries: list[SavedQuery], path: Path) -> None:
-    """Serialize queries to JSON."""
-    path.parent.mkdir(parents=True, exist_ok=True)
-    payload = [asdict(q) for q in queries]
-    path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+    """Serialize queries to JSON, atomically (temp file + ``os.replace``)."""
+    payload = json.dumps([asdict(q) for q in queries], ensure_ascii=False, indent=2)
+    atomic_write_text(path, payload)

@@ -95,6 +95,24 @@ def test_to_sql_rejects_non_select_output():
 
 
 @pytest.mark.unit
+def test_to_sql_tolerates_content_as_list_of_text_blocks():
+    """Some providers (Gemini/tool-call-shaped responses) return resp.content
+    as a list of blocks instead of a plain str; to_sql must still parse it
+    (mirrors rag.chat.answer's tolerance for the same shape)."""
+    from src.core.data.nl2sql import to_sql
+
+    payload = json.dumps({"sql": "SELECT 1 FROM vendas", "explicacao": "ok"})
+    llm = _fake_llm("placeholder")
+    llm.messages = iter([AIMessage(content=[{"type": "text", "text": payload}])])
+
+    sql, explanation = to_sql(
+        "vendas: a INT", "pergunta", make_llm_fn=lambda *a, **k: llm
+    )
+    assert sql == "SELECT 1 FROM vendas"
+    assert explanation == "ok"
+
+
+@pytest.mark.unit
 def test_to_sql_unparseable_output_raises():
     from src.core.data.nl2sql import NL2SQLError, to_sql
 

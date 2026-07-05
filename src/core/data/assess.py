@@ -22,7 +22,9 @@ from typing import Callable
 
 from langchain_core.prompts import ChatPromptTemplate
 
+from src.core.io_atomic import atomic_write_text
 from src.llm_factory import make_llm
+from src.llm_utils import extract_llm_text
 
 DEFAULT_MODEL = "gemma3-4b-custom"
 
@@ -76,7 +78,7 @@ def assess(
     resp = chain.invoke(
         {"schema": schema, "profile": profile_text, "sample": sample_text}
     )
-    content = resp.content if hasattr(resp, "content") else str(resp)
+    content = extract_llm_text(resp.content) if hasattr(resp, "content") else str(resp)
     return content.strip()
 
 
@@ -131,9 +133,6 @@ def save_assessment(path: Path, text: str, *, cache_file: Path | None = None) ->
     data = _load_cache(cache_file)
     data[str(path.resolve())] = {"mtime": mtime, "text": text}
     try:
-        cache_file.parent.mkdir(parents=True, exist_ok=True)
-        cache_file.write_text(
-            json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8"
-        )
+        atomic_write_text(cache_file, json.dumps(data, ensure_ascii=False, indent=2))
     except OSError as exc:
         logging.debug("[d] Could not write assessment cache: %s", exc)

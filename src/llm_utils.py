@@ -1,4 +1,4 @@
-"""Shared text-chunking utilities for the LLM pipeline."""
+"""Shared text-chunking and response-parsing utilities for the LLM pipeline."""
 
 from __future__ import annotations
 
@@ -10,6 +10,26 @@ from src.llm_factory import is_cloud_model, long_context_char_budget
 
 # Default separators: paragraph breaks first, then sentence, word, character.
 _SEPARATORS = ["\n\n", "\n", ". ", " ", ""]
+
+
+def extract_llm_text(content: str | list) -> str:
+    """Return an LLM response's ``.content`` as a plain string.
+
+    Most providers return ``resp.content`` as a ``str``, but some (seen with
+    certain Gemini/tool-call-shaped responses) return a list of content blocks
+    instead — each block a dict with a ``"text"`` key, or occasionally a bare
+    string. Joining handles both shapes so callers never leak a list where a
+    ``str`` is expected (GUI/CLI rendering, ``.strip()``, JSON parsing).
+    """
+    if isinstance(content, str):
+        return content
+    parts: list[str] = []
+    for block in content:
+        if isinstance(block, str):
+            parts.append(block)
+        elif isinstance(block, dict):
+            parts.append(str(block.get("text", "")))
+    return "".join(parts)
 
 
 def split_text(
