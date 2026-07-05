@@ -86,7 +86,7 @@ _CATEGORY_OPTIONS = [
     ("source", "Origem"),
     ("processed", "Processado"),
 ]
-_PROCESSED_CATEGORIES = {"processed", "text", "analysis", "digest"}
+_PROCESSED_CATEGORIES = {"processed", "text", "analysis", "digest", "subtitles"}
 
 # Date-range key → seconds back from now (None = any date).
 _SINCE_DELTAS: dict[str, int | None] = {

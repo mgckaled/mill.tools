@@ -52,6 +52,7 @@ CATEGORY_LABEL: dict[str, str] = {
     "text": "Texto",
     "analysis": "Análise",
     "digest": "Resumo",
+    "subtitles": "Legenda",
 }
 
 _MEDIA_H = 120

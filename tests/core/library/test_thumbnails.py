@@ -46,6 +46,21 @@ def test_thumbnail_for_audio_and_transcription_fall_back_to_none(tmp_path):
 
 
 @pytest.mark.unit
+def test_thumbnail_for_audio_waveform_png_returns_bytes(jpg_image, tmp_path):
+    """Waveform/spectrogram PNGs from the Audio module (kind='audio') still get
+    a real raster preview — dispatch is by suffix first, not kind alone."""
+    from src.core.library.thumbnails import thumbnail_for
+    from src.core.library.types import KIND_AUDIO
+
+    # Reuse the jpg_image fixture's bytes under a name matching Audio's output.
+    waveform = tmp_path / "track_waveform.png"
+    waveform.write_bytes(jpg_image.read_bytes())
+
+    data = thumbnail_for(_item(waveform, KIND_AUDIO))
+    assert isinstance(data, bytes) and len(data) > 0
+
+
+@pytest.mark.unit
 def test_thumbnail_for_pdf_returns_bytes(sample_pdf):
     from src.core.library.thumbnails import thumbnail_for
     from src.core.library.types import KIND_DOCUMENT

@@ -13,13 +13,29 @@ import subprocess
 
 from src.core.library.types import (
     KIND_DOCUMENT,
-    KIND_IMAGE,
     KIND_VIDEO,
     LibraryItem,
 )
 
 _THUMB_PX = 256
 _PDF_ZOOM = 1.2  # ~86dpi — a touch crisper than the 72dpi viewer thumb
+
+# Raster suffixes Pillow can open — mirrors the GUI's image-picker allowlist
+# (src/gui/modules/image/describe_tab.py), duplicated here since core/ never
+# imports gui/. Checked before the kind-based dispatch below so a PNG produced
+# by a non-image module (e.g. the Audio waveform/spectrogram, kind "audio")
+# still gets a real preview instead of a generic type icon.
+_IMAGE_SUFFIXES = {
+    ".jpg",
+    ".jpeg",
+    ".png",
+    ".webp",
+    ".avif",
+    ".tiff",
+    ".tif",
+    ".bmp",
+    ".gif",
+}
 
 
 def _video_frame(path, *, seek: str = "00:00:01") -> bytes | None:
@@ -59,13 +75,13 @@ def _video_frame(path, *, seek: str = "00:00:01") -> bytes | None:
 def thumbnail_for(item: LibraryItem) -> bytes | None:
     """Return preview bytes for an item, or None to fall back to a type icon.
 
-    - image    → src.core.image.info.thumbnail_bytes (Pillow)
+    - any raster suffix (by extension, not kind) → src.core.image.info.thumbnail_bytes
     - document → first page rasterized via pymupdf (hard dep)
     - video    → single frame via ffmpeg (piped, no temp file)
-    - audio / transcription → None (UI shows a type icon)
+    - audio / transcription with no raster suffix → None (UI shows a type icon)
     """
     try:
-        if item.kind == KIND_IMAGE:
+        if item.suffix in _IMAGE_SUFFIXES:
             from src.core.image.info import thumbnail_bytes
 
             return thumbnail_bytes(item.path, max_px=_THUMB_PX)
