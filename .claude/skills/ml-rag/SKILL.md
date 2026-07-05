@@ -14,7 +14,7 @@ mora onde e limites de tamanho → skill `architecture`; superfícies → `cli` 
 | Pacote | Responsabilidade |
 |---|---|
 | `core/rag/` | RAG local: embedder (única rede) · store `.npz` · busca híbrida · indexer incremental · chat com citação · bm25 · templates · batch · stats · analytics |
-| `core/ml/` | ML clássico torch-free: features (acessor) · dedup · cluster · labeling · project · recommend · classify · store (modelos versionados) · deps (gate `[ml]`) · cache · mapviz |
+| `core/ml/` | ML clássico torch-free: features (acessor) · dedup · cluster · labeling · project · recommend · classify/ (pacote) · store (modelos versionados) · deps (gate `[ml]`) · cache · mapviz |
 | `core/text/` | NLP textual (Plano 4B, independente de `core/ml`): keywords (YAKE) · summarize (TextRank) · entities (spaCy NER) · reader · lang |
 | `core/observatory/` | Cross-módulo read-only: activity · logs · status · model_timing · disk_usage |
 
@@ -28,21 +28,30 @@ mora onde e limites de tamanho → skill `architecture`; superfícies → `cli` 
   Caches lazy de `_normalized` **e `_bm25`**, ambos invalidados por `add()`/`drop_source()`. `persist()` grava
   sidecar `index_info.json` (`embed_model`, `dim`); índices antigos → `embed_model="?"`.
 - **Busca híbrida** (`retriever.retrieve()`): cosseno denso + **BM25** (`bm25.py`) combinados por **Reciprocal
-  Rank Fusion** (`np.lexsort((idx, -scores))`, não `argsort[::-1]` — ver skill `testing` p/ o porquê). O
-  `.score` reportado por chunk continua o **cosseno denso** (não o valor fundido) — preserva o contrato do
-  aviso de fora-de-escopo.
+  Rank Fusion** (`np.lexsort((idx, -scores))`, não `argsort[::-1]` — ver skill `testing` p/ o porquê). BM25
+  tokeniza via regex (`re.findall(r"\w+", text.lower())`, sem pontuação) nos **dois** lados (índice e query) —
+  não um `.split()` ingênuo. A fusão RRF é **pulada** (fallback pro cosseno denso puro) quando o BM25 não tem
+  nenhum match (`lexical.max() <= 0`), evitando que um sinal neutro injete viés de ordem-de-índice. O `.score`
+  reportado por chunk continua o **cosseno denso** (não o valor fundido) — preserva o contrato do aviso de
+  fora-de-escopo.
 - **`indexer.build_index()`** é **incremental** por `(path, mtime)`: pula inalterados, reembeda alterados,
   reconcilia removidos. Indexa kinds textuais (`transcription`/`document` + descrições `.txt`), tira o header
   de transcrição, chunka via `split_text` (1200/150). Aceita **`card_fn` injetável** e inclui `kind="data"` —
   arquivos de dados são indexados pelo **cartão de dados** (`core/data/datacard.card_for_path`), nunca pelas
   linhas cruas. `index_files` é a variante **aditiva** (sem reconciliação, sempre reembeda) usada pelo botão
   "Indexar no RAG" da aba Pré-visualização do módulo Dados.
+- **`batch.run_batch`** aceita `cancel_is_set: Callable[[], bool] | None`, checado entre itens (mesmo padrão
+  do runner de Receitas) — hoje é só o *seam* no core: não há worker de GUI que chame `run_batch` (o hub IA só
+  tem a Conversa single-answer) nem mecanismo de cancelamento no `cli/ai.py --batch` (Ctrl+C já cobre o caso
+  síncrono); pronto para quando um chamador cancelável de verdade existir.
 - **`chat.answer()`** monta contexto numerado `[n]` sob prompt estrito; o **`[n]` é chaveado pelo documento
   distinto** (chunks do mesmo arquivo compartilham número) — as citações nunca passam do total de fontes.
 - **`stats.py`** (puro): `index_stats(directory) → IndexStats` (docs, chunks, dim, modelo, tamanho, `per_doc`);
   `fmt_status_line()`, `fmt_disk_size`/`fmt_thousands`/`fmt_datetime`/`chunks_for` (mês PT-BR manual, sem
   `locale`). `analytics.py` (Plano 2): `index_health` + timing por modelo (p90 via `statistics`).
-- **Gate**: `embedder.is_available()` bloqueia os fluxos com `SETUP_HINT`.
+- **Gate**: `embedder.is_available()` bloqueia os fluxos com `SETUP_HINT`; usa um timeout curto próprio
+  (`AVAILABILITY_TIMEOUT=10s`) para o ping, distinto do `EMBED_TIMEOUT=300s` do embedding real (senão o status
+  board do Observatório pendura por até 5 min quando o Ollama está fora do ar).
 
 > `rank-bm25` é dependência **base** (puro Python/numpy, sem scipy) — não atrás de extra, porque a busca densa
 > do RAG já é incondicional. Racional da escolha (vs. `bm25s`) → `docs/HISTORY.md`.
@@ -60,11 +69,22 @@ mora onde e limites de tamanho → skill `architecture`; superfícies → `cli` 
   `silhouette_score` acima de 20 docs). **`labeling.py`**: c-TF-IDF estilo BERTopic (`CountVectorizer`,
   `ngram_range=(1,3)` + `reduce_frequent_words`, stopwords PT/EN próprias). **`project.py`**: PCA
   determinística (default) · TSNE · UMAP (`[ml-viz]`, métrica cosseno + pré-redução PCA→50D).
-- **`classify.py`** (`[ml]`): perfil **zero-shot** por protótipo (`label`+`source_hint`, embeddado 1×,
-  cacheado; nearest-prototype por cosseno; `margin`=incerteza) que **escala para supervisionado**
-  (`LinearSVC`+`CalibratedClassifierCV` sobre `dm.X`) conforme o usuário confirma o perfil. **Parametrizado
-  por `domain`** (`DOMAIN_TRANSCRIPTION_PROFILE`/`DOMAIN_DATA`/`DOMAIN_DOCUMENT`) — mesmas funções, chaveadas
-  por prefixo de arquivo; o domínio default preserva os nomes pré-existentes (zero invalidação de cache).
+- **`classify/`** (`[ml]`, pacote — dividido de um `classify.py` de 471 linhas na correção do quarteto ML,
+  jul/2026): `prototypes.py` (seeds + cache de protótipos), `labels.py` (rótulos + treino supervisionado +
+  `record_label`), `inference.py` (dispatch `classify()`/`has_supervised_model()`), `_naming.py` (nomes de
+  arquivo por domínio); `classify/__init__.py` reexporta a API flat pré-existente — zero mudança nos call
+  sites. Perfil **zero-shot** por protótipo (`label`+`source_hint`, embeddado 1×, cacheado; nearest-prototype
+  por cosseno; `margin`=incerteza) que **escala para supervisionado** (`LinearSVC`+`CalibratedClassifierCV`
+  sobre `dm.X`) conforme o usuário confirma o perfil. **Parametrizado por `domain`**
+  (`DOMAIN_TRANSCRIPTION_PROFILE`/`DOMAIN_DATA`/`DOMAIN_DOCUMENT`) — mesmas funções, chaveadas por prefixo de
+  arquivo; o domínio default preserva os nomes pré-existentes (zero invalidação de cache).
+- **Cegueira ao embed model (corrigida)**: as assinaturas de cache de protótipos **e** do modelo
+  supervisionado dobram o `embed_space_id` (`"{modelo}:{dim}"`, de `rag.stats.embed_space_id`) — trocar o
+  embed model e reindexar costumava deixar protótipos/SVM do espaço antigo válidos e prevendo lixo em
+  silêncio, já que a assinatura não mudava. Índice sem sidecar → `"?"`. Threading: `classify()` /
+  `has_supervised_model()` / `profile_prototypes()` / `train_supervised()` / `maybe_train()` recebem
+  `embed_space_id: str = "?"`; os call sites de produção (`cli/ai.py`, `gui/views/profile_section.py`,
+  `observatory/status.py::domain_statuses`) leem o valor real via `rag.stats.embed_space_id(index_dir())`.
 - **`store.py`** (`[ml]`): persistência de modelos versionada por `sklearn.__version__`+signature (invalida no
   mismatch; joblib v1). **`mapviz.py`**: orquestra cluster→project→label → `SemanticMap` → PNG;
   `build_semantic_map` aceita `on_stage` (stepper do Observatório; pulado em cache hit). **`cache.py`**: mapa
