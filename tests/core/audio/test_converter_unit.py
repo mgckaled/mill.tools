@@ -111,3 +111,59 @@ def test_convert_audio_inplace_transform_cleans_tmp_on_failure(tmp_path, mocker)
         convert_audio(src, tmp_path, fmt="mp3", channels=1)
 
     assert list(tmp_path.glob(".tmp_encode_*")) == []
+
+
+def test_extract_audio_uses_codec_copy_when_compatible(tmp_path, mocker):
+    """Codec de origem aac + fmt m4a → fast path com '-acodec copy' (sem reencode)."""
+    from src.core.audio.converter import extract_audio
+
+    video = tmp_path / "video.mp4"
+    video.write_bytes(b"")
+    captured = _capture_cmd(mocker)
+    mocker.patch("src.core.audio.converter.get_audio_codec_ffprobe", return_value="aac")
+
+    extract_audio(video, tmp_path / "out", fmt="m4a")
+
+    cmd = captured["cmd"]
+    assert "-acodec" in cmd
+    assert cmd[cmd.index("-acodec") + 1] == "copy"
+
+
+def test_extract_audio_mismatched_codec_reencodes(tmp_path, mocker):
+    """Codec de origem incompatível com o fmt alvo → sem '-acodec copy'."""
+    from src.core.audio.converter import extract_audio
+
+    video = tmp_path / "video.mp4"
+    video.write_bytes(b"")
+    captured = _capture_cmd(mocker)
+    mocker.patch("src.core.audio.converter.get_audio_codec_ffprobe", return_value="aac")
+
+    extract_audio(video, tmp_path / "out", fmt="mp3")
+
+    assert "-acodec" not in captured["cmd"]
+
+
+def test_extract_audio_copy_failure_falls_back_to_reencode(tmp_path, mocker):
+    """Se '-acodec copy' falhar (RuntimeError), tenta de novo com reencode completo."""
+    from src.core.audio.converter import extract_audio
+
+    video = tmp_path / "video.mp4"
+    video.write_bytes(b"")
+    mocker.patch("src.core.audio.converter.get_audio_codec_ffprobe", return_value="aac")
+
+    calls: list[list[str]] = []
+
+    def _fake(cmd, out_path, **kwargs):
+        calls.append(cmd)
+        if "-acodec" in cmd:
+            raise RuntimeError("copy not supported")
+        return out_path
+
+    mocker.patch("src.core.audio.converter.run_ffmpeg", side_effect=_fake)
+
+    out = extract_audio(video, tmp_path / "out", fmt="m4a")
+
+    assert len(calls) == 2
+    assert "-acodec" in calls[0]
+    assert "-acodec" not in calls[1]
+    assert out == (tmp_path / "out") / "video_audio.m4a"

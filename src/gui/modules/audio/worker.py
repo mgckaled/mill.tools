@@ -197,6 +197,10 @@ def _make_process_item(args: AudioArgs) -> Callable:
             def _silence_cb(ratio: float) -> None:
                 emit("progress_update", payload={"current": ratio})
 
+            # keep_silence_s stays at silence.remove_silence's default (0.1s) —
+            # not exposed as a flag/param here on purpose. Threshold + min
+            # duration already cover the common tuning need; a third silence
+            # knob would be ceremony without a driving use case so far.
             out_path = remove_silence(
                 out_path,
                 AUDIO_PROCESSED_DIR,

@@ -53,6 +53,16 @@ def test_extract_audio_from_mp4(sample_mp4, out_dir):
     assert out.stat().st_size > 500
 
 
+def test_extract_audio_m4a_uses_codec_copy_fast_path(sample_mp4, out_dir):
+    """Fonte AAC (sample_mp4) + fmt m4a aciona o fast path '-acodec copy' de verdade."""
+    from src.core.audio.converter import extract_audio
+
+    out = extract_audio(sample_mp4, out_dir, fmt="m4a")
+    assert out.exists()
+    assert out.suffix.lower() == ".m4a"
+    assert out.stat().st_size > 500
+
+
 def test_convert_audio_invalid_format_raises(sample_wav, out_dir):
     """Formato desconhecido deve lançar RuntimeError (ffmpeg retorna erro)."""
     from src.core.audio.converter import convert_audio

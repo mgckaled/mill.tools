@@ -1,4 +1,4 @@
-"""Redução de ruído espectral via noisereduce (spectral gating, CPU-only)."""
+"""Spectral noise reduction via noisereduce (spectral gating, CPU-only)."""
 
 from __future__ import annotations
 
@@ -7,11 +7,11 @@ import subprocess
 import tempfile
 from pathlib import Path
 
-_DECODE_TIMEOUT_S = 1800  # 30 min — generoso o bastante p/ não policiar lentidão
+_DECODE_TIMEOUT_S = 1800  # 30 min — generous enough to not police slowness
 
 
 def is_available() -> bool:
-    """True se noisereduce e soundfile estiverem instalados."""
+    """True if noisereduce and soundfile are installed."""
     try:
         import noisereduce  # noqa: F401
         import soundfile  # noqa: F401
@@ -22,18 +22,18 @@ def is_available() -> bool:
 
 
 def denoise(src: Path, out_dir: Path, stationary: bool = True) -> Path:
-    """Atenua ruído de fundo estacionário via spectral gating.
+    """Attenuate steady background noise via spectral gating.
 
-    Decodifica qualquer formato para WAV temporário via ffmpeg,
-    processa com noisereduce e salva resultado em WAV.
+    Decodes any format to a temporary WAV via ffmpeg, processes it with
+    noisereduce and writes the result as WAV.
 
     Args:
-        src: Arquivo de áudio (qualquer formato suportado pelo ffmpeg).
-        out_dir: Diretório de saída.
-        stationary: True = ruído constante (fan, hum). False = adaptativo.
+        src: Audio file (any ffmpeg-supported format).
+        out_dir: Output directory.
+        stationary: True = constant noise (fan, hum). False = adaptive.
 
     Returns:
-        Path do arquivo denoised (.wav).
+        Path of the denoised file (.wav).
     """
     import numpy as np
     import noisereduce as nr
@@ -41,8 +41,8 @@ def denoise(src: Path, out_dir: Path, stationary: bool = True) -> Path:
 
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    # Decodifica para WAV PCM temporário (lida com MP3/M4A/qualquer fmt). Nome
-    # único (mkstemp) evita colisão entre execuções concorrentes no mesmo stem.
+    # Decode to a temporary PCM WAV (handles MP3/M4A/any fmt). Unique name
+    # (mkstemp) avoids collisions between concurrent runs on the same stem.
     fd, tmp_wav_str = tempfile.mkstemp(
         suffix=".wav", prefix=f".tmp_denoise_{src.stem}_", dir=out_dir
     )
@@ -57,8 +57,8 @@ def denoise(src: Path, out_dir: Path, stationary: bool = True) -> Path:
 
     try:
         meta = sf.info(str(tmp_wav))
-        # float32 corta pela metade o pico de RAM de sf.read frente ao default
-        # float64 — relevante p/ áudio longo (2h estéreo ≈ 5GB em float64).
+        # float32 halves sf.read's peak RAM vs. the float64 default — matters
+        # for long audio (2h stereo ≈ 5GB at float64).
         audio, sr = sf.read(str(tmp_wav), dtype="float32")
 
         if audio.ndim == 2:
@@ -71,7 +71,7 @@ def denoise(src: Path, out_dir: Path, stationary: bool = True) -> Path:
             denoised = nr.reduce_noise(y=audio, sr=sr, stationary=stationary)
 
         out_path = out_dir / f"{src.stem}_denoised.wav"
-        # Preserva o subtype original (PCM_16, PCM_24…) para não degradar bit depth
+        # Preserves the original subtype (PCM_16, PCM_24…) to avoid degrading bit depth
         sf.write(str(out_path), denoised, sr, subtype=meta.subtype)
     finally:
         tmp_wav.unlink(missing_ok=True)

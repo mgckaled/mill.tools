@@ -1,4 +1,4 @@
-"""Normalização de loudness via ffmpeg loudnorm (EBU R128 / ITU-R BS.1770-4)."""
+"""Loudness normalization via ffmpeg loudnorm (EBU R128 / ITU-R BS.1770-4)."""
 
 from __future__ import annotations
 
@@ -14,9 +14,9 @@ from src.utils import sanitize_filename
 
 logger = logging.getLogger(__name__)
 
-_TARGET_TP = -1.0  # True Peak máximo (dBFS)
-_TARGET_LRA = 11.0  # Loudness Range alvo
-_MEASURE_TIMEOUT_S = 1800  # 30 min — generoso o bastante p/ não policiar lentidão
+_TARGET_TP = -1.0  # Max True Peak (dBFS)
+_TARGET_LRA = 11.0  # Target Loudness Range
+_MEASURE_TIMEOUT_S = 1800  # 30 min — generous enough to not police slowness
 
 
 def normalize_lufs(
@@ -25,22 +25,22 @@ def normalize_lufs(
     target_lufs: float = -14.0,
     progress_cb: Callable[[float], None] | None = None,
 ) -> tuple[Path, dict | None]:
-    """Normaliza loudness integrado para target_lufs (EBU R128, dois passes).
+    """Normalize integrated loudness to target_lufs (EBU R128, two passes).
 
     Args:
-        src: Arquivo de entrada (qualquer formato ffmpeg).
-        out_dir: Diretório de saída.
-        target_lufs: Alvo em LUFS (ex: -14.0 streaming, -23.0 broadcast).
-        progress_cb: Chamado com float 0.0-1.0 durante o segundo passe.
+        src: Input file (any ffmpeg-readable format).
+        out_dir: Output directory.
+        target_lufs: Target in LUFS (e.g. -14.0 streaming, -23.0 broadcast).
+        progress_cb: Called with float 0.0-1.0 during the second pass.
 
     Returns:
-        Tupla (out_path, stats_dict | None).
-        stats_dict contém os valores medidos (input_i, input_tp, input_lra…).
+        Tuple (out_path, stats_dict | None).
+        stats_dict holds the measured values (input_i, input_tp, input_lra…).
     """
     out_dir.mkdir(parents=True, exist_ok=True)
     out_path = out_dir / f"{sanitize_filename(src.stem)}_normalized{src.suffix}"
 
-    # Passe 1: medição
+    # Pass 1: measurement
     measure_cmd = [
         "ffmpeg",
         "-y",
@@ -62,7 +62,7 @@ def normalize_lufs(
         else None
     )
 
-    # Passe 2: aplicação
+    # Pass 2: apply
     source_sample_rate: int | None = None
     if stats:
         af = (
@@ -123,7 +123,7 @@ _REQUIRED_STATS_KEYS = {
 
 
 def _parse_loudnorm_json(stderr: str) -> dict | None:
-    """Extrai o bloco JSON de estatísticas loudnorm do stderr do ffmpeg.
+    """Extract the loudnorm stats JSON block from ffmpeg's stderr.
 
     Returns None if the block is missing, malformed, or lacks any of the keys
     the second pass reads directly (a partial block would otherwise surface as

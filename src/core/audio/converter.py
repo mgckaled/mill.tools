@@ -2,18 +2,32 @@
 
 from __future__ import annotations
 
+import logging
 import shutil
 from pathlib import Path
 from typing import Callable
 
-from src.core.audio.info import get_duration_ffprobe
+from src.core.audio.info import get_audio_codec_ffprobe, get_duration_ffprobe
 from src.core.ffmpeg import run_ffmpeg
 from src.utils import sanitize_filename
+
+logger = logging.getLogger(__name__)
 
 # Video extensions that trigger extraction (instead of conversion)
 VIDEO_EXTENSIONS = {".mp4", ".mkv", ".webm", ".avi", ".mov"}
 # Audio extensions accepted for conversion
 AUDIO_EXTENSIONS = {".mp3", ".wav", ".flac", ".ogg", ".opus", ".aac", ".m4a"}
+
+# Source codecs that can be copied (no re-encode) straight into a given target
+# container/fmt without a compatibility mismatch. Deliberately conservative —
+# "wav" is excluded because PCM subtype/layout mismatches are more likely to
+# bite silently than for these compressed formats.
+_COPYABLE_CODECS: dict[str, set[str]] = {
+    "m4a": {"aac"},
+    "mp3": {"mp3"},
+    "opus": {"opus"},
+    "ogg": {"opus", "vorbis"},
+}
 
 
 def convert_audio(
@@ -25,19 +39,19 @@ def convert_audio(
     channels: int | None = None,
     sample_rate: int | None = None,
 ) -> Path:
-    """Converte arquivo de áudio para outro formato via ffmpeg.
+    """Convert an audio file to another format via ffmpeg.
 
     Args:
-        src: Arquivo de origem.
-        out_dir: Diretório de saída (criado se necessário).
-        fmt: Formato alvo ("mp3", "m4a", "wav", "ogg", "opus").
-        bitrate: Bitrate em kbps ("320", "128", etc.). None = qualidade padrão.
-        progress_cb: Chamado com float 0.0-1.0 durante a conversão.
+        src: Source file.
+        out_dir: Output directory (created if needed).
+        fmt: Target format ("mp3", "m4a", "wav", "ogg", "opus").
+        bitrate: Bitrate in kbps ("320", "128", etc.). None = default quality.
+        progress_cb: Called with float 0.0-1.0 during the conversion.
         channels: Channel count for downmix (1 = mono). None preserves source.
         sample_rate: Target sample rate in Hz (e.g. 16000). None preserves source.
 
     Returns:
-        Path do arquivo convertido.
+        Path of the converted file.
     """
     out_dir.mkdir(parents=True, exist_ok=True)
     out_path = out_dir / f"{sanitize_filename(src.stem)}.{fmt}"
@@ -85,22 +99,47 @@ def extract_audio(
     fmt: str = "mp3",
     progress_cb: Callable[[float], None] | None = None,
 ) -> Path:
-    """Extrai faixa de áudio de vídeo local via ffmpeg.
+    """Extract the audio track from a local video via ffmpeg.
 
     Args:
-        video: Arquivo de vídeo de origem.
-        out_dir: Diretório de saída (criado se necessário).
-        fmt: Formato do áudio extraído.
-        progress_cb: Chamado com float 0.0-1.0 durante a extração.
+        video: Source video file.
+        out_dir: Output directory (created if needed).
+        fmt: Format of the extracted audio.
+        progress_cb: Called with float 0.0-1.0 during the extraction.
 
     Returns:
-        Path do arquivo de áudio extraído.
+        Path of the extracted audio file.
     """
     out_dir.mkdir(parents=True, exist_ok=True)
     out_path = out_dir / f"{sanitize_filename(video.stem)}_audio.{fmt}"
 
-    cmd = ["ffmpeg", "-y", "-i", str(video), "-vn"]  # -vn: drop video stream
-    cmd += ["-progress", "pipe:1", "-nostats", str(out_path)]
+    def _build_cmd(use_copy: bool) -> list[str]:
+        cmd = ["ffmpeg", "-y", "-i", str(video), "-vn"]  # -vn: drop video stream
+        if use_copy:
+            cmd += ["-acodec", "copy"]
+        cmd += ["-progress", "pipe:1", "-nostats", str(out_path)]
+        return cmd
 
     total_secs = get_duration_ffprobe(video) if progress_cb else None
-    return run_ffmpeg(cmd, out_path, total_secs=total_secs, progress_cb=progress_cb)
+
+    source_codec = get_audio_codec_ffprobe(video)
+    if source_codec in _COPYABLE_CODECS.get(fmt, ()):
+        try:
+            return run_ffmpeg(
+                _build_cmd(True),
+                out_path,
+                total_secs=total_secs,
+                progress_cb=progress_cb,
+            )
+        except RuntimeError:
+            logger.warning(
+                "codec copy fast path failed for %s (source codec %s, target %s) — "
+                "falling back to re-encode",
+                video,
+                source_codec,
+                fmt,
+            )
+
+    return run_ffmpeg(
+        _build_cmd(False), out_path, total_secs=total_secs, progress_cb=progress_cb
+    )
