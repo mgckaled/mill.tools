@@ -15,6 +15,7 @@ Flows behind one positional:
     uv run main.py ai "summarize" --scope path.txt # ask a single document
     uv run main.py ai "..." --model gemini-2.5-flash --k 8
     uv run main.py ai "..." --model glm-4.7-flash --k 8
+    uv run main.py ai --cmd "corta o silêncio do podcast.mp3 e acelera 1.25x"
 
 Reuses the same core (scan_library / build_index / retrieve / answer) as the GUI.
 Embeddings are always local (Ollama); only the answer step may use a cloud
@@ -22,6 +23,12 @@ provider opt-in (Gemini or GLM).
 ``dups``/``topics``/``map``/``related`` are read-only over the persisted index
 (the ML layer, Plans 3/4A): no embedder/network needed. ``topics``/``map`` need
 the ``[ml]`` extra; ``related`` is numpy-pure like ``dups``.
+
+``--cmd`` (PLANO_NL2CLI_HUB_IA.md, Fase 4) bypasses the RAG/retriever entirely:
+``query`` becomes a natural-language request, translated to the equivalent
+``uv run main.py ...`` command (never executed — printed for the user to run).
+Mirrors the AI hub's "Comandos CLI" GUI mode; same core (``core/text/nl2cli``)
+and reference (``cli/reference``).
 """
 
 from __future__ import annotations
@@ -143,6 +150,15 @@ def add_ai_parser(subparsers: argparse._SubParsersAction) -> None:
         default=10,
         metavar="N",
         help="With keywords, how many keyphrases to return (default 10)",
+    )
+    p.add_argument(
+        "--cmd",
+        action="store_true",
+        help=(
+            "Treat 'query' as a natural-language request and print the "
+            "equivalent uv run main.py ... command instead of answering "
+            "(bypasses the RAG/retriever entirely)"
+        ),
     )
     p.add_argument("--verbose", action="store_true", help="Enable debug logging")
     p.set_defaults(func=run_ai_cli)
@@ -576,6 +592,46 @@ def _entities(ns: argparse.Namespace) -> None:
         print(f"  {label}: {', '.join(by_label[label])}")
 
 
+def _nl2cli(ns: argparse.Namespace) -> None:
+    """Translate ns.query (PT) into a `uv run main.py ...` command and print it.
+
+    Same wiring as the AI hub's "Comandos CLI" GUI worker
+    (gui/modules/ai/worker.py::run_ai_command): the same gate (Ollama chat,
+    skipped for cloud models), the same core (nl2cli.to_command) with
+    reference/validate_fn from cli/reference.py, the same Atividade log entry.
+    """
+    from src.cli.reference import build_reference, validate_command
+    from src.core.observatory.status import ollama_inventory
+    from src.core.text.nl2cli import DEFAULT_MODEL as NL2CLI_DEFAULT_MODEL
+    from src.core.text.nl2cli import NL2CLIError, to_command
+    from src.llm_factory import OLLAMA_SETUP_HINT, is_cloud_model
+
+    model = ns.model or NL2CLI_DEFAULT_MODEL
+    if not is_cloud_model(model) and not ollama_inventory().reachable:
+        print(f"Ollama indisponível. Rode: {OLLAMA_SETUP_HINT}")
+        sys.exit(1)
+
+    try:
+        command, explanation = to_command(
+            ns.query, build_reference(), model=model, validate_fn=validate_command
+        )
+    except NL2CLIError as exc:
+        print(f"Não consegui gerar um comando: {exc}")
+        sys.exit(1)
+
+    if not command:
+        print(explanation or "Pedido fora do escopo desta CLI.")
+        return
+
+    print(command)
+    if explanation:
+        print(f"\n{explanation}")
+
+    from src.core.observatory.activity import log_activity
+
+    log_activity("rag", "nl2cli", command)
+
+
 def _ask(ns: argparse.Namespace, embed_model: str) -> None:
     """Retrieve top-k chunks for the question and print a cited answer."""
     from src.core.rag import embedder
@@ -651,6 +707,10 @@ def run_ai_cli(ns: argparse.Namespace) -> None:
         sys.stdout.reconfigure(encoding="utf-8", errors="replace")
     except Exception:
         pass
+
+    if getattr(ns, "cmd", False):  # NL->CLI mode overrides every keyword flow below
+        _nl2cli(ns)
+        return
 
     if ns.query == _STATS_CMD:  # read-only summary; no embedder needed
         _stats()

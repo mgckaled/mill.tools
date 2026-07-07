@@ -48,6 +48,7 @@ def test_defaults():
     assert ns.model is None
     assert ns.embed_model is None
     assert ns.reindex is False
+    assert ns.cmd is False
     assert callable(ns.func)
 
 
@@ -988,3 +989,134 @@ def test_entities_exits_when_model_missing(tmp_path, mocker, capsys):
     with pytest.raises(SystemExit):
         _entities(_parse("entities", str(f)))
     assert "spacy download" in capsys.readouterr().out
+
+
+# ── --cmd (NL->CLI, Fase 4) ───────────────────────────────────────────────────
+
+
+@pytest.mark.unit
+def test_cmd_flag_dispatches_to_nl2cli_runner(mocker):
+    nl2cli_mock = mocker.patch("src.cli.ai._nl2cli")
+    ask_mock = mocker.patch("src.cli.ai._ask")
+
+    ns = _parse("corta o silêncio do podcast.mp3", "--cmd")
+    ns.func(ns)
+
+    nl2cli_mock.assert_called_once_with(ns)
+    ask_mock.assert_not_called()
+
+
+@pytest.mark.unit
+def test_cmd_flag_overrides_keyword_flows():
+    """--cmd short-circuits before the index/stats/dups/... keyword dispatch."""
+    ns = _parse("stats", "--cmd")
+    assert ns.query == "stats"
+    assert ns.cmd is True
+
+
+@pytest.mark.unit
+def test_nl2cli_prints_command_and_explanation(mocker, capsys):
+    from src.cli.ai import _nl2cli
+
+    mocker.patch(
+        "src.core.observatory.status.ollama_inventory",
+        return_value=mocker.MagicMock(reachable=True),
+    )
+    mocker.patch("src.cli.reference.build_reference", return_value="REFERÊNCIA")
+    mocker.patch(
+        "src.core.text.nl2cli.to_command",
+        return_value=(
+            "uv run main.py audio podcast.mp3 --trim-silence --speed 1.25",
+            "Corta o silêncio e acelera o áudio.",
+        ),
+    )
+    log_mock = mocker.patch("src.core.observatory.activity.log_activity")
+
+    _nl2cli(_parse("corta o silêncio do podcast.mp3 e acelera 1.25x", "--cmd"))
+
+    out = capsys.readouterr().out
+    assert "uv run main.py audio podcast.mp3 --trim-silence --speed 1.25" in out
+    assert "Corta o silêncio e acelera o áudio." in out
+    log_mock.assert_called_once_with(
+        "rag", "nl2cli", "uv run main.py audio podcast.mp3 --trim-silence --speed 1.25"
+    )
+
+
+@pytest.mark.unit
+def test_nl2cli_prints_refusal_without_a_command(mocker, capsys):
+    from src.cli.ai import _nl2cli
+
+    mocker.patch(
+        "src.core.observatory.status.ollama_inventory",
+        return_value=mocker.MagicMock(reachable=True),
+    )
+    mocker.patch("src.cli.reference.build_reference", return_value="REFERÊNCIA")
+    mocker.patch(
+        "src.core.text.nl2cli.to_command",
+        return_value=("", "Isso não é uma tarefa da CLI do mill.tools."),
+    )
+    log_mock = mocker.patch("src.core.observatory.activity.log_activity")
+
+    _nl2cli(_parse("qual a previsão do tempo?", "--cmd"))
+
+    assert "não é uma tarefa" in capsys.readouterr().out
+    log_mock.assert_not_called()
+
+
+@pytest.mark.unit
+def test_nl2cli_exits_when_ollama_unreachable_for_local_model(mocker, capsys):
+    from src.cli.ai import _nl2cli
+
+    mocker.patch(
+        "src.core.observatory.status.ollama_inventory",
+        return_value=mocker.MagicMock(reachable=False),
+    )
+    to_command_mock = mocker.patch("src.core.text.nl2cli.to_command")
+
+    with pytest.raises(SystemExit):
+        _nl2cli(_parse("corta o silêncio do podcast.mp3", "--cmd"))
+
+    assert "ollama serve" in capsys.readouterr().out
+    to_command_mock.assert_not_called()
+
+
+@pytest.mark.unit
+def test_nl2cli_skips_ollama_gate_for_cloud_model(mocker, capsys):
+    from src.cli.ai import _nl2cli
+
+    inventory_mock = mocker.patch(
+        "src.core.observatory.status.ollama_inventory",
+        return_value=mocker.MagicMock(reachable=False),
+    )
+    mocker.patch("src.cli.reference.build_reference", return_value="REFERÊNCIA")
+    mocker.patch(
+        "src.core.text.nl2cli.to_command",
+        return_value=("uv run main.py ai index", "ok"),
+    )
+    mocker.patch("src.core.observatory.activity.log_activity")
+
+    _nl2cli(_parse("reindexa o acervo", "--cmd", "--model", "gemini-2.5-flash"))
+
+    assert "uv run main.py ai index" in capsys.readouterr().out
+    inventory_mock.assert_not_called()
+
+
+@pytest.mark.unit
+def test_nl2cli_exits_on_nl2cli_error(mocker, capsys):
+    from src.cli.ai import _nl2cli
+    from src.core.text.nl2cli import NL2CLIError
+
+    mocker.patch(
+        "src.core.observatory.status.ollama_inventory",
+        return_value=mocker.MagicMock(reachable=True),
+    )
+    mocker.patch("src.cli.reference.build_reference", return_value="REFERÊNCIA")
+    mocker.patch(
+        "src.core.text.nl2cli.to_command",
+        side_effect=NL2CLIError("não consegui gerar um comando válido"),
+    )
+
+    with pytest.raises(SystemExit):
+        _nl2cli(_parse("corta o silêncio do podcast.mp3", "--cmd"))
+
+    assert "não consegui gerar" in capsys.readouterr().out
