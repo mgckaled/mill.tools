@@ -29,7 +29,7 @@ from pathlib import Path
 
 from tqdm import tqdm
 
-from src.cli.transcription import build_output_stem, resolve_input
+from src.cli.transcription import add_transcribe_args, build_output_stem, resolve_input
 from src.core.audio.downloader import download_audio as _core_download_audio
 from src.core.metadata import fetch_metadata
 from src.transcriber import print_summary, transcribe
@@ -60,99 +60,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         description="Transcribe a YouTube video or local audio file using faster-whisper.",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
-    parser.add_argument("url", help="YouTube URL or path to local audio file")
-    parser.add_argument(
-        "--wm",
-        default="small",
-        choices=["tiny", "base", "small", "medium", "large-v3-turbo", "large-v3"],
-        help="Whisper model size",
-        dest="whisper_model",
-    )
-    parser.add_argument(
-        "--language",
-        default=None,
-        help="Language code for transcription (e.g. en, pt). Defaults to auto-detection.",
-    )
-    parser.add_argument(
-        "--threads",
-        type=int,
-        default=2,
-        help="Number of CPU threads to use",
-    )
-    parser.add_argument(
-        "--output-name",
-        default=None,
-        help="Custom name for the output file (without extension)",
-    )
-    parser.add_argument(
-        "--beam-size",
-        type=int,
-        default=1,
-        help="Beam size for decoding (1 = fastest, 5 = most accurate)",
-    )
-    parser.add_argument(
-        "--format",
-        action="store_true",
-        help="Add paragraph breaks to the transcription using a local LLM (requires Ollama)",
-    )
-    parser.add_argument(
-        "--fm",
-        default="phi4mini-custom",
-        help="Ollama model for paragraph formatting",
-        dest="format_model",
-    )
-    parser.add_argument(
-        "--analyze",
-        action="store_true",
-        help="Run structured analysis after transcription (requires Ollama)",
-    )
-    parser.add_argument(
-        "--am",
-        default="gemma3-4b-custom",
-        help="Ollama model for analysis",
-        dest="analyzer_model",
-    )
-    from src.analysis import (
-        list_profiles,
-    )  # lazy: avoids loading LangChain for other commands
-
-    parser.add_argument(
-        "--profile",
-        default="default",
-        choices=list_profiles(),
-        help="Analysis profile (schema/prompt). 'default' keeps the legacy video schema.",
-    )
-    parser.add_argument(
-        "--prompt",
-        action="store_true",
-        help="Generate a condensed prompt-ready version of the transcription (requires Ollama)",
-    )
-    parser.add_argument(
-        "--pm",
-        default="gemma3-4b-custom",
-        help="Ollama model for prompt-ready condensation",
-        dest="prompt_model",
-    )
-    parser.add_argument(
-        "--srt",
-        action="store_true",
-        help="Export an .srt subtitle file alongside the .txt transcription",
-    )
-    parser.add_argument(
-        "--vtt",
-        action="store_true",
-        help="Export a .vtt (WebVTT) subtitle file alongside the .txt transcription",
-    )
-    parser.add_argument(
-        "--subtitles",
-        action="store_true",
-        help="Shortcut for --srt --vtt (exports both subtitle formats)",
-    )
-    parser.add_argument(
-        "--verbose",
-        action="store_true",
-        help="Enable debug logging",
-    )
+    add_transcribe_args(parser)
     return parser.parse_args(argv)
 
 
