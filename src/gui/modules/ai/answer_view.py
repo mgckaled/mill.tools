@@ -71,6 +71,7 @@ class AnswerView:
     gen_status: ft.Text
     ask: Callable[[], None]
     handle_answer_done: Callable[[dict], None]
+    start_ticker: Callable[[str | None], None]
     stop_ticker: Callable[[], None]
 
 
@@ -93,6 +94,10 @@ def build_answer_view(
     # ------------------------------------------------------------------
     # Answer timer: a single blocking invoke() has no progress fraction, so we
     # show elapsed + a rolling per-model "typical" estimate instead of a fake ETA.
+    # start_ticker/stop_ticker are exposed on AnswerView and reused by
+    # command_view.py's "Comandos CLI" flow too (Fase 3) — only one of the two
+    # flows runs at a time, and each computes its own "typical" text from its
+    # own settings bucket before calling start_ticker.
     # ------------------------------------------------------------------
 
     _answer_t0: list[float] = [0.0]
@@ -439,5 +444,6 @@ def build_answer_view(
         gen_status=gen_status,
         ask=ask,
         handle_answer_done=handle_answer_done,
+        start_ticker=_start_answer_ticker,
         stop_ticker=stop_ticker,
     )

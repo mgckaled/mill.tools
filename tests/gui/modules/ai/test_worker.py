@@ -1,4 +1,5 @@
-"""Unit tests for src/gui/modules/ai/worker.py — Conversa (answer) event emission.
+"""Unit tests for src/gui/modules/ai/worker.py — Conversa + Comandos CLI event
+emission.
 
 The worker has no Flet dependency: it emits through a fake bus. The RAG core is
 mocked at its boundaries (embedder, make_llm) so no Ollama is needed.
@@ -7,6 +8,14 @@ install_log_handler=False keeps the root logger untouched.
 The reindex flow's tests moved to
 tests/gui/modules/observatory/test_index_worker.py (Fase 0b,
 PLANO_NL2CLI_HUB_IA.md) alongside the worker itself.
+
+run_ai_command's tests mock ``to_command``/``build_reference``/
+``validate_command`` at their source modules (the same "patch where it's
+imported from — a lazy ``from X import Y`` inside the function still resolves
+Y off the (patched) module at call time" pattern used for ``chat.make_llm``
+above) — nl2cli's own generation logic is already covered by
+tests/core/text/test_nl2cli.py; these tests only cover the worker's glue
+(gate, event payloads, activity log).
 """
 
 from __future__ import annotations
@@ -151,3 +160,152 @@ def test_answer_flags_low_confidence_out_of_corpus(tmp_path, monkeypatch, mocker
     assert done["best_score"] < 0.35
     # The warning is also surfaced as a log line.
     assert any("não cobre" in p.get("message", "") for _, p in bus.events)
+
+
+# ── run_ai_command (Fase 3) ──────────────────────────────────────────────────
+
+
+@pytest.mark.unit
+def test_command_emits_progress_and_done(mocker):
+    from src.gui.modules.ai.worker import run_ai_command
+
+    mocker.patch(
+        "src.core.observatory.status.ollama_inventory",
+        return_value=mocker.MagicMock(reachable=True),
+    )
+    mocker.patch("src.cli.reference.build_reference", return_value="REFERÊNCIA")
+    mocker.patch(
+        "src.core.text.nl2cli.to_command",
+        return_value=("uv run main.py ai index", "Reconstrói o índice."),
+    )
+    log_mock = mocker.patch("src.core.observatory.activity.log_activity")
+
+    bus = _Bus()
+    ok = run_ai_command(
+        bus,
+        threading.Event(),
+        query="reindexa o acervo",
+        model_name="qwen7b-custom",
+        install_log_handler=False,
+    )
+
+    assert ok is True
+    assert "progress_start" in bus.types()
+    assert "command_start" in bus.types()
+    assert "task_done" in bus.types()
+    done = bus.payload_of("command_done")
+    assert done["command"] == "uv run main.py ai index"
+    assert done["explanation"] == "Reconstrói o índice."
+    assert done["model_name"] == "qwen7b-custom"
+    assert done["elapsed"] >= 0.0
+    log_mock.assert_called_once_with("rag", "nl2cli", "uv run main.py ai index")
+
+
+@pytest.mark.unit
+def test_command_errors_when_ollama_unreachable_for_local_model(mocker):
+    from src.gui.modules.ai.worker import run_ai_command
+
+    mocker.patch(
+        "src.core.observatory.status.ollama_inventory",
+        return_value=mocker.MagicMock(reachable=False),
+    )
+    to_command_mock = mocker.patch("src.core.text.nl2cli.to_command")
+
+    bus = _Bus()
+    ok = run_ai_command(
+        bus,
+        threading.Event(),
+        query="reindexa o acervo",
+        model_name="qwen7b-custom",
+        install_log_handler=False,
+    )
+
+    assert ok is False
+    assert "ollama serve" in bus.payload_of("task_error")["message"]
+    to_command_mock.assert_not_called()
+
+
+@pytest.mark.unit
+def test_command_skips_ollama_gate_for_cloud_model(mocker):
+    from src.gui.modules.ai.worker import run_ai_command
+
+    inventory_mock = mocker.patch(
+        "src.core.observatory.status.ollama_inventory",
+        return_value=mocker.MagicMock(reachable=False),
+    )
+    mocker.patch("src.cli.reference.build_reference", return_value="REFERÊNCIA")
+    mocker.patch(
+        "src.core.text.nl2cli.to_command",
+        return_value=("uv run main.py ai index", "ok"),
+    )
+    mocker.patch("src.core.observatory.activity.log_activity")
+
+    bus = _Bus()
+    ok = run_ai_command(
+        bus,
+        threading.Event(),
+        query="reindexa o acervo",
+        model_name="gemini-2.5-flash",
+        install_log_handler=False,
+    )
+
+    assert ok is True
+    inventory_mock.assert_not_called()
+
+
+@pytest.mark.unit
+def test_command_reports_refusal_as_success_without_logging_activity(mocker):
+    from src.gui.modules.ai.worker import run_ai_command
+
+    mocker.patch(
+        "src.core.observatory.status.ollama_inventory",
+        return_value=mocker.MagicMock(reachable=True),
+    )
+    mocker.patch("src.cli.reference.build_reference", return_value="REFERÊNCIA")
+    mocker.patch(
+        "src.core.text.nl2cli.to_command",
+        return_value=("", "Isso não é uma tarefa da CLI."),
+    )
+    log_mock = mocker.patch("src.core.observatory.activity.log_activity")
+
+    bus = _Bus()
+    ok = run_ai_command(
+        bus,
+        threading.Event(),
+        query="qual a previsão do tempo?",
+        model_name="qwen7b-custom",
+        install_log_handler=False,
+    )
+
+    assert ok is True
+    done = bus.payload_of("command_done")
+    assert done["command"] == ""
+    log_mock.assert_called_once_with("rag", "nl2cli", "(fora de escopo)")
+
+
+@pytest.mark.unit
+def test_command_error_surfaces_nl2cli_error_as_task_error(mocker):
+    from src.core.text.nl2cli import NL2CLIError
+    from src.gui.modules.ai.worker import run_ai_command
+
+    mocker.patch(
+        "src.core.observatory.status.ollama_inventory",
+        return_value=mocker.MagicMock(reachable=True),
+    )
+    mocker.patch("src.cli.reference.build_reference", return_value="REFERÊNCIA")
+    mocker.patch(
+        "src.core.text.nl2cli.to_command",
+        side_effect=NL2CLIError("não consegui gerar um comando válido"),
+    )
+
+    bus = _Bus()
+    ok = run_ai_command(
+        bus,
+        threading.Event(),
+        query="reindexa o acervo",
+        model_name="qwen7b-custom",
+        install_log_handler=False,
+    )
+
+    assert ok is False
+    assert "não consegui gerar" in bus.payload_of("task_error")["message"]

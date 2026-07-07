@@ -92,6 +92,12 @@ def is_cloud_model(model_name: str) -> bool:
     return _is_gemini(model_name) or _is_glm(model_name)
 
 
+# Suggested fix shown alongside a "local Ollama unreachable" gate (e.g. the AI
+# hub's "Comandos CLI" mode, which — unlike the RAG answer flow — has no
+# embedder dependency and so only needs the chat model, not a specific pull).
+OLLAMA_SETUP_HINT = "ollama serve"
+
+
 # Local models with a large context window: short/medium inputs can skip the
 # chunk+merge step and run as a single, more coherent pass. The per-model char
 # budget caps the cost of a CPU single pass (a giant pass on a small CPU model is

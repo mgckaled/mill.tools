@@ -1,16 +1,19 @@
-"""AI / Content module — local RAG chat over the Library corpus.
+"""AI / Content module — local RAG chat + NL→CLI over the Library corpus.
 
 A hub module (reached from the AppBar, not the rail): split form | panel. The
-form collects scope/model/question; the panel shows the index status (read-
-only — reindexing lives in the Observatório hub) and a scrollable session of
-cited answers.
+form's "Corpus | Comandos CLI" toggle (Fase 3, PLANO_NL2CLI_HUB_IA.md) picks
+between two mutually exclusive flows sharing one Ask button and one progress
+chrome: Conversa (RAG chat, ``answer_view.py``) and Comandos CLI (NL→CLI
+generation, ``command_view.py``). The panel shows the index status (read-
+only — reindexing lives in the Observatório hub) and a scrollable session for
+whichever mode is active.
 
 Self-contained like the Library module: it subscribes to its own PipelineEvents
 (module_id="ai") and updates the panel on the UI thread, instead of reusing the
 generic ProgressPanel (whose log-line shape does not fit a Markdown answer +
-clickable source cards). The Conversa flow lives in ``answer_view.py``; this
-file is the thin orchestrator: shared progress chrome, the PipelineEvent
-dispatcher, lifecycle and layout assembly.
+clickable source cards, nor a command card). This file is the thin
+orchestrator: shared progress chrome, the PipelineEvent dispatcher, mode
+switching, lifecycle and layout assembly.
 """
 
 from __future__ import annotations
@@ -23,6 +26,7 @@ import flet as ft
 from src.gui import settings
 from src.gui.events import PipelineEvent
 from src.gui.modules.ai.answer_view import build_answer_view
+from src.gui.modules.ai.command_view import build_command_view
 from src.gui.modules.ai.form_view import build_ai_form
 from src.gui.modules.ai.index_controls import build_index_controls
 from src.gui.modules.ai.pipeline_log import resolve_status
@@ -44,15 +48,16 @@ def build_ai_module(
     pipeline_running: list[bool],
     nav: list,
 ) -> Module:
-    """Build the AI module — RAG chat over the Library corpus.
+    """Build the AI module — RAG chat + NL→CLI over the Library corpus.
 
     Args:
         page: Flet page.
         bus: Shared application EventBus (worker → UI).
-        cancel_event: threading.Event (signature symmetry; the Conversa flow
-            has nothing to cancel — a single blocking LLM invoke()).
+        cancel_event: threading.Event (signature symmetry; neither flow here
+            has anything mid-run to cancel — each is a single blocking LLM
+            invoke()).
         pipeline_running: Shared [bool] guard with app.py — blocks navigation
-            while answering.
+            while answering/generating.
         nav: List holding [navigate_to] — bridges "Indexar no Observatório" to
             the Observatório hub's Índice/RAG tab (reindexing moved there).
     """
@@ -81,7 +86,39 @@ def build_ai_module(
             answer.stop_ticker()
 
     # ------------------------------------------------------------------
-    # Event subscription (UI thread) — only the Conversa flow emits under
+    # Mode switch (Corpus | Comandos CLI) — toggles which session area is
+    # visible; the CLI mode's gate (Ollama chat, not the embedder) is
+    # (re)checked every time it becomes active.
+    # ------------------------------------------------------------------
+
+    def _refresh_cli_availability() -> None:
+        def _worker() -> None:
+            from src.core.observatory.status import ollama_inventory
+            from src.llm_factory import is_cloud_model
+
+            available = is_cloud_model(form.get_model()) or ollama_inventory().reachable
+            form.set_cli_available(available)
+
+        threading.Thread(target=_worker, daemon=True).start()
+
+    def _set_mode(mode: str) -> None:
+        is_cli = mode == "cli"
+        corpus_header.visible = not is_cli
+        cli_header.visible = is_cli
+        answer.session_area.visible = not is_cli
+        command_view.session_area.visible = is_cli
+        if is_cli:
+            _refresh_cli_availability()
+        page.update()
+
+    def _ask_dispatch() -> None:
+        if form.get_mode() == "cli":
+            command_view.ask()
+        else:
+            answer.ask()
+
+    # ------------------------------------------------------------------
+    # Event subscription (UI thread) — only Conversa/Comandos CLI emit under
     # module_id="ai" now; indexing moved to the Observatório hub.
     # ------------------------------------------------------------------
 
@@ -100,6 +137,8 @@ def build_ai_module(
                     status_detail.value = msg
             case "answer_done":
                 answer.handle_answer_done(p)
+            case "command_done":
+                command_view.handle_command_done(p)
             case "task_done":
                 progress_bar.value = 1.0
                 _set_progress(False)
@@ -121,7 +160,7 @@ def build_ai_module(
     # Controls
     # ------------------------------------------------------------------
 
-    form = build_ai_form(page, on_ask=lambda: answer.ask())
+    form = build_ai_form(page, on_ask=_ask_dispatch, on_mode_change=_set_mode)
 
     index_ctrl = build_index_controls(
         page,
@@ -143,13 +182,25 @@ def build_ai_module(
         toast=_toast,
     )
 
+    command_view = build_command_view(
+        page,
+        bus,
+        cancel_event,
+        pipeline_running,
+        get_query=form.get_query,
+        get_model=form.get_model,
+        on_begin=_begin_run,
+        on_empty_query=lambda: _toast("Descreva o que você quer fazer."),
+        start_ticker=answer.start_ticker,
+    )
+
     goto_observatory_btn = action_button(
         "Indexar no Observatório",
         icon=ft.Icons.OPEN_IN_NEW,
         on_click=lambda _e: nav[0]("observatory", {"tab": "index"}),
     )
 
-    status_row = ft.Row(
+    corpus_header = ft.Row(
         controls=[
             ft.Icon(
                 ft.Icons.STORAGE_OUTLINED, size=IconSize.lg, color=ft.Colors.PRIMARY
@@ -160,6 +211,24 @@ def build_ai_module(
         ],
         spacing=Space.sm,
         vertical_alignment=ft.CrossAxisAlignment.CENTER,
+    )
+    cli_header = ft.Row(
+        controls=[
+            ft.Icon(
+                ft.Icons.TERMINAL_OUTLINED, size=IconSize.lg, color=ft.Colors.PRIMARY
+            ),
+            ft.Text(
+                "Comandos CLI — revise e copie, nada roda sozinho.",
+                size=Type.input.size,
+                color=ft.Colors.ON_SURFACE_VARIANT,
+                expand=True,
+                no_wrap=False,
+            ),
+            command_view.clear_btn,
+        ],
+        spacing=Space.sm,
+        vertical_alignment=ft.CrossAxisAlignment.CENTER,
+        visible=False,
     )
 
     spinner_img, spinner_start, spinner_stop = spinner()
@@ -195,17 +264,23 @@ def build_ai_module(
     )
 
     # ------------------------------------------------------------------
-    # Panel: just the chat now — the RAG index inspector, analytics panel and
-    # reindex pipeline all live in the Observatório hub's nested Índice/RAG tab.
+    # Panel: header + progress chrome are shared; the session area below
+    # swaps between Conversa and Comandos CLI depending on the form's mode.
     # ------------------------------------------------------------------
 
-    conversa_view = ft.Column(
+    session_stack = ft.Stack(
+        [answer.session_area, command_view.session_area], expand=True
+    )
+    command_view.session_area.visible = False
+
+    panel_view = ft.Column(
         controls=[
-            status_row,
+            corpus_header,
+            cli_header,
             hairline(),
             progress_row,
             status_detail,
-            answer.session_area,
+            session_stack,
         ],
         expand=True,
         spacing=Space.sm,
@@ -220,7 +295,7 @@ def build_ai_module(
             ft.Container(content=form.control, width=380),
             ft.VerticalDivider(width=2, thickness=1.5, color=ft.Colors.OUTLINE_VARIANT),
             ft.Container(
-                content=conversa_view,
+                content=panel_view,
                 expand=True,
                 padding=ft.Padding(
                     left=Space.sm, right=Space.sm, top=Space.sm, bottom=Space.sm
@@ -242,6 +317,11 @@ def build_ai_module(
         file = payload.get("file") if payload else None
         form.bind_document(str(file) if file else None)
         index_ctrl.refresh_status()  # computes stats once, updating the status line
+        # Sync both the form's mode-dependent widgets and this panel's header/
+        # session visibility to the persisted mode — the toggle's on_change
+        # only fires on a user click, not for the initial/restored value.
+        form.sync_mode_ui()
+        _set_mode(form.get_mode())
 
     return Module(
         id=_MODULE_ID,

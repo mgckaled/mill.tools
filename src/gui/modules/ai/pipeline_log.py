@@ -53,6 +53,16 @@ def fmt_out_of_scope(best_score: float) -> str:
     )
 
 
+def fmt_command_start(model_name: str) -> str:
+    """Log line announcing the model generating a CLI command (Fase 3)."""
+    return f"[*] Gerando comando com {model_name}…"
+
+
+def fmt_command_done(has_command: bool) -> str:
+    """Summary line after a CLI command is generated (or refused)."""
+    return "[✓] Comando gerado." if has_command else "[i] Pedido fora do escopo da CLI."
+
+
 # ─── Resolvers (view.py → status line) ────────────────────────────────────────
 
 
@@ -73,6 +83,10 @@ def resolve_status(event: PipelineEvent) -> str | None:
             return "Índice atualizado."
         case "answer_done":
             return "Resposta gerada."
+        case "command_start":
+            return "Gerando comando…"
+        case "command_done":
+            return "Comando gerado." if p.get("command") else "Pedido fora de escopo."
         case "task_done":
             return "Concluído."
         case "task_error":
