@@ -107,6 +107,35 @@ mora onde e limites de tamanho → skill `architecture`; superfícies → `cli` 
   lido 1× no 1º carregamento por idioma (singleton em cache — não trocável por chamada), adicionado antes do
   `ner` estatístico. Sem o arquivo, comportamento idêntico; não há CLI/GUI para editá-lo.
 
+### `core/text/nl2cli.py` — NL→CLI (não é NLP clássico; mora aqui por forma, não por família)
+
+`to_command(question, reference, make_llm_fn, *, model, validate_fn)` traduz um pedido em português no
+comando `uv run main.py ...` equivalente. Análogo direto a `core/data/nl2sql.py` (mesmo padrão de prompt
+estrito → JSON `{"command", "explanation"}` → parsing defensivo), com uma diferença: **retry** — se
+`validate_fn(command)` reprovar (ou a resposta não vier em JSON), reprompta 1× anexando o erro; segunda
+falha levanta `NL2CLIError`. Comando vazio (`""`) é uma **recusa deliberada** (pergunta fora do escopo do
+app) — nunca passa por `validate_fn`.
+
+- **`reference`/`validate_fn` são sempre injetados** — o núcleo nunca importa `cli/`. Quem amarra é o
+  chamador: `gui/modules/ai/worker.py::run_ai_command` (hub de IA, modo "Comandos CLI") e
+  `cli/ai.py::_nl2cli` (`ai --cmd`) — ambos usam `cli/reference.build_reference()`/`validate_command()`.
+  **A exceção de camada `gui/ → cli/reference.py`** (`gui/` normalmente só importa `core/`) está registrada
+  e comentada só em `run_ai_command`; ver skill `architecture` e `docs/HISTORY.md`.
+- **Gate é só o `make_llm` (Ollama de chat)** — nunca o embedder, porque este modo não faz retrieval
+  nenhum. `ollama_inventory().reachable` (de `core/observatory/status.py`) checa o serviço; pulado quando o
+  modelo escolhido é de nuvem (`llm_factory.is_cloud_model`), já que aí não há Ollama envolvido.
+  `llm_factory.OLLAMA_SETUP_HINT = "ollama serve"` é o hint genérico (distinto do `embedder.SETUP_HINT`,
+  que é específico do modelo de embedding).
+- **Decisão de arquitetura (`PLANO_NL2CLI_HUB_IA.md`)**: prompt direto com few-shot em PT, **não** RAG — o
+  corpus de CLI inteiro (~54 operações, ~8,5k chars via `cli/reference.build_reference()`) cabe no contexto
+  de um modelo local (`DEFAULT_OLLAMA_NUM_CTX = 8192`); RAG trocaria "o modelo vê tudo" por "vê top-k", o que
+  pioraria a acurácia num corpus desse tamanho. Só reabrir se o corpus de CLI multiplicar de tamanho.
+- **`cli/reference.py`** (camada `cli/`, não `core/`) constrói a referência por **introspecção real dos
+  parsers argparse** (`_SubParsersAction`/`_choices_actions`) — nunca texto hardcoded, zero drift quando uma
+  flag nova é adicionada a qualquer subcomando. `validate_command()` roda o `parse_args()` real do mesmo
+  parser descartável (patch temporário de `ArgumentParser.error` captura a mensagem de qualquer parser da
+  árvore, incl. sub-subcomandos como `video trim`) — fecha o ciclo sem executar nada.
+
 ---
 
 ## `core/observatory/` — hub read-only cross-módulo
@@ -215,11 +244,12 @@ temperatura por papel).
 
 ## Superfícies (ponteiros)
 
-- **CLI** `ai` (index/stats/dups/topics/map/related/classify/keywords/summary/entities/pergunta) e
+- **CLI** `ai` (index/stats/dups/topics/map/related/classify/keywords/summary/entities/pergunta/`--cmd`) e
   `observatory` (status/activity/logs/disk-usage) → skill **`cli`** (read-only, sem `CLIEventBus`; `ai` usa um
-  positional despachado por valor literal).
-- **GUI** hub IA (só a Conversa) e hub Observatório (5 abas: Índice/RAG · Status · Atividade · Logs · Tempo de
-  resposta) → skill **`design-system`** (abas manuais `visible=`, spinner, thread-safety).
+  positional despachado por valor literal; `--cmd` tem prioridade sobre os demais).
+- **GUI** hub IA (toggle Corpus|Comandos CLI — ver `nl2cli.py` acima) e hub Observatório (5 abas: Índice/RAG
+  · Status · Atividade · Logs · Tempo de resposta) → skill **`design-system`** (abas manuais `visible=`,
+  spinner, thread-safety).
 - **Reindexação mora no Observatório** (Fase 0b, `PLANO_NL2CLI_HUB_IA.md`, jul/2026): a sub-aba Índice do
   Índice/RAG roda o próprio pipeline (`gui/modules/observatory/index_worker.py`, `module_id="observatory"`,
   worker+view no mesmo padrão de um módulo-ferramenta — botão Reindexar + progresso + Cancelar) em vez de

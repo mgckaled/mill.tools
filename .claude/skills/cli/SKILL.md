@@ -32,7 +32,8 @@ def main():
 ```text
 src/cli/
 ├── bus.py            — CLIEventBus: TqdmLoggingHandler + barra tqdm (sem Flet)
-├── transcription.py  — resolve_input(), build_output_stem()
+├── transcription.py  — resolve_input(), build_output_stem(), add_transcribe_args()
+├── reference.py       — build_reference()/validate_command() — introspecção p/ NL->CLI (ver skill ml-rag)
 ├── audio.py          — add_audio_parser/run_audio_cli + add_audio_viz_parser/run_audio_viz_cli
 ├── video.py          — add_video_parser/run_video_cli        (sub-subparsers)
 ├── image.py          — add_image_parser/run_image_cli        (sub-subparsers)
@@ -92,9 +93,13 @@ Usado por todos os runners para popular `InputItem(kind, value)`. Dois ramos mer
   download+Whisper, copia para `transcriptions/text/` e roda só `--format`/`--analyze`/`--prompt`; áudio/vídeo
   local → transcreve (vídeo decodificado via PyAV); URL → metadata + download. O ramo local checa
   `kind == "local"` (não `"file"`).
-- **`--profile` (perfil de análise)**: `choices=list_profiles()` com **import lazy dentro de `parse_args`**
-  (não carregar LangChain nos demais subcomandos). Repassado a `analyze(profile=...)`. Default `default`
-  (esquema legado). Escolha inválida → `SystemExit`.
+- **`--profile` (perfil de análise)**: `choices=list_profiles()` com **import lazy dentro de
+  `add_transcribe_args`** (`src/cli/transcription.py` — extraído de `main.py::parse_args` na Fase 1 do
+  `PLANO_NL2CLI_HUB_IA.md`, reusado pelo parser legado **e** pelo parser descartável de
+  `cli/reference.py::build_reference()`). Não carregar LangChain nos demais subcomandos nem na referência do
+  NL→CLI: `add_transcribe_args(parser, include_profile_choices=False)` troca `choices=list_profiles()` por
+  `choices=None` — a referência só precisa que o flag exista, não da validação real de perfil. Repassado a
+  `analyze(profile=...)`. Default `default` (esquema legado). Escolha inválida → `SystemExit`.
 
 ---
 
@@ -118,6 +123,12 @@ Usado por todos os runners para popular `InputItem(kind, value)`. Dois ramos mer
 - **`recipe` tem runner real**: diferente dos outros read-only, Receitas usa `execute_recipe` (mesmo core da
   GUI) + `CLIEventBus`; `_make_emit` traduz `recipe_start`/`step_*` em linhas de log. `--model` sobrescreve só
   o Whisper dos passos `transcription.transcribe`.
+- **`ai --cmd` é NL→CLI, não a Conversa** (`PLANO_NL2CLI_HUB_IA.md`, Fase 4): com a flag, `query` vira um
+  pedido em português traduzido para o comando `uv run main.py ...` equivalente (`_nl2cli`, mesma amarração
+  do worker da GUI — `core/text/nl2cli.to_command` + `cli/reference.build_reference`/`validate_command`).
+  **Prioridade sobre os fluxos de palavra-chave**: `ai --cmd stats` não roda `_stats()`, gera um comando pra
+  a palavra "stats". Gate só de `ollama_inventory().reachable` (não o embedder) — pulado p/ modelo de nuvem
+  via `llm_factory.is_cloud_model`. Detalhe de arquitetura → skill `ml-rag`.
 
 > Receitas de teste (patch targets por subcomando, `_parse(*argv)`, `sys.exit` branches) →
 > [`testing/mocks-gui-cli.md`](../testing/mocks-gui-cli.md).

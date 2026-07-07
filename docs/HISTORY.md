@@ -11,6 +11,23 @@ ficam em [`ROADMAP.md`](ROADMAP.md) e [`plans/active/`](plans/active/).
 
 ## Entregas (marcos)
 
+### NL→CLI no hub de IA — modo "Comandos CLI" + `ai --cmd` (jul/2026)
+Traduz um pedido em português no comando `uv run main.py ...` exato — revisa e copia, nada roda sozinho.
+**Fase 0**: divide `gui/modules/ai/view.py` (677 linhas) em `index_controls.py`/`answer_view.py`. **Fase 0b**:
+conclui a migração do reindex pro Observatório (ver decisão acima). **Fase 1**: `cli/reference.py` —
+`build_reference()`/`validate_command()` por introspecção real dos parsers argparse (zero texto hardcoded,
+zero drift). **Fase 2**: `core/text/nl2cli.py` — `to_command()` análogo a `nl2sql.py`, com retry 1x e recusa
+para pergunta fora de escopo (ver decisões acima). **Fase 3**: toggle Corpus\|Comandos CLI no hub de IA,
+card de comando com Copiar (Clipboard assíncrono). **Fase 4**: `ai --cmd "..."` na CLI, mesma amarração do
+worker da GUI. Planos:
+[`plans/implemented/PLANO_NL2CLI_HUB_IA.md`](plans/implemented/PLANO_NL2CLI_HUB_IA.md).
+
+> **Pendência não-bloqueante**: o plano previa um teste manual de acurácia (~15 perguntas reais em PT contra
+> `qwen7b-custom`/`gemma3-4b-custom`) para calibrar o few-shot do `nl2cli.py` antes de arquivar — arquivado
+> sem esse passo (ambiente sem Ollama local disponível na sessão de implementação). Se o few-shot atual
+> errar comandos com frequência no uso real, ajustar os exemplos em `core/text/nl2cli.py` é o primeiro lugar
+> a olhar.
+
 ### Correções do `core/image/` (jul/2026)
 Revisão exploratória arquivo-a-arquivo do pacote (13 arquivos, ~1.320 linhas), mesmo formato dos planos
 anteriores, implementada fase a fase direto no `main`. **Bugs de comportamento** (Fase 1):
@@ -320,3 +337,23 @@ pulo de tela sem necessidade real. Fase 0b do
 mantém só a linha de status do índice (read-only) + um botão "Indexar no Observatório" que navega pra lá.
 Regra geral: o Observatório continua read-only **exceto** onde ele é o dono de um recurso (o índice RAG) —
 nesse caso ele roda o próprio pipeline, em vez de bridgear para quem originalmente o hospedava.
+
+### Decisão: NL→CLI é prompt direto com few-shot, não RAG (jul/2026)
+O modo "Comandos CLI" (hub de IA + `ai --cmd`,
+[`plans/implemented/PLANO_NL2CLI_HUB_IA.md`](plans/implemented/PLANO_NL2CLI_HUB_IA.md)) traduz um pedido em
+português no comando `uv run main.py ...` exato. A referência de CLI inteira (~54 operações, introspectadas
+por `cli/reference.build_reference()`) cabe em ~8,5k caracteres — dentro do `DEFAULT_OLLAMA_NUM_CTX = 8192`
+junto com o few-shot, sem precisar mexer em config. RAG (retrieval sobre os fragmentos da referência) foi
+descartado deliberadamente: trocaria "o modelo vê a CLI inteira" por "vê top-k flags", o que pioraria a
+acurácia justamente no caso em que os poucos tokens do corpus tornam isso desnecessário. Só reabrir a
+decisão se o corpus de CLI crescer o bastante para não caber mais no contexto de um modelo local.
+
+### Decisão: exceção de camada `gui/ → cli/reference.py` (jul/2026)
+`gui/` nunca importa `cli/` (regra da skill `architecture`) — a única exceção é
+`gui/modules/ai/worker.py::run_ai_command`, que precisa dos parsers argparse **reais**
+(`cli/reference.build_reference()`/`validate_command()`) para gerar e validar o comando do modo "Comandos
+CLI". Não dava para duplicar essa introspecção em `core/` sem recriar `cli/reference.py` inteiro; como esse
+módulo já é puro (sem Flet), a GUI reusá-lo é mais barato que inventar uma segunda fonte de verdade. É o
+espelho inverso da exceção já existente (a CLI reusa `gui/modules/<m>/worker.py` puro) — juntas, as duas são
+as únicas travessias de camada registradas no projeto. O import mora só em `run_ai_command`, comentado
+inline; `cli/ai.py::_nl2cli` (`ai --cmd`) usa o mesmo `cli/reference.py` diretamente, já na camada correta.

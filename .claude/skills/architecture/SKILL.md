@@ -60,10 +60,20 @@ src/
 | ------- | ---------------------------------- | -------------------------------------------------------------------------------- |
 | `core/` | outros `core/`, stdlib, libs puras | `gui/`, `cli/`, `flet`                                                           |
 | `cli/`  | `core/`, `cli/bus.py`              | `gui/` (exceto reusar `gui/modules/<m>/worker.py` puro, que não depende de Flet) |
-| `gui/`  | `core/`, `gui/*`                   | —                                                                                |
+| `gui/`  | `core/`, `gui/*`                   | `cli/` (uma exceção registrada — ver abaixo)                                    |
 
 > O worker (`gui/modules/<m>/worker.py`) **não depende de Flet** — emite por `bus.emit(...)`. Por isso a CLI
 > pode reusá-lo. Mantenha-o assim: lógica de orquestração + emit, zero controles Flet.
+
+> **Exceção registrada — `gui/modules/ai/worker.py` → `src/cli/reference.py`** (Fase 3,
+> `PLANO_NL2CLI_HUB_IA.md`, jul/2026): o modo "Comandos CLI" do hub de IA precisa dos parsers argparse
+> **reais** (`build_reference()`/`validate_command()`) pra gerar e validar o comando — não há como duplicar
+> essa introspecção em `core/` sem reinventar `cli/reference.py`. É o espelho inverso da exceção acima
+> (worker puro reusado pela CLI): aqui é a GUI que reusa um módulo de `cli/`, porque `cli/reference.py` é
+> puro (sem Flet) e a introspecção teria que existir em algum lugar único. O import fica só em
+> `run_ai_command`, comentado inline; `cli/ai.py::_nl2cli` (`ai --cmd`) usa o mesmo `cli/reference.py`
+> diretamente, já que ali a camada é a correta. Não abrir uma segunda exceção parecida sem necessidade real
+> equivalente — cada nova é uma revisão à parte.
 
 **Superfícies de evento (não misturar):**
 

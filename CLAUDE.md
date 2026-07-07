@@ -156,8 +156,10 @@ Ambos são hubs de ML — **toda a maquinaria de RAG/ML/NLP e o detalhe destes d
 `ml-rag`**. Resumo:
 
 - **IA**: RAG local sobre o corpus (indexa o texto que você produziu, recupera trechos e responde citando
-  fontes). Hub = **só a Conversa**; mostra a linha de status do índice (read-only) + botão "Indexar no
-  Observatório" (a reindexação em si roda lá).
+  fontes). Toggle **Corpus | Comandos CLI**: Corpus é a Conversa (mostra a linha de status do índice
+  read-only + botão "Indexar no Observatório", já que a reindexação em si roda lá); Comandos CLI traduz um
+  pedido em português no comando `uv run main.py ...` exato (nunca executa — só copia), via
+  `core/text/nl2cli.py` + a referência introspectada de `cli/reference.py` (mesmo recurso do CLI `ai --cmd`).
 - **Observatório**: hub cross-módulo de ML — read-only, **exceto** a sub-aba Índice (Índice/RAG), que roda o
   próprio pipeline de reindexação (botão Reindexar + progresso + Cancelar, `module_id="observatory"`). 5 abas
   (Índice/RAG · Status · Atividade · Logs · Tempo de resposta); Índice/RAG é aninhada (Índice·Painel·Uso de
@@ -226,6 +228,7 @@ uv run main.py document <merge|split|compress|rotate|watermark|stamp|encrypt|ext
 uv run main.py library list [--kind audio|data] [--since 7d] [--sort size] | library dedup-images [--max-distance 8]
 uv run main.py ai index | ai stats | ai dups | ai topics | ai map [--method pca|tsne|umap] | ai related <path> | ai classify|keywords|summary|entities <path>
 uv run main.py ai "pergunta" [--scope X] [--model gemini-2.5-flash] [--k 8] [--batch]
+uv run main.py ai --cmd "corta o silêncio do podcast.mp3 e acelera 1.25x"  # NL->CLI, imprime o comando
 uv run main.py recipe list | recipe run "<nome>" <URL_OR_FILE> [--model medium]
 uv run main.py data   query <arquivos...> "<pergunta>" [--sql] [--out csv|xlsx|json|parquet] | data convert|profile|assess|plot|outliers <arquivo>
 uv run main.py observatory status | observatory activity | observatory logs | observatory disk-usage
