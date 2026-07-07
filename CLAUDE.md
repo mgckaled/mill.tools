@@ -67,8 +67,8 @@ src/
 - **`navigate_to(module_id, payload)`** alterna **visibilidade** num `ft.Stack` (nunca reatribui `content` —
   quirk do Flet 0.85); bloqueia troca enquanto `pipeline_running[0]`.
 - **Bridges** (`navigate_to(target, {...})` → `on_mount`): Áudio/Vídeo/Biblioteca→Transcrição; Vídeo→Áudio;
-  Biblioteca→IA ("Conversar sobre"); Observatório→IA (`{"trigger_reindex": True}` — a aba Índice/RAG é
-  read-only, então "Reindexar" delega ao hub de IA).
+  Biblioteca→IA ("Conversar sobre"); IA→Observatório (`{"tab": "index"}` — "Indexar no Observatório", já que a
+  reindexação roda lá, não no hub de IA).
 - Escopo de eventos: cada `ProgressPanel` ignora `module_id` ≠ `owner_id`; IA/Receitas/Dados são auto-contidos.
 
 ## Módulo Transcrição
@@ -156,8 +156,10 @@ Ambos são hubs de ML — **toda a maquinaria de RAG/ML/NLP e o detalhe destes d
 `ml-rag`**. Resumo:
 
 - **IA**: RAG local sobre o corpus (indexa o texto que você produziu, recupera trechos e responde citando
-  fontes). Hub = **só a Conversa**. `on_mount` aceita `{"trigger_reindex": True}` (bridge do Observatório).
-- **Observatório**: hub read-only que centraliza atividade/status/logs/timing de ML cross-módulo. 5 abas
+  fontes). Hub = **só a Conversa**; mostra a linha de status do índice (read-only) + botão "Indexar no
+  Observatório" (a reindexação em si roda lá).
+- **Observatório**: hub cross-módulo de ML — read-only, **exceto** a sub-aba Índice (Índice/RAG), que roda o
+  próprio pipeline de reindexação (botão Reindexar + progresso + Cancelar, `module_id="observatory"`). 5 abas
   (Índice/RAG · Status · Atividade · Logs · Tempo de resposta); Índice/RAG é aninhada (Índice·Painel·Uso de
   disco). Selo de novidades no AppBar (`last_ml_activity_seen`).
 

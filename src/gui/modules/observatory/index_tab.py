@@ -4,8 +4,11 @@ A scrollable, paginated view of the persisted RAG index: a global summary card
 plus a per-document table with a chunk drill-down. The data comes from the pure
 core (``src.core.rag.stats``); this file only builds Flet controls and is not
 unit-tested headless. Migrated here from the AI hub (which now only shows
-Conversa) — indexing itself still lives there, so "Reindexar" bridges over via
-``on_reindex`` instead of running a pipeline in this read-only hub.
+Conversa). Fase 0b (PLANO_NL2CLI_HUB_IA.md) finishes that migration: "Reindexar"
+now runs the pipeline itself (via ``on_reindex``/``on_cancel``, wired by
+``rag_tab.py`` to ``observatory/index_worker.py``) instead of bridging back to
+the AI hub — this tab owns its own progress row + cancel button, same spirit as
+the tool modules' pipelines.
 """
 
 from __future__ import annotations
@@ -27,9 +30,11 @@ from src.core.rag.stats import (
 )
 from src.gui.theme.components import (
     Cursor,
+    danger_button,
     help_icon_for,
     secondary_button,
     section_label,
+    spinner,
     summary_card,
 )
 from src.gui.theme.tokens import Color, IconSize, Radius, Space, Type
@@ -64,6 +69,9 @@ class IndexTab:
 
     control: ft.Control
     apply: Callable[[IndexStats], None]  # called on the UI thread with fresh stats
+    set_running: Callable[[bool], None]  # toggles the progress row + button states
+    set_progress: Callable[[int | None, int | None], None]  # (current, total)
+    set_detail: Callable[[str], None]  # mono status line (log/summary/error text)
 
 
 def _safe_update(*controls: ft.Control) -> None:
@@ -74,8 +82,18 @@ def _safe_update(*controls: ft.Control) -> None:
             pass
 
 
-def build_index_tab(page: ft.Page, *, on_reindex: Callable[[], None]) -> IndexTab:
-    """Build the index inspector tab and return its handles."""
+def build_index_tab(
+    page: ft.Page,
+    *,
+    on_reindex: Callable[[], None],
+    on_cancel: Callable[[], None],
+) -> IndexTab:
+    """Build the index inspector tab and return its handles.
+
+    ``on_reindex``/``on_cancel`` are wired by ``rag_tab.py`` to the real
+    pipeline (``observatory/index_worker.py``) — this file only owns the
+    controls and their visual state.
+    """
     state: dict = {"docs": [], "shown": 0}
 
     # ── global summary card ────────────────────────────────────────────────
@@ -154,6 +172,69 @@ def build_index_tab(page: ft.Page, *, on_reindex: Callable[[], None]) -> IndexTa
         spacing=Space.sm,
         vertical_alignment=ft.CrossAxisAlignment.CENTER,
     )
+
+    # ── reindex progress (spinner + bar + status line + cancel) ────────────
+    spinner_img, spinner_start, spinner_stop = spinner()
+    stage_label = ft.Text(
+        "Indexando…",
+        size=Type.input.size,
+        color=ft.Colors.ON_SURFACE,
+        weight=ft.FontWeight.W_500,
+    )
+    progress_bar = ft.ProgressBar(
+        value=None, color=ft.Colors.PRIMARY, bgcolor=ft.Colors.OUTLINE_VARIANT
+    )
+    cancel_btn = danger_button(
+        "Cancelar", icon=ft.Icons.CANCEL_OUTLINED, on_click=lambda _e: on_cancel()
+    )
+    cancel_btn.disabled = True
+    status_detail = ft.Text(
+        "",
+        size=Type.small.size,
+        color=ft.Colors.ON_SURFACE_VARIANT,
+        font_family=Type.FONT_MONO,
+        no_wrap=False,
+    )
+    progress_row = ft.Column(
+        controls=[
+            ft.Row(
+                controls=[
+                    spinner_img,
+                    stage_label,
+                    ft.Container(expand=True),
+                    cancel_btn,
+                ],
+                spacing=Space.sm,
+                vertical_alignment=ft.CrossAxisAlignment.CENTER,
+            ),
+            progress_bar,
+            status_detail,
+        ],
+        spacing=Space.xs,
+        visible=False,
+    )
+
+    def set_running(active: bool) -> None:
+        progress_row.visible = active
+        reindex_btn.disabled = active
+        cancel_btn.disabled = not active
+        if active:
+            progress_bar.value = None
+            status_detail.value = ""
+            spinner_start()
+        else:
+            spinner_stop()
+        _safe_update(progress_row, reindex_btn)
+
+    def set_progress(current: int | None, total: int | None) -> None:
+        progress_bar.value = (current / total) if total else None
+        if total:
+            status_detail.value = f"Indexando {current}/{total}…"
+        _safe_update(progress_bar, status_detail)
+
+    def set_detail(message: str) -> None:
+        status_detail.value = message
+        _safe_update(status_detail)
 
     # ── per-document table ─────────────────────────────────────────────────
     def _header_cell(text: str, *, width=None, expand=False, right=False) -> ft.Control:
@@ -405,6 +486,7 @@ def build_index_tab(page: ft.Page, *, on_reindex: Callable[[], None]) -> IndexTa
     control = ft.Column(
         controls=[
             header_row,
+            progress_row,
             summary,
             section_label("Documentos indexados"),
             table_header,
@@ -417,4 +499,10 @@ def build_index_tab(page: ft.Page, *, on_reindex: Callable[[], None]) -> IndexTa
         spacing=Space.md,
     )
 
-    return IndexTab(control=control, apply=apply)
+    return IndexTab(
+        control=control,
+        apply=apply,
+        set_running=set_running,
+        set_progress=set_progress,
+        set_detail=set_detail,
+    )

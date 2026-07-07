@@ -1,12 +1,13 @@
-"""Observatório module — cross-module ML activity + status, read-only.
+"""Observatório module — cross-module ML activity + status.
 
 A hub (reached from the AppBar, not the rail), auto-contido like IA/Receitas.
-No worker/pipeline — pure reads over ``core/observatory/`` on each mount, same
-"read-only" spirit as the Library hub. Five manual tabs
-(Índice/RAG | Status | Atividade | Logs | Tempo de resposta) — Flet 0.85 has
-no ``ft.Tabs``. Índice/RAG is first/default: it groups the RAG-index
-inspector + analytics + disk usage (migrated from the AI hub, which now only
-shows Conversa) — the leftmost tab is the hub's landing tab, same convention
+Mostly pure reads over ``core/observatory/`` on each mount, same "read-only"
+spirit as the Library hub — except the Índice/RAG tab, which since Fase 0b
+(PLANO_NL2CLI_HUB_IA.md) owns the RAG reindex pipeline (moved from the AI hub,
+which now only shows Conversa). Five manual tabs (Índice/RAG | Status |
+Atividade | Logs | Tempo de resposta) — Flet 0.85 has no ``ft.Tabs``. Índice/
+RAG is first/default: it groups the RAG-index inspector + analytics + disk
+usage + reindex — the leftmost tab is the hub's landing tab, same convention
 as when Status held that spot before this tab existed.
 """
 
@@ -40,18 +41,19 @@ def build_observatory_module(
     pipeline_running: list[bool],
     nav: list,
 ) -> Module:
-    """Build the Observatório module — read-only cross-module ML visibility.
+    """Build the Observatório module — cross-module ML visibility + reindex.
 
     Args:
         page: Flet page.
-        bus: Shared application EventBus (kept for signature symmetry with the
-            other hubs; this module has no pipeline of its own).
-        cancel_event: threading.Event (signature symmetry; unused).
-        pipeline_running: Shared [bool] with app.py (signature symmetry).
-        nav: List holding [navigate_to] — used by the Índice/RAG tab to bridge
-            "Reindexar" over to the AI hub (this hub stays read-only).
+        bus: Shared application EventBus — the Índice/RAG tab's reindex
+            pipeline emits under module_id="observatory".
+        cancel_event: threading.Event — cancels a running reindex.
+        pipeline_running: Shared [bool] guard with app.py — blocks navigation
+            while reindexing.
+        nav: List holding [navigate_to] (signature symmetry with other hubs;
+            unused since the reindex bridge to the AI hub was removed).
     """
-    rag_view, apply_rag = build_rag_tab(page, nav)
+    rag_view, apply_rag = build_rag_tab(page, bus, cancel_event, pipeline_running)
     status_view, apply_status = build_status_tab(page)
     activity_view, apply_activity = build_activity_tab(page)
     logs_view, apply_logs = build_logs_tab(page)
@@ -130,7 +132,7 @@ def build_observatory_module(
         spacing=Space.sm,
     )
 
-    def _on_mount(_payload: dict) -> None:
+    def _on_mount(payload: dict) -> None:
         # Mark every current entry as "seen" (the AppBar badge is cleared by
         # navigate_to right after this runs) and re-scan the saved tab.
         from src.core.observatory.activity import load_activity
@@ -138,6 +140,12 @@ def build_observatory_module(
         entries = load_activity()
         if entries:
             settings.set("last_ml_activity_seen", entries[-1].timestamp)
+        # Bridge from the AI hub's "Indexar no Observatório": land on the
+        # Índice/RAG tab's Índice sub-tab regardless of what was last open.
+        if payload and payload.get("tab") == "index":
+            _show_tab("rag")
+            apply_rag(force_indice=True)
+            return
         saved = settings.load().get("last_observatory_tab", "rag")
         _show_tab(saved)
 

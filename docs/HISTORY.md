@@ -308,3 +308,15 @@ de arquivo. O domínio default preserva os nomes pré-existentes → zero invali
 ### Decisão: embeddings sempre locais; nuvem só opt-in na resposta
 `core/rag/embedder.py` é a única rede na indexação (Ollama, CPU, torch-free). Gemini/GLM entram só na
 geração da resposta e sempre opt-in. Racional de modelos em [`reference/MODELOS_IA.md`](reference/MODELOS_IA.md).
+
+### Decisão: Observatório é read-only exceto a indexação — o dono do índice exibe o botão (jul/2026)
+Reversão parcial da decisão anterior. A migração Índice/Painel do hub de IA para o Observatório (PR7.2.3)
+tinha ficado incompleta: as abas foram, mas o pipeline de indexação (botão "Reindexar", progresso, cancelar)
+continuou no hub de IA, que só bridgeava (`nav[0]("ai", {"trigger_reindex": True})`) de volta pra lá — um
+pulo de tela sem necessidade real. Fase 0b do
+[`plans/active/PLANO_NL2CLI_HUB_IA.md`](plans/active/PLANO_NL2CLI_HUB_IA.md) move o worker
+(`observatory/index_worker.py`, `module_id="observatory"`) e a UI de progresso/cancelar para
+`observatory/index_tab.py`/`rag_tab.py`, no mesmo padrão worker+view de um módulo-ferramenta. O hub de IA
+mantém só a linha de status do índice (read-only) + um botão "Indexar no Observatório" que navega pra lá.
+Regra geral: o Observatório continua read-only **exceto** onde ele é o dono de um recurso (o índice RAG) —
+nesse caso ele roda o próprio pipeline, em vez de bridgear para quem originalmente o hospedava.

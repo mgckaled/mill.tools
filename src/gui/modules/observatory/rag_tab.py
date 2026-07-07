@@ -6,39 +6,83 @@ Observatório tab bar, repeated one level deeper (there is no special nesting
 support needed, or missing, in the framework for this).
 
 Migrated from the AI hub (PR7.2/Plano 2): Índice and Painel used to live
-beside Conversa there. Grouping them here keeps the AI hub to its one job
-(chat) and puts RAG-index inspection beside the rest of the app's
-ML-transparency surface. The "Reindexar" action inside Índice can't run a
-pipeline itself — Observatório stays read-only, like the Library hub — so it
-bridges to the AI hub's Conversa tab via ``nav`` and triggers the reindex
-there.
+beside Conversa there. Fase 0b (PLANO_NL2CLI_HUB_IA.md) finishes that
+migration by moving the reindex pipeline itself here too — this tab now owns
+the ``pipeline_running``/``cancel_event`` orchestration and the PipelineEvent
+subscription for ``module_id="observatory"``, the same shape as a tool
+module's worker/view pair, instead of bridging "Reindexar" back to the AI hub.
 """
 
 from __future__ import annotations
 
 import logging
 import threading
-from typing import Callable
+from typing import TYPE_CHECKING, Callable
 
 import flet as ft
 
 from src.gui import settings
+from src.gui.events import PipelineEvent
 from src.gui.modules.observatory.disk_usage_tab import build_disk_usage_tab
 from src.gui.modules.observatory.index_tab import build_index_tab
+from src.gui.modules.observatory.index_worker import start_ai_index
 from src.gui.modules.observatory.rag_analytics_tab import build_analytics_tab
 from src.gui.theme.components import Cursor, hairline
 from src.gui.theme.tokens import Space
 
+if TYPE_CHECKING:
+    from src.gui.events import EventBus
+
 _DEFAULT_SUBTAB = "indice"
+_DEFAULT_EMBED_MODEL = "nomic-embed-custom"
+_MODULE_ID = "observatory"
 
 
-def build_rag_tab(page: ft.Page, nav: list) -> tuple[ft.Control, Callable[[], None]]:
-    """Build the nested Índice/RAG tab. ``nav`` bridges "Reindexar" to the AI hub."""
+def build_rag_tab(
+    page: ft.Page,
+    bus: "EventBus",
+    cancel_event: threading.Event,
+    pipeline_running: list[bool],
+) -> tuple[ft.Control, Callable[[], None]]:
+    """Build the nested Índice/RAG tab, including the real reindex pipeline."""
+    embed_model = settings.load().get("last_embed_model", _DEFAULT_EMBED_MODEL)
 
-    def _on_reindex() -> None:
-        nav[0]("ai", {"trigger_reindex": True})
+    def _begin_index() -> None:
+        if pipeline_running[0]:
+            return
+        pipeline_running[0] = True
+        cancel_event.clear()
+        index_tab.set_running(True)
+        page.update()
+        start_ai_index(bus, cancel_event, embed_model=embed_model)
 
-    index_tab = build_index_tab(page, on_reindex=_on_reindex)
+    def _cancel_index() -> None:
+        cancel_event.set()
+
+    def _on_event(event) -> None:
+        if not isinstance(event, PipelineEvent) or event.module_id != _MODULE_ID:
+            return
+        p = event.payload
+        match event.type:
+            case "progress_update":
+                index_tab.set_progress(p.get("current"), p.get("total"))
+            case "log":
+                msg = p.get("message", "")
+                if msg:
+                    index_tab.set_detail(msg)
+            case "task_done":
+                pipeline_running[0] = False
+                index_tab.set_running(False)
+                _refresh_rag_status()
+            case "task_error":
+                pipeline_running[0] = False
+                index_tab.set_running(False)
+                index_tab.set_detail(f"[!] {p.get('message', 'Erro.')}")
+        page.update()
+
+    page.pubsub.subscribe(_on_event)
+
+    index_tab = build_index_tab(page, on_reindex=_begin_index, on_cancel=_cancel_index)
     index_view = index_tab.control
 
     analytics_tab = build_analytics_tab(page)
@@ -107,8 +151,16 @@ def build_rag_tab(page: ft.Page, nav: list) -> tuple[ft.Control, Callable[[], No
 
         threading.Thread(target=_worker, daemon=True).start()
 
-    def apply() -> None:
-        """Refresh the sub-tabs — called by the outer Observatório view."""
+    def apply(force_indice: bool = False) -> None:
+        """Refresh the sub-tabs — called by the outer Observatório view.
+
+        ``force_indice=True`` also switches to the Índice sub-tab — used by
+        the "Indexar no Observatório" bridge from the AI hub, which wants to
+        land the user on the reindex button regardless of the last-visited
+        sub-tab.
+        """
+        if force_indice and not index_view.visible:
+            _show_subtab("indice")
         _refresh_rag_status()
         if disk_view.visible:
             apply_disk()

@@ -1,14 +1,14 @@
 """AI / Content module — local RAG chat over the Library corpus.
 
 A hub module (reached from the AppBar, not the rail): split form | panel. The
-form collects scope/model/question; the panel shows the index status with a
-Reindex action, a progress line, and a scrollable session of cited answers.
+form collects scope/model/question; the panel shows the index status (read-
+only — reindexing lives in the Observatório hub) and a scrollable session of
+cited answers.
 
 Self-contained like the Library module: it subscribes to its own PipelineEvents
 (module_id="ai") and updates the panel on the UI thread, instead of reusing the
 generic ProgressPanel (whose log-line shape does not fit a Markdown answer +
-clickable source cards). The two "worlds" that used to coexist here — indexing
-and conversing — now live in ``index_controls.py`` and ``answer_view.py``; this
+clickable source cards). The Conversa flow lives in ``answer_view.py``; this
 file is the thin orchestrator: shared progress chrome, the PipelineEvent
 dispatcher, lifecycle and layout assembly.
 """
@@ -27,7 +27,7 @@ from src.gui.modules.ai.form_view import build_ai_form
 from src.gui.modules.ai.index_controls import build_index_controls
 from src.gui.modules.ai.pipeline_log import resolve_status
 from src.gui.modules.base import Module
-from src.gui.theme.components import hairline, spinner
+from src.gui.theme.components import action_button, hairline, spinner
 from src.gui.theme.tokens import IconSize, Space, Type
 
 if TYPE_CHECKING:
@@ -49,10 +49,12 @@ def build_ai_module(
     Args:
         page: Flet page.
         bus: Shared application EventBus (worker → UI).
-        cancel_event: threading.Event set to cancel a running index.
+        cancel_event: threading.Event (signature symmetry; the Conversa flow
+            has nothing to cancel — a single blocking LLM invoke()).
         pipeline_running: Shared [bool] guard with app.py — blocks navigation
-            while indexing/answering.
-        nav: List holding [navigate_to] (signature symmetry with other hubs).
+            while answering.
+        nav: List holding [navigate_to] — bridges "Indexar no Observatório" to
+            the Observatório hub's Índice/RAG tab (reindexing moved there).
     """
     cfg = settings.load()
     embed_model = cfg.get("last_embed_model", _DEFAULT_EMBED_MODEL)
@@ -62,17 +64,10 @@ def build_ai_module(
         page.snack_bar.open = True
         page.update()
 
-    # ------------------------------------------------------------------
-    # Shared "starting a run" orchestration — both indexing and answering
-    # flip pipeline_running, disable each other's action, reset the shared
-    # progress chrome. Each flow adds its own bits after calling this.
-    # ------------------------------------------------------------------
-
     def _begin_run() -> None:
         pipeline_running[0] = True
         cancel_event.clear()
         form.set_running(True)
-        index_ctrl.set_disabled(True)
         status_detail.value = ""
         _set_progress(True)
 
@@ -86,7 +81,8 @@ def build_ai_module(
             answer.stop_ticker()
 
     # ------------------------------------------------------------------
-    # Event subscription (UI thread)
+    # Event subscription (UI thread) — only the Conversa flow emits under
+    # module_id="ai" now; indexing moved to the Observatório hub.
     # ------------------------------------------------------------------
 
     def _on_event(event) -> None:
@@ -98,12 +94,6 @@ def build_ai_module(
             stage_label.value = label
 
         match event.type:
-            case "progress_update":
-                cur, tot = p.get("current"), p.get("total")
-                progress_bar.value = (cur / tot) if tot else None
-                status_detail.value = (
-                    f"Indexando {cur}/{tot}…" if tot else status_detail.value
-                )
             case "log":
                 msg = p.get("message", "")
                 if msg:
@@ -115,12 +105,11 @@ def build_ai_module(
                 _set_progress(False)
                 pipeline_running[0] = False
                 form.set_running(False)
-                index_ctrl.on_task_done()
+                index_ctrl.refresh_status()
             case "task_error":
                 _set_progress(False)
                 pipeline_running[0] = False
                 form.set_running(False)
-                index_ctrl.on_task_error()
                 message = p.get("message", "Erro.")
                 status_detail.value = f"[!] {message}"
                 _toast(message)
@@ -136,11 +125,7 @@ def build_ai_module(
 
     index_ctrl = build_index_controls(
         page,
-        bus,
-        cancel_event,
-        pipeline_running,
         embed_model=embed_model,
-        on_begin=_begin_run,
         on_availability_change=form.set_available,
     )
 
@@ -158,6 +143,12 @@ def build_ai_module(
         toast=_toast,
     )
 
+    goto_observatory_btn = action_button(
+        "Indexar no Observatório",
+        icon=ft.Icons.OPEN_IN_NEW,
+        on_click=lambda _e: nav[0]("observatory", {"tab": "index"}),
+    )
+
     status_row = ft.Row(
         controls=[
             ft.Icon(
@@ -165,7 +156,7 @@ def build_ai_module(
             ),
             index_ctrl.status_text,
             answer.clear_btn,
-            index_ctrl.reindex_btn,
+            goto_observatory_btn,
         ],
         spacing=Space.sm,
         vertical_alignment=ft.CrossAxisAlignment.CENTER,
@@ -204,9 +195,8 @@ def build_ai_module(
     )
 
     # ------------------------------------------------------------------
-    # Panel: just the chat now — the RAG index inspector and analytics panel
-    # (formerly "Índice"/"Painel" tabs beside this one) moved to the
-    # Observatório hub's nested Índice/RAG tab.
+    # Panel: just the chat now — the RAG index inspector, analytics panel and
+    # reindex pipeline all live in the Observatório hub's nested Índice/RAG tab.
     # ------------------------------------------------------------------
 
     conversa_view = ft.Column(
@@ -252,11 +242,6 @@ def build_ai_module(
         file = payload.get("file") if payload else None
         form.bind_document(str(file) if file else None)
         index_ctrl.refresh_status()  # computes stats once, updating the status line
-        # Bridge from the Observatório hub's Índice/RAG tab: its own
-        # "Reindexar" can't run a pipeline there (that hub stays read-only),
-        # so it navigates here and asks us to kick off the reindex.
-        if payload and payload.get("trigger_reindex"):
-            index_ctrl.trigger_reindex()
 
     return Module(
         id=_MODULE_ID,

@@ -220,5 +220,9 @@ temperatura por papel).
   positional despachado por valor literal).
 - **GUI** hub IA (só a Conversa) e hub Observatório (5 abas: Índice/RAG · Status · Atividade · Logs · Tempo de
   resposta) → skill **`design-system`** (abas manuais `visible=`, spinner, thread-safety).
-- **Bridge `trigger_reindex`**: a aba Índice/RAG do Observatório é read-only — "Reindexar" navega pro hub de IA
-  (`nav[0]("ai", {"trigger_reindex": True})`), que dispara o reindex ao montar com esse payload.
+- **Reindexação mora no Observatório** (Fase 0b, `PLANO_NL2CLI_HUB_IA.md`, jul/2026): a sub-aba Índice do
+  Índice/RAG roda o próprio pipeline (`gui/modules/observatory/index_worker.py`, `module_id="observatory"`,
+  worker+view no mesmo padrão de um módulo-ferramenta — botão Reindexar + progresso + Cancelar) em vez de
+  bridgear pro hub de IA. O hub de IA mantém só a linha de status do índice (read-only) + um botão "Indexar
+  no Observatório" (`nav[0]("observatory", {"tab": "index"})`). `core/observatory/` (o pacote puro) continua
+  100% read-only — o pipeline vive só na camada `gui/`.

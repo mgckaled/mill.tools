@@ -133,13 +133,19 @@ def test_on_mount_records_last_seen_timestamp(tmp_path, monkeypatch):
 
 
 @pytest.mark.unit
-def test_reindex_bridges_through_nav_to_the_ai_hub():
+def test_reindex_button_starts_the_pipeline_instead_of_bridging(mocker):
+    """Fase 0b (PLANO_NL2CLI_HUB_IA.md): reindex runs here now, no AI-hub bridge."""
     from src.gui.modules.observatory.view import build_observatory_module
 
-    nav_calls = []
-    nav = [lambda target, payload: nav_calls.append((target, payload))]
+    mocker.patch(
+        "src.gui.modules.observatory.index_tab.spinner",
+        return_value=(MagicMock(), lambda: None, lambda: None),
+    )
+    start_mock = mocker.patch("src.gui.modules.observatory.rag_tab.start_ai_index")
+
+    pipeline_running = [False]
     module = build_observatory_module(
-        MagicMock(), MagicMock(), MagicMock(), [False], nav
+        MagicMock(), MagicMock(), MagicMock(), pipeline_running, []
     )
     module.on_mount({})
 
@@ -157,4 +163,6 @@ def test_reindex_bridges_through_nav_to_the_ai_hub():
         c for c in _walk(module.control) if getattr(c, "content", None) == "Reindexar"
     )
     reindex_btn.on_click(MagicMock())
-    assert nav_calls == [("ai", {"trigger_reindex": True})]
+
+    assert pipeline_running[0] is True
+    start_mock.assert_called_once()

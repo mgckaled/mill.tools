@@ -75,7 +75,7 @@ def rag_index_button(
         _safe_update(btn)
 
     def _run() -> None:
-        from src.gui.modules.ai.worker import run_ai_index
+        from src.gui.modules.observatory.index_worker import run_ai_index
 
         cap = _Capture()
         cancel = threading.Event()

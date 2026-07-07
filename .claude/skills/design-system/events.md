@@ -13,9 +13,9 @@ factories e quirks do Flet ficam no [`SKILL.md`](SKILL.md).
 
 `PipelineEvent(type, stage, payload, module_id)` é publicado via `page.pubsub.send_all()` (thread-safe;
 worker thread → callbacks na UI thread). `module_id` ∈ {`"transcription"`, `"audio"`, `"image"`, `"video"`,
-`"document"`, `"data"`, `"ai"`, `"recipes"`, `""` (legado)}. O `ProgressPanel` ignora eventos cujo
-`module_id` ≠ `owner_id`; os hubs **IA** e **Receitas** e a ferramenta **Dados** são auto-contidos (assinam
-os próprios eventos, não usam `ProgressPanel`).
+`"document"`, `"data"`, `"ai"`, `"recipes"`, `"observatory"`, `""` (legado)}. O `ProgressPanel` ignora eventos
+cujo `module_id` ≠ `owner_id`; os hubs **IA**, **Receitas** e **Observatório** (só a sub-aba Índice) e a
+ferramenta **Dados** são auto-contidos (assinam os próprios eventos, não usam `ProgressPanel`).
 
 **`EventBus.emit()` grava falhas no Observatório**: além do `send_all()`, todo evento `task_error` (de
 qualquer módulo) é gravado em `core/observatory/logs.py` (aba Logs), exceto cancelamentos do usuário
@@ -93,10 +93,26 @@ repinta até o próximo update da UI thread, atrasando o cursor).
 `metadata_start/done`, `audio_cached`, `download_start/done`, `whisper_loading/loaded`, `transcribe_started`,
 `language_detected` (`audio_duration`), `vad_filtered` (`duration`, `duration_after_vad`, `removed` — silêncio
 pulado pelo VAD; `[i] VAD removed Xs of silence (Y%)`), `transcribe_segment` (`end`, `is_low_confidence`),
-`transcribe_summary`, `format_*`, `analyze_*`, `translation_*`, `prompt_*`. A resposta da IA emite
-`answer_done` com `query`/`text`/`sources`/`model_name`/`elapsed` + **`low_confidence`/`best_score`** (Plano
-4A — derivado do top-1 do retrieve sem re-embeddar; `True` mostra um banner "o acervo não cobre bem esta
-pergunta" acima da resposta).
+`transcribe_summary`, `format_*`, `analyze_*`, `translation_*`, `prompt_*`.
+
+### IA — Conversa (module_id="ai")
+
+Auto-contido (não usa `ProgressPanel`). `progress_start` → `answer_start` (`query`, `model_name`) →
+`answer_done` (`query`/`text`/`sources`/`model_name`/`elapsed` + **`low_confidence`/`best_score`**, Plano 4A —
+derivado do top-1 do retrieve sem re-embeddar; `True` mostra um banner "o acervo não cobre bem esta pergunta"
+acima da resposta) → `task_done`/`task_error`. Sem `progress_update` (um único `invoke()` bloqueante não tem
+fração de progresso) — a view mostra um ticker de tempo decorrido + "típico do modelo" (`ai/timing.py`) em vez
+de uma barra determinada.
+
+### Observatório — Índice/RAG (module_id="observatory")
+
+A sub-aba Índice roda o pipeline de reindexação (Fase 0b, `PLANO_NL2CLI_HUB_IA.md`, jul/2026 — movido do hub
+de IA): `progress_start` → `index_start` (`total`) → `progress_update` (`current`/`total`, mutable) →
+`index_done` (`n_docs`/`n_chunks`/`added`) → `task_done`/`task_error`. Emitido por
+`gui/modules/observatory/index_worker.py::run_ai_index`, consumido por `rag_tab.py` (que também refaz a
+leitura de `index_stats`/`analytics` em `task_done`) — a mesma forma worker+view de um módulo-ferramenta,
+não o padrão auto-contido single-file do hub de IA/Receitas. `core/observatory/` (o pacote puro) continua sem
+saber nada disso — o pipeline vive só na camada `gui/`.
 
 ### Dados (module_id="data")
 
