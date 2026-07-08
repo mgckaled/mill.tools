@@ -22,7 +22,7 @@ def _src(tmp_path: Path) -> Path:
 
 def test_ocr_image_writes_txt(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     # Fake the tesseract binary resolution and the pytesseract module.
-    monkeypatch.setattr(ocr, "_resolve_tesseract_cmd", lambda: "tesseract")
+    monkeypatch.setattr(ocr, "resolve_tesseract_cmd", lambda: "tesseract")
 
     fake = types.ModuleType("pytesseract")
     fake.pytesseract = types.SimpleNamespace(tesseract_cmd="")
@@ -41,6 +41,6 @@ def test_ocr_image_writes_txt(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -
 def test_ocr_image_raises_without_binary(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setattr(ocr, "_resolve_tesseract_cmd", lambda: None)
+    monkeypatch.setattr(ocr, "resolve_tesseract_cmd", lambda: None)
     with pytest.raises(RuntimeError):
         ocr.ocr_image(_src(tmp_path), tmp_path / "out")

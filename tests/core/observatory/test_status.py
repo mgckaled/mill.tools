@@ -89,7 +89,7 @@ def test_binary_statuses_returns_the_four_binaries():
 @pytest.mark.unit
 def test_binary_statuses_reflects_a_missing_binary(mocker):
     mocker.patch("shutil.which", return_value=None)
-    mocker.patch("src.core.document.ocr._resolve_tesseract_cmd", return_value=None)
+    mocker.patch("src.core.document.ocr.resolve_tesseract_cmd", return_value=None)
     binaries = status.binary_statuses()
     assert all(b.path is None for b in binaries)
 
@@ -98,7 +98,7 @@ def test_binary_statuses_reflects_a_missing_binary(mocker):
 def test_binary_statuses_reflects_a_resolved_binary(mocker):
     mocker.patch("shutil.which", return_value="/usr/bin/ffmpeg")
     mocker.patch(
-        "src.core.document.ocr._resolve_tesseract_cmd",
+        "src.core.document.ocr.resolve_tesseract_cmd",
         return_value="/usr/bin/tesseract",
     )
     binaries = status.binary_statuses()

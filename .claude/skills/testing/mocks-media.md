@@ -175,7 +175,7 @@ def _patch_tesseract(mocker, ocr_text="texto reconhecido"):
     fake = MagicMock()
     fake.image_to_string.return_value = ocr_text
     mocker.patch.dict(sys.modules, {"pytesseract": fake})
-    mocker.patch("src.core.document.ocr._resolve_tesseract_cmd", return_value="tesseract")
+    mocker.patch("src.core.document.ocr.resolve_tesseract_cmd", return_value="tesseract")
     return fake
 ```
 

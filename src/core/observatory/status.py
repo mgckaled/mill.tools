@@ -226,13 +226,13 @@ def binary_statuses() -> tuple[BinaryStatus, ...]:
     """Resolution of every external binary the app shells out to."""
     import shutil
 
-    from src.core.document.ocr import _resolve_tesseract_cmd
+    from src.core.document.ocr import resolve_tesseract_cmd
 
     return (
         BinaryStatus("yt-dlp", shutil.which("yt-dlp")),
         BinaryStatus("ffmpeg", shutil.which("ffmpeg")),
         BinaryStatus("ffprobe", shutil.which("ffprobe")),
-        BinaryStatus("tesseract", _resolve_tesseract_cmd()),
+        BinaryStatus("tesseract", resolve_tesseract_cmd()),
     )
 
 

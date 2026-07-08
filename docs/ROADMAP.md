@@ -233,3 +233,26 @@ Item de baixo risco, deliberadamente não corrigido na revisão arquivo-a-arquiv
   `core/` compartilhado pelos dois pacotes e tocar `core/data` de novo fora do escopo deste plano — mantido
   como duplicação aceita (mesmo racional de `core/text` × `core/ml` já registrado no HISTORY). Vale a pena
   se um terceiro consumidor do mesmo padrão aparecer.
+
+---
+
+## 11. Pendências pontuais — revisão exploratória do `core/document/` (jul/2026)
+
+Itens de baixo risco, deliberadamente não corrigidos na revisão arquivo-a-arquivo do `core/document/`
+([`plans/active/PLANO_CORRECOES_CORE_DOCUMENT.md`](plans/active/PLANO_CORRECOES_CORE_DOCUMENT.md)):
+
+- **`watermark_pdf` em páginas com `rotation` ≠ 0 sai de lado**: mesma causa-raiz do `stamp_pdf` (corrigido
+  nesta revisão) — `TextWriter`/`insert_text`/`draw_rect` escrevem no espaço de conteúdo não-rotacionado da
+  página, enquanto a posição é calculada a partir do rect visual (rotacionado). Para o `stamp_pdf`, mapear o
+  ponto/retângulo por `page.derotation_matrix` (com `Rect.normalize()` depois, já que os cantos podem trocar
+  de ordem) e contra-rotacionar o texto com `rotate=page.rotation` resolveu de forma limpa, validado
+  numericamente nas quatro rotações (0/90/180/270). O `watermark_pdf` soma a essa mecânica seu próprio
+  `TextWriter(rect, opacity=...)` com clip próprio e o `morph=(pivot, rot_matrix)` do efeito diagonal de 45°;
+  a tentativa de aplicar a mesma correção (`TextWriter(page.mediabox, ...)` + pontos/pivot mapeados por
+  `derotation_matrix` + ângulo composto `45 + page.rotation`) não convergiu num teste (watermark sai clipado
+  ou fora da página em pelo menos uma das quatro rotações) — não é um fix trivial de uma linha como o do
+  stamp; exige entender a interação entre o clip-rect do `TextWriter` e o `morph`. Vale revisitar se um
+  usuário reportar o problema na prática (a maioria dos PDFs não tem `/Rotate` ≠ 0).
+- **Tamanho de arquivo**: `processor.py` está em ~351 linhas — acima do alvo de 300 para módulos de `core/`,
+  abaixo do teto de 400 (arquitetura §3). Nenhum sinal de baixa coesão hoje (é uma função por operação de
+  PDF, sem abas/seções misturadas) — dividir **ao tocar** na próxima operação nova, não preventivamente.

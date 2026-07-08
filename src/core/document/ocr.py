@@ -30,7 +30,7 @@ _WINDOWS_FALLBACKS = (
 )
 
 
-def _resolve_tesseract_cmd() -> str | None:
+def resolve_tesseract_cmd() -> str | None:
     """Return a usable tesseract executable path, or None if not found.
 
     Prefers the binary on PATH; falls back to common Windows install dirs so
@@ -47,7 +47,7 @@ def _resolve_tesseract_cmd() -> str | None:
 
 def is_available() -> bool:
     """True if pytesseract is importable AND a tesseract binary is resolvable."""
-    if _resolve_tesseract_cmd() is None:
+    if resolve_tesseract_cmd() is None:
         return False
     try:
         import pytesseract  # noqa: F401
@@ -86,7 +86,7 @@ def ocr_pdf(
     import pytesseract
     from PIL import Image
 
-    cmd = _resolve_tesseract_cmd()
+    cmd = resolve_tesseract_cmd()
     if cmd is None:
         raise RuntimeError(
             "Tesseract binary not found on PATH or in standard install dirs."

@@ -9,11 +9,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from src.core.document.ocr import _resolve_tesseract_cmd, is_available
+from src.core.document.ocr import LANGS, is_available, resolve_tesseract_cmd
 from src.utils import sanitize_filename
-
-# por = Portuguese, eng = English, spa = Spanish. Combine with '+': "por+eng".
-LANGS = ("por", "eng", "por+eng", "spa")
 
 __all__ = ["is_available", "LANGS", "ocr_image"]
 
@@ -35,7 +32,7 @@ def ocr_image(src: Path, output_dir: Path, lang: str = "por") -> tuple[Path, int
     import pytesseract
     from PIL import Image, ImageOps
 
-    cmd = _resolve_tesseract_cmd()
+    cmd = resolve_tesseract_cmd()
     if cmd is None:
         raise RuntimeError(
             "Tesseract binary not found on PATH or in standard install dirs."

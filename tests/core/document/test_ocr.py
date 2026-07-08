@@ -11,7 +11,7 @@ from unittest.mock import MagicMock
 import pytest
 
 
-# ─── _resolve_tesseract_cmd ─────────────────────────────────────────────────────
+# ─── resolve_tesseract_cmd ─────────────────────────────────────────────────────
 
 
 @pytest.mark.unit
@@ -21,7 +21,7 @@ def test_resolve_prefers_path(mocker):
     mocker.patch(
         "src.core.document.ocr.shutil.which", return_value="/usr/bin/tesseract"
     )
-    assert ocr._resolve_tesseract_cmd() == "/usr/bin/tesseract"
+    assert ocr.resolve_tesseract_cmd() == "/usr/bin/tesseract"
 
 
 @pytest.mark.unit
@@ -32,7 +32,7 @@ def test_resolve_falls_back_to_windows_dir(mocker, tmp_path):
     fake_exe = tmp_path / "tesseract.exe"
     fake_exe.write_bytes(b"")
     mocker.patch("src.core.document.ocr._WINDOWS_FALLBACKS", (fake_exe,))
-    assert ocr._resolve_tesseract_cmd() == str(fake_exe)
+    assert ocr.resolve_tesseract_cmd() == str(fake_exe)
 
 
 @pytest.mark.unit
@@ -41,7 +41,7 @@ def test_resolve_none_when_missing(mocker):
 
     mocker.patch("src.core.document.ocr.shutil.which", return_value=None)
     mocker.patch("src.core.document.ocr._WINDOWS_FALLBACKS", ())
-    assert ocr._resolve_tesseract_cmd() is None
+    assert ocr.resolve_tesseract_cmd() is None
 
 
 # ─── is_available ───────────────────────────────────────────────────────────────
@@ -87,7 +87,7 @@ def _patch_tesseract(mocker, ocr_text="texto reconhecido"):
     fake.image_to_string.return_value = ocr_text
     mocker.patch.dict(sys.modules, {"pytesseract": fake})
     mocker.patch(
-        "src.core.document.ocr._resolve_tesseract_cmd", return_value="tesseract"
+        "src.core.document.ocr.resolve_tesseract_cmd", return_value="tesseract"
     )
     return fake
 
@@ -140,7 +140,7 @@ def test_ocr_pdf_raises_when_binary_unresolved(sample_pdf, out_dir, mocker):
     from src.core.document import ocr
 
     mocker.patch.dict(sys.modules, {"pytesseract": MagicMock()})
-    mocker.patch("src.core.document.ocr._resolve_tesseract_cmd", return_value=None)
+    mocker.patch("src.core.document.ocr.resolve_tesseract_cmd", return_value=None)
     with pytest.raises(RuntimeError, match="Tesseract"):
         ocr.ocr_pdf(sample_pdf, out_dir)
 

@@ -161,6 +161,47 @@ def test_stamp_text_embeds_in_output(sample_pdf, out_dir):
     doc.close()
 
 
+def test_stamp_on_rotated_page_stays_horizontal_and_centered(tmp_path, out_dir):
+    """A page with /Rotate must not make the stamp come out sideways/off-center.
+
+    insert_text/draw_rect write into the page's raw (unrotated) content
+    stream, while the visual center is computed from the rotated rect — the
+    two must be reconciled via derotation_matrix or the stamp lands rotated
+    and shifted relative to what the viewer sees.
+    """
+    import numpy as np
+    import pymupdf  # type: ignore[import-untyped]
+    from PIL import Image
+
+    from src.core.document.processor import stamp_pdf
+
+    src_doc = pymupdf.open()
+    page = src_doc.new_page(width=600, height=800)
+    page.set_rotation(90)
+    src_path = tmp_path / "rotated.pdf"
+    src_doc.save(str(src_path))
+    src_doc.close()
+
+    out = stamp_pdf(src_path, out_dir, text="RASCUNHO")
+
+    doc = pymupdf.open(str(out))
+    pix = doc[0].get_pixmap()
+    arr = np.array(Image.frombytes("RGB", (pix.width, pix.height), pix.samples))
+    doc.close()
+
+    red = (arr[:, :, 0] > 100) & (arr[:, :, 1] < 80) & (arr[:, :, 2] < 80)
+    ys, xs = np.where(red)
+    assert len(xs) > 0, "stamp text not found in rendered output"
+
+    width = xs.max() - xs.min()
+    height = ys.max() - ys.min()
+    assert width > height, "stamp text rendered sideways on a rotated page"
+
+    center_x, center_y = (xs.min() + xs.max()) / 2, (ys.min() + ys.max()) / 2
+    assert abs(center_x - pix.width / 2) < pix.width * 0.15
+    assert abs(center_y - pix.height / 2) < pix.height * 0.15
+
+
 def test_encrypt_file_requires_password(sample_pdf, out_dir):
     from src.core.document.processor import encrypt_pdf
     import pymupdf  # type: ignore[import-untyped]

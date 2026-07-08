@@ -281,22 +281,32 @@ def stamp_pdf(path: Path, output_dir: Path, text: str) -> Path:
     doc = open_pdf(path)
 
     for page in doc:
-        rect = page.rect
+        rect = page.rect  # visual (rotated) rect — matches what the user sees
         fontsize = 64
         text_width = pymupdf.get_text_length(text, fontname="helv", fontsize=fontsize)
         x = (rect.width - text_width) / 2
         y = rect.height / 2
 
-        # Draw a light background rect for contrast
-        box = pymupdf.Rect(x - 10, y - fontsize - 4, x + text_width + 10, y + 8)
-        page.draw_rect(box, color=(0.85, 0.85, 0.85), fill=(0.95, 0.95, 0.95))
+        # insert_text/draw_rect write into the page's raw (unrotated) content
+        # stream, not the visual rect used above — map both back through
+        # derotation_matrix, and counter-rotate the glyphs with rotate=, or a
+        # rotated page ends up with the stamp sideways/off-center.
+        drm = page.derotation_matrix
+        text_point = pymupdf.Point(x, y) * drm
+        box = pymupdf.Rect(
+            pymupdf.Point(x - 10, y - fontsize - 4) * drm,
+            pymupdf.Point(x + text_width + 10, y + 8) * drm,
+        )
+        box.normalize()
 
+        page.draw_rect(box, color=(0.85, 0.85, 0.85), fill=(0.95, 0.95, 0.95))
         page.insert_text(
-            pymupdf.Point(x, y),
+            text_point,
             text,
             fontsize=fontsize,
             fontname="helv",
             color=(0.7, 0.0, 0.0),
+            rotate=page.rotation,
         )
 
     stem = sanitize_filename(path.stem)
