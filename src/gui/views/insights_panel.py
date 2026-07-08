@@ -32,6 +32,10 @@ class _Insights:
     keywords: list[tuple[str, float]] | None
     summary: list[str] | None
     entities: list[tuple[str, str]] | None
+    # Specific setup hint when entities is None — distinguishes "the [nlp]
+    # extra itself is missing" from "spaCy is there but this language's model
+    # isn't" (entities.availability()); irrelevant when entities has a value.
+    entities_hint: str | None = None
 
 
 def _compute(path: str) -> _Insights:
@@ -43,6 +47,7 @@ def _compute(path: str) -> _Insights:
 
     text = read_document_text(path)
     lang = detect_lang(text)
+    entities_hint = ner.availability(lang)
     return _Insights(
         keywords=(
             keywords.keyphrases(text, lang=lang, top_n=10)
@@ -54,7 +59,8 @@ def _compute(path: str) -> _Insights:
             if summarize.is_available()
             else None
         ),
-        entities=ner.entities(text, lang=lang) if ner.is_available(lang) else None,
+        entities=ner.entities(text, lang=lang) if entities_hint is None else None,
+        entities_hint=entities_hint,
     )
 
 
@@ -122,9 +128,7 @@ def build_insights_panel(
         # --- Entities ---
         body.controls.append(section_label("Entidades"))
         if data.entities is None:
-            body.controls.append(
-                helper_text("Instale o extra de NLP e o modelo spaCy para entidades.")
-            )
+            body.controls.append(helper_text(data.entities_hint))
         elif not data.entities:
             body.controls.append(helper_text("Nenhuma entidade encontrada."))
         else:

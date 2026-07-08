@@ -256,7 +256,7 @@ uv run main.py observatory status | observatory activity | observatory logs | ob
   Estrutura, fixtures e mocks → skill `testing`.
 - **PATH**: `yt-dlp`, `ffmpeg`/`ffprobe` (verificados por `check_dependencies()`); **Tesseract** opcional
   (`[ocr]`, resolvido no PATH ou `C:\Program Files\Tesseract-OCR`); **modelo spaCy** `pt_core_news_sm` à parte
-  (`[nlp]`) → skill `ml-rag`.
+  (`[nlp]`) — `en_core_web_sm` é opcional-recomendado se o acervo tiver material em inglês → skill `ml-rag`.
 
 > **Quirk Windows — pacote corrompido após `uv sync` (lock de `.pyd`)**: um `uv sync` interrompido por lock do
 > Windows sobre um `.pyd` (binário em uso por `python.exe`/GUI aberto, ou Defender) deixa um pacote

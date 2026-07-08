@@ -117,7 +117,11 @@ mora onde e limites de tamanho → skill `architecture`; superfícies → `cli` 
   (`pt_core_news_sm`, singleton lazy; **nunca `_trf`**, que puxaria torch). **`reader.py`**/**`lang.py`** —
   corpo do doc (header-strip) e heurística PT/EN.
 - **Modelo spaCy** é download à parte (como o Tesseract): `uv sync --extra nlp && uv run python -m spacy
-  download pt_core_news_sm`. `entities.is_available()` checa **pacote e modelo**.
+  download pt_core_news_sm`. `en_core_web_sm` (`uv run python -m spacy download en_core_web_sm`) é
+  **opcional-recomendado** para acervo com material em inglês. `entities.is_available()` checa **pacote e
+  modelo**; `entities.availability(lang)` (Fase 4, `PLANO_INSIGHTS_QUALIDADE.md`) devolve `None`/hint
+  específico — distingue "falta o extra `[nlp]`" de "falta só o modelo de `lang`", já que um PDF em inglês
+  com todos os extras instalados mas sem `en_core_web_sm` mostrava a mesma mensagem genérica dos dois casos.
 - **Glossário opcional de domínio**: `~/.mill-tools/entity_glossary.json` (`[{"label":…, "pattern":…}]`),
   lido 1× no 1º carregamento por idioma (singleton em cache — não trocável por chamada), adicionado antes do
   `ner` estatístico. Sem o arquivo, comportamento idêntico; não há CLI/GUI para editá-lo.

@@ -58,6 +58,9 @@ SETUP_HINT = (
 _MODELS = {"pt": "pt_core_news_sm", "en": "en_core_web_sm"}
 _DEFAULT_LANG = "pt"
 
+# Human-readable language label for availability()'s per-language hint.
+_LANG_LABELS = {"pt": "português", "en": "inglês"}
+
 # Only these components are needed for NER; everything else is disabled per call.
 # entity_ruler is included so the optional glossary (if loaded) actually runs.
 # No "transformer" here: that component only exists in the forbidden _trf
@@ -102,20 +105,42 @@ def _model_for(lang: str) -> str:
     return _MODELS.get(lang, _MODELS[_DEFAULT_LANG])
 
 
-def is_available(lang: str = _DEFAULT_LANG) -> bool:
-    """True if spaCy AND the language model are importable/installed.
+def availability(lang: str = _DEFAULT_LANG) -> str | None:
+    """Return ``None`` when ready, or a setup hint naming what's missing.
 
-    Mirrors ``ocr.is_available()``: the package alone is not enough — the model
-    download must be present too. Used to gate the entities field/flag.
+    ``is_available()`` collapses two different failure modes into one
+    boolean: "the ``[nlp]`` extra itself is missing" (spaCy not importable)
+    and "spaCy is installed but this one language's model isn't". A caller
+    that only sees the boolean can't tell them apart and always shows the
+    same generic hint — the actual bug behind a screenshot report: an
+    English PDF, with every extra already installed, still got told to
+    "install the NLP extra and the spaCy model" when only ``en_core_web_sm``
+    was missing. Kept as a sibling function rather than changing
+    ``is_available()``'s return type, so no existing boolean call site breaks.
     """
     try:
         import spacy
     except ImportError:
-        return False
+        return SETUP_HINT
+    model = _model_for(lang)
     try:
-        return bool(spacy.util.is_package(_model_for(lang)))
+        installed = bool(spacy.util.is_package(model))
     except Exception:  # pragma: no cover — spacy.util quirk, treat as unavailable
-        return False
+        installed = False
+    if installed:
+        return None
+    label = _LANG_LABELS.get(lang, lang)
+    return f"Modelo de {label} ausente: uv run python -m spacy download {model}"
+
+
+def is_available(lang: str = _DEFAULT_LANG) -> bool:
+    """True if spaCy AND the language model are importable/installed.
+
+    Mirrors ``ocr.is_available()``: the package alone is not enough — the model
+    download must be present too. Used to gate the entities field/flag. See
+    :func:`availability` for a caller that needs to know *why* it's False.
+    """
+    return availability(lang) is None
 
 
 def _load(lang: str) -> Language:

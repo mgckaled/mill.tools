@@ -67,6 +67,41 @@ def test_is_available_false_without_spacy(mocker):
     assert entities.is_available("pt") is False
 
 
+# ── availability() — PLANO_INSIGHTS_QUALIDADE.md, Fase 4 ────────────────────
+
+
+@pytest.mark.unit
+def test_availability_none_when_model_installed(mocker):
+    mocker.patch("spacy.util.is_package", return_value=True)
+    assert entities.availability("pt") is None
+
+
+@pytest.mark.unit
+def test_availability_names_the_missing_language_model(mocker):
+    # The reported bug: package + all extras installed, only en_core_web_sm
+    # missing -- the hint must name *that* model, not the generic PT one.
+    mocker.patch("spacy.util.is_package", return_value=False)
+    hint = entities.availability("en")
+    assert hint is not None
+    assert "en_core_web_sm" in hint
+    assert "inglês" in hint
+
+
+@pytest.mark.unit
+def test_availability_generic_hint_when_spacy_itself_missing(mocker):
+    mocker.patch.dict("sys.modules", {"spacy": None})
+    assert entities.availability("en") == entities.SETUP_HINT
+
+
+@pytest.mark.unit
+def test_is_available_delegates_to_availability(mocker):
+    mocker.patch("src.core.text.entities.availability", return_value=None)
+    assert entities.is_available("pt") is True
+
+    mocker.patch("src.core.text.entities.availability", return_value="algum motivo")
+    assert entities.is_available("pt") is False
+
+
 @pytest.mark.unit
 def test_gate_raises_when_model_missing(mocker):
     # entities() skips the is_available() check on a _NLP_CACHE hit — force a
