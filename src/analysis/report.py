@@ -73,8 +73,10 @@ def _normalize_items(value: object) -> list[str]:
         items = [value]
     elif isinstance(value, dict):
         items = [f"{k}: {v}" for k, v in value.items()]
-    else:
+    elif isinstance(value, (list, tuple)):
         items = [_stringify_item(item) for item in value]
+    else:
+        items = [_stringify_item(value)]
     return [item for item in items if item.strip() not in ("", _PLACEHOLDER_ECHO)]
 
 

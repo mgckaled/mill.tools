@@ -217,6 +217,15 @@ def test_non_string_items_in_list_get_friendly_coercion():
     assert "{'termo'" not in out
 
 
+def test_bare_scalar_where_list_expected_does_not_crash():
+    from src.analysis.report import format_report
+    from src.analysis.types import Field
+
+    prof = _profile([Field("items", "Itens", "list", "r")])
+    out = format_report(prof, {"items": 5}, Path("t.txt"))
+    assert "- 5" in out
+
+
 def test_quotes_multiline_prefixes_each_line():
     from src.analysis.report import format_report
     from src.analysis.types import Field
