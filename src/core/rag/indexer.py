@@ -34,8 +34,9 @@ CHUNK_SIZE = 1200
 CHUNK_OVERLAP = 150
 
 # Transcription files keep a metadata header separated from the body by a line
-# of 64 dashes (see analyzer._extract_transcription_body). Other text kinds have
-# no header, so the whole file is indexed.
+# of 64 dashes (see src.transcript_io.split_header_body, the shared owner of
+# this same split for the analyzer/formatter/prompter pipeline). Other text
+# kinds have no header, so the whole file is indexed.
 _HEADER_SEP = "-" * 64
 
 # The real header is a handful of short lines, always well under this. Bounds

@@ -115,6 +115,32 @@ def test_format_transcription_strips_response_whitespace(tmp_path, mocker):
     assert not out.endswith("   ")
 
 
+def test_format_transcription_ignores_separator_look_alike_deep_in_body(
+    tmp_path, mocker
+):
+    """Fase 2 do PLANO_CORRECOES_SRC_RAIZ: formatter agora usa a mesma janela
+    de busca do analyzer. Antes (busca sem janela), um run de 64 traços no
+    meio de um corpo sem header real era tratado como separador — o texto
+    ANTES dele virava "header" e sobrevivia intocado no arquivo reescrito,
+    e só o restinho depois dele era enviado ao LLM. Com a janela, tudo é
+    corpo: nada do texto original sobrevive intocado (o LLM reescreve tudo)."""
+    from src import formatter
+
+    sep = "-" * 64
+    body_before = "Paragrafo real com conteudo. " * 200
+    src = tmp_path / "t.txt"
+    src.write_text(f"{body_before}\n{sep}\nMais texto depois.", encoding="utf-8")
+    mocker.patch.object(
+        formatter,
+        "make_llm",
+        return_value=_fake_llm(*(["FORMATADO."] * 10)),
+    )
+    formatter.format_transcription(src)
+    written = src.read_text(encoding="utf-8")
+    assert "Paragrafo real com conteudo." not in written
+    assert "FORMATADO." in written
+
+
 def test_format_transcription_no_header_just_body(tmp_path, mocker):
     from src import formatter
 

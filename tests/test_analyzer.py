@@ -161,69 +161,6 @@ def test_invoke_and_parse_handles_list_content_gemini_shape():
     assert _invoke_and_parse(chain, {"text": "x"}) == {"summary": "ok"}
 
 
-# ── _extract_transcription_body ──────────────────────────────────────────────
-
-
-def test_extract_transcription_body_with_separator():
-    from src.analyzer import _extract_transcription_body
-
-    text = _HEADER + "\n\nThis is the body."
-    assert _extract_transcription_body(text) == "This is the body."
-
-
-def test_extract_transcription_body_no_separator():
-    from src.analyzer import _extract_transcription_body
-
-    assert _extract_transcription_body("just body") == "just body"
-
-
-def test_extract_transcription_body_ignores_separator_look_alike_deep_in_body():
-    from src.analyzer import _extract_transcription_body
-
-    # A plain text with no real metadata header can still coincidentally
-    # contain a run of 64+ dashes far into its own body — must not be
-    # mistaken for the header separator and silently drop everything before it.
-    sep = "-" * 64
-    body_before = "Paragrafo real com conteudo. " * 200
-    text = f"{body_before}\n{sep}\nMais texto depois."
-    assert _extract_transcription_body(text) == text.strip()
-
-
-# ── _parse_header ────────────────────────────────────────────────────────────
-
-
-def test_parse_header_extracts_fields():
-    from src.analyzer import _parse_header
-
-    meta = _parse_header(_HEADER + "\nbody")
-    assert meta["title"] == "Test Video"
-    assert meta["channel"] == "Test Channel"
-    assert meta["url"] == "https://youtu.be/abc123"
-
-
-def test_parse_header_no_separator_returns_empty():
-    from src.analyzer import _parse_header
-
-    assert _parse_header("no separator here") == {}
-
-
-def test_parse_header_ignores_separator_look_alike_deep_in_body():
-    from src.analyzer import _parse_header
-
-    sep = "-" * 64
-    body_before = "Paragrafo real com conteudo. " * 200
-    text = f"{body_before}\n{sep}\nMais texto depois."
-    assert _parse_header(text) == {}
-
-
-def test_parse_header_skips_lines_without_colon():
-    from src.analyzer import _parse_header
-
-    text = "title: T\nnocolon line\nurl: https://x\n" + ("-" * 64) + "\nbody"
-    meta = _parse_header(text)
-    assert meta == {"title": "T", "url": "https://x"}
-
-
 # ── _split_text ──────────────────────────────────────────────────────────────
 
 

@@ -22,11 +22,11 @@ from langchain_core.prompts import ChatPromptTemplate
 
 from src.llm_factory import make_llm
 from src.llm_utils import extract_llm_text, split_text
+from src.transcript_io import SEPARATOR, split_header_body
 
 DEFAULT_FORMAT_MODEL = "phi4mini-custom"
 FORMAT_CHUNK_SIZE = 4500
 FORMAT_CHUNK_OVERLAP = 150
-SEPARATOR = "-" * 64
 
 FORMAT_PROMPT = ChatPromptTemplate.from_messages(
     [
@@ -111,13 +111,7 @@ def format_transcription(
     logging.info("[*] Format model: %s", model_name)
 
     raw_text = input_path.read_text(encoding="utf-8")
-
-    if SEPARATOR in raw_text:
-        header, body = raw_text.split(SEPARATOR, 1)
-        body = body.strip()
-    else:
-        header = ""
-        body = raw_text.strip()
+    header, body = split_header_body(raw_text)
 
     if not body:
         logging.warning("[!] Empty transcription body, skipping format.")

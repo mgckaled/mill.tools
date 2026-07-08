@@ -25,12 +25,12 @@ from langchain_core.prompts import ChatPromptTemplate
 
 from src.llm_factory import make_llm
 from src.llm_utils import extract_llm_text, split_text
+from src.transcript_io import parse_header_meta, split_header_body
 from src.utils import TRANSCRIPTIONS_DIGEST_DIR
 
 DEFAULT_PROMPT_MODEL = "gemma3-4b-custom"
 PROMPT_CHUNK_SIZE = 4500
 PROMPT_CHUNK_OVERLAP = 200
-SEPARATOR = "-" * 64
 
 CONDENSE_PROMPT = ChatPromptTemplate.from_messages(
     [
@@ -99,30 +99,6 @@ def _split_for_prompt(text: str, model_name: str) -> list[str]:
     )
 
 
-def _extract_body_and_meta(raw_text: str) -> tuple[str, dict]:
-    """Separate the metadata header from the transcription body.
-
-    Args:
-        raw_text: Full file content including metadata header.
-
-    Returns:
-        Tuple of (body text, metadata dict).
-    """
-    if SEPARATOR not in raw_text:
-        return raw_text.strip(), {}
-
-    header_text, body = raw_text.split(SEPARATOR, 1)
-    meta = {}
-    for line in header_text.splitlines():
-        if ":" in line:
-            key, _, value = line.partition(":")
-            key = key.strip()
-            value = value.strip()
-            if key and value:
-                meta[key] = value
-    return body.strip(), meta
-
-
 def build_prompt_ready(
     input_path: Path,
     model_name: str = DEFAULT_PROMPT_MODEL,
@@ -161,7 +137,8 @@ def build_prompt_ready(
     logging.info("[*] Prompt model: %s", model_name)
 
     raw_text = input_path.read_text(encoding="utf-8")
-    body, meta = _extract_body_and_meta(raw_text)
+    header_text, body = split_header_body(raw_text)
+    meta = parse_header_meta(header_text)
 
     if not body:
         logging.warning("[!] Empty transcription body, skipping prompt-ready.")

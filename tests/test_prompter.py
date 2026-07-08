@@ -33,46 +33,6 @@ def isolate_digest_dir(tmp_path, monkeypatch):
     return target
 
 
-# ── _extract_body_and_meta ───────────────────────────────────────────────────
-
-
-def test_extract_body_and_meta_with_header():
-    from src.prompter import _extract_body_and_meta
-
-    text = _HEADER + "\n\nThis is the body."
-    body, meta = _extract_body_and_meta(text)
-    assert body == "This is the body."
-    assert meta["title"] == "Test Video"
-    assert meta["channel"] == "Test Channel"
-    assert meta["url"] == "https://youtu.be/abc123"
-
-
-def test_extract_body_and_meta_no_header():
-    from src.prompter import _extract_body_and_meta
-
-    body, meta = _extract_body_and_meta("Only body, no header.")
-    assert body == "Only body, no header."
-    assert meta == {}
-
-
-def test_extract_body_and_meta_ignores_lines_without_colon():
-    from src.prompter import _extract_body_and_meta
-
-    text = (
-        "title: T\nrandom line without colon\nurl: https://x\n" + ("-" * 64) + "\nbody"
-    )
-    _, meta = _extract_body_and_meta(text)
-    assert meta == {"title": "T", "url": "https://x"}
-
-
-def test_extract_body_and_meta_empty_keys_or_values_are_skipped():
-    from src.prompter import _extract_body_and_meta
-
-    text = "title: \n: orphan_value\nurl: https://x\n" + ("-" * 64) + "\nbody"
-    _, meta = _extract_body_and_meta(text)
-    assert meta == {"url": "https://x"}
-
-
 # ── _split_for_prompt ────────────────────────────────────────────────────────
 
 

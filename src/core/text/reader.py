@@ -11,7 +11,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
-# Transcription metadata header separator (see analyzer._extract_transcription_body).
+# Transcription metadata header separator (see src.transcript_io.split_header_body,
+# the shared owner of this same split for the analyzer/formatter/prompter pipeline).
 _HEADER_SEP = "-" * 64
 
 # The real header (title/channel/date/duration/language/tags/url) is a handful

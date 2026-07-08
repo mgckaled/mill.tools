@@ -36,18 +36,13 @@ from src.analysis import (
 )
 from src.llm_factory import make_llm
 from src.llm_utils import extract_llm_text, split_text
+from src.transcript_io import parse_header_meta, split_header_body
 from src.utils import TRANSCRIPTIONS_ANALYSIS_DIR, setup_logging
 
 DEFAULT_MODEL = "gemma3-4b-custom"
 DEFAULT_PROFILE = "default"
 CHUNK_SIZE = 4500
 CHUNK_OVERLAP = 300
-
-# The real metadata header is a handful of short lines, always well under
-# this. Bounds the separator search to a prefix window so a coincidental run
-# of 64 dashes deep in a plain document's own body isn't mistaken for a
-# header — which would silently drop everything before it as "metadata".
-_HEADER_SEARCH_WINDOW = 4096
 
 DETECT_LANGUAGE_PROMPT = ChatPromptTemplate.from_messages(
     [
@@ -160,53 +155,6 @@ def _split_text(text: str, model_name: str) -> list[str]:
         model_name=model_name,
         bypass_long_context=True,
     )
-
-
-def _extract_transcription_body(raw_text: str) -> str:
-    """Separate the metadata header from the transcription body.
-
-    The transcription files have a metadata header separated from the body
-    by a line of dashes (64 '-' characters). This function returns only
-    the body text after that separator.
-
-    Args:
-        raw_text: Full file content including metadata header.
-
-    Returns:
-        The transcription body without metadata header.
-    """
-    separator = "-" * 64
-    idx = raw_text.find(separator)
-    if 0 <= idx <= _HEADER_SEARCH_WINDOW:
-        return raw_text[idx + len(separator) :].strip()
-    return raw_text.strip()
-
-
-def _parse_header(raw_text: str) -> dict:
-    """Parse the key: value metadata fields from the transcription file header.
-
-    Args:
-        raw_text: Full file content including metadata header.
-
-    Returns:
-        Dictionary with metadata fields (title, channel, duration, url, etc.).
-        Empty dict if no header separator is found.
-    """
-    separator = "-" * 64
-    idx = raw_text.find(separator)
-    if not (0 <= idx <= _HEADER_SEARCH_WINDOW):
-        return {}
-
-    header_text = raw_text[:idx]
-    meta = {}
-    for line in header_text.splitlines():
-        if ":" in line:
-            key, _, value = line.partition(":")
-            key = key.strip()
-            value = value.strip()
-            if key and value:
-                meta[key] = value
-    return meta
 
 
 def _format_report(
@@ -334,8 +282,8 @@ def analyze(
     logging.info("[*] Model: %s | Profile: %s", model_name, prof.id)
 
     raw_text = input_path.read_text(encoding="utf-8")
-    video_meta = _parse_header(raw_text)
-    body = _extract_transcription_body(raw_text)
+    header_text, body = split_header_body(raw_text)
+    video_meta = parse_header_meta(header_text)
     logging.debug(
         "[d] File: %d chars total | body after header strip: %d chars",
         len(raw_text),
