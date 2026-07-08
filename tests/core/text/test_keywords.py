@@ -50,6 +50,39 @@ def test_gate_raises_when_unavailable(mocker):
 
 
 @pytest.mark.unit
+def test_stopwords_for_merges_yake_defaults_with_extras():
+    # Must keep YAKE's own function-word filtering (e.g. "de") *and* add our
+    # structural artifacts -- passing only the extras would silently replace
+    # (not extend) YAKE's default list (verified against yake==0.7.1's
+    # _load_stopwords source).
+    merged = keywords._stopwords_for("pt")
+    assert "de" in merged  # a real YAKE PT stopword
+    assert "página" in merged  # our extra
+
+
+@pytest.mark.unit
+def test_keyphrases_of_messy_pdf_excludes_structural_artifacts(messy_pdf_text):
+    """PLANO_INSIGHTS_QUALIDADE.md, Fase 5.1: page markers are already gone at
+    the source (clean_document_text); loose front-matter words that survive
+    tokenization must not surface as keyphrases either."""
+    out = keywords.keyphrases(messy_pdf_text, lang="en", top_n=10)
+    phrases = " ".join(p for p, _ in out).lower()
+    assert "página" not in phrases
+    assert "anthropic" not in phrases
+    assert "january" not in phrases
+
+
+@pytest.mark.unit
+def test_keyphrases_blank_after_cleaning_returns_empty():
+    # A "document" that is nothing but a page marker: non-blank before
+    # cleaning, blank after -- must degrade to [], not crash inside YAKE.
+    from src.core.text.clean import page_marker
+
+    text = f"\n\n{page_marker(1)}\n\n"
+    assert keywords.keyphrases(text) == []
+
+
+@pytest.mark.unit
 def test_extractor_receives_the_tuned_dedup_params(mocker):
     # yake.KeywordExtractor.__init__ has a **kwargs catch-all that silently
     # swallows unknown keyword names instead of raising -- these must be the

@@ -39,13 +39,18 @@ class _Insights:
 
 
 def _compute(path: str) -> _Insights:
-    """Read the document and run the three engines off-thread (gated each)."""
+    """Read the document, clean it once, and run the three engines off-thread
+    (gated each) on the same cleaned text — including entities()/detect_lang,
+    which don't clean on their own: this panel wants a consistent view across
+    all three sections, not just the page-marker/front-matter fix that
+    summarize/keywords already apply internally regardless of caller."""
     from src.core.text import entities as ner
     from src.core.text import keywords, summarize
+    from src.core.text.clean import clean_document_text
     from src.core.text.lang import detect_lang
     from src.core.text.reader import read_document_text
 
-    text = read_document_text(path)
+    text = clean_document_text(read_document_text(path))
     lang = detect_lang(text)
     entities_hint = ner.availability(lang)
     return _Insights(
