@@ -22,8 +22,31 @@ if TYPE_CHECKING:
 
 # Default cosine floor for "the corpus covers this question". It is
 # embedding-model dependent (calibrated for nomic-embed), so it is exposed as a
-# parameter/config rather than hard-coded into the flow — a conservative start.
-DEFAULT_IN_CORPUS_THRESHOLD = 0.35
+# parameter/config rather than hard-coded into the flow.
+#
+# Recalibrated 08/07/2026 (PLANO_RAG_ESPACO_EMBEDDING, Fase 5) after
+# reindexing under the new scheme (task prefixes + contextual header + PDF
+# cleanup). Method: best dense cosine (VectorStore.search top-1, same path as
+# in_corpus()) for 10 questions clearly covered by a real personal corpus
+# (Dune novels, tech/AI video transcripts, Claude's Constitution) vs. 5
+# questions clearly outside it (cooking, car maintenance, chess, taxes, dog
+# training). In-corpus range: 0.7045-0.8688 (mean 0.797). Out-of-corpus
+# range: 0.6502-0.7321 (mean 0.695) — the two bands **overlap** between
+# ~0.70 and ~0.73; nomic-embed-text has a high cosine floor for unrelated
+# short PT-BR text, so no single threshold cleanly separates the two classes
+# on this corpus. The old 0.35 sat so far below both bands it was a
+# functional no-op (never fired either way) both before and after this
+# reindex — the before/after means barely moved (~0.79 -> 0.80), so this is
+# not a claim that prefixes widened the gap.
+#
+# Chose 0.68 — just under the observed in-corpus minimum, leaving a small
+# margin for harder real questions than this hand-picked sample — favoring
+# zero false "out of scope" warnings on real coverage (the costlier error
+# for a personal RAG tool) over catching every unrelated query; it still
+# catches the two out-of-corpus samples that scored below 0.70. Revisit if
+# false negatives (missed genuinely out-of-scope questions) turn out to be
+# the more common complaint in practice.
+DEFAULT_IN_CORPUS_THRESHOLD = 0.68
 
 # MMR (Carbonell & Goldstein, 1998) balances relevance to the anchor against
 # redundancy with already-picked results — plain top-k can surface several
