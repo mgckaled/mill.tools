@@ -79,6 +79,29 @@ def test_format_adapter_returns_input_path(mocker, tmp_path):
 
 
 @pytest.mark.unit
+def test_prompt_adapter_raises_when_build_prompt_ready_returns_none(mocker, tmp_path):
+    """Fase 3 do PLANO_CORRECOES_SRC_RAIZ: build_prompt_ready agora retorna
+    None (corpo vazio) em vez de input_path — o adapter não pode devolver
+    [None] como se fosse um Path válido; levanta pra abortar a chain
+    (execute_recipe já captura Exception e emite step_error)."""
+    import src.core.recipes.registry.transcription as reg
+    from src.core.recipes.types import StepContext
+
+    mocker.patch("src.prompter.build_prompt_ready", return_value=None)
+    src = tmp_path / "t.txt"
+    src.write_text("hello", encoding="utf-8")
+    ctx = StepContext(
+        emit=lambda *a: None,
+        cancel_is_set=lambda: False,
+        initial_inputs=[src],
+        outputs_by_op={},
+    )
+
+    with pytest.raises(ValueError, match="vazio"):
+        reg._prompt([src], {}, ctx)
+
+
+@pytest.mark.unit
 def test_transcribe_adapter_builds_meta_and_reconstructs_subtitles(
     mocker, tmp_path, monkeypatch
 ):

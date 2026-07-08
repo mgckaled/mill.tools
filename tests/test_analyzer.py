@@ -105,6 +105,29 @@ def test_parse_json_response_unclosed_fence_still_parses():
     assert out == {"k": 1}
 
 
+def test_parse_json_response_prose_prefix_without_fence_still_parses():
+    """Fase 3 do PLANO_CORRECOES_SRC_RAIZ: modelo prefixa prosa fora de
+    qualquer fence — recupera fatiando do primeiro '{' ao último '}'."""
+    from src.analyzer import _parse_json_response
+
+    text = 'Aqui está a análise solicitada:\n{"summary": "ok"}'
+    assert _parse_json_response(text) == {"summary": "ok"}
+
+
+def test_parse_json_response_prose_suffix_without_fence_still_parses():
+    from src.analyzer import _parse_json_response
+
+    text = '{"summary": "ok"}\nEspero que ajude!'
+    assert _parse_json_response(text) == {"summary": "ok"}
+
+
+def test_parse_json_response_no_braces_at_all_raises():
+    from src.analyzer import _parse_json_response
+
+    with pytest.raises(ValueError, match="valid JSON"):
+        _parse_json_response("nao ha json nenhum aqui")
+
+
 # ── _invoke_and_parse (retry on malformed/truncated JSON) ─────────────────────
 
 
@@ -304,6 +327,40 @@ def test_ensure_portuguese_other_language_triggers_translation():
     llm = _fake_llm("en", json.dumps(translated, ensure_ascii=False))
     out = _ensure_portuguese(_VALID_ANALYSIS, llm)
     assert out["summary"] == "Traduzido para PT-BR."
+
+
+def test_ensure_portuguese_invalid_translation_json_falls_back_to_original():
+    """Fase 3 do PLANO_CORRECOES_SRC_RAIZ: JSON malformado na tradução (mesmo
+    após retry) não derruba a análise inteira — cai pro original em inglês."""
+    from src.analyzer import _ensure_portuguese
+
+    llm = _fake_llm("en", "not valid json {{", "still not valid json")
+    out = _ensure_portuguese(_VALID_ANALYSIS, llm)
+    assert out == _VALID_ANALYSIS
+
+
+def test_ensure_portuguese_invalid_translation_still_emits_translation_done():
+    from src.analyzer import _ensure_portuguese
+
+    llm = _fake_llm("en", "not valid json {{", "still not valid json")
+    events: list[tuple[str, str, dict]] = []
+    _ensure_portuguese(
+        _VALID_ANALYSIS, llm, on_event=lambda t, s, p: events.append((t, s, p))
+    )
+    assert "translation_done" in [e[0] for e in events]
+
+
+def test_ensure_portuguese_translation_retries_once_then_succeeds():
+    """Translation now goes through _invoke_and_parse — a truncated/invalid
+    first attempt gets one retry before falling back."""
+    from src.analyzer import _ensure_portuguese
+
+    translated = dict(_VALID_ANALYSIS, summary="Traduzido após retry.")
+    llm = _fake_llm(
+        "en", "not valid json {{", json.dumps(translated, ensure_ascii=False)
+    )
+    out = _ensure_portuguese(_VALID_ANALYSIS, llm)
+    assert out["summary"] == "Traduzido após retry."
 
 
 def test_ensure_portuguese_empty_summary_skips_detection():

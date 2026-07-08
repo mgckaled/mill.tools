@@ -71,17 +71,35 @@ def test_build_prompt_ready_missing_file_raises(tmp_path):
         build_prompt_ready(tmp_path / "missing.txt")
 
 
-def test_build_prompt_ready_empty_body_returns_input_path(
+def test_build_prompt_ready_empty_body_returns_none(
     tmp_path, mocker, isolate_digest_dir
 ):
+    """Fase 3 do PLANO_CORRECOES_SRC_RAIZ: retornar input_path como se fosse
+    o output gerado era um contrato enganoso pros chamadores — None sinaliza
+    "nada foi gerado" sem ambiguidade."""
     from src import prompter
 
     mocker.patch.object(prompter, "make_llm")  # never called
     src = tmp_path / "empty.txt"
     src.write_text(_HEADER + "\n   \n", encoding="utf-8")
     result = prompter.build_prompt_ready(src)
-    assert result == src
+    assert result is None
     # nothing written to digest dir
+    assert not isolate_digest_dir.exists() or not any(isolate_digest_dir.iterdir())
+
+
+def test_build_prompt_ready_empty_condensed_output_returns_none(
+    tmp_path, mocker, isolate_digest_dir
+):
+    """Corpo não-vazio, mas o LLM devolve string vazia na condensação — sem
+    resultado utilizável, retorna None em vez de escrever um arquivo vazio."""
+    from src import prompter
+
+    src = tmp_path / "video.txt"
+    src.write_text(_HEADER + "\n\nshort body.", encoding="utf-8")
+    mocker.patch.object(prompter, "make_llm", return_value=_fake_llm(""))
+    result = prompter.build_prompt_ready(src)
+    assert result is None
     assert not isolate_digest_dir.exists() or not any(isolate_digest_dir.iterdir())
 
 

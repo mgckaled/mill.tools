@@ -103,7 +103,7 @@ def build_prompt_ready(
     input_path: Path,
     model_name: str = DEFAULT_PROMPT_MODEL,
     on_event: Callable[[str, str, dict], None] | None = None,
-) -> Path:
+) -> Path | None:
     """Generate a condensed transcription file optimized for use as LLM context.
 
     Reads the raw transcription, strips metadata header, condenses the body
@@ -119,7 +119,10 @@ def build_prompt_ready(
             prefix in `llm_factory.make_llm`.
 
     Returns:
-        Path to the generated prompt-ready .txt file.
+        Path to the generated prompt-ready .txt file, or None if the source
+        body — or the condensed result — came out empty (nothing to write;
+        distinct from "succeeded", unlike the old contract of returning
+        input_path as if it were a real output).
 
     Raises:
         FileNotFoundError: If the input file does not exist.
@@ -142,7 +145,7 @@ def build_prompt_ready(
 
     if not body:
         logging.warning("[!] Empty transcription body, skipping prompt-ready.")
-        return input_path
+        return None
 
     logging.debug("[d] Body to condense: %d chars", len(body))
 
@@ -189,6 +192,10 @@ def build_prompt_ready(
         final_body = extract_llm_text(merge_response.content).strip()
     else:
         final_body = condensed_chunks[0]
+
+    if not final_body:
+        logging.warning("[!] Condensed output is empty, skipping prompt-ready.")
+        return None
 
     elapsed = time() - start
 

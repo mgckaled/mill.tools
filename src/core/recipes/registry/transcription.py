@@ -83,7 +83,12 @@ def _analyze(inputs: list, params: dict, ctx: StepContext) -> list[Path]:
 
 
 def _prompt(inputs: list, params: dict, ctx: StepContext) -> list[Path]:
-    """transcription/text → condensed prompt-ready .txt. Wraps build_prompt_ready."""
+    """transcription/text → condensed prompt-ready .txt. Wraps build_prompt_ready.
+
+    build_prompt_ready returns None when the source (or condensed) body came
+    out empty — nothing to chain forward, so this raises instead of returning
+    ``[None]``; execute_recipe's except-Exception aborts the chain cleanly.
+    """
     from src import prompter
 
     out = prompter.build_prompt_ready(
@@ -91,6 +96,8 @@ def _prompt(inputs: list, params: dict, ctx: StepContext) -> list[Path]:
         model_name=params.get("model", prompter.DEFAULT_PROMPT_MODEL),
         on_event=lambda t, s, p: ctx.emit(t, p),
     )
+    if out is None:
+        raise ValueError("Corpo da transcrição está vazio — nada para condensar.")
     return [out]
 
 

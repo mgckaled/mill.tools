@@ -74,7 +74,9 @@ def _parse_json_response(text: str) -> dict:
     """Extract and parse JSON from LLM response, handling markdown fences.
 
     Args:
-        text: Raw LLM response that may contain JSON wrapped in ```json fences.
+        text: Raw LLM response that may contain JSON wrapped in ```json fences,
+            or prefixed/suffixed with prose outside any fence (e.g. "Aqui está
+            a análise:\\n{...}").
 
     Returns:
         Parsed dictionary with analysis fields.
@@ -93,8 +95,21 @@ def _parse_json_response(text: str) -> dict:
     try:
         return json.loads(cleaned)
     except json.JSONDecodeError as exc:
-        logging.error("Failed to parse JSON from LLM response:\n%s", text)
-        raise ValueError("LLM did not return valid JSON") from exc
+        last_exc: Exception = exc
+
+    # Local models sometimes prefix/suffix prose around the JSON object
+    # instead of (or in addition to) a code fence. Slicing from the first '{'
+    # to the last '}' recovers it without spending an extra retry round-trip.
+    start = cleaned.find("{")
+    end = cleaned.rfind("}")
+    if start != -1 and end > start:
+        try:
+            return json.loads(cleaned[start : end + 1])
+        except json.JSONDecodeError as exc:
+            last_exc = exc
+
+    logging.error("Failed to parse JSON from LLM response:\n%s", text)
+    raise ValueError("LLM did not return valid JSON") from last_exc
 
 
 def _invoke_and_parse(chain, payload: dict, *, retries: int = 1) -> dict:
@@ -225,8 +240,19 @@ def _ensure_portuguese(
     _emit("translation_start", {})
     json_text = json.dumps(analysis, ensure_ascii=False, indent=2)
     translate_chain = TRANSLATE_PROMPT | llm
-    translated_response = translate_chain.invoke({"json_text": json_text})
-    translated = _parse_json_response(extract_llm_text(translated_response.content))
+    try:
+        translated = _invoke_and_parse(translate_chain, {"json_text": json_text})
+    except ValueError:
+        # Translation is the LAST step after every (paid) chunk analysis —
+        # letting a malformed-JSON translation kill the whole run would throw
+        # away all of that work. The original-language analysis is still a
+        # valid, usable result, so fall back to it instead of raising.
+        logging.warning(
+            "[!] Translation returned invalid JSON after retries — keeping "
+            "the original-language analysis instead of failing the run."
+        )
+        _emit("translation_done", {})
+        return analysis
 
     logging.info("[✓] Translation complete.")
     _emit("translation_done", {})

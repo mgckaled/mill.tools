@@ -55,6 +55,74 @@ FORMAT_PROMPT = ChatPromptTemplate.from_messages(
 # breaks, to avoid cutting mid-sentence when inserting paragraph markers.
 _FORMAT_SEPARATORS = [". ", "? ", "! ", " ", ""]
 
+# The formatter's only job is inserting blank lines — word count should match
+# the original almost exactly. A little slack absorbs whitespace-splitting
+# quirks without masking a model that dropped or rewrote content.
+_WORD_COUNT_TOLERANCE = 0.02
+
+
+def _word_count_preserved(original: str, formatted: str) -> bool:
+    """Cheap sanity check that *formatted* didn't drop or rewrite content.
+
+    Args:
+        original: The source chunk/body text.
+        formatted: The LLM's formatted output for the same text.
+
+    Returns:
+        True if the word counts match within ``_WORD_COUNT_TOLERANCE``.
+    """
+    original_words = len(original.split())
+    if original_words == 0:
+        return True
+    formatted_words = len(formatted.split())
+    return abs(formatted_words - original_words) / original_words <= (
+        _WORD_COUNT_TOLERANCE
+    )
+
+
+def _format_chunk(chain, chunk: str, i: int, total: int) -> str:
+    """Format one chunk, retrying once on an empty response.
+
+    Also guards against content loss/rewrite: the word-count-preservation
+    check runs per chunk, not on the reassembled body — chunks overlap
+    (FORMAT_CHUNK_OVERLAP), so a whole-body comparison would always see
+    inflated word counts from the duplicated boundary text and misfire on
+    every multi-chunk transcription, not just genuinely mangled ones.
+
+    Args:
+        chain: The `FORMAT_PROMPT | llm` runnable.
+        chunk: The chunk of transcription body to format.
+        i: 1-based chunk index (for log messages).
+        total: Total chunk count (for log messages).
+
+    Returns:
+        The formatted text, or the original *chunk* unchanged if both the
+        first attempt and the retry come back empty, or if the formatted
+        text's word count diverges from the chunk's — better than silently
+        gluing bad output into the reassembled body.
+    """
+    text = extract_llm_text(chain.invoke({"text": chunk}).content).strip()
+    if not text:
+        logging.warning("[!] Chunk %d/%d returned empty — retrying once...", i, total)
+        text = extract_llm_text(chain.invoke({"text": chunk}).content).strip()
+    if not text:
+        logging.warning(
+            "[!] Chunk %d/%d still empty after retry — keeping the original chunk.",
+            i,
+            total,
+        )
+        return chunk
+    if not _word_count_preserved(chunk, text):
+        logging.warning(
+            "[!] Chunk %d/%d word count diverges from the original by more than "
+            "%.0f%% — keeping the original chunk.",
+            i,
+            total,
+            _WORD_COUNT_TOLERANCE * 100,
+        )
+        return chunk
+    return text
+
 
 def _split_for_format(text: str) -> list[str]:
     """Split transcription body into chunks for paragraph formatting.
@@ -141,8 +209,7 @@ def format_transcription(
         logging.info("[~] Formatting chunk %d/%d...", i, len(chunks))
         _emit("format_chunk_start", {"i": i, "total": len(chunks)})
         t = time()
-        response = chain.invoke({"text": chunk})
-        text = extract_llm_text(response.content).strip()
+        text = _format_chunk(chain, chunk, i, len(chunks))
         formatted_chunks.append(text)
         chunk_elapsed = time() - t
         logging.debug(
@@ -156,11 +223,10 @@ def format_transcription(
             {"i": i, "total": len(chunks), "elapsed": round(chunk_elapsed, 1)},
         )
 
+    # _format_chunk always returns non-empty, word-count-checked text for a
+    # non-empty chunk (falls back to the original chunk otherwise), so
+    # formatted_body can't come out empty or mangled here.
     formatted_body = "\n\n".join(formatted_chunks)
-
-    if not formatted_body:
-        logging.warning("[!] LLM retornou resposta vazia — arquivo não modificado.")
-        return body
 
     if header:
         result = header + SEPARATOR + "\n\n" + formatted_body + "\n"

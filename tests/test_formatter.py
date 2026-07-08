@@ -23,6 +23,24 @@ def _fake_llm(*responses: str):
     )
 
 
+def _echo_llm():
+    """A fake "LLM" that echoes its input chunk back verbatim.
+
+    format_transcription's word-count-preservation guard (Fase 3 do
+    PLANO_CORRECOES_SRC_RAIZ) rejects any output whose word count diverges
+    from the input by more than 2% — a canned sentinel string like
+    "chunk_n" would trip it for any body longer than a couple of words.
+    Echoing the chunk trivially preserves word count for tests that only
+    care about chunking/joining/header mechanics, not paragraph insertion.
+    """
+    from langchain_core.messages import AIMessage
+    from langchain_core.runnables import RunnableLambda
+
+    # FORMAT_PROMPT's human message is "{text}", so messages[-1].content is
+    # exactly the chunk that was sent in.
+    return RunnableLambda(lambda pv: AIMessage(content=pv.messages[-1].content))
+
+
 # ── _split_for_format ────────────────────────────────────────────────────────
 
 
@@ -130,15 +148,12 @@ def test_format_transcription_ignores_separator_look_alike_deep_in_body(
     body_before = "Paragrafo real com conteudo. " * 200
     src = tmp_path / "t.txt"
     src.write_text(f"{body_before}\n{sep}\nMais texto depois.", encoding="utf-8")
-    mocker.patch.object(
-        formatter,
-        "make_llm",
-        return_value=_fake_llm(*(["FORMATADO."] * 10)),
-    )
+    mocker.patch.object(formatter, "make_llm", return_value=_echo_llm())
     formatter.format_transcription(src)
     written = src.read_text(encoding="utf-8")
-    assert "Paragrafo real com conteudo." not in written
-    assert "FORMATADO." in written
+    # Nothing before the look-alike separator was dropped as a fake "header".
+    assert "Paragrafo real com conteudo." in written
+    assert "Mais texto depois." in written
 
 
 def test_format_transcription_no_header_just_body(tmp_path, mocker):
@@ -146,14 +161,10 @@ def test_format_transcription_no_header_just_body(tmp_path, mocker):
 
     src = tmp_path / "t.txt"
     src.write_text("just body without separator", encoding="utf-8")
-    mocker.patch.object(
-        formatter,
-        "make_llm",
-        return_value=_fake_llm("formatted body"),
-    )
+    mocker.patch.object(formatter, "make_llm", return_value=_echo_llm())
     out = formatter.format_transcription(src)
     written = src.read_text(encoding="utf-8")
-    assert out == "formatted body"
+    assert out == "just body without separator"
     assert "----" not in written  # nenhum separator inventado
 
 
@@ -166,10 +177,31 @@ def test_format_transcription_empty_llm_response_keeps_body(tmp_path, mocker):
     mocker.patch.object(
         formatter,
         "make_llm",
-        return_value=_fake_llm(""),
+        return_value=_fake_llm("", ""),  # first attempt + retry, both empty
     )
     out = formatter.format_transcription(src)
-    # LLM returned empty → função retorna body original
+    # Both attempts empty → _format_chunk falls back to the original chunk.
+    assert out == body
+
+
+def test_format_transcription_chunk_word_count_mismatch_keeps_original_chunk(
+    tmp_path, mocker
+):
+    """A chunk whose formatted output diverges too much in word count from
+    the input (e.g. the model summarized instead of just adding blank lines)
+    falls back to the original chunk instead of gluing mangled text into the
+    reassembled body (Fase 3 do PLANO_CORRECOES_SRC_RAIZ)."""
+    from src import formatter
+
+    src = tmp_path / "t.txt"
+    body = "Uma frase inteira com bastante conteudo relevante para preservar aqui."
+    src.write_text(_HEADER + "\n\n" + body, encoding="utf-8")
+    mocker.patch.object(
+        formatter,
+        "make_llm",
+        return_value=_fake_llm("resumo curto"),  # far fewer words than the input
+    )
+    out = formatter.format_transcription(src)
     assert out == body
 
 
@@ -197,16 +229,14 @@ def test_format_transcription_emits_lifecycle_events(tmp_path, mocker):
 def test_format_transcription_multiple_chunks_joined_with_blank_line(tmp_path, mocker):
     from src import formatter
 
+    from src.formatter import _split_for_format
+
     src = tmp_path / "t.txt"
     # Build a body large enough to require >1 chunks
     long_body = "Sentence ends here. " * 500  # ~10000 chars > 4500
     src.write_text(_HEADER + "\n\n" + long_body, encoding="utf-8")
-    # Provide enough fake responses for whatever chunks the splitter produces
-    mocker.patch.object(
-        formatter,
-        "make_llm",
-        return_value=_fake_llm(*["chunk_n"] * 20),
-    )
+    mocker.patch.object(formatter, "make_llm", return_value=_echo_llm())
     out = formatter.format_transcription(src)
-    # Multiple chunks → joined with \n\n
-    assert "chunk_n\n\nchunk_n" in out
+    # Multiple chunks → joined with \n\n, each chunk echoed back unchanged.
+    assert out == "\n\n".join(_split_for_format(long_body))
+    assert out.count("\n\n") >= 1
