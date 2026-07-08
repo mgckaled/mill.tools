@@ -11,6 +11,48 @@ ficam em [`ROADMAP.md`](ROADMAP.md) e [`plans/active/`](plans/active/).
 
 ## Entregas (marcos)
 
+### Correções dos arquivos soltos de `src/` + entry points (jul/2026)
+Revisão exploratória arquivo-a-arquivo dos 9 `.py` soltos em `src/` (`__init__`, `__main__`, `analyzer`,
+`formatter`, `llm_factory`, `llm_utils`, `prompter`, `transcriber`, `utils`) + `gui.py`/`main.py` na raiz —
+os arquivos mais antigos do projeto (pré-mill.tools), ~2.120 linhas. **Fase 1 — bugs reais**:
+`sanitize_filename` não removia `:` ASCII (só o wide colon fullwidth) — título tipo "Python: aula 1" virava
+`Python:_aula_1.txt`, que no NTFS cria um Alternate Data Stream em vez de falhar visivelmente; `:` passou a
+receber o mesmo tratamento do wide colon, e o stem ganhou cap de ~120 chars contra MAX_PATH.
+`analyzer`/`formatter`/`prompter` faziam `response.content.strip()` cru — Gemini/GLM podem devolver
+`.content` como lista de blocos (motivo de `llm_utils.extract_llm_text` existir), quebrando com
+`AttributeError` em produção com modelo cloud; os 3 módulos passaram a rotear tudo por `extract_llm_text`.
+`transcriber.transcribe`: `input()` de overwrite tratava `EOFError` (execução sem stdin) como crash — agora
+trata como "não sobrescrever"; `sys.exit(0)` dentro do `except KeyboardInterrupt` saía de dentro de uma
+função de biblioteca — a decisão de sair virou responsabilidade do `main.py`, e o cleanup do `.txt` parcial
+generalizou pra qualquer exceção do loop, não só Ctrl-C. Barra de progresso: mídia local tinha
+`meta["duration"]=0` → `tqdm(total=0)` sem porcentagem, agora cai pra `info.duration`;
+`progress_bar.update(int(elapsed_seg))` truncava a cada segmento e acumulava déficit em vídeos com muitos
+segmentos curtos — atualiza agora pela diferença inteira da posição cumulativa em float. **Fase 2**: o
+separador `"-"*64` era parseado 3× com semânticas divergentes (analyzer com janela de 4096 chars contra
+falso-positivo, formatter/prompter sem janela — o mesmo arquivo podia ter o corpo amputado no format/prompt
+e não no analyze); `src/transcript_io.py` novo é o dono único (`split_header_body`/`parse_header_meta`),
+migrado nos 3 call sites + testes; comentários em `core/rag/indexer.py`/`core/text/reader.py` (que citavam a
+função removida do analyzer) atualizados pra apontar ao novo dono, sem migrar as implementações deles
+(fora do escopo deste plano). **Fase 3**: `_ensure_portuguese` deixava um JSON malformado na tradução
+derrubar a análise inteira depois de todos os chunks pagos — agora usa `_invoke_and_parse` (retry 1×) e cai
+pro original em inglês com warning se persistir. `formatter._format_chunk` novo retry 1× em resposta vazia e
+valida preservação de contagem de palavras (~2% tolerância) **por chunk**, não no corpo inteiro — os chunks
+têm overlap, então uma checagem no corpo já reagrupado veria contagem sempre inflada pelo texto duplicado nas
+bordas e falharia até em transcrições normais com múltiplos chunks (achado só durante a implementação, não
+previsto no plano original). `prompter.build_prompt_ready` com corpo vazio retornava `input_path` como se
+fosse o output gerado — contrato enganoso; agora retorna `None`, e o adaptador de receitas
+(`core/recipes/registry/transcription.py::_prompt`) levanta `ValueError` nesse caso (o worker da GUI já
+esperava `Path | None`). `_parse_json_response` ganhou fallback fatiando do primeiro `{` ao último `}` quando
+o modelo prefixa/sufixa prosa fora de qualquer fence. **Fase 4**: `check_dependencies()` rodava incondicional
+(exigia yt-dlp+ffmpeg até pra entrada `.txt`, onde nenhum é usado) — agora só roda quando o input resolvido é
+uma URL; entrada de texto sem `--format/--analyze/--prompt` e `--srt/--vtt/--subtitles` combinados com texto
+ganharam avisos novos (espelham guardas que a GUI já tinha ou eram silenciosamente ignorados). **Fase 5**:
+`_emit(payload: dict = {})` (default mutável, 5 ocorrências) → `dict | None = None`; import de `SubtitleCue`
+saiu de dentro do loop de segmentos; `_resolve_device(threads)` — parâmetro nunca usado — assinatura limpa;
+docstring do `analyzer` com exemplos mortos (`uv run yt-analyzer`, script inexistente) atualizada;
+`gui.py::page.window.center()` depois de `maximized=True` (inócuo) removido. Plano:
+[`plans/implemented/PLANO_CORRECOES_SRC_RAIZ.md`](plans/implemented/PLANO_CORRECOES_SRC_RAIZ.md).
+
 ### Correções do `src/analysis/` (jul/2026)
 Revisão exploratória arquivo-a-arquivo do pacote (9 arquivos, ~1.296 linhas — `types`/`prompts`/`report` +
 catálogo `profiles/` por grupo), pacote recente e bem desenhado (catálogo declarativo, puro, sem duplicação
