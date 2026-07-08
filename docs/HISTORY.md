@@ -55,8 +55,7 @@ protegido por senha antes disso; adotado nos 12 pontos que abrem um PDF fonte (p
 `core/image`) e trocou o save multi-page do Pillow (todas as imagens decodificadas em RAM antes de salvar)
 por inserção página-a-página via pymupdf, memória limitada a uma imagem por vez. Trade-off aceito: cada
 página agora é reencodada como PNG sem perdas (antes, o Pillow às vezes emitia JPEG passthrough para fontes
-já-JPEG) — um lote grande de fotos gera um PDF maior; não há teste de tamanho, é decisão de produto (memória
-> tamanho de saída), revisitável se o tamanho do PDF incomodar na prática. `info.get_pdf_info.has_text`
+já-JPEG) — um lote grande de fotos gera um PDF maior; não há teste de tamanho, é decisão de produto (memória > tamanho de saída), revisitável se o tamanho do PDF incomodar na prática. `info.get_pdf_info.has_text`
 passou a amostrar só as primeiras 20 páginas (scan completo era lento demais para um metadado de preview num
 PDF escaneado de centenas de páginas) e reusa `render_first_page_png` em vez de reimplementar o raster
 inline. Um teste (`test_render_first_page_png_zero_pages_returns_none`) mockava pymupdf com `MagicMock` sem
@@ -121,7 +120,7 @@ mente/omite o header); `smart_crop.focal_crop_box` clampa `new_w`/`new_h` às di
 `round()` (não reproduzido numa busca exaustiva, mas protegido mesmo assim — teste de invariante cobrindo
 uma grade ampla de dimensões/ratios/focos); texto de ajuda do `--quality` na CLI alinhado ao clamp real.
 Cobertura do pacote `transform/` fechou em 94% (era 91% no arquivo único). Plano:
-[`plans/active/PLANO_CORRECOES_CORE_IMAGE.md`](plans/active/PLANO_CORRECOES_CORE_IMAGE.md).
+[`plans/active/PLANO_CORRECOES_CORE_IMAGE.md`](plans/implemented/PLANO_CORRECOES_CORE_IMAGE.md).
 
 ### Correções do `core/library/` (jul/2026)
 Revisão exploratória arquivo-a-arquivo do pacote (7 arquivos, ~636 linhas) — o mais novo e mais limpo dos
@@ -143,7 +142,7 @@ documentada no próprio `types.py`, mas nunca registrada aqui (o quarteto ML só
 duplicação text×ml); registrada agora, mesmo racional. Cache `(path, mtime)→JSON` duplicado entre
 `core/data/assess.py` e `core/library/tags.py` registrado como pendência de baixo risco no `ROADMAP.md`
 §10 (extração de helper genérico tocaria `core/data` de novo, fora do escopo deste plano). Plano:
-[`plans/active/PLANO_CORRECOES_CORE_LIBRARY.md`](plans/active/PLANO_CORRECOES_CORE_LIBRARY.md).
+[`plans/active/PLANO_CORRECOES_CORE_LIBRARY.md`](plans/implemented/PLANO_CORRECOES_CORE_LIBRARY.md).
 
 ### Correções do `core/audio/` (jul/2026)
 Revisão exploratória arquivo-a-arquivo do pacote (10 arquivos, ~745 linhas), mesmo formato do quarteto ML e
@@ -165,7 +164,7 @@ origem já casa com o fmt alvo (ex.: AAC de um MP4 → m4a), com fallback autom�
 falhar. **Convenção**: docstrings/comentários PT→EN nos arquivos tocados; `__init__.py` do pacote atualizado
 p/ as 8 capacidades reais (download, convert/extract, silence, denoise, speed, normalize, visualize).
 Pendência de baixo risco registrada no `ROADMAP.md` §9 (processamento em chunks do `denoiser` p/ áudio muito
-longo). Plano: [`plans/active/PLANO_CORRECOES_CORE_AUDIO.md`](plans/active/PLANO_CORRECOES_CORE_AUDIO.md).
+longo). Plano: [`plans/active/PLANO_CORRECOES_CORE_AUDIO.md`](plans/implemented/PLANO_CORRECOES_CORE_AUDIO.md).
 
 ### Correções do `core/data/` (jul/2026)
 Revisão exploratória arquivo-a-arquivo do pacote (14 arquivos, ~1.450 linhas), mesmo formato do quarteto ML,
