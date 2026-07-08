@@ -107,6 +107,46 @@ def test_sample_indices_covers_full_range_not_just_head():
 
 
 @pytest.mark.unit
+def test_summary_of_messy_pdf_excludes_page_markers_and_front_matter(messy_pdf_text):
+    """PLANO_INSIGHTS_QUALIDADE.md acceptance fixture (Fase 0/2/3): the
+    reported bug had page markers and unpunctuated front matter dominate the
+    summary. The lead-position prior alone (no kind-based tuning) must be
+    enough once clean_document_text + the candidate filter remove the
+    boilerplate before the graph is even built."""
+    out = summarize.extractive_summary(messy_pdf_text, sentences=3)
+
+    joined = " ".join(out)
+    assert "Página" not in joined
+    assert "Claude's Constitution" not in joined
+    assert "Anthropic" not in joined
+    assert "January 2024" not in joined
+    assert "Acknowledgments" not in joined
+    # Abbreviations survive intact -- not truncated mid-word by the split.
+    assert "e.g." in joined
+    assert "i.e." in joined
+    assert "et al." in joined
+    # The real content is what's left.
+    assert any("helpful, honest, and harmless" in s for s in out)
+
+
+@pytest.mark.unit
+def test_is_summary_candidate_rejects_short_unpunctuated_lines():
+    assert summarize._is_summary_candidate("Anthropic") is False
+    assert summarize._is_summary_candidate("January 2024") is False
+
+
+@pytest.mark.unit
+def test_is_summary_candidate_rejects_implausibly_long_run_on():
+    run_on = " ".join(f"palavra{i}" for i in range(100))
+    assert summarize._is_summary_candidate(run_on) is False
+
+
+@pytest.mark.unit
+def test_is_summary_candidate_accepts_normal_sentence():
+    assert summarize._is_summary_candidate("Esta é uma frase normal e válida.") is True
+
+
+@pytest.mark.unit
 def test_diversifies_near_duplicate_sentences():
     # Two of the three sentences are identical (fully redundant); the third is
     # distinct. Plain top-k by PageRank alone risks picking both duplicates

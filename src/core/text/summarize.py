@@ -24,6 +24,8 @@ import re
 
 import numpy as np
 
+from src.core.text import clean
+
 SETUP_HINT = "Instale o extra de ML: uv sync --extra ml"
 
 # Cap on sentences fed to the O(S²) graph. Longer documents are downsampled
@@ -33,9 +35,18 @@ SETUP_HINT = "Instale o extra de ML: uv sync --extra ml"
 _MAX_SENTENCES = 400
 
 # Sentence boundary: end punctuation followed by whitespace. Deliberately simple
-# (no nltk) — good enough for prose; abbreviations may over-split, which only
-# costs a slightly shorter candidate sentence, never a crash.
+# (no nltk) — good enough for prose; ``clean.mask_abbreviations`` protects the
+# fixed abbreviation list from being cut mid-word, so this only over-splits on
+# genuinely unknown abbreviations, which just costs a slightly shorter
+# candidate sentence, never a crash.
 _SENT_BOUNDARY = re.compile(r"(?<=[.!?])\s+")
+
+# Candidate-sentence bounds applied after split_sentences (PLANO_INSIGHTS_QUALIDADE.md,
+# Fase 3.2): too few words is the same front-matter/list-fragment shape
+# clean.is_prose_line already flags; implausibly many words usually means the
+# naive regex failed to find a real boundary (a run-on merged across a missing
+# terminal punctuation) rather than one genuine long sentence.
+_MAX_CANDIDATE_WORDS = 80
 
 # MMR (Carbonell & Goldstein, 1998): balances centrality (PageRank score)
 # against redundancy with sentences already picked. Duplicated from
@@ -59,11 +70,21 @@ def is_available() -> bool:
 
 
 def split_sentences(text: str) -> list[str]:
-    """Split *text* into trimmed, non-empty sentences (whitespace collapsed)."""
+    """Split *text* into trimmed, non-empty sentences (whitespace collapsed).
+
+    Abbreviations (``e.g.``, ``Dr.``, ...) are masked before the split and
+    unmasked per resulting sentence, so ``_SENT_BOUNDARY`` never cuts one in
+    half (``clean.mask_abbreviations``/``unmask_abbreviations``).
+    """
     collapsed = re.sub(r"\s+", " ", text).strip()
     if not collapsed:
         return []
-    return [s.strip() for s in _SENT_BOUNDARY.split(collapsed) if s.strip()]
+    masked = clean.mask_abbreviations(collapsed)
+    return [
+        clean.unmask_abbreviations(s.strip())
+        for s in _SENT_BOUNDARY.split(masked)
+        if s.strip()
+    ]
 
 
 def extractive_summary(text: str, *, sentences: int = 5, lang: str = "pt") -> list[str]:
@@ -86,7 +107,8 @@ def extractive_summary(text: str, *, sentences: int = 5, lang: str = "pt") -> li
     if not is_available():
         raise RuntimeError(SETUP_HINT)
 
-    sents = split_sentences(text)
+    cleaned = clean.clean_document_text(text)
+    sents = [s for s in split_sentences(cleaned) if _is_summary_candidate(s)]
     if len(sents) <= sentences:
         return sents
 
@@ -97,6 +119,18 @@ def extractive_summary(text: str, *, sentences: int = 5, lang: str = "pt") -> li
     order = _mmr(scores, sim, sentences)
     # Restored to original order for readability.
     return [work[i] for i in sorted(order)]
+
+
+def _is_summary_candidate(sentence: str) -> bool:
+    """A sentence worth feeding to the TextRank graph: prose-like
+    (``clean.is_prose_line``, catching whatever ``clean_document_text``'s
+    line-level filter didn't since sentence and line boundaries don't align
+    1:1) and not implausibly long (a giant run-on usually means the naive
+    ``_SENT_BOUNDARY`` regex failed to find a real split, not one genuine
+    long sentence)."""
+    if not clean.is_prose_line(sentence):
+        return False
+    return len(sentence.split()) <= _MAX_CANDIDATE_WORDS
 
 
 def _sample_indices(n: int, cap: int) -> list[int]:
