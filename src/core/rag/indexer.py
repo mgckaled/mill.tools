@@ -214,6 +214,7 @@ def build_index(
     *,
     progress_cb: Callable[[int, int], None] | None = None,
     card_fn: Callable[[LibraryItem], str] | None = None,
+    force: bool = False,
 ) -> VectorStore:
     """Embed new/changed items, skip unchanged, drop deleted. Returns store.
 
@@ -232,11 +233,21 @@ def build_index(
             processed (drives the GUI/CLI progress bar).
         card_fn: Builds the textual *data card* for a ``kind="data"`` item. When
             absent, data items are silently skipped (text kinds still index).
+        force: Treat every item as changed, bypassing the ``(path, mtime)``
+            fast path. Needed when the persisted index was built under an
+            older content scheme (``CURRENT_EMBED_SCHEME`` changed — task
+            prefixes, chunk header, PDF cleanup) — no source file's mtime
+            moved, so the incremental check alone would never re-trigger and
+            "Reindexar" would silently no-op, leaving old-space vectors under
+            a sidecar that now claims the new scheme (see
+            ``rag.stats.is_stale_scheme``, which callers check to set this).
 
     Returns:
         The same ``store``, mutated.
     """
-    indexed = {(m.source_path, m.mtime) for m in store.meta}
+    indexed: set[tuple[str, float]] = (
+        set() if force else {(m.source_path, m.mtime) for m in store.meta}
+    )
     text_items = indexable_items(items)
     total = len(text_items)
 

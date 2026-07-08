@@ -52,6 +52,7 @@ def run_ai_index(
         index_dir,
         indexable_items,
     )
+    from src.core.rag.stats import index_stats, is_stale_scheme
     from src.core.rag.store import VectorStore
 
     emit = make_emitter(bus, _MODULE_ID, "observatory")
@@ -75,8 +76,13 @@ def run_ai_index(
             emit("index_start", payload={"total": total})
             emit("log", payload={"message": pipeline_log.fmt_index_start(total)})
 
-            store = VectorStore.load(index_dir(), dim=embedder.EMBED_DIM)
+            index_directory = index_dir()
+            store = VectorStore.load(index_directory, dim=embedder.EMBED_DIM)
             before = len(store)
+            # A scheme change alone never moves a source file's mtime — force
+            # a full re-embed so "Reindexar" actually migrates a stale index
+            # instead of silently no-op'ing (see build_index's `force` docstring).
+            force = is_stale_scheme(index_stats(index_directory), CURRENT_EMBED_SCHEME)
 
             def _progress(current: int, tot: int) -> None:
                 if cancel_event.is_set():
@@ -100,9 +106,13 @@ def run_ai_index(
 
                 return card_for_path(Path(item.path))
 
-            build_index(items, store, _embed, progress_cb=_progress, card_fn=_card)
+            build_index(
+                items, store, _embed, progress_cb=_progress, card_fn=_card, force=force
+            )
             store.persist(
-                index_dir(), embed_model=embed_model, embed_scheme=CURRENT_EMBED_SCHEME
+                index_directory,
+                embed_model=embed_model,
+                embed_scheme=CURRENT_EMBED_SCHEME,
             )
 
             added = len(store) - before

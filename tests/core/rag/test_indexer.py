@@ -469,6 +469,68 @@ def test_index_one_prepends_context_header_only_to_embedded_text(tmp_path):
 
 
 @pytest.mark.unit
+def test_build_index_force_reembeds_unchanged_items(tmp_path):
+    """force=True must bypass the (path, mtime) skip — a scheme change never
+    moves a source file's mtime, so without this a stale index could never be
+    migrated by re-running build_index (the exact bug this guards)."""
+    from src.core.rag.indexer import build_index
+
+    f = tmp_path / "a.txt"
+    f.write_text("hello there.", encoding="utf-8")
+    item = _item(f, mtime=5.0)
+    store = _store()
+    emb = _Embedder()
+
+    build_index([item], store, emb)
+    assert emb.calls == 1
+
+    # Same (path, mtime) — a plain rerun skips it...
+    build_index([item], store, emb)
+    assert emb.calls == 1
+
+    # ...but force=True re-embeds it anyway.
+    build_index([item], store, emb, force=True)
+    assert emb.calls == 2
+    assert len(store) == 1  # old chunk replaced, not duplicated
+
+
+@pytest.mark.unit
+def test_build_index_force_actually_changes_embedded_content(tmp_path):
+    """The regression this guards: reindexing under a new indexer.py content
+    scheme (e.g. clean.py adoption) must actually re-run _index_one so the
+    new content (not the old raw text) reaches embed_fn — force=False would
+    silently keep serving the old embeddings under a sidecar that claims the
+    new scheme."""
+    from src.core.text.clean import page_marker
+    from src.core.rag.indexer import build_index
+
+    f = tmp_path / "extracted.txt"
+    f.write_text(f"{page_marker(1)}\nConteudo real do documento.", encoding="utf-8")
+    item = _item(f, kind="document", mtime=1.0)
+    store = _store()
+    emb = _Embedder()
+
+    build_index([item], store, emb)  # first index — already clean (Fase 3)
+    assert "Página" not in store.meta[0].text
+
+    # Simulate a pre-Fase-3 index that still has the raw marker in ChunkMeta.text
+    # (as if built before clean.py was adopted), same (path, mtime) as now.
+    from src.core.rag.types import ChunkMeta
+
+    store.meta[0] = ChunkMeta(
+        source_path=store.meta[0].source_path,
+        kind=store.meta[0].kind,
+        mtime=store.meta[0].mtime,
+        chunk_idx=0,
+        text=f"{page_marker(1)}\nConteudo real do documento.",
+    )
+    assert "Página" in store.meta[0].text  # tampered — simulates the old scheme
+
+    build_index([item], store, emb, force=True)
+    assert "Página" not in store.meta[0].text  # re-cleaned, not left stale
+
+
+@pytest.mark.unit
 def test_read_indexable_text_strips_pdf_page_markers(tmp_path):
     from src.core.text.clean import page_marker
     from src.core.rag.indexer import _read_indexable_text

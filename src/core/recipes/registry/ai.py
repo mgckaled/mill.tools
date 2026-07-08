@@ -27,6 +27,7 @@ def _ai_answer(inputs: list, params: dict, ctx: StepContext) -> list[Path]:
     from src.core.rag.chat import answer as _answer
     from src.core.rag.indexer import CURRENT_EMBED_SCHEME, build_index, index_dir
     from src.core.rag.retriever import retrieve
+    from src.core.rag.stats import index_stats, is_stale_scheme
     from src.core.rag.store import VectorStore
     from src.utils import TRANSCRIPTIONS_ANALYSIS_DIR
 
@@ -38,14 +39,20 @@ def _ai_answer(inputs: list, params: dict, ctx: StepContext) -> list[Path]:
     src = Path(inputs[0])
 
     # Reindex so the freshly produced document is embedded, then scope to it.
-    store = VectorStore.load(index_dir(), dim=embedder.EMBED_DIM)
+    index_directory = index_dir()
+    store = VectorStore.load(index_directory, dim=embedder.EMBED_DIM)
+    # A scheme change alone never moves a source file's mtime — force a full
+    # re-embed so this step migrates a stale index instead of silently
+    # no-op'ing (see build_index's `force` docstring).
+    force = is_stale_scheme(index_stats(index_directory), CURRENT_EMBED_SCHEME)
     build_index(
         scan_library(),
         store,
         lambda texts: embedder.embed_texts(texts, model=embed_model),
+        force=force,
     )
     store.persist(
-        index_dir(), embed_model=embed_model, embed_scheme=CURRENT_EMBED_SCHEME
+        index_directory, embed_model=embed_model, embed_scheme=CURRENT_EMBED_SCHEME
     )
 
     hits = retrieve(

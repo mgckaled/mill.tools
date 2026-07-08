@@ -198,12 +198,19 @@ def _build(embed_model: str) -> None:
         index_dir,
         indexable_items,
     )
+    from src.core.rag.stats import index_stats, is_stale_scheme
     from src.core.rag.store import VectorStore
 
+    index_directory = index_dir()
     items = scan_library()
     total = len(indexable_items(items))
-    store = VectorStore.load(index_dir(), dim=embedder.EMBED_DIM)
+    store = VectorStore.load(index_directory, dim=embedder.EMBED_DIM)
     before = len(store)
+    # A scheme change alone never moves a source file's mtime — without this,
+    # the incremental (path, mtime) check would skip every already-indexed
+    # item forever, leaving old-space vectors under a sidecar that claims the
+    # new scheme (see build_index's `force` docstring).
+    force = is_stale_scheme(index_stats(index_directory), CURRENT_EMBED_SCHEME)
 
     embed_texts, _ = _embed_fns(embed_model)
     bar = tqdm(total=total, desc="Indexando", unit="doc", disable=total == 0)
@@ -219,11 +226,13 @@ def _build(embed_model: str) -> None:
 
         return card_for_path(Path(item.path))
 
-    build_index(items, store, embed_texts, progress_cb=_progress, card_fn=_card)
+    build_index(
+        items, store, embed_texts, progress_cb=_progress, card_fn=_card, force=force
+    )
     bar.close()
 
     store.persist(
-        index_dir(), embed_model=embed_model, embed_scheme=CURRENT_EMBED_SCHEME
+        index_directory, embed_model=embed_model, embed_scheme=CURRENT_EMBED_SCHEME
     )
 
     added = len(store) - before
