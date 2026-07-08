@@ -11,6 +11,30 @@ ficam em [`ROADMAP.md`](ROADMAP.md) e [`plans/active/`](plans/active/).
 
 ## Entregas (marcos)
 
+### Correções do `src/analysis/` (jul/2026)
+Revisão exploratória arquivo-a-arquivo do pacote (9 arquivos, ~1.296 linhas — `types`/`prompts`/`report` +
+catálogo `profiles/` por grupo), pacote recente e bem desenhado (catálogo declarativo, puro, sem duplicação
+de prompt); os achados se concentraram num único tema. **Fase 1 — o bug principal**: `report._render_section`
+confiava que o LLM respeitava os tipos do schema à risca — qualquer desvio de shape virava lixo silencioso:
+string onde se esperava lista virava bullet por-caractere (`list(value)` fatiando a string), lista onde se
+esperava parágrafo imprimia o repr Python, dict pra keyvalue perdia as definições (`_is_empty` não tratava
+dict) e item não-string dentro de lista imprimia o repr do dict. Normalizadores por kind
+(`_normalize_items`/`_normalize_paragraph`) absorvem o desvio antes de renderizar; complementos: citação
+multilinha prefixa cada linha do blockquote, item já bulletado não duplica o `-`, placeholder `"..."` ecoado
+do skeleton do prompt e itens em branco são descartados. Golden test novo trava o relatório do perfil
+default byte-a-byte contra a saída legada (capturada com `datetime.now()` congelado) — a única salvaguarda
+mecânica de que o caminho feliz não mudou. **Fase 2 — integridade do catálogo**: `Field.kind` era string
+livre (um typo caía silenciosamente no branch de lista); `Field.__post_init__` agora levanta `ValueError`
+para kind desconhecido e para `always=True` sem `empty_text` — corrigiu o único ofensor real do catálogo
+inteiro (`key_points` do perfil `default`). `AnalysisProfile.__post_init__` valida key não vazia e sem
+duplicatas entre os fields do perfil; a bijeção PROFILES×GROUPS e o smoke test do catálogo inteiro já
+existiam em `tests/analysis/test_profiles.py`, não duplicados. **Fase 3**: prompts de análise e merge
+ganharam regra explícita contra copiar os placeholders `"..."` do skeleton, e o merge passou a listar
+dinamicamente os fields `always=True` do perfil como obrigatórios ("nunca deixe vazios"). **Fase 4**:
+`format_report` ganhou `generated_at: datetime | None = None` (default `now()`) para relatório
+determinístico sem mudar call sites. Plano:
+[`plans/implemented/PLANO_CORRECOES_SRC_ANALYSIS.md`](plans/implemented/PLANO_CORRECOES_SRC_ANALYSIS.md).
+
 ### Correções do `core/document/` (jul/2026)
 Revisão exploratória arquivo-a-arquivo do pacote (7 arquivos, ~805 linhas), mesmo formato do quarteto ML e
 dos três pacotes revisados antes (image/library/audio), implementada fase a fase direto no `main`. **Fase 0**:
