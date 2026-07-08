@@ -528,10 +528,14 @@ def _run_exif_cli(ns: argparse.Namespace) -> None:
 
     from src.core.image.exif import apply_to_file, read_summary
 
-    try:
-        sys.stdout.reconfigure(encoding="utf-8")  # filenames/values may be non-cp1252
-    except Exception:
-        pass
+    # filenames/values may be non-cp1252. Reconfigure only our real stdout;
+    # under pytest sys.stdout is a capture wrapper (≠ __stdout__) whose
+    # reconfigure would drop the captured output.
+    if sys.stdout is sys.__stdout__:
+        try:
+            sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+        except Exception:
+            pass
 
     src = Path(ns.file)
     if not src.exists():

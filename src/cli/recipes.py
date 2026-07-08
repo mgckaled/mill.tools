@@ -167,10 +167,13 @@ def _make_emit(bus):
 def run_recipe_cli(ns: argparse.Namespace) -> None:
     """Dispatch the `recipe` subcommand: list, or run a recipe by name."""
     # Output filenames may contain non-cp1252 characters (e.g. fullwidth ｜).
-    try:
-        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
-    except Exception:
-        pass
+    # Reconfigure only our real stdout; under pytest sys.stdout is a capture
+    # wrapper (≠ __stdout__) whose reconfigure would drop the captured output.
+    if sys.stdout is sys.__stdout__:
+        try:
+            sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+        except Exception:
+            pass
 
     if ns.recipe_op == "list":
         _list_recipes()

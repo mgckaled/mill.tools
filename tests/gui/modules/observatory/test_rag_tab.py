@@ -11,7 +11,7 @@ actually mounted to a page, which raises headless.
 from __future__ import annotations
 
 import threading
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, NonCallableMock
 
 import pytest
 
@@ -21,6 +21,13 @@ from src.gui.modules.observatory.rag_tab import build_rag_tab
 def _walk(control):
     """Yield a control and its descendants (best-effort, for smoke assertions)."""
     yield control
+    if isinstance(control, NonCallableMock):
+        # A mocked-out control (e.g. the patched spinner in _no_spin) fabricates
+        # a brand-new child mock on every .controls/.content access, so walking
+        # into it recurses forever and exhausts memory. Yield it (equality checks
+        # still see it) but never descend — the real siblings after it (like the
+        # cancel button) are still reached by the caller's iteration.
+        return
     for attr in ("controls", "content"):
         child = getattr(control, attr, None)
         if isinstance(child, list):

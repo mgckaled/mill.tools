@@ -155,11 +155,14 @@ def run_audio_viz_cli(ns: argparse.Namespace) -> None:
     from src.core.audio.visualize import render_spectrogram_png, render_waveform_png
     from src.utils import AUDIO_PROCESSED_DIR, check_dependencies
 
-    # Output filenames may contain non-cp1252 characters.
-    try:
-        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
-    except Exception:
-        pass
+    # Output filenames may contain non-cp1252 characters. Reconfigure only our
+    # real stdout; under pytest sys.stdout is a capture wrapper (≠ __stdout__)
+    # whose reconfigure would drop the captured output.
+    if sys.stdout is sys.__stdout__:
+        try:
+            sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+        except Exception:
+            pass
 
     check_dependencies()
 

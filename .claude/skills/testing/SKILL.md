@@ -51,6 +51,50 @@ Regras de estrutura:
 
 ---
 
+## ⚠️ Testes NÃO podem travar a máquina (OOM) — regra dura
+
+Um teste que faz o processo Python crescer sem limite estoura a RAM (dev = 16 GB), **trava o Windows e fecha
+o VSCode sem aviso** — inaceitável, custa tempo e dinheiro. `pytest-timeout` (60 s) **não protege**: o
+swap/OOM trava a máquina *antes* do timeout disparar. Prevenir é obrigatório; ao escrever/revisar qualquer
+teste, cheque os padrões abaixo.
+
+**Causa nº 1 — travessia recursiva descendo em `MagicMock`** (o bug que travou a máquina, `test_rag_tab.py`).
+Um `MagicMock` fabrica um filho novo a cada acesso de atributo, então `m.controls`/`m.content` nunca esgota.
+Um helper que anda a árvore de controles Flet por `.controls`/`.content` recursivamente e encontra um mock
+**enterrado na árvore** (ex.: `spinner()` trocado por `MagicMock()` num `_no_spin`, que vira filho de um
+`Row`) recursa/gera mocks para sempre → 1–6 GB em segundos. Regra: **helper de travessia PARA em mocks**.
+
+```python
+from unittest.mock import NonCallableMock
+
+def _walk(control):
+    yield control
+    if isinstance(control, NonCallableMock):
+        return  # nunca descer num mock (fabrica filhos infinitos → OOM)
+    for attr in ("controls", "content"):
+        ...
+```
+
+O sintoma é traiçoeiro: um `next(...)` que acha o alvo **antes** do mock na ordem de travessia passa; só o
+que procura um alvo **depois** do mock explode. Não confie em "passou isolado" — rode a suíte inteira.
+
+**Outros padrões de OOM a vigiar:**
+- `while <cond>` onde `<cond>` vem de um mock — `MagicMock()` é sempre truthy → laço infinito; se o corpo
+  acumula em lista/str vira OOM (senão só trava a CPU até o timeout).
+- `for x in mock_iteravel` onde o mock recebeu um iterador **infinito** (`itertools.count/repeat/cycle` como
+  `return_value`/`side_effect`) e o código acumula (`full_text += ...`).
+- Modelo real carregado por mock incompleto (Whisper/spaCy/UMAP/embeddings) — confirme sempre que a fronteira
+  pesada está de fato mockada; ver os 3 arquivos de referência.
+
+**Diagnosticar com segurança (sem travar):** nunca rode a suíte "crua" para caçar o culpado. Rode sob um
+guarda que **mata o processo em ~3 GB** (bem abaixo do travamento), registrando o teste corrente: uma thread
+daemon amostra o RSS (`ctypes` → `psapi.GetProcessMemoryInfo`, `WorkingSetSize`) a cada ~20 ms e chama
+`os._exit()` ao cruzar o teto, imprimindo o `nodeid` (hook `pytest_runtest_logstart`) + o **delta** de RSS
+por teste (pico − início) para achar o *alocador*, não só onde cruzou o teto. Rode `-n0 -p no:randomly` para
+atribuição determinística.
+
+---
+
 ## Fixtures globais (`tests/conftest.py`)
 
 Não duplicar estas fixtures nos testes.

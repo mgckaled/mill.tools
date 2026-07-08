@@ -182,10 +182,13 @@ def _run_disk_usage(ns: argparse.Namespace) -> None:
 def run_observatory_cli(ns: argparse.Namespace) -> None:
     """Dispatch the `observatory` subcommand: `status`, `activity`, `logs` or
     `disk-usage`."""
-    try:
-        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
-    except Exception:
-        pass
+    # Reconfigure only our real stdout; under pytest sys.stdout is a capture
+    # wrapper (≠ __stdout__) whose reconfigure would drop the captured output.
+    if sys.stdout is sys.__stdout__:
+        try:
+            sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+        except Exception:
+            pass
 
     if ns.observatory_op == "status":
         _run_status(ns)

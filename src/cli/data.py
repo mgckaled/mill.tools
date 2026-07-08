@@ -365,10 +365,13 @@ def _outliers(ns: argparse.Namespace) -> None:
 def run_data_cli(ns: argparse.Namespace) -> None:
     """Dispatch the ``data`` subcommand to its operation handler."""
     # Data values often contain non-cp1252 characters; force UTF-8 stdout.
-    try:
-        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
-    except (AttributeError, ValueError):
-        pass
+    # Reconfigure only our real stdout; under pytest sys.stdout is a capture
+    # wrapper (≠ __stdout__) whose reconfigure would drop the captured output.
+    if sys.stdout is sys.__stdout__:
+        try:
+            sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+        except (AttributeError, ValueError):
+            pass
     setup_logging(getattr(ns, "verbose", False))
 
     op = ns.data_op

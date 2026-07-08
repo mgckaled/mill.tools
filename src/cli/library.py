@@ -105,11 +105,14 @@ def run_library_cli(ns: argparse.Namespace) -> None:
     """Dispatch the `library` subcommand: `list`/`stats`/`dedup-images`."""
     # Output filenames may contain non-cp1252 characters (e.g. fullwidth ｜).
     # On Windows the console defaults to charmap and print() would raise — make
-    # stdout UTF-8 and replace anything it still can't encode.
-    try:
-        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
-    except Exception:
-        pass
+    # stdout UTF-8 and replace anything it still can't encode. Reconfigure only
+    # our real stdout; under pytest sys.stdout is a capture wrapper (≠ __stdout__)
+    # whose reconfigure would drop the captured output.
+    if sys.stdout is sys.__stdout__:
+        try:
+            sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+        except Exception:
+            pass
 
     if ns.library_op == "stats":
         _run_stats(ns)

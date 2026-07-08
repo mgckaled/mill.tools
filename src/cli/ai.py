@@ -703,10 +703,13 @@ def _batch(ns: argparse.Namespace, embed_model: str) -> None:
 def run_ai_cli(ns: argparse.Namespace) -> None:
     """Dispatch the `ai` subcommand: (re)index and/or answer/batch a question."""
     # Output filenames may contain non-cp1252 characters (e.g. fullwidth ｜).
-    try:
-        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
-    except Exception:
-        pass
+    # Reconfigure only our real stdout; under pytest sys.stdout is a capture
+    # wrapper (≠ __stdout__) whose reconfigure would drop the captured output.
+    if sys.stdout is sys.__stdout__:
+        try:
+            sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+        except Exception:
+            pass
 
     if getattr(ns, "cmd", False):  # NL->CLI mode overrides every keyword flow below
         _nl2cli(ns)
