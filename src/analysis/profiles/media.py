@@ -47,6 +47,7 @@ DEFAULT = AnalysisProfile(
             "substitui a batedeira ao emulsionar os ingredientes, resultando em "
             f"massa mais homogênea e fofa'; {_IGNORE_CTA}",
             always=True,
+            empty_text="Nenhum ponto-chave identificado.",
         ),
         Field(
             "action_items",

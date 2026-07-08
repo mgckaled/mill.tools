@@ -48,6 +48,18 @@ class Field:
     always: bool = False
     empty_text: str = ""
 
+    def __post_init__(self) -> None:
+        if self.kind not in ALL_KINDS:
+            raise ValueError(
+                f"Field {self.key!r} has unknown kind {self.kind!r} "
+                f"(expected one of {sorted(ALL_KINDS)})"
+            )
+        if self.always and not self.empty_text:
+            raise ValueError(
+                f"Field {self.key!r} has always=True but no empty_text — "
+                "an always-rendered section left empty has no placeholder text"
+            )
+
 
 @dataclass(frozen=True)
 class AnalysisProfile:
@@ -74,6 +86,14 @@ class AnalysisProfile:
     fields: tuple[Field, ...]
     temperature: float = 0.4
     disclaimer: str = ""
+
+    def __post_init__(self) -> None:
+        keys = [f.key for f in self.fields]
+        if any(not key for key in keys):
+            raise ValueError(f"Profile {self.id!r} has a field with an empty key")
+        if len(keys) != len(set(keys)):
+            dupes = sorted({key for key in keys if keys.count(key) > 1})
+            raise ValueError(f"Profile {self.id!r} has duplicate field keys: {dupes}")
 
 
 @dataclass(frozen=True)

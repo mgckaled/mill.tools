@@ -57,3 +57,58 @@ def test_group_meta_holds_ordered_ids():
 
     g = GroupMeta(label="Rápido", icon="LIGHTBULB_OUTLINE", profile_ids=("notes",))
     assert g.profile_ids == ("notes",)
+
+
+# --- Fase 2 do PLANO_CORRECOES_SRC_ANALYSIS: integridade do catálogo -------
+
+
+def test_field_rejects_unknown_kind():
+    from src.analysis.types import Field
+
+    with pytest.raises(ValueError, match="unknown kind"):
+        Field(key="k", title="T", kind="pargraph", rule="r")
+
+
+def test_field_requires_empty_text_when_always():
+    from src.analysis.types import Field
+
+    with pytest.raises(ValueError, match="empty_text"):
+        Field(key="k", title="T", kind="list", rule="r", always=True)
+
+
+def test_field_always_with_empty_text_is_valid():
+    from src.analysis.types import Field
+
+    f = Field(key="k", title="T", kind="list", rule="r", always=True, empty_text="N/A")
+    assert f.empty_text == "N/A"
+
+
+def test_profile_rejects_duplicate_field_keys():
+    from src.analysis.types import AnalysisProfile, Field
+
+    with pytest.raises(ValueError, match="duplicate field keys"):
+        AnalysisProfile(
+            id="x",
+            label="X",
+            icon="ARTICLE_OUTLINED",
+            persona="Você é um analista.",
+            source_hint="transcrição",
+            fields=(
+                Field(key="summary", title="Resumo", kind="paragraph", rule="r"),
+                Field(key="summary", title="Resumo 2", kind="paragraph", rule="r"),
+            ),
+        )
+
+
+def test_profile_rejects_empty_field_key():
+    from src.analysis.types import AnalysisProfile, Field
+
+    with pytest.raises(ValueError, match="empty key"):
+        AnalysisProfile(
+            id="x",
+            label="X",
+            icon="ARTICLE_OUTLINED",
+            persona="Você é um analista.",
+            source_hint="transcrição",
+            fields=(Field(key="", title="Resumo", kind="paragraph", rule="r"),),
+        )
