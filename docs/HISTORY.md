@@ -11,6 +11,51 @@ ficam em [`ROADMAP.md`](ROADMAP.md) e [`plans/active/`](plans/active/).
 
 ## Entregas (marcos)
 
+### Correções do `core/document/` (jul/2026)
+Revisão exploratória arquivo-a-arquivo do pacote (7 arquivos, ~805 linhas), mesmo formato do quarteto ML e
+dos três pacotes revisados antes (image/library/audio), implementada fase a fase direto no `main`. **Fase 0**:
+`DocumentArgs.analyze_model` e o segmented_selector da GUI usavam `qwen7b-custom` como default, divergindo da
+decisão já tomada nos demais módulos (`gemma3-4b-custom`); alinhado à mesma referência do módulo Dados.
+**Fase 1 — o bug principal, investigado via context7 antes do fix**: `compress_pdf` aceitava `image_quality`
+mas nunca o usava — o loop reinjetava via `update_stream` os bytes originais de `extract_image`, um no-op
+disfarçado (a redução real vinha só do `garbage=4, deflate=True` do `save`). Trocado por
+`Document.rewrite_images(quality=image_quality)`, API nativa do pymupdf para essa finalidade. Validado
+empiricamente antes de trocar: quality realmente escala o tamanho de saída, `rewrite_images` nunca produz
+arquivo maior que o baseline garbage+deflate (testado até quality 99 sobre imagem já comprimida), e a
+transparência (soft mask) sobrevive à conversão pra JPEG — não precisou desativar `lossless`. Fixture nova
+`sample_pdf_with_textured_image` (JPEG de ruído) substituiu `session_jpg` nos testes de qualidade, que
+comprimia a quase nada em qualquer quality e não discriminava as duas execuções. **Fase 2 — robustez**:
+`_shared.open_pdf` novo centraliza o check de `doc.needs_pass` — nenhuma operação do pacote tratava PDF
+protegido por senha antes disso; adotado nos 12 pontos que abrem um PDF fonte (processor/converter/info/ocr).
+`converter.images_to_pdf` ganhou `ImageOps.exif_transpose` (mesma família de bug já corrigida em
+`core/image`) e trocou o save multi-page do Pillow (todas as imagens decodificadas em RAM antes de salvar)
+por inserção página-a-página via pymupdf, memória limitada a uma imagem por vez. Trade-off aceito: cada
+página agora é reencodada como PNG sem perdas (antes, o Pillow às vezes emitia JPEG passthrough para fontes
+já-JPEG) — um lote grande de fotos gera um PDF maior; não há teste de tamanho, é decisão de produto (memória
+> tamanho de saída), revisitável se o tamanho do PDF incomodar na prática. `info.get_pdf_info.has_text`
+passou a amostrar só as primeiras 20 páginas (scan completo era lento demais para um metadado de preview num
+PDF escaneado de centenas de páginas) e reusa `render_first_page_png` em vez de reimplementar o raster
+inline. Um teste (`test_render_first_page_png_zero_pages_returns_none`) mockava pymupdf com `MagicMock` sem
+fixar `needs_pass` — o novo check virava verdadeiro por acidente (MagicMock não configurado é truthy) e a
+asserção passava pelo motivo errado, sem mais exercitar o guard de `page_count==0` que o teste dizia cobrir;
+corrigido fixando `needs_pass=False` no mock, com teste dedicado novo para o caminho `needs_pass=True` usando
+um PDF criptografado real. **Fase 3 — miudezas**: `_resolve_tesseract_cmd` (privada) promovida a
+`resolve_tesseract_cmd` pública — já tinha dois consumidores externos importando o nome privado direto
+(`core/image/ocr.py`, `core/observatory/status.py`); sem alias de compatibilidade, os dois call sites e os
+mocks de teste foram atualizados junto. `LANGS` ganhou dono único em `document/ocr.py`. `stamp_pdf` em página
+com `/Rotate` ≠ 0 saía de lado — `insert_text`/`draw_rect` escrevem no espaço de conteúdo não-rotacionado da
+página enquanto a posição vinha do rect visual (rotacionado); fix: mapear ponto e caixa por
+`page.derotation_matrix` (com `Rect.normalize()` depois — os cantos trocam de ordem) e contra-rotacionar o
+texto com `rotate=page.rotation`, validado numericamente nas quatro rotações (0/90/180/270) via render +
+inspeção de pixels antes de codificar. `watermark_pdf` tem o mesmo bug, mas soma um `TextWriter` com clip
+próprio e o `morph` diagonal de 45° já existente — uma tentativa de aplicar a mesma correção não convergiu
+(watermark sai clipado ou fora da página em pelo menos uma rotação); registrado como limitação conhecida no
+`ROADMAP.md` §11 em vez de arriscar um fix quebrado. `__init__.py` ganhou docstring citando os cinco
+submódulos. Cobertura do pacote fechou em 95% (era 93% no baseline; `processor.py` 91%→92%, `info.py`
+94%→96%, `_shared.py` novo 100%). `processor.py` (~351 linhas, acima do alvo de 300) registrado no
+`ROADMAP.md` §11 para dividir ao tocar. Plano:
+[`plans/implemented/PLANO_CORRECOES_CORE_DOCUMENT.md`](plans/implemented/PLANO_CORRECOES_CORE_DOCUMENT.md).
+
 ### NL→CLI no hub de IA — modo "Comandos CLI" + `ai --cmd` (jul/2026)
 Traduz um pedido em português no comando `uv run main.py ...` exato — revisa e copia, nada roda sozinho.
 **Fase 0**: divide `gui/modules/ai/view.py` (677 linhas) em `index_controls.py`/`answer_view.py`. **Fase 0b**:
