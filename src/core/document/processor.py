@@ -6,6 +6,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from src.core.document._shared import open_pdf
 from src.utils import sanitize_filename
 
 
@@ -74,7 +75,7 @@ def merge_pdfs(paths: list[Path], output_dir: Path) -> Path:
     output_dir.mkdir(parents=True, exist_ok=True)
     merged = pymupdf.open()
     for p in paths:
-        src = pymupdf.open(str(p))
+        src = open_pdf(p)
         merged.insert_pdf(src)
         src.close()
 
@@ -102,7 +103,7 @@ def split_pdf(path: Path, pages: str, output_dir: Path) -> list[Path]:
     import pymupdf  # type: ignore[import-untyped]
 
     output_dir.mkdir(parents=True, exist_ok=True)
-    doc = pymupdf.open(str(path))
+    doc = open_pdf(path)
     total = doc.page_count
     indices = _parse_page_ranges(pages, total)
 
@@ -152,10 +153,8 @@ def compress_pdf(path: Path, output_dir: Path, image_quality: int = 75) -> Path:
     Returns:
         Path to the compressed PDF.
     """
-    import pymupdf  # type: ignore[import-untyped]
-
     output_dir.mkdir(parents=True, exist_ok=True)
-    doc = pymupdf.open(str(path))
+    doc = open_pdf(path)
     doc.rewrite_images(quality=image_quality)
 
     stem = sanitize_filename(path.stem)
@@ -188,10 +187,8 @@ def rotate_pdf(
     Returns:
         Path to the rotated PDF.
     """
-    import pymupdf  # type: ignore[import-untyped]
-
     output_dir.mkdir(parents=True, exist_ok=True)
-    doc = pymupdf.open(str(path))
+    doc = open_pdf(path)
     indices = _parse_page_ranges(pages, doc.page_count)
 
     for i in indices:
@@ -227,7 +224,7 @@ def watermark_pdf(
     import pymupdf  # type: ignore[import-untyped]
 
     output_dir.mkdir(parents=True, exist_ok=True)
-    doc = pymupdf.open(str(path))
+    doc = open_pdf(path)
 
     import math
 
@@ -281,7 +278,7 @@ def stamp_pdf(path: Path, output_dir: Path, text: str) -> Path:
     import pymupdf  # type: ignore[import-untyped]
 
     output_dir.mkdir(parents=True, exist_ok=True)
-    doc = pymupdf.open(str(path))
+    doc = open_pdf(path)
 
     for page in doc:
         rect = page.rect
@@ -323,7 +320,7 @@ def encrypt_pdf(path: Path, output_dir: Path, password: str) -> Path:
     import pymupdf  # type: ignore[import-untyped]
 
     output_dir.mkdir(parents=True, exist_ok=True)
-    doc = pymupdf.open(str(path))
+    doc = open_pdf(path)
 
     stem = sanitize_filename(path.stem)
     out_path = output_dir / f"{stem}_encrypted.pdf"

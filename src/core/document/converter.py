@@ -7,6 +7,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Callable
 
+from src.core.document._shared import open_pdf
 from src.utils import sanitize_filename
 
 
@@ -32,7 +33,7 @@ def pdf_to_images(
     import pymupdf  # type: ignore[import-untyped]
 
     output_dir.mkdir(parents=True, exist_ok=True)
-    doc = pymupdf.open(str(path))
+    doc = open_pdf(path)
     total = doc.page_count
     scale = dpi / 72.0
     matrix = pymupdf.Matrix(scale, scale)
@@ -61,7 +62,12 @@ def images_to_pdf(
 ) -> Path:
     """Combine a list of images into a single PDF.
 
-    Each image becomes one page, sized to fit the image dimensions.
+    Each image becomes one page, sized to fit the image dimensions. Camera
+    EXIF orientation is applied before insertion so portrait photos taken
+    with a phone don't end up sideways. Images are decoded and inserted one
+    at a time (pymupdf pages) rather than held in memory all at once, so
+    peak memory use stays bounded to a single image regardless of how many
+    photos are combined.
 
     Args:
         paths: Ordered list of image paths (JPEG, PNG, etc.).
@@ -70,29 +76,37 @@ def images_to_pdf(
 
     Returns:
         Path to the generated PDF.
+
+    Raises:
+        ValueError: If no images are provided.
     """
+    import io
+
+    import pymupdf  # type: ignore[import-untyped]
     from PIL import Image as PILImage
+    from PIL import ImageOps
+
+    if not paths:
+        raise ValueError("No valid images provided.")
 
     output_dir.mkdir(parents=True, exist_ok=True)
     stem = sanitize_filename(output_name) if output_name else "images_combined"
     out_path = output_dir / f"{stem}.pdf"
 
-    images = []
+    doc = pymupdf.open()
     for p in paths:
-        img = PILImage.open(p).convert("RGB")
-        images.append(img)
+        with PILImage.open(p) as raw:
+            img = ImageOps.exif_transpose(raw).convert("RGB")
+            width, height = img.size
+            buf = io.BytesIO()
+            img.save(buf, format="PNG")
+            image_bytes = buf.getvalue()
 
-    if not images:
-        raise ValueError("No valid images provided.")
+        page = doc.new_page(width=width, height=height)
+        page.insert_image(pymupdf.Rect(0, 0, width, height), stream=image_bytes)
 
-    first = images[0]
-    rest = images[1:] if len(images) > 1 else []
-    first.save(
-        str(out_path),
-        format="PDF",
-        save_all=True,
-        append_images=rest,
-    )
+    doc.save(str(out_path))
+    doc.close()
     return out_path
 
 
@@ -106,10 +120,8 @@ def extract_text(path: Path, output_dir: Path) -> tuple[Path, int]:
     Returns:
         Tuple of (txt_path, word_count).
     """
-    import pymupdf  # type: ignore[import-untyped]
-
     output_dir.mkdir(parents=True, exist_ok=True)
-    doc = pymupdf.open(str(path))
+    doc = open_pdf(path)
     parts: list[str] = []
 
     for i, page in enumerate(doc):

@@ -7,6 +7,12 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
+from src.core.document._shared import open_pdf
+
+# get_pdf_info's has_text scan samples only the first N pages — a full scan of
+# a 500-page scanned PDF is too slow for what is just preview metadata.
+_HAS_TEXT_SAMPLE_PAGES = 20
+
 
 def render_first_page_png(path: Path, *, zoom: float = 1.0) -> bytes | None:
     """Rasterize the first page of a PDF to PNG bytes (~72dpi * zoom).
@@ -26,7 +32,7 @@ def render_first_page_png(path: Path, *, zoom: float = 1.0) -> bytes | None:
     try:
         import pymupdf  # type: ignore[import-untyped]
 
-        doc = pymupdf.open(str(path))
+        doc = open_pdf(path)
     except Exception:
         return None
     try:
@@ -55,31 +61,27 @@ class PdfInfo:
 def get_pdf_info(path: Path) -> PdfInfo:
     """Extract metadata and first-page thumbnail from a PDF.
 
+    `has_text` samples only the first `_HAS_TEXT_SAMPLE_PAGES` pages — a full
+    scan is too slow for a 500-page scanned PDF when this is just preview
+    metadata. A document is scanned cover-to-cover or not; sampling the front
+    is enough to tell native-text PDFs from image-only ones in practice.
+
     Args:
         path: Path to a PDF file.
 
     Returns:
         PdfInfo dataclass with page count, metadata and preview thumbnail.
     """
-    import pymupdf  # type: ignore[import-untyped]
-
-    doc = pymupdf.open(str(path))
+    doc = open_pdf(path)
     try:
         meta = doc.metadata or {}
         page_count = doc.page_count
 
-        # Check whether at least one page has extractable text
         has_text = False
-        for page in doc:
+        for page in doc[:_HAS_TEXT_SAMPLE_PAGES]:
             if page.get_text().strip():
                 has_text = True
                 break
-
-        # Rasterize first page at ~72dpi for lightweight preview
-        thumb: bytes | None = None
-        if page_count > 0:
-            pix = doc[0].get_pixmap(matrix=pymupdf.Matrix(1.0, 1.0))
-            thumb = pix.tobytes("png")
 
         return PdfInfo(
             page_count=page_count,
@@ -87,7 +89,7 @@ def get_pdf_info(path: Path) -> PdfInfo:
             title=meta.get("title", "") or "",
             author=meta.get("author", "") or "",
             has_text=has_text,
-            first_page_thumb=thumb,
+            first_page_thumb=render_first_page_png(path),
         )
     finally:
         doc.close()

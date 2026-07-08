@@ -12,6 +12,7 @@ import shutil
 from pathlib import Path
 from typing import Callable
 
+from src.core.document._shared import open_pdf
 from src.utils import sanitize_filename
 
 # por = Portuguese, eng = English, spa = Spanish. Combine with '+': "por+eng".
@@ -93,7 +94,7 @@ def ocr_pdf(
     pytesseract.pytesseract.tesseract_cmd = cmd
 
     output_dir.mkdir(parents=True, exist_ok=True)
-    doc = pymupdf.open(str(path))
+    doc = open_pdf(path)
     total = doc.page_count
     scale = dpi / 72.0
     matrix = pymupdf.Matrix(scale, scale)

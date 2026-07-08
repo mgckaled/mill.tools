@@ -172,3 +172,13 @@ def test_encrypt_file_requires_password(sample_pdf, out_dir):
     result = doc.authenticate(pw)
     assert result != 0
     doc.close()
+
+
+def test_split_encrypted_pdf_raises_clear_error(sample_pdf, out_dir):
+    """Every operation shares _shared.open_pdf, so one call site is enough
+    to prove the needs_pass check is wired in end-to-end."""
+    from src.core.document.processor import encrypt_pdf, split_pdf
+
+    encrypted = encrypt_pdf(sample_pdf, out_dir, password="testsecret")
+    with pytest.raises(ValueError, match="protegido por senha"):
+        split_pdf(encrypted, "1", out_dir)

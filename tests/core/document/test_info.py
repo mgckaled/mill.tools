@@ -74,6 +74,7 @@ def test_render_first_page_png_zero_pages_returns_none(mocker):
 
     fake_doc = MagicMock()
     fake_doc.page_count = 0
+    fake_doc.needs_pass = False
     fake_pymupdf = MagicMock()
     fake_pymupdf.open.return_value = fake_doc
     mocker.patch.dict(sys.modules, {"pymupdf": fake_pymupdf})
