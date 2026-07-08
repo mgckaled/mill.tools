@@ -116,6 +116,25 @@ mora onde e limites de tamanho → skill `architecture`; superfícies → `cli` 
   `TfidfVectorizer` do `[ml]` (sem download nltk, sem dep nova). **`entities.py`** — spaCy NER **CNN**
   (`pt_core_news_sm`, singleton lazy; **nunca `_trf`**, que puxaria torch). **`reader.py`**/**`lang.py`** —
   corpo do doc (header-strip) e heurística PT/EN.
+- **`clean.py`** (`PLANO_INSIGHTS_QUALIDADE.md`) — fonte única de limpeza de texto extraído de PDF: derruba
+  marcadores de página, pontua itens de lista sem fronteira de sentença, filtra linhas curtas sem pontuação
+  terminal (front matter tipo título/autor/data) e mascara/desmascara abreviações (`e.g.`, `i.e.`, `et al.`,
+  `Dr.`, `Sr.`, `Sra.`, `p. ex.`). `core/document/converter.py::extract_text` gera o marcador via
+  `clean.page_marker()` — mesma string, fonte única (antes duplicava o literal). **Consumida internamente**
+  por `summarize.extractive_summary`/`keywords.keyphrases` (qualquer chamador — GUI ou CLI — se beneficia sem
+  precisar limpar antes) e explicitamente pelo `insights_panel` (uma chamada, três engines — ver abaixo).
+  **Nunca consumida por `entities()`**: front matter carrega entidades PER/ORG/DATE legítimas ("Anthropic",
+  "January 2024") que o NER se beneficia de ver — só o hub Insights opta por alimentá-lo com o texto limpo
+  mesmo assim, por consistência visual entre as três seções do painel, não por precisar da limpeza.
+  `reader.py` **não** foi alterado (fica fino, só o header-strip de sempre) — a limpeza é responsabilidade de
+  cada engine que a usa, não da leitura em si; isso preserva o acesso do `entities()` ao texto cru via CLI
+  (`cli/ai.py entities`), que continua sem tocar `clean.py`.
+- **Prior de posição pós-filtro** (`summarize.py`, Fase 3): o filtro de sentenças candidatas
+  (`_is_summary_candidate` — `clean.is_prose_line` + teto de palavras) roda **antes** do grafo do TextRank
+  ser montado, então o lead-position prior (`_POSITION_BIAS_WEIGHT = 0.15`) já opera só sobre sentenças
+  reais — não precisou de ajuste por `kind` (o filtro pós-boilerplate sozinho bastou, confirmado pela fixture
+  de reprodução `messy_pdf_text`). `split_sentences` mascara/desmascara abreviações internamente, ao redor do
+  `_SENT_BOUNDARY`.
 - **Modelo spaCy** é download à parte (como o Tesseract): `uv sync --extra nlp && uv run python -m spacy
   download pt_core_news_sm`. `en_core_web_sm` (`uv run python -m spacy download en_core_web_sm`) é
   **opcional-recomendado** para acervo com material em inglês. `entities.is_available()` checa **pacote e

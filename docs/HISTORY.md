@@ -11,6 +11,30 @@ ficam em [`ROADMAP.md`](ROADMAP.md) e [`plans/active/`](plans/active/).
 
 ## Entregas (marcos)
 
+### Qualidade da aba Insights — limpeza de texto + gates por idioma (jul/2026)
+Origem: a mesma avaliação de produto ML/RAG
+([`reference/AVALIACAO_ML_RAG_FABLE5.md`](reference/AVALIACAO_ML_RAG_FABLE5.md)) mais um caso real com
+screenshot — um PDF em inglês ("Claude's Constitution") produzia um resumo dominado por marcadores de página
+e front matter, keyphrases poluídas ("Página", "January") e a seção Entidades pedindo para "instalar o extra
+de NLP" com todos os extras já instalados (faltava só o modelo `en_core_web_sm`). **`core/text/clean.py`**
+(novo) é a fonte única de limpeza: derruba marcadores de página (`core/document/converter.py` gera via
+`clean.page_marker()`, mesma string, fonte única), pontua itens de lista sem fronteira de sentença, filtra
+linhas curtas sem pontuação terminal (front matter tipo título/autor/data) e mascara/desmascara abreviações
+(`e.g.`, `i.e.`, `et al.`, `Dr.`, `Sr.`, `Sra.`, `p. ex.`) para um split de sentenças seguro. Consumido
+internamente por `summarize.extractive_summary`/`keywords.keyphrases` (qualquer chamador se beneficia, GUI ou
+CLI) — **deliberadamente não** por `entities()`, que se beneficia de ver as entidades PER/ORG/DATE legítimas
+do front matter; só o painel Insights opta por alimentar as três engines com o mesmo texto limpo (uma
+chamada, três engines), por consistência visual, não porque `entities()` precise da limpeza. O filtro de
+sentenças candidatas roda **antes** do grafo do TextRank, então o lead-position prior (0.15) já opera só
+sobre conteúdo real — não precisou de ajuste por `kind`, a fixture de reprodução confirmou que o filtro
+pós-boilerplate sozinho bastou. `entities.availability(lang)` (nova função irmã de `is_available()`) devolve
+`None`/hint específico, distinguindo "falta o extra `[nlp]`" de "falta só o modelo do idioma X" — o bug de
+mensagem do screenshot. `keywords.keyphrases` funde o stopword set default da YAKE por idioma com um pequeno
+conjunto de artefatos estruturais (`_stopwords_for`) — nunca substitui o default (verificado no código-fonte
+do `yake==0.7.1` via Context7: passar só os extras troca a lista inteira, não soma). Cobertura de
+`core/text/` foi de 97% para 98%. Plano:
+[`plans/implemented/PLANO_INSIGHTS_QUALIDADE.md`](plans/implemented/PLANO_INSIGHTS_QUALIDADE.md).
+
 ### Correções RAG/ML — 2ª rodada, pós-avaliação de produto (jul/2026)
 Avaliação de produto+acurácia do ML/RAG (ver
 [`reference/AVALIACAO_ML_RAG_FABLE5.md`](reference/AVALIACAO_ML_RAG_FABLE5.md)) encontrou arestas que só
