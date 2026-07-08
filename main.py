@@ -149,13 +149,23 @@ def main() -> None:
     setup_logging(args.verbose)
 
     try:
-        check_dependencies()
-
         kind, value = resolve_input(args.url)
+        # yt-dlp/ffmpeg are only needed to download+extract audio from a URL —
+        # local files (text or media) never touch either, so the check would
+        # otherwise fail installs that only ever process local input.
+        if kind == "url":
+            check_dependencies()
 
         TRANSCRIPTIONS_TEXT_DIR.mkdir(parents=True, exist_ok=True)
 
         is_text = kind == "local" and Path(value).suffix.lower() in {".txt", ".md"}
+
+        subtitle_formats = _subtitle_formats_from_args(args)
+        if is_text and subtitle_formats:
+            logging.warning(
+                "[!] --srt/--vtt/--subtitles ignorados para entrada de texto "
+                "(não há transcrição a partir da qual gerar legendas)."
+            )
 
         if is_text:
             # Text file: skip download + transcription, run only the LLM steps.
@@ -166,6 +176,12 @@ def main() -> None:
             if output_path.resolve() != src_txt.resolve():
                 shutil.copyfile(src_txt, output_path)
             logging.info("[i] Text input — skipping transcription: %s", src_txt.name)
+            if not (args.format or args.analyze or args.prompt):
+                logging.warning(
+                    "[!] Nenhuma etapa de IA solicitada (--format/--analyze/--prompt) "
+                    "— apenas o arquivo foi copiado para %s.",
+                    output_path,
+                )
         else:
             if kind == "local":
                 # Local audio or video (faster-whisper decodes video via PyAV).
@@ -214,7 +230,7 @@ def main() -> None:
                 args.language,
                 args.threads,
                 args.beam_size,
-                subtitle_formats=_subtitle_formats_from_args(args),
+                subtitle_formats=subtitle_formats,
             )
 
             if elapsed is not None:

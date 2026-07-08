@@ -101,3 +101,120 @@ def test_parse_args_profile_accepts_valid_choice():
 def test_parse_args_profile_rejects_unknown_choice():
     with pytest.raises(SystemExit):
         _parse("https://youtu.be/abc", "--profile", "does-not-exist")
+
+
+# ── main() — check_dependencies conditional by input kind (Fase 4) ──────────
+
+
+def test_main_skips_check_dependencies_for_local_text_input(
+    tmp_path, mocker, monkeypatch
+):
+    import main as main_mod
+
+    txt = tmp_path / "notas.txt"
+    txt.write_text("algum conteudo de texto.", encoding="utf-8")
+    monkeypatch.setattr(main_mod, "TRANSCRIPTIONS_TEXT_DIR", tmp_path / "out")
+    mocker.patch("main.setup_logging")
+    mock_check = mocker.patch("main.check_dependencies")
+    mocker.patch("sys.argv", ["main.py", str(txt)])
+
+    main_mod.main()
+
+    mock_check.assert_not_called()
+
+
+def test_main_calls_check_dependencies_for_url_input(mocker):
+    import main as main_mod
+
+    mocker.patch("main.setup_logging")
+    mock_check = mocker.patch(
+        "main.check_dependencies", side_effect=RuntimeError("stop before network")
+    )
+    mocker.patch("sys.argv", ["main.py", "https://youtu.be/abc123"])
+
+    with pytest.raises(SystemExit):
+        main_mod.main()
+
+    mock_check.assert_called_once()
+
+
+# ── main() — avisos de UX pra entrada de texto (Fase 4) ──────────────────────
+
+
+def test_main_text_input_without_ai_steps_warns(tmp_path, mocker, monkeypatch, caplog):
+    import logging as _logging
+
+    import main as main_mod
+
+    txt = tmp_path / "notas.txt"
+    txt.write_text("algum conteudo de texto.", encoding="utf-8")
+    monkeypatch.setattr(main_mod, "TRANSCRIPTIONS_TEXT_DIR", tmp_path / "out")
+    mocker.patch("main.setup_logging")
+    mocker.patch("sys.argv", ["main.py", str(txt)])
+
+    with caplog.at_level(_logging.WARNING, logger="root"):
+        main_mod.main()
+
+    assert any("Nenhuma etapa de IA" in r.message for r in caplog.records)
+
+
+def test_main_text_input_with_ai_step_does_not_warn(
+    tmp_path, mocker, monkeypatch, caplog
+):
+    import logging as _logging
+
+    import main as main_mod
+
+    txt = tmp_path / "notas.txt"
+    txt.write_text("algum conteudo de texto.", encoding="utf-8")
+    monkeypatch.setattr(main_mod, "TRANSCRIPTIONS_TEXT_DIR", tmp_path / "out")
+    mocker.patch("main.setup_logging")
+    mocker.patch("src.prompter.build_prompt_ready")
+    mocker.patch("sys.argv", ["main.py", str(txt), "--prompt"])
+
+    with caplog.at_level(_logging.WARNING, logger="root"):
+        main_mod.main()
+
+    assert not any("Nenhuma etapa de IA" in r.message for r in caplog.records)
+
+
+def test_main_text_input_with_subtitle_flags_warns(
+    tmp_path, mocker, monkeypatch, caplog
+):
+    import logging as _logging
+
+    import main as main_mod
+
+    txt = tmp_path / "notas.txt"
+    txt.write_text("algum conteudo de texto.", encoding="utf-8")
+    monkeypatch.setattr(main_mod, "TRANSCRIPTIONS_TEXT_DIR", tmp_path / "out")
+    mocker.patch("main.setup_logging")
+    mocker.patch("sys.argv", ["main.py", str(txt), "--srt"])
+
+    with caplog.at_level(_logging.WARNING, logger="root"):
+        main_mod.main()
+
+    assert any("ignorados para entrada de texto" in r.message for r in caplog.records)
+
+
+def test_main_media_input_with_subtitle_flags_does_not_warn(
+    tmp_path, mocker, monkeypatch, caplog
+):
+    """Sanity: the text-input-only warning must not fire for local media."""
+    import logging as _logging
+
+    import main as main_mod
+
+    audio = tmp_path / "audio.mp3"
+    audio.write_bytes(b"")
+    monkeypatch.setattr(main_mod, "TRANSCRIPTIONS_TEXT_DIR", tmp_path / "out")
+    mocker.patch("main.setup_logging")
+    mocker.patch("main.transcribe", return_value=None)
+    mocker.patch("sys.argv", ["main.py", str(audio), "--srt"])
+
+    with caplog.at_level(_logging.WARNING, logger="root"):
+        main_mod.main()
+
+    assert not any(
+        "ignorados para entrada de texto" in r.message for r in caplog.records
+    )
