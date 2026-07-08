@@ -164,6 +164,7 @@ def format_report(
     source_path: Path,
     video_meta: dict | None = None,
     transcription: str | None = None,
+    generated_at: datetime | None = None,
 ) -> str:
     """Format the analysis dictionary as a Markdown report for *profile*.
 
@@ -173,6 +174,8 @@ def format_report(
         source_path: Path to the original transcription/source file.
         video_meta: Parsed metadata from the source header (optional).
         transcription: Formatted transcription body to append (optional).
+        generated_at: Timestamp for the "Gerado em" line (default: now).
+            Overridable so callers/tests can get a deterministic report.
 
     Returns:
         Formatted Markdown string.
@@ -182,7 +185,7 @@ def format_report(
     channel = video_meta.get("channel", "")
     duration = video_meta.get("duration", "")
     url = video_meta.get("url", "")
-    generated_at = datetime.now().strftime("%Y-%m-%d %H:%M")
+    generated_at_str = (generated_at or datetime.now()).strftime("%Y-%m-%d %H:%M")
 
     lines = [f"# {title}", ""]
 
@@ -199,7 +202,7 @@ def format_report(
     lines.extend(
         [
             "",
-            f"> Gerado em: {generated_at} | Fonte: `{source_path.name}`",
+            f"> Gerado em: {generated_at_str} | Fonte: `{source_path.name}`",
             "",
             "---",
             "",

@@ -129,6 +129,22 @@ def test_header_meta_and_transcription_appendix():
     assert "## Transcrição\n\nCORPO COMPLETO" in out
 
 
+def test_generated_at_override_is_deterministic():
+    from datetime import datetime
+
+    from src.analysis.report import format_report
+    from src.analysis.types import Field
+
+    prof = _profile([Field("summary", "Resumo", "paragraph", "r")])
+    out = format_report(
+        prof,
+        {"summary": "S"},
+        Path("t.txt"),
+        generated_at=datetime(2026, 1, 2, 3, 4),
+    )
+    assert "> Gerado em: 2026-01-02 03:04 | Fonte: `t.txt`" in out
+
+
 def test_title_falls_back_to_stem():
     from src.analysis.report import format_report
     from src.analysis.types import Field

@@ -1,8 +1,9 @@
 """
-profiles: Tier 1 catalog of analysis profiles + grouped metadata for the GUI.
+profiles: Catalog of analysis profiles + grouped metadata for the GUI.
 
 Adding a profile is a single entry: define it in one of the group modules,
 include it in that module's ``PROFILES`` tuple, and reference its id in ``GROUPS``.
+Origin and rationale: docs/plans/archive/ANALYSIS_PROFILES.md.
 """
 
 from __future__ import annotations
