@@ -36,7 +36,7 @@ def test_resolve_device_cuda_fallback(mocker):
     )
     from src.transcriber import _resolve_device
 
-    device, compute = _resolve_device(4)
+    device, compute = _resolve_device()
     assert device == "cpu"
     assert compute == "int8"
 
@@ -50,7 +50,7 @@ def test_resolve_device_cuda_int8_float32(mocker):
     )
     from src.transcriber import _resolve_device
 
-    device, compute = _resolve_device(4)
+    device, compute = _resolve_device()
     assert device == "cuda"
     assert compute == "int8_float32"
 
@@ -64,7 +64,7 @@ def test_resolve_device_cuda_float32_fallback(mocker):
     )
     from src.transcriber import _resolve_device
 
-    device, compute = _resolve_device(4)
+    device, compute = _resolve_device()
     assert device == "cuda"
     assert compute == "float32"
 

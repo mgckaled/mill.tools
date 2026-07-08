@@ -167,9 +167,9 @@ def format_transcription(
         FileNotFoundError: If the input file does not exist.
     """
 
-    def _emit(type: str, payload: dict = {}) -> None:
+    def _emit(type: str, payload: dict | None = None) -> None:
         if on_event:
-            on_event(type, "format", payload)
+            on_event(type, "format", payload or {})
 
     if not input_path.exists():
         logging.error("File not found: %s", input_path)

@@ -19,7 +19,6 @@ async def main(page: ft.Page) -> None:
     page.window.min_height = 600
     page.window.maximized = True
     page.update()
-    await page.window.center()
     # Windows-only; caminho absoluto (issue #3438)
     page.window.icon = WINDOW_ICON
     # define page.theme (light) + page.dark_theme (dark)

@@ -35,13 +35,10 @@ def format_elapsed(seconds: float) -> str:
     return f"{s}s"
 
 
-def _resolve_device(threads: int) -> tuple[str, str]:
+def _resolve_device() -> tuple[str, str]:
     """Detect available compute device and select the best compute type.
 
     Prefers CUDA with int8_float32 if available, falls back to CPU with int8.
-
-    Args:
-        threads: CPU thread count (used only on CPU fallback path).
 
     Returns:
         Tuple of (device, compute_type).
@@ -96,9 +93,9 @@ def transcribe(
         Elapsed transcription time in seconds.
     """
 
-    def _emit(type: str, payload: dict = {}) -> None:
+    def _emit(type: str, payload: dict | None = None) -> None:
         if on_event:
-            on_event(type, "transcribe", payload)
+            on_event(type, "transcribe", payload or {})
 
     if output_path.exists():
         if force_overwrite:
@@ -116,7 +113,7 @@ def transcribe(
                 logging.info("Skipping transcription.")
                 return None
 
-    device, compute_type = _resolve_device(threads)
+    device, compute_type = _resolve_device()
     logging.debug(
         "[d] Device: %s | compute_type: %s | threads: %d | beam_size: %d",
         device.upper(),
@@ -204,6 +201,8 @@ def transcribe(
         segment_count = 0
         flagged_count = 0
         cues: list = []  # populated only when subtitle_formats is non-empty
+        if subtitle_formats:
+            from src.core.subtitles import SubtitleCue
         with output_path.open("w", encoding="utf-8") as f:
             f.write(header)
             current = 0.0
@@ -232,8 +231,6 @@ def transcribe(
                     shown = total_shown
                     segment_count += 1
                     if subtitle_formats:
-                        from src.core.subtitles import SubtitleCue
-
                         cues.append(
                             SubtitleCue(
                                 index=segment_count,

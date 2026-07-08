@@ -11,10 +11,10 @@ Provider routing is handled by `src.llm_factory.make_llm`:
 - anything else → local Ollama
 
 Usage (standalone):
-    uv run yt-analyzer transcriptions/raw/transcricao_ovabeV.txt
-    uv run yt-analyzer transcriptions/raw/transcricao_ovabeV.txt --model qwen7b-custom
-    uv run yt-analyzer transcriptions/raw/transcricao_ovabeV.txt --model gemini-2.5-flash
-    uv run yt-analyzer transcriptions/raw/transcricao_ovabeV.txt --verbose
+    uv run -m src output/transcriptions/text/transcricao_ovabeV.txt
+    uv run -m src output/transcriptions/text/transcricao_ovabeV.txt --model qwen7b-custom
+    uv run -m src output/transcriptions/text/transcricao_ovabeV.txt --model gemini-2.5-flash
+    uv run -m src output/transcriptions/text/transcricao_ovabeV.txt --verbose
 """
 
 import argparse
@@ -216,9 +216,9 @@ def _ensure_portuguese(
         Original analysis if already in Portuguese, or translated version.
     """
 
-    def _emit(type: str, payload: dict = {}) -> None:
+    def _emit(type: str, payload: dict | None = None) -> None:
         if on_event:
-            on_event(type, "analyze", payload)
+            on_event(type, "analyze", payload or {})
 
     summary = analysis.get("summary", "")
     if not summary:
@@ -292,9 +292,9 @@ def analyze(
         ValueError: If the LLM returns invalid JSON after all attempts.
     """
 
-    def _emit(type: str, payload: dict = {}) -> None:
+    def _emit(type: str, payload: dict | None = None) -> None:
         if on_event:
-            on_event(type, "analyze", payload)
+            on_event(type, "analyze", payload or {})
 
     if not input_path.exists():
         logging.error("File not found: %s", input_path)
