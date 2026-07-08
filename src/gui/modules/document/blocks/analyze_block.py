@@ -19,15 +19,16 @@ class AnalyzeRefs(NamedTuple):
 def build_analyze_block(page: ft.Page) -> tuple[ft.Column, AnalyzeRefs]:
     """Build the analyze operation block."""
     model_grid, _get_model, _ = segmented_selector(
-        ["qwen7b-custom", "gemini-2.5-flash", "glm-4.7-flash"],
-        "qwen7b-custom",
+        ["gemma3-4b-custom", "qwen7b-custom", "gemini-2.5-flash", "glm-4.7-flash"],
+        "gemma3-4b-custom",
         page,
         labels={
+            "gemma3-4b-custom": "Local (Gemma)",
             "qwen7b-custom": "Local (Qwen)",
             "gemini-2.5-flash": "Gemini Flash",
             "glm-4.7-flash": "GLM Flash",
         },
-        columns=3,
+        columns=2,
     )
 
     profile_grid, _get_profile, _ = build_profile_selector(page, value="default")

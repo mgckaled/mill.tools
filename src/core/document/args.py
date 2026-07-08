@@ -51,7 +51,7 @@ class DocumentArgs:
     qr_fmt: str = "png"  # png | jpg
 
     # --- analyze ---
-    analyze_model: str = "qwen7b-custom"  # qwen7b-custom | gemini-2.5-flash
+    analyze_model: str = "gemma3-4b-custom"  # gemma3-4b-custom | qwen7b-custom | gemini-2.5-flash | glm-4.7-flash
     analyze_profile: str = "default"  # analysis schema/prompt — see src/analysis
 
     # --- ocr ---
