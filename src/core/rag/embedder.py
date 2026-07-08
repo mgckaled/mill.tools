@@ -4,6 +4,13 @@ Kept tiny and dependency-light: it wraps ``langchain_ollama.OllamaEmbeddings``
 (same package already used for ``ChatOllama``) so no new dependency is added. The
 indexer/retriever inject these functions as ``embed_fn``/``embed_query_fn``, which
 keeps the rest of the core testable without a running Ollama.
+
+Models in the nomic-embed family (matched by substring — see ``_prefixes_for``)
+require task-instruction prefixes: ``embed_texts`` prepends ``"search_document: "``
+and ``embed_query`` prepends ``"search_query: "`` before calling Ollama. A model
+outside that family embeds unprefixed. This changes the embedding space, so it is
+folded into ``rag.stats.embed_space_id`` via the indexer's scheme marker — see
+``core/rag/indexer.py``.
 """
 
 from __future__ import annotations
@@ -41,6 +48,29 @@ SETUP_HINT = (
     "ollama pull nomic-embed-text && "
     "ollama create nomic-embed-custom -f ollama/Modelfile.nomic"
 )
+
+# nomic-embed-text was trained with task-instruction prefixes: documents must be
+# embedded as "search_document: <text>" and queries as "search_query: <text>"
+# (exact strings + the trailing space, per the model's Hugging Face card). Without
+# them, document and query fall into the same "no task" space, which is the
+# asymmetry (short query vs. long document) RAG retrieval suffers from most.
+# Verified (PLANO_RAG_ESPACO_EMBEDDING, Fase 1) that nothing already adds this:
+# ollama/Modelfile.nomic has no TEMPLATE override, so it inherits the base
+# nomic-embed-text model's `TEMPLATE {{ .Prompt }}` — the prompt reaches the
+# model raw. langchain_ollama.OllamaEmbeddings.embed_query/embed_documents post
+# the text unmodified to Ollama's /api/embed too. Keyed by substring so any
+# nomic-embed-* tag (custom build, base, future variants) matches; a model
+# outside this family embeds unprefixed, unchanged from pre-existing behavior.
+_NOMIC_DOC_PREFIX = "search_document: "
+_NOMIC_QUERY_PREFIX = "search_query: "
+
+
+def _prefixes_for(model: str) -> tuple[str, str]:
+    """Return (doc_prefix, query_prefix) for `model`; ("", "") outside the nomic family."""
+    if "nomic" in model.lower():
+        return _NOMIC_DOC_PREFIX, _NOMIC_QUERY_PREFIX
+    return "", ""
+
 
 # TTL for the opt-in availability cache (use_cache=True) — short enough that a
 # service that just went down is still caught within a minute, long enough to
@@ -133,13 +163,16 @@ def embed_texts(
     if not texts:
         return np.empty((0, EMBED_DIM), dtype=np.float32)
 
+    doc_prefix, _ = _prefixes_for(model)
+    prefixed = [doc_prefix + t for t in texts] if doc_prefix else texts
+
     client = _embeddings(model)
     out: list[list[float]] = []
     total = len(texts)
     elapsed_total = 0.0
     for start in range(0, total, batch_size):
         t0 = time.monotonic()
-        batch = client.embed_documents(texts[start : start + batch_size])
+        batch = client.embed_documents(prefixed[start : start + batch_size])
         elapsed_total += time.monotonic() - t0
         out.extend(batch)
         if progress_cb:
@@ -158,7 +191,8 @@ def embed_texts(
 
 def embed_query(text: str, model: str = DEFAULT_EMBED_MODEL) -> np.ndarray:
     """Return a (EMBED_DIM,) float32 vector for a single query."""
+    _, query_prefix = _prefixes_for(model)
     t0 = time.monotonic()
-    vec = _embeddings(model).embed_query(text)
+    vec = _embeddings(model).embed_query(query_prefix + text if query_prefix else text)
     record_timing(model, "embed", time.monotonic() - t0)
     return np.asarray(vec, dtype=np.float32)

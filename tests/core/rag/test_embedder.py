@@ -290,3 +290,84 @@ def test_embed_texts_empty_records_no_timing(mocker, isolate_model_timing_store)
     embedder.embed_texts([])
 
     assert load_timings(isolate_model_timing_store) == []
+
+
+# ---------------------------------------------------------------------------
+# Task-instruction prefixes (PLANO_RAG_ESPACO_EMBEDDING, Fase 2)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.unit
+def test_prefixes_for_nomic_family():
+    from src.core.rag import embedder
+
+    assert embedder._prefixes_for("nomic-embed-custom") == (
+        "search_document: ",
+        "search_query: ",
+    )
+    assert embedder._prefixes_for("nomic-embed-text") == (
+        "search_document: ",
+        "search_query: ",
+    )
+
+
+@pytest.mark.unit
+def test_prefixes_for_outside_nomic_family_is_empty():
+    from src.core.rag import embedder
+
+    assert embedder._prefixes_for("qwen7b-custom") == ("", "")
+    assert embedder._prefixes_for("mxbai-embed-large") == ("", "")
+
+
+@pytest.mark.unit
+def test_embed_texts_prefixes_nomic_documents(mocker):
+    from src.core.rag import embedder
+
+    module = _fake_ollama_module(doc_vec=[1, 2, 3])
+    mocker.patch.dict(sys.modules, {"langchain_ollama": module})
+
+    embedder.embed_texts(["olá", "mundo"], model="nomic-embed-custom")
+
+    emb = module.OllamaEmbeddings.return_value
+    (seen_batch,), _ = emb.embed_documents.call_args
+    assert seen_batch == ["search_document: olá", "search_document: mundo"]
+
+
+@pytest.mark.unit
+def test_embed_query_prefixes_nomic_query(mocker):
+    from src.core.rag import embedder
+
+    module = _fake_ollama_module(query_vec=[1, 2, 3])
+    mocker.patch.dict(sys.modules, {"langchain_ollama": module})
+
+    embedder.embed_query("pergunta", model="nomic-embed-custom")
+
+    emb = module.OllamaEmbeddings.return_value
+    emb.embed_query.assert_called_once_with("search_query: pergunta")
+
+
+@pytest.mark.unit
+def test_embed_texts_no_prefix_outside_nomic_family(mocker):
+    from src.core.rag import embedder
+
+    module = _fake_ollama_module(doc_vec=[1, 2, 3])
+    mocker.patch.dict(sys.modules, {"langchain_ollama": module})
+
+    embedder.embed_texts(["olá"], model="qwen7b-custom")
+
+    emb = module.OllamaEmbeddings.return_value
+    (seen_batch,), _ = emb.embed_documents.call_args
+    assert seen_batch == ["olá"]  # unchanged — pre-existing behavior
+
+
+@pytest.mark.unit
+def test_embed_query_no_prefix_outside_nomic_family(mocker):
+    from src.core.rag import embedder
+
+    module = _fake_ollama_module(query_vec=[1, 2, 3])
+    mocker.patch.dict(sys.modules, {"langchain_ollama": module})
+
+    embedder.embed_query("pergunta", model="qwen7b-custom")
+
+    emb = module.OllamaEmbeddings.return_value
+    emb.embed_query.assert_called_once_with("pergunta")

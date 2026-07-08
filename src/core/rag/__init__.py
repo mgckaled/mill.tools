@@ -9,4 +9,10 @@ for provider routing (Ollama/Gemini), ``llm_utils.split_text`` for chunking, and
 the Library scanner (``scan_library``) as the corpus source — instead of growing a
 second way of talking to an LLM. Torch-free: embeddings run on Ollama (llama.cpp),
 the vector store is a thin numpy wrapper, no FAISS/Chroma.
+
+The embedding space is versioned (``embed_space_id`` in ``rag.stats``, folded from
+the embed model, the vector width and the indexer's content scheme — task-instruction
+prefixes, contextual chunk headers, PDF-noise cleanup). Anything that changes what
+gets embedded requires a reindex and must bump the scheme marker in
+``core/rag/indexer.py`` — see ``PLANO_RAG_ESPACO_EMBEDDING`` in ``docs/HISTORY.md``.
 """
