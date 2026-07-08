@@ -3,7 +3,6 @@ transcriber.py: Audio transcription, progress display and result summary.
 """
 
 import logging
-import sys
 from collections.abc import Callable
 from pathlib import Path
 from time import time
@@ -105,9 +104,14 @@ def transcribe(
         if force_overwrite:
             logging.info("[»] Overwriting existing transcription: %s", output_path.name)
         else:
-            answer = input(
-                f"[!] Transcription already exists: '{output_path}'. Overwrite? [y/N] "
-            )
+            try:
+                answer = input(
+                    f"[!] Transcription already exists: '{output_path}'. Overwrite? [y/N] "
+                )
+            except EOFError:
+                # No stdin (scheduled/piped run) — default to not overwriting
+                # rather than crashing on the prompt.
+                answer = "n"
             if answer.strip().lower() != "y":
                 logging.info("Skipping transcription.")
                 return None
@@ -192,7 +196,10 @@ def transcribe(
                 )
 
         header = format_metadata(meta, url, detected_language=info.language)
-        duration = int(meta.get("duration", 0))
+        # meta["duration"] is 0 for local files (no metadata source) — info.duration
+        # (from Whisper, known before the segment loop starts) gives the progress
+        # bar a real total instead of staying stuck at 0%.
+        duration = int(meta.get("duration", 0)) or int(info.duration)
 
         segment_count = 0
         flagged_count = 0
@@ -200,6 +207,7 @@ def transcribe(
         with output_path.open("w", encoding="utf-8") as f:
             f.write(header)
             current = 0.0
+            shown = 0  # whole seconds already reported to the bar
             with tqdm(
                 total=duration, unit="s", desc="Transcribing", ncols=72
             ) as progress_bar:
@@ -214,9 +222,14 @@ def transcribe(
                         flagged_count += 1
                     else:
                         f.write(f"{text} ")
-                    elapsed_seg = segment.end - current
-                    progress_bar.update(int(elapsed_seg))
                     current = segment.end
+                    # Update by the integer difference of the float-accumulated
+                    # cumulative position, not int(elapsed_seg) per segment —
+                    # truncating each segment's fractional part independently
+                    # loses time across many segments and the bar never reaches 100%.
+                    total_shown = int(current)
+                    progress_bar.update(total_shown - shown)
+                    shown = total_shown
                     segment_count += 1
                     if subtitle_formats:
                         from src.core.subtitles import SubtitleCue
@@ -275,12 +288,20 @@ def transcribe(
         )
         return elapsed
 
-    except KeyboardInterrupt:
-        logging.warning("[!] Transcription interrupted by user.")
+    except BaseException as exc:
+        # Any exception mid-loop — not just Ctrl-C — leaves an incomplete .txt
+        # that the Library/RAG would later index as if it were a full
+        # transcription. Clean it up regardless of cause, then re-raise:
+        # deciding the process exit code is main.py's call, not this library
+        # function's.
+        if isinstance(exc, KeyboardInterrupt):
+            logging.warning("[!] Transcription interrupted by user.")
+        else:
+            logging.error("[x] Transcription failed: %s", exc)
         if output_path.exists():
             output_path.unlink()
             logging.warning("[-] Incomplete file removed: %s", output_path)
-        sys.exit(0)
+        raise
 
 
 def print_summary(meta: dict, output_path: Path, elapsed: float) -> None:

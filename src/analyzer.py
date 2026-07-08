@@ -35,7 +35,7 @@ from src.analysis import (
     list_profiles,
 )
 from src.llm_factory import make_llm
-from src.llm_utils import split_text
+from src.llm_utils import extract_llm_text, split_text
 from src.utils import TRANSCRIPTIONS_ANALYSIS_DIR, setup_logging
 
 DEFAULT_MODEL = "gemma3-4b-custom"
@@ -124,7 +124,7 @@ def _invoke_and_parse(chain, payload: dict, *, retries: int = 1) -> dict:
     for attempt in range(retries + 1):
         response = chain.invoke(payload)
         try:
-            return _parse_json_response(response.content)
+            return _parse_json_response(extract_llm_text(response.content))
         except ValueError as exc:
             last_exc = exc
             if attempt < retries:
@@ -264,7 +264,7 @@ def _ensure_portuguese(
     logging.info("[~] Detecting analysis language...")
     detect_chain = DETECT_LANGUAGE_PROMPT | llm
     lang_response = detect_chain.invoke({"text": summary[:500]})
-    raw_lang = lang_response.content.strip()
+    raw_lang = extract_llm_text(lang_response.content).strip()
     detected = raw_lang.lower()[:2]
     logging.debug("[d] Language raw response: %r → parsed: %r", raw_lang, detected)
     logging.info("[i] Detected language: %s", detected)
@@ -278,7 +278,7 @@ def _ensure_portuguese(
     json_text = json.dumps(analysis, ensure_ascii=False, indent=2)
     translate_chain = TRANSLATE_PROMPT | llm
     translated_response = translate_chain.invoke({"json_text": json_text})
-    translated = _parse_json_response(translated_response.content)
+    translated = _parse_json_response(extract_llm_text(translated_response.content))
 
     logging.info("[✓] Translation complete.")
     _emit("translation_done", {})

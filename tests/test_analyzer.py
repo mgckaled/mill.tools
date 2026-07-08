@@ -151,6 +151,16 @@ def test_invoke_and_parse_raises_after_exhausting_retries():
     assert chain.calls == 2
 
 
+def test_invoke_and_parse_handles_list_content_gemini_shape():
+    """Gemini/GLM can return .content as a list of blocks instead of a str —
+    must route through extract_llm_text instead of AttributeError'ing on
+    .content.strip() (Fase 1 do PLANO_CORRECOES_SRC_RAIZ)."""
+    from src.analyzer import _invoke_and_parse
+
+    chain = _FakeChain([{"text": '{"summary": "ok"}'}])
+    assert _invoke_and_parse(chain, {"text": "x"}) == {"summary": "ok"}
+
+
 # ── _extract_transcription_body ──────────────────────────────────────────────
 
 
@@ -333,6 +343,19 @@ def test_ensure_portuguese_already_pt_returns_same():
     from src.analyzer import _ensure_portuguese
 
     llm = _fake_llm("pt")  # detect → 'pt' → returns input as-is
+    out = _ensure_portuguese(_VALID_ANALYSIS, llm)
+    assert out == _VALID_ANALYSIS
+
+
+def test_ensure_portuguese_handles_list_content_gemini_shape():
+    """Language-detection response as a list of blocks (Gemini shape) must not
+    AttributeError on .content.strip()."""
+    from langchain_core.language_models.fake_chat_models import GenericFakeChatModel
+    from langchain_core.messages import AIMessage
+
+    from src.analyzer import _ensure_portuguese
+
+    llm = GenericFakeChatModel(messages=iter([AIMessage(content=[{"text": "pt"}])]))
     out = _ensure_portuguese(_VALID_ANALYSIS, llm)
     assert out == _VALID_ANALYSIS
 

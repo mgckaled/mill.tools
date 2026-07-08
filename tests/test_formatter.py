@@ -80,6 +80,25 @@ def test_format_transcription_single_chunk_writes_back(tmp_path, mocker):
     assert "frase dois." in written
 
 
+def test_format_transcription_handles_list_content_gemini_shape(tmp_path, mocker):
+    """Gemini/GLM can return .content as a list of blocks — must route through
+    extract_llm_text instead of AttributeError'ing on .content.strip()
+    (Fase 1 do PLANO_CORRECOES_SRC_RAIZ)."""
+    from langchain_core.language_models.fake_chat_models import GenericFakeChatModel
+    from langchain_core.messages import AIMessage
+
+    from src import formatter
+
+    src = tmp_path / "t.txt"
+    src.write_text(_HEADER + "\n\nhello world.", encoding="utf-8")
+    fake = GenericFakeChatModel(
+        messages=iter([AIMessage(content=[{"text": "hello world."}])])
+    )
+    mocker.patch.object(formatter, "make_llm", return_value=fake)
+    out = formatter.format_transcription(src)
+    assert out == "hello world."
+
+
 def test_format_transcription_strips_response_whitespace(tmp_path, mocker):
     from src import formatter
 

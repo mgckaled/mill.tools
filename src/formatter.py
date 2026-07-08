@@ -21,7 +21,7 @@ from time import time
 from langchain_core.prompts import ChatPromptTemplate
 
 from src.llm_factory import make_llm
-from src.llm_utils import split_text
+from src.llm_utils import extract_llm_text, split_text
 
 DEFAULT_FORMAT_MODEL = "phi4mini-custom"
 FORMAT_CHUNK_SIZE = 4500
@@ -148,13 +148,14 @@ def format_transcription(
         _emit("format_chunk_start", {"i": i, "total": len(chunks)})
         t = time()
         response = chain.invoke({"text": chunk})
-        formatted_chunks.append(response.content.strip())
+        text = extract_llm_text(response.content).strip()
+        formatted_chunks.append(text)
         chunk_elapsed = time() - t
         logging.debug(
             "[d] Chunk %d done in %.1fs | output: %d chars",
             i,
             chunk_elapsed,
-            len(response.content),
+            len(text),
         )
         _emit(
             "format_chunk_done",

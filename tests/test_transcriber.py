@@ -349,6 +349,47 @@ def test_transcribe_subtitle_formats_with_zero_segments_skips_write(
     assert not sub_dir.exists()
 
 
+# ── progress bar total/accumulation (Fase 1 do PLANO_CORRECOES_SRC_RAIZ) ─────
+
+
+@pytest.mark.unit
+def test_transcribe_progress_total_falls_back_to_info_duration_when_meta_zero(
+    tmp_path, mocker
+):
+    """meta['duration']=0 (local file, no metadata source) — the progress bar
+    total must fall back to info.duration instead of staying stuck at 0."""
+    _patch_whisper(mocker, [_Seg(0.0, 3.0, "a")], info=_Info(duration=42.0))
+    mock_tqdm = mocker.patch("src.transcriber.tqdm")
+    mock_tqdm.return_value.__enter__.return_value = mocker.MagicMock()
+    _call_transcribe(tmp_path, meta={"title": "Local File", "duration": 0})
+    _, kwargs = mock_tqdm.call_args
+    assert kwargs["total"] == 42
+
+
+@pytest.mark.unit
+def test_transcribe_progress_bar_update_does_not_lose_fractional_seconds(
+    tmp_path, mocker
+):
+    """Many sub-second segments must not leave the bar stuck near 0 — update by
+    the integer diff of the cumulative position, not per-segment truncation."""
+    _patch_whisper(
+        mocker,
+        [
+            _Seg(0.0, 0.6, "a"),
+            _Seg(0.6, 1.2, "b"),
+            _Seg(1.2, 1.8, "c"),
+        ],
+    )
+    mock_tqdm = mocker.patch("src.transcriber.tqdm")
+    fake_bar = mocker.MagicMock()
+    mock_tqdm.return_value.__enter__.return_value = fake_bar
+    _call_transcribe(tmp_path)
+    total_updated = sum(c.args[0] for c in fake_bar.update.call_args_list)
+    # int(1.8) == 1 — the old int(elapsed_seg)-per-segment logic truncated
+    # every 0.6s segment to 0 and reported a total of 0.
+    assert total_updated == 1
+
+
 # ── force_overwrite e KeyboardInterrupt ──────────────────────────────────────
 
 
@@ -409,8 +450,11 @@ def test_transcribe_existing_output_overwrites_when_user_says_yes(tmp_path, mock
 
 
 @pytest.mark.unit
-def test_transcribe_keyboard_interrupt_removes_partial_file(tmp_path, mocker):
-    """KeyboardInterrupt no meio do loop → remove arquivo incompleto e sys.exit(0)."""
+def test_transcribe_keyboard_interrupt_removes_partial_file_and_reraises(
+    tmp_path, mocker
+):
+    """KeyboardInterrupt no meio do loop → remove arquivo incompleto e
+    re-levanta (a decisão de sys.exit é do main.py, não da lib)."""
     audio = tmp_path / "audio.mp3"
     audio.write_bytes(b"")
     out = tmp_path / "out.txt"
@@ -426,7 +470,7 @@ def test_transcribe_keyboard_interrupt_removes_partial_file(tmp_path, mocker):
 
     from src.transcriber import transcribe
 
-    with pytest.raises(SystemExit) as exc:
+    with pytest.raises(KeyboardInterrupt):
         transcribe(
             audio_path=audio,
             output_path=out,
@@ -438,9 +482,73 @@ def test_transcribe_keyboard_interrupt_removes_partial_file(tmp_path, mocker):
             beam_size=1,
             force_overwrite=True,
         )
-    assert exc.value.code == 0
     # Arquivo incompleto removido
     assert not out.exists()
+
+
+@pytest.mark.unit
+def test_transcribe_other_exception_mid_loop_removes_partial_file_and_reraises(
+    tmp_path, mocker
+):
+    """Qualquer outra exceção no meio do loop (não só Ctrl-C) também limpa o
+    .txt parcial e re-levanta — generaliza o cleanup além de KeyboardInterrupt."""
+    audio = tmp_path / "audio.mp3"
+    audio.write_bytes(b"")
+    out = tmp_path / "out.txt"
+
+    def _raise_after_first():
+        yield _Seg(0.0, 3.0, "primeiro")
+        raise RuntimeError("whisper crashed")
+
+    fake_model = mocker.MagicMock()
+    fake_model.transcribe.return_value = (_raise_after_first(), _Info())
+    mocker.patch("src.transcriber.WhisperModel", return_value=fake_model)
+    mocker.patch("src.transcriber._resolve_device", return_value=("cpu", "int8"))
+
+    from src.transcriber import transcribe
+
+    with pytest.raises(RuntimeError, match="whisper crashed"):
+        transcribe(
+            audio_path=audio,
+            output_path=out,
+            meta=_DEFAULT_META,
+            url="https://x",
+            model_size="small",
+            language="pt",
+            threads=2,
+            beam_size=1,
+            force_overwrite=True,
+        )
+    assert not out.exists()
+
+
+@pytest.mark.unit
+def test_transcribe_overwrite_prompt_eof_defaults_to_no_overwrite(tmp_path, mocker):
+    """input() sem stdin (execução agendada/pipe) levanta EOFError — deve ser
+    tratado como 'não sobrescrever', não propagar o EOFError."""
+    audio = tmp_path / "audio.mp3"
+    audio.write_bytes(b"")
+    out = tmp_path / "out.txt"
+    out.write_text("existing", encoding="utf-8")
+
+    mock_whisper = mocker.patch("src.transcriber.WhisperModel")
+    mocker.patch("builtins.input", side_effect=EOFError)
+    from src.transcriber import transcribe
+
+    result = transcribe(
+        audio_path=audio,
+        output_path=out,
+        meta=_DEFAULT_META,
+        url="https://x",
+        model_size="small",
+        language="pt",
+        threads=2,
+        beam_size=1,
+        force_overwrite=False,
+    )
+    assert result is None
+    mock_whisper.assert_not_called()
+    assert out.read_text(encoding="utf-8") == "existing"
 
 
 # ── print_summary ────────────────────────────────────────────────────────────

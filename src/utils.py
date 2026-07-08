@@ -29,7 +29,7 @@ TRANSCRIPTIONS_SUBTITLES_DIR = OUTPUT_DIR / "transcriptions" / "subtitles"
 DATA_DIR = OUTPUT_DIR / "data"  # structured-data module (PR9)
 
 _SANITIZE_SEPS = re.compile(r"\s*[｜|·–—]\s*")
-_SANITIZE_WIDE_COLON = re.compile(r"\s*[：]\s*")
+_SANITIZE_COLON = re.compile(r"\s*[：:]\s*")
 _SANITIZE_INVALID = re.compile(r'[<>"\\/?*\x00-\x1f]')
 _SANITIZE_PUNCT = re.compile(r"[!！？]")
 _SANITIZE_DASH_SPACE = re.compile(r"\s*-\s*")
@@ -37,23 +37,29 @@ _SANITIZE_SPACES = re.compile(r"\s+")
 _SANITIZE_MULTI_US = re.compile(r"_+")
 _SANITIZE_MULTI_HY = re.compile(r"-+")
 
+# Keeps the stem well under Windows' MAX_PATH (260 chars total) even after the
+# output directory prefix and a suffix are added.
+_MAX_STEM_LENGTH = 120
+
 
 def sanitize_filename(name: str) -> str:
     """Convert a title to a clean filename stem (no spaces or problematic chars).
 
-    Rules: section separators (｜ |) → hyphen; spaces → underscore;
+    Rules: section separators (｜ |) → hyphen; ASCII/fullwidth colon → hyphen
+    (dropping it outright, as ``:`` alone would, creates an NTFS Alternate
+    Data Stream instead of failing loudly); spaces → underscore; remaining
     chars invalid on Windows are removed. Accented characters are preserved
-    (NTFS supports them).
+    (NTFS supports them). Result is capped at ``_MAX_STEM_LENGTH`` chars.
     """
     name = _SANITIZE_SEPS.sub("-", name)
-    name = _SANITIZE_WIDE_COLON.sub("-", name)
+    name = _SANITIZE_COLON.sub("-", name)
     name = _SANITIZE_INVALID.sub("", name)
     name = _SANITIZE_PUNCT.sub("", name)
     name = _SANITIZE_DASH_SPACE.sub("-", name.strip())
     name = _SANITIZE_SPACES.sub("_", name)
     name = _SANITIZE_MULTI_US.sub("_", name)
     name = _SANITIZE_MULTI_HY.sub("-", name)
-    return name.strip("-_.")
+    return name.strip("-_.")[:_MAX_STEM_LENGTH].rstrip("-_.")
 
 
 class TqdmLoggingHandler(logging.Handler):

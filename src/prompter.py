@@ -24,7 +24,7 @@ from time import time
 from langchain_core.prompts import ChatPromptTemplate
 
 from src.llm_factory import make_llm
-from src.llm_utils import split_text
+from src.llm_utils import extract_llm_text, split_text
 from src.utils import TRANSCRIPTIONS_DIGEST_DIR
 
 DEFAULT_PROMPT_MODEL = "gemma3-4b-custom"
@@ -191,12 +191,13 @@ def build_prompt_ready(
         t = time()
         response = condense_chain.invoke({"text": chunk})
         chunk_elapsed = time() - t
-        condensed_chunks.append(response.content.strip())
+        text = extract_llm_text(response.content).strip()
+        condensed_chunks.append(text)
         logging.debug(
             "[d] Chunk %d done in %.1fs | output: %d chars",
             i,
             chunk_elapsed,
-            len(response.content),
+            len(text),
         )
         _emit(
             "prompt_chunk_done",
@@ -208,7 +209,7 @@ def build_prompt_ready(
         merge_chain = MERGE_CONDENSE_PROMPT | llm
         joined = "\n\n---\n\n".join(condensed_chunks)
         merge_response = merge_chain.invoke({"segments": joined})
-        final_body = merge_response.content.strip()
+        final_body = extract_llm_text(merge_response.content).strip()
     else:
         final_body = condensed_chunks[0]
 

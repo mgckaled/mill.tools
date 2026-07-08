@@ -16,6 +16,10 @@ from src.utils import sanitize_filename
         ("Título — Parte 2", "Título-Parte_2"),
         # Wide colon
         ("Python：Tutorial", "Python-Tutorial"),
+        # ASCII colon — must not be dropped outright (NTFS ADS risk); same
+        # treatment as the wide colon.
+        ("Python: aula 1", "Python-aula_1"),
+        ("a:b", "a-b"),
         # Invalid Windows chars
         ('arquivo<>bad"name', "arquivobadname"),
         ("path/with\\slash", "pathwithslash"),
@@ -48,4 +52,23 @@ def test_sanitize_filename_strip_leading_trailing():
     """Result never starts or ends with '-', '_' or '.'."""
     result = sanitize_filename("  - título -  ")
     assert not result.startswith(("-", "_", "."))
+    assert not result.endswith(("-", "_", "."))
+
+
+@pytest.mark.unit
+def test_sanitize_filename_caps_length_against_max_path():
+    from src.utils import _MAX_STEM_LENGTH
+
+    result = sanitize_filename("palavra " * 100)
+    assert len(result) <= _MAX_STEM_LENGTH
+
+
+@pytest.mark.unit
+def test_sanitize_filename_truncation_does_not_leave_trailing_separator():
+    from src.utils import _MAX_STEM_LENGTH
+
+    # Construct a title whose sanitized form has a separator exactly at the
+    # truncation boundary, so the naive slice would end in "_" or "-".
+    long_word = "a" * (_MAX_STEM_LENGTH - 1)
+    result = sanitize_filename(f"{long_word} resto do título")
     assert not result.endswith(("-", "_", "."))

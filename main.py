@@ -246,6 +246,10 @@ def main() -> None:
 
             build_prompt_ready(output_path, model_name=args.prompt_model)
 
+    except KeyboardInterrupt:
+        # transcribe() already cleaned up any partial output file and
+        # re-raised — this is the single place that decides the exit code.
+        sys.exit(0)
     except (RuntimeError, ValueError, FileNotFoundError) as exc:
         logging.error("%s", exc)
         sys.exit(1)

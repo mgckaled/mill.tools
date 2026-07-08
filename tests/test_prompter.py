@@ -146,6 +146,27 @@ def test_build_prompt_ready_single_chunk_writes_output(
     assert "00:02:05" in content
 
 
+def test_build_prompt_ready_handles_list_content_gemini_shape(
+    tmp_path, mocker, isolate_digest_dir
+):
+    """Gemini/GLM can return .content as a list of blocks — must route through
+    extract_llm_text instead of AttributeError'ing on .content.strip()
+    (Fase 1 do PLANO_CORRECOES_SRC_RAIZ)."""
+    from langchain_core.language_models.fake_chat_models import GenericFakeChatModel
+    from langchain_core.messages import AIMessage
+
+    from src import prompter
+
+    src = tmp_path / "video.txt"
+    src.write_text(_HEADER + "\n\nshort body.", encoding="utf-8")
+    fake = GenericFakeChatModel(
+        messages=iter([AIMessage(content=[{"text": "condensed body."}])])
+    )
+    mocker.patch.object(prompter, "make_llm", return_value=fake)
+    out = prompter.build_prompt_ready(src)
+    assert "condensed body." in out.read_text(encoding="utf-8")
+
+
 def test_build_prompt_ready_single_chunk_skips_merge(
     tmp_path, mocker, isolate_digest_dir
 ):
