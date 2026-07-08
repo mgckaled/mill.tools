@@ -163,6 +163,46 @@ def test_answer_flags_low_confidence_out_of_corpus(tmp_path, monkeypatch, mocker
 
 
 @pytest.mark.unit
+def test_answer_checks_embedder_availability_with_cache(tmp_path, monkeypatch, mocker):
+    """PLANO_CORRECOES_RAG_ML_2, Fase 2.2: the hot Conversa path must opt into
+    the embedder's short-TTL availability cache instead of pinging Ollama on
+    every question."""
+    import src.core.rag.chat as chat
+    import src.core.rag.indexer as indexer
+    from src.core.rag.store import VectorStore
+    from src.core.rag.types import ChunkMeta
+    from src.gui.modules.ai.worker import run_ai_answer
+
+    rag_dir = tmp_path / "rag"
+    store = VectorStore(dim=8)
+    store.add(
+        np.ones((1, 8), dtype=np.float32),
+        [ChunkMeta("doc.txt", "transcription", 1.0, 0, "ctx")],
+    )
+    store.persist(rag_dir)
+    monkeypatch.setattr(indexer, "index_dir", lambda: rag_dir)
+
+    is_available_mock = mocker.patch(
+        "src.core.rag.embedder.is_available", return_value=True
+    )
+    mocker.patch("src.core.rag.embedder.embed_query", return_value=np.ones(8))
+    mocker.patch.object(chat, "make_llm", return_value=_fake_llm("resposta"))
+
+    bus = _Bus()
+    run_ai_answer(
+        bus,
+        threading.Event(),
+        query="pergunta?",
+        scope=None,
+        model_name="qwen7b-custom",
+        embed_model="nomic-embed-text",
+        install_log_handler=False,
+    )
+
+    is_available_mock.assert_called_once_with("nomic-embed-text", use_cache=True)
+
+
+@pytest.mark.unit
 def test_answer_low_confidence_uses_max_dense_score_not_first_hit(
     tmp_path, monkeypatch, mocker
 ):

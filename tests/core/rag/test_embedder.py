@@ -92,6 +92,71 @@ def test_is_available_pings_with_short_timeout_not_embed_timeout(mocker):
 
 
 @pytest.mark.unit
+def test_is_available_use_cache_reuses_recent_ping(mocker, monkeypatch):
+    """PLANO_CORRECOES_RAG_ML_2, Fase 2.2: use_cache=True must not re-ping
+    Ollama within AVAILABILITY_CACHE_TTL — the hot path (one call per
+    question) shouldn't cost a round trip every time."""
+    from src.core.rag import embedder
+
+    monkeypatch.setattr(embedder, "_availability_cache", {})
+    module = _fake_ollama_module(query_vec=[0.1] * 4)
+    mocker.patch.dict(sys.modules, {"langchain_ollama": module})
+
+    assert embedder.is_available(use_cache=True) is True
+    assert embedder.is_available(use_cache=True) is True
+    assert module.OllamaEmbeddings.call_count == 1
+
+
+@pytest.mark.unit
+def test_is_available_without_cache_pings_every_call(mocker, monkeypatch):
+    from src.core.rag import embedder
+
+    monkeypatch.setattr(embedder, "_availability_cache", {})
+    module = _fake_ollama_module(query_vec=[0.1] * 4)
+    mocker.patch.dict(sys.modules, {"langchain_ollama": module})
+
+    embedder.is_available()
+    embedder.is_available()
+    assert module.OllamaEmbeddings.call_count == 2
+
+
+@pytest.mark.unit
+def test_is_available_cache_expires_after_ttl(mocker, monkeypatch):
+    from src.core.rag import embedder
+
+    monkeypatch.setattr(embedder, "_availability_cache", {})
+    module = _fake_ollama_module(query_vec=[0.1] * 4)
+    mocker.patch.dict(sys.modules, {"langchain_ollama": module})
+
+    fake_now = [1000.0]
+    monkeypatch.setattr(embedder.time, "monotonic", lambda: fake_now[0])
+
+    embedder.is_available(use_cache=True)
+    fake_now[0] += embedder.AVAILABILITY_CACHE_TTL + 1
+    embedder.is_available(use_cache=True)
+
+    assert module.OllamaEmbeddings.call_count == 2
+
+
+@pytest.mark.unit
+def test_is_available_cache_keyed_by_model(mocker, monkeypatch):
+    from src.core.rag import embedder
+
+    monkeypatch.setattr(embedder, "_availability_cache", {})
+    module = _fake_ollama_module(query_vec=[0.1] * 4)
+    mocker.patch.dict(sys.modules, {"langchain_ollama": module})
+
+    embedder.is_available("model-a", use_cache=True)
+    embedder.is_available("model-b", use_cache=True)
+    assert module.OllamaEmbeddings.call_count == 2
+
+    # Re-requesting either one within the TTL is a cache hit.
+    embedder.is_available("model-a", use_cache=True)
+    embedder.is_available("model-b", use_cache=True)
+    assert module.OllamaEmbeddings.call_count == 2
+
+
+@pytest.mark.unit
 def test_embed_texts_returns_float32_matrix(mocker):
     from src.core.rag import embedder
 

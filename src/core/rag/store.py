@@ -12,6 +12,7 @@ import io
 import json
 import logging
 import time
+import zipfile
 from dataclasses import asdict
 from pathlib import Path
 
@@ -184,7 +185,10 @@ class VectorStore:
 
         Tolerates ``vectors.npz`` present without its ``meta.json`` sidecar
         (an interrupted persist, or manual tampering) — returns an empty store
-        with a warning instead of raising ``FileNotFoundError``.
+        with a warning instead of raising ``FileNotFoundError``. Also tolerates
+        a *corrupted* pair (truncated npz, invalid JSON) the same way — same
+        parity as ``classify.prototypes._load_prototypes``, which already
+        treats a bad ``.npz``/JSON as a cache miss rather than propagating.
         """
         store = cls(dim)
         vectors_path = directory / "vectors.npz"
@@ -197,9 +201,19 @@ class VectorStore:
                 vectors_path,
             )
             return store
-        store.vectors = np.load(vectors_path)["vectors"].astype(np.float32)
-        raw = json.loads(meta_path.read_text(encoding="utf-8"))
-        store.meta = [ChunkMeta(**m) for m in raw]
+        try:
+            vectors = np.load(vectors_path)["vectors"].astype(np.float32)
+            raw = json.loads(meta_path.read_text(encoding="utf-8"))
+            meta = [ChunkMeta(**m) for m in raw]
+        except (OSError, ValueError, KeyError, EOFError, zipfile.BadZipFile) as exc:
+            logging.warning(
+                "[!] Malformed index at %s (%s) — treating index as empty.",
+                directory,
+                exc,
+            )
+            return store
+        store.vectors = vectors
+        store.meta = meta
         if store.vectors.shape[1]:
             store.dim = store.vectors.shape[1]
         return store

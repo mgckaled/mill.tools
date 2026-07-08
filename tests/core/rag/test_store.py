@@ -364,6 +364,38 @@ def test_load_missing_dir_returns_empty_store(tmp_path):
 
 
 @pytest.mark.unit
+def test_load_tolerates_corrupt_npz(tmp_path, caplog):
+    """PLANO_CORRECOES_RAG_ML_2, Fase 2.1: a truncated/malformed vectors.npz
+    must degrade to an empty store + warning, not raise zipfile.BadZipFile."""
+    from src.core.rag.store import VectorStore
+
+    (tmp_path / "vectors.npz").write_bytes(b"PK\x03\x04" + b"garbage" * 5)
+    (tmp_path / "meta.json").write_text("[]", encoding="utf-8")
+
+    with caplog.at_level("WARNING"):
+        loaded = VectorStore.load(tmp_path, dim=3)
+
+    assert len(loaded) == 0
+    assert "Malformed index" in caplog.text
+
+
+@pytest.mark.unit
+def test_load_tolerates_corrupt_meta_json(tmp_path, caplog):
+    """A truncated/invalid meta.json (json.JSONDecodeError, a ValueError
+    subclass) must degrade the same way as a corrupt npz."""
+    from src.core.rag.store import VectorStore
+
+    np.savez_compressed(tmp_path / "vectors.npz", vectors=np.zeros((1, 3)))
+    (tmp_path / "meta.json").write_text("{not valid json", encoding="utf-8")
+
+    with caplog.at_level("WARNING"):
+        loaded = VectorStore.load(tmp_path, dim=3)
+
+    assert len(loaded) == 0
+    assert "Malformed index" in caplog.text
+
+
+@pytest.mark.unit
 def test_persist_leaves_no_tmp_file_behind(tmp_path):
     from src.core.rag.store import VectorStore
 

@@ -71,7 +71,7 @@ def run_ai_answer(
                     },
                 )
                 return False
-            if not embedder.is_available(embed_model):
+            if not embedder.is_available(embed_model, use_cache=True):
                 emit(
                     "task_error",
                     payload={

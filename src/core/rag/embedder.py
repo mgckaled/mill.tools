@@ -42,6 +42,14 @@ SETUP_HINT = (
     "ollama create nomic-embed-custom -f ollama/Modelfile.nomic"
 )
 
+# TTL for the opt-in availability cache (use_cache=True) — short enough that a
+# service that just went down is still caught within a minute, long enough to
+# spare a hot path (one ping per user question) a round trip to Ollama on every
+# call. Keyed by model so switching the embed model never returns a stale
+# verdict for the new one.
+AVAILABILITY_CACHE_TTL = 60.0
+_availability_cache: dict[str, tuple[float, bool]] = {}
+
 
 def _embeddings(model: str, *, timeout: float = EMBED_TIMEOUT):
     """Build an OllamaEmbeddings client with a bounded request timeout."""
@@ -50,14 +58,37 @@ def _embeddings(model: str, *, timeout: float = EMBED_TIMEOUT):
     return OllamaEmbeddings(model=model, client_kwargs={"timeout": timeout})
 
 
-def is_available(model: str = DEFAULT_EMBED_MODEL) -> bool:
+def is_available(model: str = DEFAULT_EMBED_MODEL, *, use_cache: bool = False) -> bool:
     """Return True if langchain-ollama is importable and the embed model answers.
 
     Used to gate the GUI/CLI: when False, the caller shows ``SETUP_HINT``
     instead of failing mid-pipeline. The ping uses ``AVAILABILITY_TIMEOUT``,
     not ``EMBED_TIMEOUT`` — a hung Ollama service should fail this check fast
     rather than block the caller for minutes.
+
+    Args:
+        model: The embed model to ping.
+        use_cache: Reuse a verdict pinged within the last
+            ``AVAILABILITY_CACHE_TTL`` seconds instead of hitting Ollama again.
+            Opt-in and off by default: cold flows (the Observatório status
+            board, the reindex gate) must always see a fresh ping. Only a hot
+            path called once per user action (the Conversa's ``run_ai_answer``,
+            once per question) should pass ``True``.
     """
+    if use_cache:
+        cached = _availability_cache.get(model)
+        if cached is not None and time.monotonic() - cached[0] < AVAILABILITY_CACHE_TTL:
+            return cached[1]
+
+    result = _ping(model)
+
+    if use_cache:
+        _availability_cache[model] = (time.monotonic(), result)
+    return result
+
+
+def _ping(model: str) -> bool:
+    """Perform the real availability check (package import + embed_query)."""
     try:
         from langchain_ollama import OllamaEmbeddings  # noqa: F401
     except ImportError:
