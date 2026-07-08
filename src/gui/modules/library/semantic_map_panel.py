@@ -168,6 +168,7 @@ def build_semantic_map_panel(page: ft.Page) -> tuple[ft.Control, Callable[[], No
         from src.core.ml.cache import corpus_signature
         from src.core.rag import embedder
         from src.core.rag.indexer import index_dir
+        from src.core.rag.stats import embed_space_id
         from src.core.rag.store import VectorStore
 
         if not deps.is_available():
@@ -181,7 +182,8 @@ def build_semantic_map_panel(page: ft.Page) -> tuple[ft.Control, Callable[[], No
             map_img.visible = False
             return
 
-        store = VectorStore.load(index_dir(), dim=embedder.EMBED_DIM)
+        index_directory = index_dir()
+        store = VectorStore.load(index_directory, dim=embedder.EMBED_DIM)
         if len(store) == 0:
             status.value = "Índice vazio. Indexe seu acervo no hub IA primeiro."
             status.visible = True
@@ -190,7 +192,8 @@ def build_semantic_map_panel(page: ft.Page) -> tuple[ft.Control, Callable[[], No
             _last_sig[0] = None
             return
 
-        signature = corpus_signature(store.meta)
+        space_id = embed_space_id(index_directory)
+        signature = corpus_signature(store.meta, space_id)
         if signature == _last_sig[0] and map_img.visible:
             return  # already rendered for this exact corpus
 
@@ -202,7 +205,9 @@ def build_semantic_map_panel(page: ft.Page) -> tuple[ft.Control, Callable[[], No
             from src.core.ml.mapviz import build_semantic_map, render_semantic_map_png
 
             try:
-                sm = await asyncio.to_thread(build_semantic_map, store)
+                sm = await asyncio.to_thread(
+                    lambda: build_semantic_map(store, embed_space_id=space_id)
+                )
                 png = await asyncio.to_thread(
                     render_semantic_map_png, sm, palette=_charts.dark_palette()
                 )

@@ -25,7 +25,7 @@ def _ai_answer(inputs: list, params: dict, ctx: StepContext) -> list[Path]:
     from src.core.rag import embedder
     from src.core.rag.chat import DEFAULT_MODEL
     from src.core.rag.chat import answer as _answer
-    from src.core.rag.indexer import build_index, index_dir
+    from src.core.rag.indexer import CURRENT_EMBED_SCHEME, build_index, index_dir
     from src.core.rag.retriever import retrieve
     from src.core.rag.store import VectorStore
     from src.utils import TRANSCRIPTIONS_ANALYSIS_DIR
@@ -44,7 +44,9 @@ def _ai_answer(inputs: list, params: dict, ctx: StepContext) -> list[Path]:
         store,
         lambda texts: embedder.embed_texts(texts, model=embed_model),
     )
-    store.persist(index_dir())
+    store.persist(
+        index_dir(), embed_model=embed_model, embed_scheme=CURRENT_EMBED_SCHEME
+    )
 
     hits = retrieve(
         query,

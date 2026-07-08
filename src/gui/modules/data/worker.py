@@ -161,7 +161,7 @@ def run_data_index(bus: EventBus, files: list, *, embed_model: str) -> bool:
     """
     from src.core.library.types import LibraryItem
     from src.core.rag import embedder
-    from src.core.rag.indexer import index_dir, index_files
+    from src.core.rag.indexer import CURRENT_EMBED_SCHEME, index_dir, index_files
     from src.core.rag.store import VectorStore
 
     emit = make_emitter(bus, _MODULE_ID, "data")
@@ -211,7 +211,9 @@ def run_data_index(bus: EventBus, files: list, *, embed_model: str) -> bool:
             return card_for_path(Path(item.path))
 
         index_files(items, store, _embed, progress_cb=_progress, card_fn=_card)
-        store.persist(index_dir(), embed_model=embed_model)
+        store.persist(
+            index_dir(), embed_model=embed_model, embed_scheme=CURRENT_EMBED_SCHEME
+        )
 
         added = len(store) - before
         emit(

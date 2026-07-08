@@ -192,7 +192,12 @@ def _build(embed_model: str) -> None:
 
     from src.core.library.scanner import scan_library
     from src.core.rag import embedder
-    from src.core.rag.indexer import build_index, indexable_items, index_dir
+    from src.core.rag.indexer import (
+        CURRENT_EMBED_SCHEME,
+        build_index,
+        index_dir,
+        indexable_items,
+    )
     from src.core.rag.store import VectorStore
 
     items = scan_library()
@@ -216,7 +221,10 @@ def _build(embed_model: str) -> None:
 
     build_index(items, store, embed_texts, progress_cb=_progress, card_fn=_card)
     bar.close()
-    store.persist(index_dir(), embed_model=embed_model)
+
+    store.persist(
+        index_dir(), embed_model=embed_model, embed_scheme=CURRENT_EMBED_SCHEME
+    )
 
     added = len(store) - before
     sign = "+" if added >= 0 else ""
@@ -355,7 +363,7 @@ def _dups(ns: argparse.Namespace) -> None:
     )
 
 
-def _semantic_map(store):
+def _semantic_map(store, *, embed_space_id: str = "?"):
     """Build the cached SemanticMap, exiting with a hint if [ml] is missing."""
     from src.core.ml import deps
     from src.core.ml.mapviz import build_semantic_map
@@ -363,7 +371,7 @@ def _semantic_map(store):
     if not deps.is_available():
         print(f"ML indisponível. {deps.SETUP_HINT}")
         sys.exit(1)
-    return build_semantic_map(store)
+    return build_semantic_map(store, embed_space_id=embed_space_id)
 
 
 def _topics() -> None:
@@ -373,14 +381,16 @@ def _topics() -> None:
     from src.core.ml.mapviz import cluster_display_name
     from src.core.rag import embedder
     from src.core.rag.indexer import index_dir
+    from src.core.rag.stats import embed_space_id
     from src.core.rag.store import VectorStore
 
-    store = VectorStore.load(index_dir(), dim=embedder.EMBED_DIM)
+    index_directory = index_dir()
+    store = VectorStore.load(index_directory, dim=embedder.EMBED_DIM)
     if len(store) == 0:
         print('Índice vazio. Rode "uv run main.py ai index" primeiro.')
         sys.exit(1)
 
-    sm = _semantic_map(store)
+    sm = _semantic_map(store, embed_space_id=embed_space_id(index_directory))
     counts = Counter(int(label) for label in sm.labels)
     clusters = sorted((c for c in counts if c != -1), key=lambda c: -counts[c])
     print(f"Tópicos do acervo ({len(sm)} documentos, {len(clusters)} grupos):\n")
@@ -396,19 +406,22 @@ def _map(ns: argparse.Namespace) -> None:
     from src.core.ml.mapviz import build_semantic_map, render_semantic_map_png
     from src.core.rag import embedder
     from src.core.rag.indexer import index_dir
+    from src.core.rag.stats import embed_space_id
     from src.core.rag.store import VectorStore
     from src.utils import DATA_DIR
 
-    store = VectorStore.load(index_dir(), dim=embedder.EMBED_DIM)
+    index_directory = index_dir()
+    store = VectorStore.load(index_directory, dim=embedder.EMBED_DIM)
     if len(store) == 0:
         print('Índice vazio. Rode "uv run main.py ai index" primeiro.')
         sys.exit(1)
     if not charts.is_available():
         print(charts.SETUP_HINT)
         sys.exit(1)
-    _semantic_map(store)  # gate [ml] with the shared hint before projecting
+    space_id = embed_space_id(index_directory)
+    _semantic_map(store, embed_space_id=space_id)  # gate [ml] before projecting
 
-    sm = build_semantic_map(store, projection=ns.method)
+    sm = build_semantic_map(store, projection=ns.method, embed_space_id=space_id)
     png = render_semantic_map_png(sm, title="Mapa semântico do acervo")
     out = Path(ns.out) if ns.out else DATA_DIR / "semantic_map.png"
     out.parent.mkdir(parents=True, exist_ok=True)

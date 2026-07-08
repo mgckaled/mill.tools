@@ -117,6 +117,19 @@ def test_build_semantic_map_no_cache_recomputes(tmp_path, mocker):
 
 
 @pytest.mark.unit
+def test_build_semantic_map_recomputes_when_embed_space_id_changes(tmp_path, mocker):
+    """PLANO_RAG_ESPACO_EMBEDDING, Fase 4.3: a reindex under a new embedding
+    space (same files/mtimes) must not reuse the cached map from the old one."""
+    import src.core.ml.mapviz as mapviz
+
+    spy = mocker.spy(mapviz, "cluster_documents")
+    store = _store_two_themes()
+    mapviz.build_semantic_map(store, cache_dir=tmp_path, embed_space_id="model:6:v1")
+    mapviz.build_semantic_map(store, cache_dir=tmp_path, embed_space_id="model:6:v2")
+    assert spy.call_count == 2
+
+
+@pytest.mark.unit
 def test_render_semantic_map_png(tmp_path):
     pytest.importorskip("matplotlib")
     pytest.importorskip("pandas")

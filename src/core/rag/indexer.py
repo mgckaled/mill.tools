@@ -43,6 +43,15 @@ DATA_KINDS = {"data"}
 CHUNK_SIZE = 1200
 CHUNK_OVERLAP = 150
 
+# Marks *what content this module feeds to embed_fn* — bump it whenever a
+# change here (or in the embedder's task-instruction prefixes) alters the
+# embedding space enough to require a reindex. The single mechanism for this
+# is folding the marker into ``rag.stats.embed_space_id`` (persisted per index
+# via ``VectorStore.persist(..., embed_scheme=CURRENT_EMBED_SCHEME)``); an
+# index built under an older scheme compares as stale instead of silently
+# mixing incompatible vectors. Do not add a second versioning mechanism.
+CURRENT_EMBED_SCHEME = "nomic-prefix+ctx-header+clean"
+
 # Transcription files keep a metadata header separated from the body by a line
 # of 64 dashes (see src.transcript_io.split_header_body, the shared owner of
 # this same split for the analyzer/formatter/prompter pipeline). Other text

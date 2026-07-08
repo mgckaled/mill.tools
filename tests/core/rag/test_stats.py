@@ -16,7 +16,9 @@ def _meta(source: str, idx: int, *, kind: str = "transcription", text: str = "x"
     )
 
 
-def _persist_store(tmp_path, *, embed_model="nomic-embed-custom"):
+def _persist_store(
+    tmp_path, *, embed_model="nomic-embed-custom", embed_scheme="test-scheme"
+):
     """Persist a 3-dim store: doc 'a.txt' (2 chunks) + 'b.txt' (1 chunk, document)."""
     from src.core.rag.store import VectorStore
 
@@ -29,7 +31,7 @@ def _persist_store(tmp_path, *, embed_model="nomic-embed-custom"):
             _meta("b.txt", 0, kind="document", text="doc"),
         ],
     )
-    store.persist(tmp_path, embed_model=embed_model)
+    store.persist(tmp_path, embed_model=embed_model, embed_scheme=embed_scheme)
     return store
 
 
@@ -49,6 +51,7 @@ def test_index_stats_counts_and_dim(tmp_path):
     assert stats.n_chunks == 3
     assert stats.dim == 3
     assert stats.embed_model == "nomic-embed-custom"
+    assert stats.embed_scheme == "test-scheme"
     assert stats.disk_bytes > 0
     assert stats.updated_at is not None
 
@@ -81,6 +84,7 @@ def test_index_stats_missing_index_is_zeroed(tmp_path):
     assert stats.n_chunks == 0
     assert stats.dim == 0
     assert stats.embed_model == "?"
+    assert stats.embed_scheme == "?"
     assert stats.disk_bytes == 0
     assert stats.updated_at is None
     assert stats.per_doc == ()
@@ -184,11 +188,11 @@ def test_index_stats_dim_zero_when_both_vectors_and_sidecar_are_corrupt(tmp_path
 
 
 @pytest.mark.unit
-def test_embed_space_id_combines_model_and_dim(tmp_path):
+def test_embed_space_id_combines_model_dim_and_scheme(tmp_path):
     from src.core.rag.stats import embed_space_id
 
-    _persist_store(tmp_path, embed_model="nomic-embed-custom")
-    assert embed_space_id(tmp_path) == "nomic-embed-custom:3"
+    _persist_store(tmp_path, embed_model="nomic-embed-custom", embed_scheme="v2")
+    assert embed_space_id(tmp_path) == "nomic-embed-custom:3:v2"
 
 
 @pytest.mark.unit
@@ -197,14 +201,14 @@ def test_embed_space_id_stable_placeholder_for_index_without_sidecar(tmp_path):
 
     _persist_store(tmp_path)
     (tmp_path / "index_info.json").unlink()
-    assert embed_space_id(tmp_path) == "?:3"  # falls back to the npz shape
+    assert embed_space_id(tmp_path) == "?:3:?"  # falls back to the npz shape
 
 
 @pytest.mark.unit
 def test_embed_space_id_missing_index_is_question_mark_zero(tmp_path):
     from src.core.rag.stats import embed_space_id
 
-    assert embed_space_id(tmp_path) == "?:0"
+    assert embed_space_id(tmp_path) == "?:0:?"
 
 
 @pytest.mark.unit
@@ -216,6 +220,58 @@ def test_embed_space_id_changes_when_model_changes(tmp_path):
     _persist_store(tmp_path, embed_model="bge-m3")
     id_b = embed_space_id(tmp_path)
     assert id_a != id_b
+
+
+@pytest.mark.unit
+def test_embed_space_id_changes_when_scheme_changes(tmp_path):
+    from src.core.rag.stats import embed_space_id
+
+    _persist_store(tmp_path, embed_scheme="v1")
+    id_a = embed_space_id(tmp_path)
+    _persist_store(tmp_path, embed_scheme="v2")
+    id_b = embed_space_id(tmp_path)
+    assert id_a != id_b
+
+
+@pytest.mark.unit
+def test_embed_space_id_question_mark_scheme_for_index_predating_the_field(tmp_path):
+    """An index persisted before this field existed has no ``embed_scheme``
+    key at all in its sidecar — must degrade to "?", not KeyError/None."""
+    from src.core.rag.stats import embed_space_id
+
+    _persist_store(tmp_path, embed_model="nomic-embed-custom", embed_scheme=None)
+    assert embed_space_id(tmp_path) == "nomic-embed-custom:3:?"
+
+
+# ---------------------------------------------------------------------------
+# is_stale_scheme
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.unit
+def test_is_stale_scheme_true_when_scheme_differs(tmp_path):
+    from src.core.rag.stats import index_stats, is_stale_scheme
+
+    _persist_store(tmp_path, embed_scheme="old-scheme")
+    stats = index_stats(tmp_path)
+    assert is_stale_scheme(stats, "new-scheme") is True
+
+
+@pytest.mark.unit
+def test_is_stale_scheme_false_when_scheme_matches(tmp_path):
+    from src.core.rag.stats import index_stats, is_stale_scheme
+
+    _persist_store(tmp_path, embed_scheme="current-scheme")
+    stats = index_stats(tmp_path)
+    assert is_stale_scheme(stats, "current-scheme") is False
+
+
+@pytest.mark.unit
+def test_is_stale_scheme_false_for_empty_index(tmp_path):
+    from src.core.rag.stats import index_stats, is_stale_scheme
+
+    stats = index_stats(tmp_path / "nope")
+    assert is_stale_scheme(stats, "current-scheme") is False
 
 
 # ---------------------------------------------------------------------------

@@ -46,7 +46,12 @@ def run_ai_index(
     """
     from src.core.library.scanner import scan_library
     from src.core.rag import embedder
-    from src.core.rag.indexer import build_index, indexable_items, index_dir
+    from src.core.rag.indexer import (
+        CURRENT_EMBED_SCHEME,
+        build_index,
+        index_dir,
+        indexable_items,
+    )
     from src.core.rag.store import VectorStore
 
     emit = make_emitter(bus, _MODULE_ID, "observatory")
@@ -96,7 +101,9 @@ def run_ai_index(
                 return card_for_path(Path(item.path))
 
             build_index(items, store, _embed, progress_cb=_progress, card_fn=_card)
-            store.persist(index_dir(), embed_model=embed_model)
+            store.persist(
+                index_dir(), embed_model=embed_model, embed_scheme=CURRENT_EMBED_SCHEME
+            )
 
             added = len(store) - before
             emit(

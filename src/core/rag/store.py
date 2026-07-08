@@ -146,14 +146,23 @@ class VectorStore:
         top = top[np.isfinite(scores[top])]  # drop masked-out rows in a too-small scope
         return [RetrievedChunk(self.meta[i], float(scores[i])) for i in top]
 
-    def persist(self, directory: Path, *, embed_model: str | None = None) -> None:
+    def persist(
+        self,
+        directory: Path,
+        *,
+        embed_model: str | None = None,
+        embed_scheme: str | None = None,
+    ) -> None:
         """Write the matrix (npz), metadata (json) and an info sidecar as one
         atomic unit (:func:`src.core.io_atomic.write_group`).
 
-        ``index_info.json`` records the embedding model and vector width so the
-        index can be described (``stats.index_stats``) and a future dimension
-        mismatch detected (Ollama #10176) without loading the matrix. Older
-        indexes lack the sidecar; ``index_stats`` treats that as ``embed_model="?"``.
+        ``index_info.json`` records the embedding model, vector width and
+        content scheme so the index can be described (``stats.index_stats``),
+        a future dimension mismatch detected (Ollama #10176) and a stale
+        embedding space (``indexer.CURRENT_EMBED_SCHEME`` changed since this
+        index was built) flagged — all without loading the matrix. Older
+        indexes lack the sidecar, or lack the ``embed_scheme`` key; ``stats``
+        treats either as ``"?"``.
 
         Writing the trio as a group means a crash or a concurrent reader never
         sees a fresh ``vectors.npz`` paired with a stale/missing ``meta.json``.
@@ -167,6 +176,7 @@ class VectorStore:
             {
                 "embed_model": embed_model,
                 "dim": self.dim,
+                "embed_scheme": embed_scheme,
                 "created_at": time.time(),
             },
             ensure_ascii=False,

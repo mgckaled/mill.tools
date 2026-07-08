@@ -410,6 +410,35 @@ def test_persist_leaves_no_tmp_file_behind(tmp_path):
 
 
 @pytest.mark.unit
+def test_persist_writes_embed_scheme_into_sidecar(tmp_path):
+    import json
+
+    from src.core.rag.store import VectorStore
+
+    store = VectorStore(dim=3)
+    store.add(np.array([[0.1, 0.2, 0.3]], dtype=np.float32), [_meta("a.txt")])
+    store.persist(tmp_path, embed_model="nomic-embed-custom", embed_scheme="v2")
+
+    info = json.loads((tmp_path / "index_info.json").read_text(encoding="utf-8"))
+    assert info["embed_scheme"] == "v2"
+    assert info["embed_model"] == "nomic-embed-custom"
+
+
+@pytest.mark.unit
+def test_persist_defaults_embed_scheme_to_none(tmp_path):
+    import json
+
+    from src.core.rag.store import VectorStore
+
+    store = VectorStore(dim=3)
+    store.add(np.array([[0.1, 0.2, 0.3]], dtype=np.float32), [_meta("a.txt")])
+    store.persist(tmp_path)  # no embed_scheme passed — same as an old call site
+
+    info = json.loads((tmp_path / "index_info.json").read_text(encoding="utf-8"))
+    assert info["embed_scheme"] is None
+
+
+@pytest.mark.unit
 def test_load_tolerates_vectors_without_meta_sidecar(tmp_path, caplog):
     from src.core.rag.store import VectorStore
 

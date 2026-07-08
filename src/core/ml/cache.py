@@ -36,14 +36,23 @@ _MAP_JSON = "semantic_map.json"
 _MAP_INFO = "semantic_map_info.json"
 
 
-def corpus_signature(metas: list[ChunkMeta]) -> str:
+def corpus_signature(metas: list[ChunkMeta], embed_space_id: str = "?") -> str:
     """Return a stable hash of the corpus from its ``(source_path, mtime)`` pairs.
 
     Distinct documents only, sorted, so the signature is invariant to chunk order
     and re-scans — it changes only when a document is added, removed or modified.
+
+    ``embed_space_id`` (model + dim + content scheme, from ``rag.stats.embed_space_id``)
+    is folded into the hash: a reindex that changes the embedding space but
+    touches the *same* files at the *same* mtimes (e.g. adopting task prefixes
+    or a contextual chunk header) would otherwise leave this signature
+    unchanged, silently serving the cached semantic map computed from the old
+    vectors. Defaults to ``"?"`` for callers that don't track it explicitly.
     """
     distinct = sorted({(m.source_path, float(m.mtime)) for m in metas})
-    payload = "\n".join(f"{path}\t{mtime!r}" for path, mtime in distinct)
+    payload = f"{embed_space_id}\n" + "\n".join(
+        f"{path}\t{mtime!r}" for path, mtime in distinct
+    )
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
 

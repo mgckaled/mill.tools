@@ -48,20 +48,30 @@ def build_semantic_map(
     use_cache: bool = True,
     cache_dir: Path | None = None,
     on_stage: Callable[[str], None] | None = None,
+    embed_space_id: str = "?",
 ) -> SemanticMap:
     """Cluster, project and label the corpus into a (cached) ``SemanticMap``.
 
-    The cache is keyed by the corpus signature (``(source_path, mtime)``), so an
-    unchanged index returns instantly without recomputing. Requires the ``[ml]``
-    extra (raised by the underlying steps when missing).
+    The cache is keyed by the corpus signature (``(source_path, mtime)`` plus
+    ``embed_space_id``), so an unchanged index returns instantly without
+    recomputing, and a reindex under a new embedding space (model, dim or
+    content scheme) invalidates it instead of silently reusing vectors from a
+    different space. Requires the ``[ml]`` extra (raised by the underlying
+    steps when missing).
 
     ``on_stage`` (optional) is called with ``"cluster"``/``"project"``/
     ``"label"`` right before each stage starts — the Observatório stepper's
     hook (item 3.5): this is the one place in ``core/ml`` that internally
     chains multiple stages itself, so it is the one pure function that needs
     to know about a progress callback at all.
+
+    Args:
+        embed_space_id: Identifies the RAG's current embedding space (model +
+            dim + scheme, from ``rag.stats.embed_space_id``) — folded into the
+            cache signature. Defaults to ``"?"`` for callers that don't track
+            it explicitly; production call sites pass the real value.
     """
-    signature = corpus_signature(store.meta)
+    signature = corpus_signature(store.meta, embed_space_id)
     if use_cache:
         cached = load_map(signature, directory=cache_dir)
         if cached is not None:

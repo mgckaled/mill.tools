@@ -54,6 +54,7 @@ class IndexStats:
     disk_bytes: int  # vectors.npz + meta.json (+ index_info.json)
     updated_at: float | None  # mtime of vectors.npz; None when absent
     per_doc: tuple[DocStat, ...]  # ordered by n_chunks desc, then filename
+    embed_scheme: str = "?"  # indexer.CURRENT_EMBED_SCHEME at build time; "?" if absent
 
 
 # Files that make up the persisted index, summed for ``disk_bytes``.
@@ -70,6 +71,7 @@ def _empty_stats() -> IndexStats:
         disk_bytes=0,
         updated_at=None,
         per_doc=(),
+        embed_scheme="?",
     )
 
 
@@ -85,23 +87,56 @@ def _read_embed_model(directory: Path) -> str:
     return info.get("embed_model") or "?"
 
 
+def _read_embed_scheme(directory: Path) -> str:
+    """Read the indexer's content-scheme marker from index_info.json.
+
+    ``"?"`` when the sidecar is absent, malformed, or predates this field
+    (every index built before ``PLANO_RAG_ESPACO_EMBEDDING``) — same
+    placeholder convention as :func:`_read_embed_model`.
+    """
+    info_path = directory / "index_info.json"
+    if not info_path.exists():
+        return "?"
+    try:
+        info = json.loads(info_path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return "?"
+    return info.get("embed_scheme") or "?"
+
+
 def embed_space_id(directory: Path) -> str:
-    """Return a short identifier for the index's embedding space (model name +
-    vector width), read from the ``index_info.json`` sidecar only — cheap
-    enough to call on every ``core.ml.classify`` call.
+    """Return a short identifier for the index's embedding space (model name,
+    vector width and content scheme), read from the ``index_info.json``
+    sidecar only — cheap enough to call on every ``core.ml.classify`` call.
 
     Meant to be folded into a downstream cache signature (prototype cache,
-    supervised-model signature — see ``core/ml/classify``): switching the
-    embed model and reindexing must invalidate a cache trained on the old
-    embedding space, instead of silently comparing vectors from two
-    incompatible spaces and predicting garbage.
+    supervised-model signature, semantic-map corpus signature — see
+    ``core/ml/classify`` and ``core/ml/cache``): switching the embed model,
+    reindexing under a new content scheme (``indexer.CURRENT_EMBED_SCHEME`` —
+    task-instruction prefixes, contextual chunk headers, PDF-noise cleanup —
+    any of these change what gets embedded), or both, must invalidate a cache
+    built on the old embedding space, instead of silently comparing vectors
+    from two incompatible spaces and predicting garbage.
 
-    An index that predates the sidecar reports ``"?:<dim>"`` — a stable but
-    uninformative id. It neither forces a spurious retrain on every call
-    (the id stays constant across reads of that same old index) nor claims to
-    know a model it was never told.
+    An index that predates the sidecar (or a field in it) reports ``"?"`` for
+    that component — a stable but uninformative id. It neither forces a
+    spurious retrain on every call (the id stays constant across reads of
+    that same old index) nor claims to know a model/scheme it was never told.
     """
-    return f"{_read_embed_model(directory)}:{_read_dim(directory)}"
+    return f"{_read_embed_model(directory)}:{_read_dim(directory)}:{_read_embed_scheme(directory)}"
+
+
+def is_stale_scheme(stats: IndexStats, current_scheme: str) -> bool:
+    """True when a non-empty index was built under a different content scheme
+    than ``current_scheme`` (the running code's ``indexer.CURRENT_EMBED_SCHEME``).
+
+    Callers (the AI hub's status line, the Observatório's Índice/RAG tab) pass
+    the constant in — this module stays free of any dependency on ``indexer``.
+    An empty index (nothing indexed yet) is never "stale": there's nothing to
+    reindex, so the distinction is meaningless — the caller's usual "índice
+    vazio" message already covers that case.
+    """
+    return stats.n_chunks > 0 and stats.embed_scheme != current_scheme
 
 
 def _read_dim(directory: Path) -> int:
@@ -199,6 +234,7 @@ def index_stats(directory: Path) -> IndexStats:
         disk_bytes=_disk_bytes(directory),
         updated_at=updated_at,
         per_doc=tuple(per_doc),
+        embed_scheme=_read_embed_scheme(directory),
     )
 
 

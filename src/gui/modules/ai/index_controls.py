@@ -50,8 +50,8 @@ def build_index_controls(
     def refresh_status() -> None:
         def _worker() -> None:
             from src.core.rag import embedder
-            from src.core.rag.indexer import index_dir
-            from src.core.rag.stats import fmt_status_line, index_stats
+            from src.core.rag.indexer import CURRENT_EMBED_SCHEME, index_dir
+            from src.core.rag.stats import fmt_status_line, index_stats, is_stale_scheme
 
             try:
                 stats = index_stats(index_dir())
@@ -63,6 +63,8 @@ def build_index_controls(
 
             if stats and stats.n_chunks:
                 status_text.value = fmt_status_line(stats)
+                if is_stale_scheme(stats, CURRENT_EMBED_SCHEME):
+                    status_text.value += " · índice em esquema antigo — reindexe"
             else:
                 status_text.value = (
                     "Índice vazio — indexe no Observatório para começar."

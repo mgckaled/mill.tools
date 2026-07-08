@@ -48,6 +48,24 @@ def test_corpus_signature_ignores_chunk_multiplicity():
 
 
 @pytest.mark.unit
+def test_corpus_signature_changes_with_embed_space_id():
+    """PLANO_RAG_ESPACO_EMBEDDING, Fase 4.3: a reindex that changes the
+    embedding space (model/dim/scheme) but touches the same files at the same
+    mtimes must still invalidate the cached semantic map — otherwise it keeps
+    serving vectors from a space that no longer matches the persisted index."""
+    metas = _metas([("a.txt", 1.0)])
+    a = corpus_signature(metas, "nomic-embed-custom:768:v1")
+    b = corpus_signature(metas, "nomic-embed-custom:768:v2")
+    assert a != b
+
+
+@pytest.mark.unit
+def test_corpus_signature_defaults_embed_space_id_to_question_mark():
+    metas = _metas([("a.txt", 1.0)])
+    assert corpus_signature(metas) == corpus_signature(metas, "?")
+
+
+@pytest.mark.unit
 def test_save_load_round_trip(tmp_path):
     sm = _map()
     save_map(sm, "sig-1", directory=tmp_path)

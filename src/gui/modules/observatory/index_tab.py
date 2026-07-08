@@ -21,12 +21,14 @@ from typing import Callable
 
 import flet as ft
 
+from src.core.rag.indexer import CURRENT_EMBED_SCHEME
 from src.core.rag.stats import (
     IndexStats,
     chunks_for,
     fmt_datetime,
     fmt_disk_size,
     fmt_thousands,
+    is_stale_scheme,
 )
 from src.gui.theme.components import (
     Cursor,
@@ -466,6 +468,8 @@ def build_index_tab(
         vals["chunks"].value = fmt_thousands(stats.n_chunks)
         vals["dim"].value = str(stats.dim) if stats.dim else "—"
         vals["model"].value = stats.embed_model
+        if is_stale_scheme(stats, CURRENT_EMBED_SCHEME):
+            vals["model"].value += " (esquema antigo — reindexe)"
         vals["size"].value = fmt_disk_size(stats.disk_bytes)
         vals["updated"].value = (
             fmt_datetime(stats.updated_at) if stats.updated_at else "—"
