@@ -9,6 +9,11 @@ the extractive summary is self-contained on the ``[ml]`` TfidfVectorizer.
 The Plan 4C "ficha de leitura" only *composes* these engines — they live here so
 there is no duplication later.
 
+``clean.py`` (PLANO_INSIGHTS_QUALIDADE.md) is the single source of PDF-extraction
+text cleanup — page-break markers, unpunctuated list items, front-matter lines —
+consumed internally by ``summarize``/``keywords`` (never by ``entities``, which
+benefits from seeing the front matter's genuine PER/ORG/DATE entities).
+
 ``nl2cli.py`` (PLANO_NL2CLI_HUB_IA.md) is the odd one out — an LLM generation
 task, not classic NLP — but mirrors ``core/data/nl2sql.py``'s shape closely
 enough (PT question → strict-JSON payload via an injected ``make_llm_fn``)

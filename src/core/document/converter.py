@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Callable
 
 from src.core.document._shared import open_pdf
+from src.core.text.clean import page_marker
 from src.utils import sanitize_filename
 
 
@@ -127,7 +128,7 @@ def extract_text(path: Path, output_dir: Path) -> tuple[Path, int]:
     for i, page in enumerate(doc):
         text = page.get_text("text")
         if text.strip():
-            parts.append(f"\n\n--- Página {i + 1} ---\n\n{text.strip()}")
+            parts.append(f"\n\n{page_marker(i + 1)}\n\n{text.strip()}")
 
     doc.close()
     full_text = "".join(parts).strip()
