@@ -699,6 +699,13 @@ def _batch(ns: argparse.Namespace, embed_model: str) -> None:
         print(f"\n=== {Path(result.source_path).name} ===")
         print(result.answer.text)
 
+    succeeded = {r.source_path for r in results}
+    failed = [s for s in sources if s not in succeeded]
+    if failed:
+        print(f"\n{len(failed)} de {len(sources)} documento(s) falharam (ver log):")
+        for source in failed:
+            print(f"  • {Path(source).name}")
+
 
 def run_ai_cli(ns: argparse.Namespace) -> None:
     """Dispatch the `ai` subcommand: (re)index and/or answer/batch a question."""

@@ -136,6 +136,50 @@ def test_run_batch_stops_when_cancelled_between_sources(mocker):
 
 
 @pytest.mark.unit
+def test_run_batch_isolates_failure_per_document(mocker, caplog):
+    """PLANO_CORRECOES_RAG_ML_2, Fase 1.2: an error answering one document
+    (e.g. the LLM failing mid-run) must not abort the whole batch — the
+    failed source is logged and skipped, same "log + skip" contract as
+    indexer._index_one, while the others still get their result, in order."""
+    from src.core.rag import batch as batch_mod
+    from src.core.rag.types import AnswerResult
+
+    store = _store(
+        [
+            ([1, 0, 0, 0, 0, 0, 0, 0], "a.txt", "transcription"),
+            ([0, 1, 0, 0, 0, 0, 0, 0], "b.txt", "document"),
+            ([0, 0, 1, 0, 0, 0, 0, 0], "c.txt", "document"),
+        ]
+    )
+    mocker.patch.object(
+        batch_mod,
+        "answer",
+        side_effect=[
+            AnswerResult(text="R-a", sources=[]),
+            RuntimeError("LLM restarted mid-run"),
+            AnswerResult(text="R-c", sources=[]),
+        ],
+    )
+
+    calls: list[tuple[int, int]] = []
+    with caplog.at_level("WARNING"):
+        results = batch_mod.run_batch(
+            "resuma",
+            store,
+            lambda _q: np.ones(_W, dtype=np.float32),
+            sources=["a.txt", "b.txt", "c.txt"],
+            progress_cb=lambda c, t: calls.append((c, t)),
+        )
+
+    assert [r.source_path for r in results] == ["a.txt", "c.txt"]
+    assert results[0].answer.text == "R-a"
+    assert results[1].answer.text == "R-c"
+    # progress_cb still fires once per attempted source, failures included.
+    assert calls == [(1, 3), (2, 3), (3, 3)]
+    assert "b.txt" in caplog.text
+
+
+@pytest.mark.unit
 def test_run_batch_never_cancels_when_cancel_is_set_is_none(mocker):
     import src.core.rag.chat as chat
     from src.core.rag.batch import run_batch

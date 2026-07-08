@@ -162,6 +162,102 @@ def test_answer_flags_low_confidence_out_of_corpus(tmp_path, monkeypatch, mocker
     assert any("não cobre" in p.get("message", "") for _, p in bus.events)
 
 
+@pytest.mark.unit
+def test_answer_low_confidence_uses_max_dense_score_not_first_hit(
+    tmp_path, monkeypatch, mocker
+):
+    """PLANO_CORRECOES_RAG_ML_2, Fase 1.1: `hits` is ordered by the fused RRF
+    ranking, not by dense cosine — the first hit can have a low dense score
+    while a later hit scores well above the threshold. `low_confidence` must
+    reflect the *max* dense score across hits, not `hits[0].score`."""
+    import src.core.rag.chat as chat
+    import src.core.rag.indexer as indexer
+    import src.core.rag.retriever as retriever
+    from src.core.rag.store import VectorStore
+    from src.core.rag.types import ChunkMeta, RetrievedChunk
+    from src.gui.modules.ai.worker import run_ai_answer
+
+    rag_dir = tmp_path / "rag"
+    store = VectorStore(dim=8)
+    store.add(
+        np.ones((1, 8), dtype=np.float32),
+        [ChunkMeta("doc.txt", "transcription", 1.0, 0, "ctx")],
+    )
+    store.persist(rag_dir)
+    monkeypatch.setattr(indexer, "index_dir", lambda: rag_dir)
+
+    mocker.patch("src.core.rag.embedder.is_available", return_value=True)
+    mocker.patch("src.core.rag.embedder.embed_query", return_value=np.ones(8))
+    # RRF put the low-scoring chunk first (e.g. a lexical-only match) and the
+    # high-scoring one second — a fusion order that differs from dense order.
+    hits = [
+        RetrievedChunk(ChunkMeta("a.txt", "transcription", 1.0, 0, "a"), 0.10),
+        RetrievedChunk(ChunkMeta("b.txt", "transcription", 1.0, 0, "b"), 0.90),
+    ]
+    mocker.patch.object(retriever, "retrieve", return_value=hits)
+    mocker.patch.object(chat, "make_llm", return_value=_fake_llm("resposta"))
+
+    bus = _Bus()
+    run_ai_answer(
+        bus,
+        threading.Event(),
+        query="pergunta?",
+        scope=None,
+        model_name="qwen7b-custom",
+        embed_model="nomic-embed-text",
+        install_log_handler=False,
+    )
+
+    done = bus.payload_of("answer_done")
+    assert done["best_score"] == pytest.approx(0.90)
+    assert done["low_confidence"] is False
+
+
+@pytest.mark.unit
+def test_answer_cancelled_between_retrieve_and_answer(tmp_path, monkeypatch, mocker):
+    """PLANO_CORRECOES_RAG_ML_2, Fase 2.3: cancel_event is checked once, right
+    after retrieve — a cancel there must skip the (expensive) answer call."""
+    import src.core.rag.chat as chat
+    import src.core.rag.indexer as indexer
+    import src.core.rag.retriever as retriever
+    from src.core.rag.store import VectorStore
+    from src.core.rag.types import ChunkMeta, RetrievedChunk
+    from src.gui.modules.ai.worker import run_ai_answer
+
+    rag_dir = tmp_path / "rag"
+    store = VectorStore(dim=8)
+    store.add(
+        np.ones((1, 8), dtype=np.float32),
+        [ChunkMeta("doc.txt", "transcription", 1.0, 0, "ctx")],
+    )
+    store.persist(rag_dir)
+    monkeypatch.setattr(indexer, "index_dir", lambda: rag_dir)
+
+    mocker.patch("src.core.rag.embedder.is_available", return_value=True)
+    mocker.patch("src.core.rag.embedder.embed_query", return_value=np.ones(8))
+    hits = [RetrievedChunk(ChunkMeta("a.txt", "transcription", 1.0, 0, "a"), 0.9)]
+    mocker.patch.object(retriever, "retrieve", return_value=hits)
+    answer_mock = mocker.patch.object(chat, "answer")
+
+    cancel_event = threading.Event()
+    cancel_event.set()
+
+    bus = _Bus()
+    ok = run_ai_answer(
+        bus,
+        cancel_event,
+        query="pergunta?",
+        scope=None,
+        model_name="qwen7b-custom",
+        embed_model="nomic-embed-text",
+        install_log_handler=False,
+    )
+
+    assert ok is False
+    assert "Cancelado" in bus.payload_of("task_error")["message"]
+    answer_mock.assert_not_called()
+
+
 # ── run_ai_command (Fase 3) ──────────────────────────────────────────────────
 
 

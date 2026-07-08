@@ -41,7 +41,13 @@ def run_ai_answer(
     """Retrieve top-k chunks for the question and emit a cited answer.
 
     Emits: progress_start, answer_start, answer_done (text + sources), task_done —
-    or task_error if the index is empty / embedder unavailable / LLM fails.
+    or task_error if the index is empty / embedder unavailable / LLM fails / the
+    user cancels.
+
+    ``cancel_event`` is checked once, between retrieve and answer — the only gap
+    where interrupting is possible. The ``chain.invoke`` inside ``answer()``
+    itself is not interruptible today, so a cancel during the LLM call still
+    waits for it to finish.
     """
     from src.core.rag import embedder
     from src.core.rag.chat import answer as _answer
@@ -83,13 +89,21 @@ def run_ai_answer(
             t0 = time.monotonic()
             hits = retrieve(query, store, _embed_query, k=k, scope=scope)
 
+            if cancel_event.is_set():
+                emit("task_error", payload={"message": "Cancelado pelo usuário."})
+                return False
+
             # Out-of-corpus warning (Plano 4A): the best retrieved chunk's cosine
             # is the corpus's closeness to the question. Below the threshold the
             # corpus probably does not cover it — flag it so the view can warn
             # (we still answer; the user decides). No re-embedding: reuse the hit.
+            # max(), not hits[0]: `hits` is ordered by the fused RRF ranking, whose
+            # top slot is not necessarily the highest *dense* cosine — a lexically
+            # strong but semantically mediocre chunk can win the fusion and falsely
+            # trip the out-of-scope warning even when the corpus covers the question.
             from src.core.ml.recommend import DEFAULT_IN_CORPUS_THRESHOLD
 
-            best_score = hits[0].score if hits else 0.0
+            best_score = max((h.score for h in hits), default=0.0)
             low_confidence = best_score < DEFAULT_IN_CORPUS_THRESHOLD
             if low_confidence:
                 emit(
@@ -169,6 +183,11 @@ def run_ai_command(
     Emits: progress_start, command_start, command_done (command + explanation,
     no ``sources``), task_done — or task_error if Ollama is unreachable (cloud
     models skip this check) or the LLM cannot produce a valid command.
+
+    ``cancel_event`` is accepted for signature symmetry with ``run_ai_answer``
+    but never checked: generation is a single ``to_command`` call with no
+    intermediate stage to interrupt at (unlike the retrieve→answer gap in
+    ``run_ai_answer``), so a mid-flight check here would never actually fire.
     """
     # Layer exception (documented in docs/HISTORY.md + skill `architecture`):
     # gui/ normally only imports core/, never cli/ — src/cli/reference.py's

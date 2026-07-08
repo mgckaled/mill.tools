@@ -391,6 +391,46 @@ def test_batch_runner_exits_when_embedder_unavailable(
 
 
 @pytest.mark.unit
+def test_batch_runner_reports_failed_documents(tmp_path, monkeypatch, mocker, capsys):
+    """PLANO_CORRECOES_RAG_ML_2, Fase 1.2: run_batch skips a failed source
+    rather than raising — _batch must tell the user which document(s) it
+    skipped instead of silently under-reporting."""
+    import src.core.rag.batch as batch_mod
+    import src.core.rag.indexer as indexer
+    from src.cli.ai import _batch
+    from src.core.rag.store import VectorStore
+    from src.core.rag.types import AnswerResult, ChunkMeta
+
+    rag_dir = tmp_path / "rag"
+    store = VectorStore(dim=768)
+    store.add(
+        np.ones((2, 768), dtype=np.float32),
+        [
+            ChunkMeta("alpha.txt", "transcription", 1.0, 0, "ctx a"),
+            ChunkMeta("beta.txt", "transcription", 1.0, 0, "ctx b"),
+        ],
+    )
+    store.persist(rag_dir)
+    monkeypatch.setattr(indexer, "index_dir", lambda: rag_dir)
+
+    mocker.patch("src.core.rag.embedder.is_available", return_value=True)
+    mocker.patch.object(
+        batch_mod,
+        "run_batch",
+        return_value=[
+            batch_mod.BatchResult("alpha.txt", AnswerResult(text="R-alpha", sources=[]))
+        ],
+    )
+
+    _batch(_parse("resuma", "--batch"), "nomic-embed-text")
+
+    out = capsys.readouterr().out
+    assert "alpha.txt" in out and "R-alpha" in out
+    assert "1 de 2 documento(s) falharam" in out
+    assert "beta.txt" in out
+
+
+@pytest.mark.unit
 def test_batch_runner_reports_no_match_for_kind(tmp_path, monkeypatch, mocker, capsys):
     import src.core.rag.indexer as indexer
     from src.cli.ai import _batch

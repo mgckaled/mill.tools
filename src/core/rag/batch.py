@@ -9,7 +9,9 @@ testable without Ollama.
 
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
+from pathlib import Path
 from typing import TYPE_CHECKING, Callable
 
 from src.core.rag.chat import DEFAULT_MODEL, answer
@@ -60,7 +62,9 @@ def run_batch(
         sources: Distinct source paths to process (e.g. from distinct_sources).
         model_name: Answer model — Ollama tag or Gemini name.
         k: Chunks to retrieve per document.
-        progress_cb: Optional ``(current, total)`` callback, one call per source.
+        progress_cb: Optional ``(current, total)`` callback, one call per source
+            (attempted, regardless of success — mirrors ``indexer._index_one``'s
+            per-item accounting).
         cancel_is_set: Optional ``() -> bool``, checked between sources — same
             convention as ``core.recipes.runner``. ``None`` (the default) never
             cancels. No current caller wires a real cancellation source (batch
@@ -68,17 +72,24 @@ def run_batch(
             script); this is the seam for the day one does.
 
     Returns:
-        One ``BatchResult`` per source processed before cancellation (or every
-        source, if never cancelled), in input order.
+        One ``BatchResult`` per source that answered successfully, in input
+        order — a source whose retrieve/answer step raises (e.g. the LLM
+        restarting mid-run) is logged and skipped rather than aborting the
+        rest, the same "log + skip" contract ``indexer._index_one`` uses for a
+        single bad item. Cancellation still stops the whole run early.
     """
     results: list[BatchResult] = []
     total = len(sources)
     for n, source in enumerate(sources, 1):
         if cancel_is_set is not None and cancel_is_set():
             break
-        hits = retrieve(instruction, store, embed_query_fn, k=k, scope=source)
-        result = answer(instruction, hits, model_name=model_name)
-        results.append(BatchResult(source, result))
+        try:
+            hits = retrieve(instruction, store, embed_query_fn, k=k, scope=source)
+            result = answer(instruction, hits, model_name=model_name)
+        except Exception as exc:  # one bad document must not abort the batch
+            logging.warning("[!] Could not answer for %s: %s", Path(source).name, exc)
+        else:
+            results.append(BatchResult(source, result))
         if progress_cb:
             progress_cb(n, total)
     return results
