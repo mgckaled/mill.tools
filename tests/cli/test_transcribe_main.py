@@ -155,7 +155,7 @@ def test_main_text_input_without_ai_steps_warns(tmp_path, mocker, monkeypatch, c
     with caplog.at_level(_logging.WARNING, logger="root"):
         main_mod.main()
 
-    assert any("Nenhuma etapa de IA" in r.message for r in caplog.records)
+    assert any("No AI step requested" in r.message for r in caplog.records)
 
 
 def test_main_text_input_with_ai_step_does_not_warn(
@@ -175,7 +175,7 @@ def test_main_text_input_with_ai_step_does_not_warn(
     with caplog.at_level(_logging.WARNING, logger="root"):
         main_mod.main()
 
-    assert not any("Nenhuma etapa de IA" in r.message for r in caplog.records)
+    assert not any("No AI step requested" in r.message for r in caplog.records)
 
 
 def test_main_text_input_with_subtitle_flags_warns(
@@ -194,7 +194,7 @@ def test_main_text_input_with_subtitle_flags_warns(
     with caplog.at_level(_logging.WARNING, logger="root"):
         main_mod.main()
 
-    assert any("ignorados para entrada de texto" in r.message for r in caplog.records)
+    assert any("ignored for text input" in r.message for r in caplog.records)
 
 
 def test_main_media_input_with_subtitle_flags_does_not_warn(
@@ -215,6 +215,4 @@ def test_main_media_input_with_subtitle_flags_does_not_warn(
     with caplog.at_level(_logging.WARNING, logger="root"):
         main_mod.main()
 
-    assert not any(
-        "ignorados para entrada de texto" in r.message for r in caplog.records
-    )
+    assert not any("ignored for text input" in r.message for r in caplog.records)

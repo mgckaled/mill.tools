@@ -163,8 +163,8 @@ def main() -> None:
         subtitle_formats = _subtitle_formats_from_args(args)
         if is_text and subtitle_formats:
             logging.warning(
-                "[!] --srt/--vtt/--subtitles ignorados para entrada de texto "
-                "(não há transcrição a partir da qual gerar legendas)."
+                "[!] --srt/--vtt/--subtitles ignored for text input "
+                "(no transcription to generate subtitles from)."
             )
 
         if is_text:
@@ -178,8 +178,8 @@ def main() -> None:
             logging.info("[i] Text input — skipping transcription: %s", src_txt.name)
             if not (args.format or args.analyze or args.prompt):
                 logging.warning(
-                    "[!] Nenhuma etapa de IA solicitada (--format/--analyze/--prompt) "
-                    "— apenas o arquivo foi copiado para %s.",
+                    "[!] No AI step requested (--format/--analyze/--prompt) "
+                    "— only copied the file to %s.",
                     output_path,
                 )
         else:
