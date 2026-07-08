@@ -11,6 +11,45 @@ ficam em [`ROADMAP.md`](ROADMAP.md) e [`plans/active/`](plans/active/).
 
 ## Entregas (marcos)
 
+### Correções RAG/ML — 2ª rodada, pós-avaliação de produto (jul/2026)
+Avaliação de produto+acurácia do ML/RAG (ver
+[`reference/AVALIACAO_ML_RAG_FABLE5.md`](reference/AVALIACAO_ML_RAG_FABLE5.md)) encontrou arestas que só
+apareceram olhando o produto de ponta a ponta — distinta da 1ª rodada (revisão arquivo-a-arquivo, já
+implementada). **Contratos de resultado**: `run_ai_answer` derivava `low_confidence` de `hits[0].score`, mas
+`hits` vem ordenado pela fusão RRF, cujo primeiro lugar não é necessariamente o de maior cosseno denso — um
+chunk lexicalmente forte porém semanticamente mediano podia disparar o aviso de fora-de-escopo com o corpus
+cobrindo bem a pergunta; fix: `max(h.score for h in hits)`. `batch.run_batch` não isolava falha por
+documento — um erro de LLM num documento abortava o `ai --batch` inteiro; agora loga e pula (mesmo contrato
+"log + skip" de `indexer._index_one`), e `cli/ai.py --batch` reporta quais documentos foram pulados
+comparando a lista de entrada contra os resultados devolvidos. **Robustez**: `VectorStore.load` agora tolera
+`vectors.npz`/`meta.json` corrompidos (não só ausentes), mesma paridade de
+`classify.prototypes._load_prototypes`; `embedder.is_available()` ganhou um `use_cache` opt-in (TTL 60s,
+chaveado por modelo) para a Conversa parar de pingar o Ollama a cada pergunta, mantendo os fluxos frios
+(status board, gate de reindexação) sempre com ping fresco; `cancel_event` (antes recebido e nunca checado
+em `run_ai_answer`/`run_ai_command`) agora é checado uma vez, entre retrieve e answer — `run_ai_command` não
+ganhou o check por não ter um estágio intermediário real para interromper (documentado no docstring, não
+"consertado"). **Seeds bilíngues**: `_DATA_DOMAIN_SEEDS`/`_DOCUMENT_TYPE_SEEDS` (domínios `data`/`document`)
+eram 100% EN contra um corpus majoritariamente PT-BR — o `nomic-embed` é fraco cross-língua, então essas
+seeds ganharam a frase em português ao lado da original; a assinatura de cache invalida sozinha, sem
+migração. Cobertura de `core/rag`/`core/ml/classify` foi de 98% para 99%. Plano:
+[`plans/implemented/PLANO_CORRECOES_RAG_ML_2.md`](plans/implemented/PLANO_CORRECOES_RAG_ML_2.md).
+
+### Decisão — `bge-m3`/`mxbai-embed-large` descartados como upgrade do embedder (jul/2026)
+A skill `ml-rag` os citava como "alternativas multilíngues (exigem reindexação)" sem qualificar o custo. Na
+2ª rodada de correções RAG/ML ficou explícito: ambos têm dimensão >1000 (`nomic-embed-custom` é 768) — trocar
+dobraria a memória do índice numpy e quebra a suposição `EMBED_DIM=768` hardcoded em vários call sites, não
+é um upgrade drop-in via reindexação simples. Decisão: descartados por ora; só reconsiderar se o ganho de
+qualidade multilíngue justificar o retrabalho além da reindexação (ajustar `EMBED_DIM` e os pontos que o
+assumem). [`plans/implemented/PLANO_CORRECOES_RAG_ML_2.md`](plans/implemented/PLANO_CORRECOES_RAG_ML_2.md).
+
+### Decisão — `embed_query` não ganhou soma-antes-de-grava (ainda) (jul/2026)
+`embed_texts` já soma o tempo de todos os sub-batches antes de gravar em `model_timings.json` (evita
+reescrever o log dezenas de vezes por documento). `embed_query` grava a cada chamada, mas hoje `run_ai_answer`
+só chama uma vez por pergunta — aplicar a mesma mitigação agora seria prematuro. Decisão: adiar até a Conversa
+ganhar um passo de condensação de query (multi-turno) que de fato chame `embed_query` mais de uma vez no
+mesmo fluxo; não criar um arquivo de plano só para guardar esta nota.
+[`plans/implemented/PLANO_CORRECOES_RAG_ML_2.md`](plans/implemented/PLANO_CORRECOES_RAG_ML_2.md).
+
 ### Correções dos arquivos soltos de `src/` + entry points (jul/2026)
 Revisão exploratória arquivo-a-arquivo dos 9 `.py` soltos em `src/` (`__init__`, `__main__`, `analyzer`,
 `formatter`, `llm_factory`, `llm_utils`, `prompter`, `transcriber`, `utils`) + `gui.py`/`main.py` na raiz —

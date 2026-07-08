@@ -26,7 +26,10 @@ mora onde e limites de tamanho → skill `architecture`; superfícies → `cli` 
   Embeddings **100% locais** (Ollama, `nomic-embed-custom`, CPU `num_gpu 0`, 768-dim, torch-free).
 - **`VectorStore`** (`store.py`): matriz numpy `(N,D)` + persistência `.npz`/`.json` em `~/.mill-tools/rag/`.
   Caches lazy de `_normalized` **e `_bm25`**, ambos invalidados por `add()`/`drop_source()`. `persist()` grava
-  sidecar `index_info.json` (`embed_model`, `dim`); índices antigos → `embed_model="?"`.
+  sidecar `index_info.json` (`embed_model`, `dim`); índices antigos → `embed_model="?"`. **`load()` tolera
+  corrupção** (`PLANO_CORRECOES_RAG_ML_2.md`, Fase 2): `vectors.npz`/`meta.json` truncados ou inválidos
+  (`zipfile.BadZipFile`/`ValueError`/`OSError`/`KeyError`/`EOFError`) viram store vazio + warning, não
+  exceção crua — mesma paridade de `classify.prototypes._load_prototypes`.
 - **Busca híbrida** (`retriever.retrieve()`): cosseno denso + **BM25** (`bm25.py`) combinados por **Reciprocal
   Rank Fusion** (`np.lexsort((idx, -scores))`, não `argsort[::-1]` — ver skill `testing` p/ o porquê). BM25
   tokeniza via regex (`re.findall(r"\w+", text.lower())`, sem pontuação) nos **dois** lados (índice e query) —
@@ -43,15 +46,22 @@ mora onde e limites de tamanho → skill `architecture`; superfícies → `cli` 
 - **`batch.run_batch`** aceita `cancel_is_set: Callable[[], bool] | None`, checado entre itens (mesmo padrão
   do runner de Receitas) — hoje é só o *seam* no core: não há worker de GUI que chame `run_batch` (o hub IA só
   tem a Conversa single-answer) nem mecanismo de cancelamento no `cli/ai.py --batch` (Ctrl+C já cobre o caso
-  síncrono); pronto para quando um chamador cancelável de verdade existir.
+  síncrono); pronto para quando um chamador cancelável de verdade existir. **Isolamento de falha por
+  documento** (`PLANO_CORRECOES_RAG_ML_2.md`, Fase 1): um erro de LLM/retrieval num documento é logado
+  (`logging.warning`) e **pulado**, no mesmo contrato "log + skip" de `indexer._index_one` — não aborta os
+  demais nem devolve um campo de erro no `BatchResult`. `cli/ai.py --batch` reporta quais documentos faltam
+  comparando `sources` (entrada) contra os `source_path` dos resultados devolvidos (sem campo novo).
 - **`chat.answer()`** monta contexto numerado `[n]` sob prompt estrito; o **`[n]` é chaveado pelo documento
   distinto** (chunks do mesmo arquivo compartilham número) — as citações nunca passam do total de fontes.
 - **`stats.py`** (puro): `index_stats(directory) → IndexStats` (docs, chunks, dim, modelo, tamanho, `per_doc`);
   `fmt_status_line()`, `fmt_disk_size`/`fmt_thousands`/`fmt_datetime`/`chunks_for` (mês PT-BR manual, sem
   `locale`). `analytics.py` (Plano 2): `index_health` + timing por modelo (p90 via `statistics`).
-- **Gate**: `embedder.is_available()` bloqueia os fluxos com `SETUP_HINT`; usa um timeout curto próprio
-  (`AVAILABILITY_TIMEOUT=10s`) para o ping, distinto do `EMBED_TIMEOUT=300s` do embedding real (senão o status
-  board do Observatório pendura por até 5 min quando o Ollama está fora do ar).
+- **Gate**: `embedder.is_available(model, use_cache=False)` bloqueia os fluxos com `SETUP_HINT`; usa um
+  timeout curto próprio (`AVAILABILITY_TIMEOUT=10s`) para o ping, distinto do `EMBED_TIMEOUT=300s` do
+  embedding real (senão o status board do Observatório pendura por até 5 min quando o Ollama está fora do
+  ar). `use_cache=True` (opt-in, TTL 60s via `AVAILABILITY_CACHE_TTL`, chaveado por modelo) poupa um ping por
+  pergunta no **hot path** da Conversa (`run_ai_answer`) — fluxos frios (status board, gate de reindexação,
+  CLI) mantêm o default `False` para nunca reportar um veredito velho.
 
 > `rank-bm25` é dependência **base** (puro Python/numpy, sem scipy) — não atrás de extra, porque a busca densa
 > do RAG já é incondicional. Racional da escolha (vs. `bm25s`) → `docs/HISTORY.md`.
@@ -77,7 +87,12 @@ mora onde e limites de tamanho → skill `architecture`; superfícies → `cli` 
   por cosseno; `margin`=incerteza) que **escala para supervisionado** (`LinearSVC`+`CalibratedClassifierCV`
   sobre `dm.X`) conforme o usuário confirma o perfil. **Parametrizado por `domain`**
   (`DOMAIN_TRANSCRIPTION_PROFILE`/`DOMAIN_DATA`/`DOMAIN_DOCUMENT`) — mesmas funções, chaveadas por prefixo de
-  arquivo; o domínio default preserva os nomes pré-existentes (zero invalidação de cache).
+  arquivo; o domínio default preserva os nomes pré-existentes (zero invalidação de cache). **Seeds bilíngues**
+  (`PLANO_CORRECOES_RAG_ML_2.md`, Fase 3): `_DATA_DOMAIN_SEEDS`/`_DOCUMENT_TYPE_SEEDS` carregam a frase em
+  inglês **e** em português no mesmo texto de protótipo — o corpus desses dois domínios é majoritariamente
+  PT-BR e o `nomic-embed` é fraco cross-língua; seeds só-EN deprimiam a margem artificialmente. Os seeds de
+  perfil de transcrição (derivados de `label`+`source_hint`, já PT) não precisam disso. `_seeds_signature`
+  invalida o cache sozinha ao mudar o texto — zero migração.
 - **Cegueira ao embed model (corrigida)**: as assinaturas de cache de protótipos **e** do modelo
   supervisionado dobram o `embed_space_id` (`"{modelo}:{dim}"`, de `rag.stats.embed_space_id`) — trocar o
   embed model e reindexar costumava deixar protótipos/SVM do espaço antigo válidos e prevendo lixo em
@@ -175,7 +190,11 @@ Zero dependência nova; agrega o que já existe em outros módulos.
 1. **Embeddings sempre locais** (Ollama, na indexação). Gemini/GLM entram **só** no passo de resposta e
    sempre opt-in.
 2. **`.score` = cosseno denso**, não o valor fundido do RRF — contrato do aviso de fora-de-escopo (o worker
-   deriva `low_confidence` do `hits[0].score` sem re-embeddar, compara com `recommend.DEFAULT_IN_CORPUS_THRESHOLD`).
+   deriva `low_confidence` do **`max(h.score for h in hits)`** sem re-embeddar, compara com
+   `recommend.DEFAULT_IN_CORPUS_THRESHOLD`). Não é `hits[0].score`: `hits` vem ordenado pela fusão RRF, cujo
+   primeiro lugar não é necessariamente o de maior cosseno denso — um chunk lexicalmente forte porém
+   semanticamente mediano podia vencer a fusão e disparar o aviso de fora-de-escopo com o corpus cobrindo bem
+   a pergunta (`PLANO_CORRECOES_RAG_ML_2.md`, Fase 1).
 3. **A IA de dados recebe só schema/cartão**, nunca as linhas cruas (privacidade: com nuvem, só nomes de
    coluna saem da máquina).
 4. **Funções puras de `core/ml`/`core/text` nunca escrevem log** — quem grava `activity`/`logs` é o
@@ -204,7 +223,7 @@ temperatura por papel).
 
 | Modelo | Papel |
 |---|---|
-| `nomic-embed-custom` | **embeddings do RAG** — 768-dim, CPU, torch-free. Alternativas multilíngues (exigem reindexação): `bge-m3`, `mxbai-embed-large` |
+| `nomic-embed-custom` | **embeddings do RAG** — 768-dim, CPU, torch-free. `bge-m3`/`mxbai-embed-large` (multilíngues) foram **descartados por decisão** (`PLANO_CORRECOES_RAG_ML_2.md`): dimensão >1000 dobraria a memória do índice e quebra a suposição `EMBED_DIM=768` — não são um upgrade drop-in, exigiriam retrabalho além da reindexação |
 | `gemma3-4b-custom` | Gemma 3 4B (128K ctx) — **default da resposta de RAG e do Analyzer/Prompter local**; ~3,3 GB; sintetiza e cita `[n]` muito melhor que o 1B |
 | `gemma3-1b-custom` | Gemma 3 1B (32K) — fallback rápido/baixa-RAM (~815 MB); fraco em síntese |
 | `qwen7b-custom` | Qwen 2.5 7B — análise/RAG de máxima qualidade; lento na CPU |
