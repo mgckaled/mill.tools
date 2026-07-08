@@ -90,3 +90,57 @@ def test_paragraph_skeleton_differs_from_list_skeleton():
     # paragraph -> "..."; list-like -> ["...", "..."]
     assert '"summary": "..."' in system_text
     assert '"points": ["...", "..."]' in system_text
+
+
+# --- Fase 3 do PLANO_CORRECOES_SRC_ANALYSIS: refinos de prompt -------------
+
+
+def test_analysis_prompt_warns_against_placeholder_echo():
+    from src.analysis.prompts import build_analysis_prompt
+
+    system_text = build_analysis_prompt(_profile()).format_messages(text="x")[0].content
+    assert "Não copie os placeholders" in system_text
+
+
+def test_merge_prompt_warns_against_placeholder_echo():
+    from src.analysis.prompts import build_merge_prompt
+
+    system_text = (
+        build_merge_prompt(_profile()).format_messages(analyses="[]")[0].content
+    )
+    assert "Não copie os placeholders" in system_text
+
+
+def test_merge_prompt_lists_always_fields_as_mandatory():
+    from src.analysis.prompts import build_merge_prompt
+    from src.analysis.types import AnalysisProfile, Field
+
+    profile = AnalysisProfile(
+        id="sample",
+        label="Amostra",
+        icon="ARTICLE_OUTLINED",
+        persona="Você é um analista de teste.",
+        source_hint="transcrição de teste",
+        fields=(
+            Field(
+                key="summary",
+                title="Resumo",
+                kind="paragraph",
+                rule="3-5 frases.",
+                always=True,
+                empty_text="N/A",
+            ),
+            Field(key="points", title="Pontos", kind="list", rule="pontos."),
+        ),
+    )
+    system_text = build_merge_prompt(profile).format_messages(analyses="[]")[0].content
+    assert "Nunca deixe os campos obrigatórios vazios: summary" in system_text
+
+
+def test_merge_prompt_omits_mandatory_rule_when_no_always_fields():
+    from src.analysis.prompts import build_merge_prompt
+
+    system_text = (
+        build_merge_prompt(_profile()).format_messages(analyses="[]")[0].content
+    )
+    assert "Nunca deixe os campos obrigatórios" not in system_text

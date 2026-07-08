@@ -56,7 +56,10 @@ def build_analysis_prompt(profile: AnalysisProfile) -> ChatPromptTemplate:
         f"{profile.persona} Você recebe a {profile.source_hint} e deve produzir "
         "uma análise estruturada em formato JSON. "
         "Responda APENAS com JSON válido, sem texto extra antes ou depois. "
-        "Responda SEMPRE em português brasileiro.\n\n"
+        "Responda SEMPRE em português brasileiro. "
+        'Não copie os placeholders "..." do exemplo abaixo — eles só ilustram o '
+        "formato; se não houver conteúdo para um campo, use uma lista vazia ([]) "
+        'ou uma string vazia ("").\n\n'
         "Estrutura JSON obrigatória:\n"
         f"{_json_skeleton(profile.fields)}\n\n"
         "Regras:\n"
@@ -79,6 +82,12 @@ def build_merge_prompt(profile: AnalysisProfile) -> ChatPromptTemplate:
     Returns:
         A ChatPromptTemplate whose human message expects an ``analyses`` variable.
     """
+    always_keys = [f.key for f in profile.fields if f.always]
+    always_rule = (
+        f"- Nunca deixe os campos obrigatórios vazios: {', '.join(always_keys)}\n"
+        if always_keys
+        else ""
+    )
     system = (
         f"{profile.persona} Você recebe múltiplas análises parciais de uma única "
         f"{profile.source_hint}, dividida em partes. Sua tarefa é consolidar tudo "
@@ -87,7 +96,10 @@ def build_merge_prompt(profile: AnalysisProfile) -> ChatPromptTemplate:
         "- Elimine itens duplicados ou semanticamente equivalentes — mantenha "
         "apenas a versão mais completa\n"
         "- Unifique itens que tratam do mesmo assunto em um único item abrangente\n"
-        "- Use português brasileiro correto — sem neologismos, sem palavras inventadas\n\n"
+        "- Use português brasileiro correto — sem neologismos, sem palavras inventadas\n"
+        '- Não copie os placeholders "..." do exemplo abaixo; se não houver '
+        'conteúdo para um campo, use lista vazia ([]) ou string vazia ("")\n'
+        f"{always_rule}\n"
         "Responda APENAS com JSON válido, sem texto extra antes ou depois.\n\n"
         "Estrutura JSON obrigatória:\n"
         f"{_json_skeleton(profile.fields)}\n\n"
