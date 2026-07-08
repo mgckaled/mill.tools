@@ -94,6 +94,19 @@ def test_profile_prototypes_bad_zip_npz_re_embeds(tmp_path):
     assert calls["n"] == 2  # cache miss → re-embedded, not raised
 
 
+@pytest.mark.unit
+@pytest.mark.parametrize("domain", [cl.DOMAIN_DATA, cl.DOMAIN_DOCUMENT])
+def test_domain_seeds_are_bilingual(domain):
+    """PLANO_CORRECOES_RAG_ML_2, Fase 3: data/document prototypes must carry a
+    PT-BR sentence alongside the EN one — nomic-embed is weak cross-language
+    against the mostly PT-BR corpus these two domains classify. (The
+    transcription profile seeds are already PT — derived from label/source_hint
+    — so this only applies to the two hand-written catalogs.)"""
+    accented = set("áàâãéêíóôõúçÁÀÂÃÉÊÍÓÔÕÚÇ")
+    for _, text in cl._seeds_for_domain(domain):
+        assert accented & set(text), f"seed looks English-only: {text!r}"
+
+
 # ---------------------------------------------------------------------------
 # Zero-shot
 # ---------------------------------------------------------------------------

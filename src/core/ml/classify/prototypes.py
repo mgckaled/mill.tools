@@ -39,46 +39,76 @@ from src.core.ml.types import Classification
 # Prototype seeds for the two new domains — (class_id, prototype_text) pairs,
 # same shape as _profile_seeds()'s output. Small, hand-written catalogs (no
 # existing registry to derive them from, unlike the transcription profiles).
+#
+# Bilingual (EN + PT-BR in the same prototype text): the corpus these domains
+# classify (data cards, documents) is mostly PT-BR, and nomic-embed is weak
+# cross-language — an English-only prototype embeds far from a PT-BR document
+# even when the topic matches, artificially depressing the margin. The
+# transcription profile seeds (_profile_seeds, derived from label+source_hint)
+# don't need this: those are already PT. _seeds_signature hashes the text, so
+# changing it invalidates the cache on its own — no migration step needed.
 _DATA_DOMAIN_SEEDS: list[tuple[str, str]] = [
     (
         "financial",
-        "Financial data. Revenue, expenses, invoices, transactions, budgets.",
+        "Financial data. Dados financeiros. Revenue, expenses, invoices, "
+        "transactions, budgets. Receitas, despesas, notas fiscais, transações, "
+        "orçamentos.",
     ),
     (
         "research",
-        "Scientific or research data. Experiment results, measurements, surveys.",
+        "Scientific or research data. Dados científicos ou de pesquisa. "
+        "Experiment results, measurements, surveys. Resultados de experimentos, "
+        "medições, pesquisas.",
     ),
     (
         "log",
-        "Operational log data. Timestamped events, system logs, application traces.",
+        "Operational log data. Dados de log operacional. Timestamped events, "
+        "system logs, application traces. Eventos com data e hora, logs de "
+        "sistema, rastros de aplicação.",
     ),
     (
         "people",
-        "People or registry data. Names, contacts, employee or customer records.",
+        "People or registry data. Dados de pessoas ou cadastro. Names, "
+        "contacts, employee or customer records. Nomes, contatos, registros de "
+        "funcionários ou clientes.",
     ),
-    ("catalog", "Product catalog data. Items, SKUs, prices, inventory."),
+    (
+        "catalog",
+        "Product catalog data. Dados de catálogo de produtos. Items, SKUs, "
+        "prices, inventory. Itens, SKUs, preços, estoque.",
+    ),
 ]
 
 _DOCUMENT_TYPE_SEEDS: list[tuple[str, str]] = [
     (
         "invoice",
-        "Invoice or receipt. Billed amounts, taxes, payment terms, itemized charges.",
+        "Invoice or receipt. Nota fiscal ou recibo. Billed amounts, taxes, "
+        "payment terms, itemized charges. Valores cobrados, impostos, "
+        "condições de pagamento, itens detalhados.",
     ),
     (
         "minutes",
-        "Meeting minutes. Attendees, decisions, action items, discussion notes.",
+        "Meeting minutes. Ata de reunião. Attendees, decisions, action items, "
+        "discussion notes. Participantes, decisões, itens de ação, notas de "
+        "discussão.",
     ),
     (
         "article",
-        "Article or report. Analysis, findings, structured sections, references.",
+        "Article or report. Artigo ou relatório. Analysis, findings, "
+        "structured sections, references. Análise, conclusões, seções "
+        "estruturadas, referências.",
     ),
     (
         "contract",
-        "Contract or agreement. Parties, clauses, terms, signatures, obligations.",
+        "Contract or agreement. Contrato ou acordo. Parties, clauses, terms, "
+        "signatures, obligations. Partes, cláusulas, termos, assinaturas, "
+        "obrigações.",
     ),
     (
         "correspondence",
-        "Correspondence. Letter or formal written communication between parties.",
+        "Correspondence. Correspondência. Letter or formal written "
+        "communication between parties. Carta ou comunicação formal escrita "
+        "entre partes.",
     ),
 ]
 
