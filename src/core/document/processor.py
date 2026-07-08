@@ -139,6 +139,11 @@ def split_pdf(path: Path, pages: str, output_dir: Path) -> list[Path]:
 def compress_pdf(path: Path, output_dir: Path, image_quality: int = 75) -> Path:
     """Recompress embedded images in a PDF to reduce file size.
 
+    Uses pymupdf's native `Document.rewrite_images`, which recompresses
+    lossy and lossless images as JPEG at the target quality while keeping
+    any soft mask (alpha/transparency) as a separate object — transparent
+    images are not flattened.
+
     Args:
         path: Source PDF path.
         output_dir: Directory to write the compressed file.
@@ -151,14 +156,7 @@ def compress_pdf(path: Path, output_dir: Path, image_quality: int = 75) -> Path:
 
     output_dir.mkdir(parents=True, exist_ok=True)
     doc = pymupdf.open(str(path))
-
-    for page in doc:
-        for img_info in page.get_images(full=True):
-            xref = img_info[0]
-            try:
-                doc.update_stream(xref, doc.extract_image(xref)["image"])
-            except Exception:
-                pass
+    doc.rewrite_images(quality=image_quality)
 
     stem = sanitize_filename(path.stem)
     out_path = output_dir / f"{stem}_compressed.pdf"

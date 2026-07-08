@@ -210,6 +210,44 @@ def sample_pdf_with_images(tmp_path_factory: pytest.TempPathFactory, session_jpg
     return path
 
 
+@pytest.fixture(scope="session")
+def session_textured_jpg(tmp_path_factory: pytest.TempPathFactory) -> Path:
+    """Noisy-pixel JPEG 640×480 — unlike session_jpg's flat color, this has
+    enough entropy for JPEG quality to actually change output size, so
+    compress_pdf tests can assert a real size difference between qualities."""
+    import random
+
+    rng = random.Random(42)
+    img = Image.new("RGB", (640, 480))
+    img.putdata(
+        [
+            (rng.randrange(256), rng.randrange(256), rng.randrange(256))
+            for _ in range(640 * 480)
+        ]
+    )
+    out = tmp_path_factory.mktemp("fixtures") / "session_textured.jpg"
+    img.save(out, format="JPEG", quality=95)
+    return out
+
+
+@pytest.fixture(scope="session")
+def sample_pdf_with_textured_image(
+    tmp_path_factory: pytest.TempPathFactory, session_textured_jpg
+):
+    """PDF with an embedded high-entropy JPEG — used to assert compress_pdf's
+    image_quality actually changes output size (session_jpg is too flat)."""
+    pymupdf = pytest.importorskip("pymupdf")
+    tmp = tmp_path_factory.mktemp("pdfs")
+    path = tmp / "with_textured_image.pdf"
+    doc = pymupdf.open()
+    page = doc.new_page()
+    rect = pymupdf.Rect(50, 50, 500, 400)
+    page.insert_image(rect, filename=str(session_textured_jpg))
+    doc.save(str(path))
+    doc.close()
+    return path
+
+
 # ---------------------------------------------------------------------------
 # Hook: pula testes de integração automaticamente se ffmpeg não estiver no PATH
 # ---------------------------------------------------------------------------

@@ -73,6 +73,52 @@ def test_compress_returns_valid_pdf(sample_pdf_with_images, out_dir):
     doc.close()
 
 
+def test_compress_lower_quality_yields_smaller_file(
+    sample_pdf_with_textured_image, out_dir
+):
+    """image_quality must actually drive recompression, not be a no-op.
+
+    Uses a high-entropy JPEG fixture — a flat-color image compresses to
+    near-nothing at any quality and wouldn't discriminate the two runs.
+    """
+    from src.core.document.processor import compress_pdf
+
+    low = compress_pdf(
+        sample_pdf_with_textured_image, out_dir / "low", image_quality=50
+    )
+    high = compress_pdf(
+        sample_pdf_with_textured_image, out_dir / "high", image_quality=95
+    )
+    assert low.stat().st_size < high.stat().st_size
+
+
+def test_compress_preserves_alpha_transparency(tmp_path, out_dir):
+    """rewrite_images must keep the soft mask, not flatten transparent images."""
+    import pymupdf  # type: ignore[import-untyped]
+    from PIL import Image
+
+    from src.core.document.processor import compress_pdf
+
+    img = Image.new("RGBA", (64, 64), (255, 0, 0, 128))
+    png_path = tmp_path / "alpha.png"
+    img.save(png_path, format="PNG")
+
+    src_doc = pymupdf.open()
+    page = src_doc.new_page()
+    page.insert_image(pymupdf.Rect(0, 0, 64, 64), filename=str(png_path))
+    src_path = tmp_path / "alpha_src.pdf"
+    src_doc.save(str(src_path))
+    src_doc.close()
+
+    out = compress_pdf(src_path, out_dir, image_quality=50)
+
+    doc = pymupdf.open(str(out))
+    xref = doc[0].get_images(full=True)[0][0]
+    extracted = doc.extract_image(xref)
+    assert extracted["smask"] > 0
+    doc.close()
+
+
 def test_rotate_90_changes_page_orientation(sample_pdf, out_dir):
     from src.core.document.processor import rotate_pdf
     import pymupdf  # type: ignore[import-untyped]
