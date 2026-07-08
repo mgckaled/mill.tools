@@ -256,18 +256,3 @@ Itens de baixo risco, deliberadamente não corrigidos na revisão arquivo-a-arqu
 - **Tamanho de arquivo**: `processor.py` está em ~351 linhas — acima do alvo de 300 para módulos de `core/`,
   abaixo do teto de 400 (arquitetura §3). Nenhum sinal de baixa coesão hoje (é uma função por operação de
   PDF, sem abas/seções misturadas) — dividir **ao tocar** na próxima operação nova, não preventivamente.
-
----
-
-## 12. Pendência pontual — adotar `core/text/clean.py` na indexação do RAG (jul/2026)
-
-Item deliberadamente fora do escopo do
-[`plans/implemented/PLANO_INSIGHTS_QUALIDADE.md`](plans/implemented/PLANO_INSIGHTS_QUALIDADE.md), que criou
-`clean.py` só para `summarize`/`keywords`/o painel Insights:
-
-- **`rag/indexer.py` ainda embedda os marcadores de página crus** (`--- Página N ---`): o texto que vira
-  chunk no índice RAG não passa por `clean.clean_document_text`, então esses marcadores continuam sendo
-  embeddados e citados como se fossem conteúdo. Adotar `clean.py` aqui exige **reindexação** (o texto
-  embeddado muda) e pertence ao `PLANO_RAG_ESPACO_EMBEDDING` já cogitado (junto dos prefixos de tarefa do
-  `nomic-embed` e do header de contexto do chunk — ver `docs/reference/AVALIACAO_ML_RAG_FABLE5.md` §2.1/2.4)
-  — uma reindexação versionada única, não uma correção isolada.

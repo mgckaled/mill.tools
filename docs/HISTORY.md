@@ -11,6 +11,36 @@ ficam em [`ROADMAP.md`](ROADMAP.md) e [`plans/active/`](plans/active/).
 
 ## Entregas (marcos)
 
+### Espaço de embedding versionado — prefixos, header contextual, reindexação (jul/2026)
+Origem: achado nº 1 da avaliação de produto ML/RAG
+([`reference/AVALIACAO_ML_RAG_FABLE5.md`](reference/AVALIACAO_ML_RAG_FABLE5.md), §2.1/§2.4/§2.6): o
+`nomic-embed-text` foi treinado com prefixos de instrução de tarefa (`search_document: `/`search_query: `,
+confirmados no card do modelo) e o embedder enviava tudo cru. **`core/rag/embedder.py`** ganhou o prefixo
+por família de modelo (`_prefixes_for`, chaveado por qualquer tag contendo `nomic`); verificado via context7
+(langchain-ollama, Ollama) e o `ollama/Modelfile.nomic` local que nada no caminho já prefixava sozinho (o
+Modelfile herda `TEMPLATE {{ .Prompt }}` da base, sem wrapper). **`core/rag/indexer.py`** passou a limpar o
+corpo via `core/text/clean.clean_document_text` antes de chunkar (resolve o ponteiro do ROADMAP §12) e a
+prepender um header contextual (`"{stem} — {kind}:\n"`) só no texto enviado ao embedder —
+`ChunkMeta.text`/BM25/citações continuam sobre o chunk cru. As três mudanças alteram o que é embeddado, então
+exigem reindexação: um marcador de esquema (`indexer.CURRENT_EMBED_SCHEME`) foi persistido no
+`index_info.json` e passou a compor `rag.stats.embed_space_id` (`"{modelo}:{dim}:{esquema}"`) — protótipos e
+SVM do `classify` já dobravam esse id (correção M2 da 1ª rodada), então a invalidação deles veio de graça,
+confirmado por teste. Auditoria do checklist encontrou um segundo ponto cego: o mapa semântico
+(`ml/cache.corpus_signature`) era assinado só por `(source_path, mtime)` dos documentos — uma reindexação sob
+esquema novo sem tocar arquivos não invalidava o mapa cacheado; `corpus_signature`/`mapviz.build_semantic_map`
+agora também dobram `embed_space_id`. O status do índice (linha do hub IA + card "Modelo" da aba Índice/RAG
+do Observatório) sinaliza "esquema antigo — reindexe" via `stats.is_stale_scheme` quando o sidecar diverge do
+código em execução — a migração continua sendo o botão Reindexar existente.
+
+Reindexação real do acervo pessoal (85 docs, 14.844 chunks) e recalibração de
+`core/ml/recommend.DEFAULT_IN_CORPUS_THRESHOLD`: medidas 10 perguntas claramente cobertas vs. 5 claramente
+fora do acervo — as faixas de cosseno **se sobrepõem** (cobertas 0.70–0.87, fora 0.65–0.73; o
+`nomic-embed-text` tem piso de cosseno alto para texto PT-BR curto não relacionado, e a média antes/depois da
+reindexação quase não mudou), então o novo valor (0.68, ante 0.35 — um no-op funcional desde sempre) prioriza
+zero alarme falso de "fora do acervo" sobre pergunta real coberta em vez de perseguir uma separação perfeita
+que a amostra não sustenta. Plano, com o antes/depois completo:
+[`plans/implemented/PLANO_RAG_ESPACO_EMBEDDING.md`](plans/implemented/PLANO_RAG_ESPACO_EMBEDDING.md).
+
 ### Qualidade da aba Insights — limpeza de texto + gates por idioma (jul/2026)
 Origem: a mesma avaliação de produto ML/RAG
 ([`reference/AVALIACAO_ML_RAG_FABLE5.md`](reference/AVALIACAO_ML_RAG_FABLE5.md)) mais um caso real com

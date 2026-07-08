@@ -24,12 +24,19 @@ mora onde e limites de tamanho → skill `architecture`; superfícies → `cli` 
 
 - **`embedder.py` é a única rede** (injetável como `embed_fn`; o resto é unit-testável sem Ollama).
   Embeddings **100% locais** (Ollama, `nomic-embed-custom`, CPU `num_gpu 0`, 768-dim, torch-free).
+  **Prefixos de tarefa** (`PLANO_RAG_ESPACO_EMBEDDING`, jul/2026): `embed_texts` prepends
+  `"search_document: "` e `embed_query` prepends `"search_query: "` — o `nomic-embed-text` foi treinado
+  com esses prefixos (exatos, com espaço; confirmado no card do modelo) e sem eles documento/pergunta caem
+  no mesmo espaço "sem tarefa". Chaveado por família (`_prefixes_for`, qualquer tag contendo `"nomic"`); um
+  modelo fora dela embedda sem prefixo. Verificado (context7 + `ollama/Modelfile.nomic`) que nada no
+  caminho já prefixava sozinho — nem o `TEMPLATE {{ .Prompt }}` do Modelfile (herdado da base, sem
+  wrapper) nem `langchain_ollama.OllamaEmbeddings`, que repassa o texto cru ao `/api/embed`.
 - **`VectorStore`** (`store.py`): matriz numpy `(N,D)` + persistência `.npz`/`.json` em `~/.mill-tools/rag/`.
   Caches lazy de `_normalized` **e `_bm25`**, ambos invalidados por `add()`/`drop_source()`. `persist()` grava
-  sidecar `index_info.json` (`embed_model`, `dim`); índices antigos → `embed_model="?"`. **`load()` tolera
-  corrupção** (`PLANO_CORRECOES_RAG_ML_2.md`, Fase 2): `vectors.npz`/`meta.json` truncados ou inválidos
-  (`zipfile.BadZipFile`/`ValueError`/`OSError`/`KeyError`/`EOFError`) viram store vazio + warning, não
-  exceção crua — mesma paridade de `classify.prototypes._load_prototypes`.
+  sidecar `index_info.json` (`embed_model`, `dim`, **`embed_scheme`**); índices antigos → `embed_model="?"`/
+  `embed_scheme="?"`. **`load()` tolera corrupção** (`PLANO_CORRECOES_RAG_ML_2.md`, Fase 2): `vectors.npz`/
+  `meta.json` truncados ou inválidos (`zipfile.BadZipFile`/`ValueError`/`OSError`/`KeyError`/`EOFError`)
+  viram store vazio + warning, não exceção crua — mesma paridade de `classify.prototypes._load_prototypes`.
 - **Busca híbrida** (`retriever.retrieve()`): cosseno denso + **BM25** (`bm25.py`) combinados por **Reciprocal
   Rank Fusion** (`np.lexsort((idx, -scores))`, não `argsort[::-1]` — ver skill `testing` p/ o porquê). BM25
   tokeniza via regex (`re.findall(r"\w+", text.lower())`, sem pontuação) nos **dois** lados (índice e query) —
@@ -43,6 +50,14 @@ mora onde e limites de tamanho → skill `architecture`; superfícies → `cli` 
   arquivos de dados são indexados pelo **cartão de dados** (`core/data/datacard.card_for_path`), nunca pelas
   linhas cruas. `index_files` é a variante **aditiva** (sem reconciliação, sempre reembeda) usada pelo botão
   "Indexar no RAG" da aba Pré-visualização do módulo Dados.
+- **Limpeza + header contextual** (`PLANO_RAG_ESPACO_EMBEDDING`, jul/2026): `_read_indexable_text` passa o
+  corpo por `core/text/clean.clean_document_text` antes de chunkar (kinds texto, não `card_fn`) — marcadores
+  `--- Página N ---` e boilerplate de PDF param de ser embeddados/citados como conteúdo (resolve o ponteiro
+  que estava no ROADMAP). Cada chunk ganha uma linha de contexto (`"{stem} — {kind}:\n"`) prependada **só**
+  no texto passado a `embed_fn` — `ChunkMeta.text` continua o chunk cru, então BM25 (construído sobre
+  `m.text`) e as citações ficam intactos. `indexer.CURRENT_EMBED_SCHEME` é o marcador de versão desse
+  conteúdo (junto com os prefixos do embedder) — bump aqui sempre que uma mudança exigir reindexação;
+  **fonte única**, nunca criar um segundo mecanismo de versionamento.
 - **`batch.run_batch`** aceita `cancel_is_set: Callable[[], bool] | None`, checado entre itens (mesmo padrão
   do runner de Receitas) — hoje é só o *seam* no core: não há worker de GUI que chame `run_batch` (o hub IA só
   tem a Conversa single-answer) nem mecanismo de cancelamento no `cli/ai.py --batch` (Ctrl+C já cobre o caso
@@ -53,9 +68,15 @@ mora onde e limites de tamanho → skill `architecture`; superfícies → `cli` 
   comparando `sources` (entrada) contra os `source_path` dos resultados devolvidos (sem campo novo).
 - **`chat.answer()`** monta contexto numerado `[n]` sob prompt estrito; o **`[n]` é chaveado pelo documento
   distinto** (chunks do mesmo arquivo compartilham número) — as citações nunca passam do total de fontes.
-- **`stats.py`** (puro): `index_stats(directory) → IndexStats` (docs, chunks, dim, modelo, tamanho, `per_doc`);
-  `fmt_status_line()`, `fmt_disk_size`/`fmt_thousands`/`fmt_datetime`/`chunks_for` (mês PT-BR manual, sem
-  `locale`). `analytics.py` (Plano 2): `index_health` + timing por modelo (p90 via `statistics`).
+- **`stats.py`** (puro): `index_stats(directory) → IndexStats` (docs, chunks, dim, modelo, **esquema**,
+  tamanho, `per_doc`); `fmt_status_line()`, `fmt_disk_size`/`fmt_thousands`/`fmt_datetime`/`chunks_for` (mês
+  PT-BR manual, sem `locale`). `embed_space_id(directory)` compõe **`"{modelo}:{dim}:{esquema}"`** (esquema
+  = `indexer.CURRENT_EMBED_SCHEME` no momento da indexação; `"?"` p/ índice sem o campo). `is_stale_scheme
+  (stats, current_scheme)` compara o esquema persistido contra o do código em execução — `stats.py` não
+  importa `indexer` (fica puro); quem chama injeta `CURRENT_EMBED_SCHEME`. Usado pela linha de status do
+  hub IA e pelo card "Modelo" da aba Índice/RAG do Observatório para sinalizar "esquema antigo — reindexe"
+  (a migração continua sendo o botão Reindexar existente). `analytics.py` (Plano 2): `index_health` + timing
+  por modelo (p90 via `statistics`).
 - **Gate**: `embedder.is_available(model, use_cache=False)` bloqueia os fluxos com `SETUP_HINT`; usa um
   timeout curto próprio (`AVAILABILITY_TIMEOUT=10s`) para o ping, distinto do `EMBED_TIMEOUT=300s` do
   embedding real (senão o status board do Observatório pendura por até 5 min quando o Ollama está fora do
@@ -94,12 +115,17 @@ mora onde e limites de tamanho → skill `architecture`; superfícies → `cli` 
   perfil de transcrição (derivados de `label`+`source_hint`, já PT) não precisam disso. `_seeds_signature`
   invalida o cache sozinha ao mudar o texto — zero migração.
 - **Cegueira ao embed model (corrigida)**: as assinaturas de cache de protótipos **e** do modelo
-  supervisionado dobram o `embed_space_id` (`"{modelo}:{dim}"`, de `rag.stats.embed_space_id`) — trocar o
-  embed model e reindexar costumava deixar protótipos/SVM do espaço antigo válidos e prevendo lixo em
-  silêncio, já que a assinatura não mudava. Índice sem sidecar → `"?"`. Threading: `classify()` /
+  supervisionado dobram o `embed_space_id` (`"{modelo}:{dim}:{esquema}"`, de `rag.stats.embed_space_id` —
+  o componente de esquema veio com o `PLANO_RAG_ESPACO_EMBEDDING`) — trocar o embed model **ou** reindexar
+  sob um esquema novo costumava deixar protótipos/SVM do espaço antigo válidos e prevendo lixo em silêncio,
+  já que a assinatura não mudava. Índice sem sidecar/campo → `"?"`. Threading: `classify()` /
   `has_supervised_model()` / `profile_prototypes()` / `train_supervised()` / `maybe_train()` recebem
   `embed_space_id: str = "?"`; os call sites de produção (`cli/ai.py`, `gui/views/profile_section.py`,
   `observatory/status.py::domain_statuses`) leem o valor real via `rag.stats.embed_space_id(index_dir())`.
+  **Mesma cegueira existia no mapa semântico** (`ml/cache.corpus_signature`, assinado só por
+  `(source_path, mtime)`): `corpus_signature`/`mapviz.build_semantic_map` agora também aceitam
+  `embed_space_id` e o dobram no hash — os dois call sites (`cli ai map`/`topics`, painel semântico da
+  Biblioteca) passam o valor real em vez de deixar o mapa cacheado servir vetores do espaço antigo.
 - **`store.py`** (`[ml]`): persistência de modelos versionada por `sklearn.__version__`+signature (invalida no
   mismatch; joblib v1). **`mapviz.py`**: orquestra cluster→project→label → `SemanticMap` → PNG;
   `build_semantic_map` aceita `on_stage` (stepper do Observatório; pulado em cache hit). **`cache.py`**: mapa
@@ -271,7 +297,7 @@ temperatura por papel).
 
 | Caminho | Dono | Conteúdo |
 |---|---|---|
-| `rag/` (`.npz`/`.json` + `index_info.json`) | `rag/store.persist` | índice do RAG (matriz + metadados + modelo/dim) |
+| `rag/` (`.npz`/`.json` + `index_info.json`) | `rag/store.persist` | índice do RAG (matriz + metadados + modelo/dim/esquema) |
 | `ml/` | `ml/store` | modelos sklearn versionados (classify supervisionado, etc.) |
 | `ml_activity.json` | `observatory/activity` | log de sucesso cross-módulo (cap 200) |
 | `ml_logs.json` | `observatory/logs` | log de falhas (`task_error`, cap 100) |
