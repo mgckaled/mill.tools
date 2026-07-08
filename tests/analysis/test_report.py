@@ -136,3 +136,118 @@ def test_title_falls_back_to_stem():
     prof = _profile([Field("summary", "Resumo", "paragraph", "r")])
     out = format_report(prof, {"summary": "S"}, Path("meu_arquivo.txt"))
     assert "# Análise: meu_arquivo" in out
+
+
+# --- Shape-drift tolerance (Fase 1 do PLANO_CORRECOES_SRC_ANALYSIS) --------
+
+
+@pytest.mark.parametrize("kind", ["list", "quotes", "keyvalue"])
+def test_string_where_list_expected_becomes_single_item_not_char_split(kind):
+    """A bare string instead of a list must not be split character-by-character."""
+    from src.analysis.report import format_report
+    from src.analysis.types import Field
+
+    prof = _profile([Field("items", "Itens", kind, "r")])
+    out = format_report(prof, {"items": "Uma frase só."}, Path("t.txt"))
+    assert "Uma frase só." in out
+    assert "- U\n- m\n- a" not in out
+    assert "> U\n" not in out
+
+
+def test_list_where_paragraph_expected_joins_instead_of_repr():
+    from src.analysis.report import format_report
+    from src.analysis.types import Field
+
+    prof = _profile([Field("summary", "Resumo", "paragraph", "r")])
+    out = format_report(
+        prof, {"summary": ["Primeira frase.", "Segunda frase."]}, Path("t.txt")
+    )
+    assert "Primeira frase.\n\nSegunda frase." in out
+    assert "['Primeira frase.', 'Segunda frase.']" not in out
+
+
+def test_dict_for_keyvalue_becomes_bullets_not_dropped():
+    from src.analysis.report import format_report
+    from src.analysis.types import Field
+
+    prof = _profile([Field("glossary", "Glossário", "keyvalue", "r")])
+    out = format_report(
+        prof, {"glossary": {"Termo": "Definição de uma linha."}}, Path("t.txt")
+    )
+    assert "- Termo: Definição de uma linha." in out
+
+
+def test_empty_dict_for_keyvalue_is_treated_as_empty():
+    from src.analysis.report import format_report
+    from src.analysis.types import Field
+
+    prof = _profile([Field("glossary", "Glossário", "keyvalue", "r")])
+    out = format_report(prof, {"glossary": {}}, Path("t.txt"))
+    assert "## Glossário" not in out
+
+
+def test_non_string_items_in_list_get_friendly_coercion():
+    from src.analysis.report import format_report
+    from src.analysis.types import Field
+
+    prof = _profile([Field("items", "Itens", "list", "r")])
+    out = format_report(
+        prof,
+        {"items": [{"termo": "Fermento", "definicao": "Agente levedante."}, "outro"]},
+        Path("t.txt"),
+    )
+    assert "- Fermento: Agente levedante." in out
+    assert "- outro" in out
+    assert "{'termo'" not in out
+
+
+def test_quotes_multiline_prefixes_each_line():
+    from src.analysis.report import format_report
+    from src.analysis.types import Field
+
+    prof = _profile([Field("quotes", "Citações", "quotes", "r")])
+    out = format_report(prof, {"quotes": ["linha um\nlinha dois"]}, Path("t.txt"))
+    assert "> linha um" in out
+    assert "> linha dois" in out
+
+
+def test_double_leading_bullet_is_deduped():
+    from src.analysis.report import format_report
+    from src.analysis.types import Field
+
+    prof = _profile([Field("items", "Itens", "list", "r")])
+    out = format_report(prof, {"items": ["- já vem com bullet"]}, Path("t.txt"))
+    assert "- já vem com bullet" in out
+    assert "- - já vem com bullet" not in out
+
+
+def test_blank_string_value_for_list_field_is_omitted_like_legacy():
+    from src.analysis.report import format_report
+    from src.analysis.types import Field
+
+    prof = _profile([Field("items", "Itens", "list", "r")])
+    out = format_report(prof, {"summary": "x", "items": "   "}, Path("t.txt"))
+    assert "## Itens" not in out
+
+
+@pytest.mark.parametrize("kind", ["list", "quotes", "keyvalue"])
+def test_echoed_placeholder_items_are_dropped(kind):
+    from src.analysis.report import format_report
+    from src.analysis.types import Field
+
+    prof = _profile([Field("items", "Itens", kind, "r")])
+    out = format_report(prof, {"items": ["...", "Conteúdo real."]}, Path("t.txt"))
+    assert "Conteúdo real." in out
+    assert "..." not in out
+
+
+def test_echoed_placeholder_paragraph_is_treated_as_blank():
+    from src.analysis.report import format_report
+    from src.analysis.types import Field
+
+    prof = _profile(
+        [Field("summary", "Resumo", "paragraph", "r", always=True, empty_text="N/A")]
+    )
+    out = format_report(prof, {"summary": "..."}, Path("t.txt"))
+    assert "## Resumo\n\n" in out
+    assert "..." not in out
