@@ -4,6 +4,15 @@ Consumes the typed items from ``scan_library()`` (PR6), keeps only the textual
 kinds, chunks them with the project's shared ``split_text`` and embeds the new or
 changed ones. Embedding is injected as ``embed_fn`` so the indexing logic stays
 unit-testable without a running Ollama.
+
+Two things shape what actually gets embedded, both applied in ``_index_one``:
+``clean.clean_document_text`` strips PDF-extraction noise (page markers,
+unpunctuated front matter) from the source text before chunking, and a short
+contextual header (``"{stem} — {kind}:\\n"``) is prepended to each chunk *only*
+in the text handed to ``embed_fn`` — ``ChunkMeta.text`` keeps the bare chunk, so
+BM25 and citations are unaffected. Both changes (plus the embedder's task
+prefixes) alter the embedding space and are folded into the versioned scheme
+marker recorded alongside the index (see ``rag.stats.embed_space_id``).
 """
 
 from __future__ import annotations
@@ -14,6 +23,7 @@ from typing import TYPE_CHECKING, Callable
 
 from src.core.rag.store import VectorStore
 from src.core.rag.types import ChunkMeta
+from src.core.text.clean import clean_document_text
 from src.llm_utils import split_text
 
 if TYPE_CHECKING:
@@ -72,12 +82,21 @@ def indexable_items(items: list[LibraryItem]) -> list[LibraryItem]:
 
 
 def _read_indexable_text(item: LibraryItem) -> str:
-    """Return the plain-text body of a Library item (header stripped if present)."""
+    """Return the plain-text body of a Library item (header stripped if present).
+
+    Passed through ``clean.clean_document_text`` before chunking — the same
+    PDF-extraction noise filter already used by ``summarize``/``keywords``
+    (page-break markers, unpunctuated front matter) so that structural noise
+    stops being embedded and cited as if it were real content.
+    """
     raw = Path(item.path).read_text(encoding="utf-8", errors="replace")
     idx = raw.find(_HEADER_SEP)
-    if 0 <= idx <= _HEADER_SEARCH_WINDOW:
-        return raw[idx + len(_HEADER_SEP) :].strip()
-    return raw.strip()
+    body = (
+        raw[idx + len(_HEADER_SEP) :].strip()
+        if 0 <= idx <= _HEADER_SEARCH_WINDOW
+        else raw.strip()
+    )
+    return clean_document_text(body).strip()
 
 
 def _text_for(item: LibraryItem, card_fn: Callable[[LibraryItem], str] | None) -> str:
@@ -129,8 +148,15 @@ def _index_one(
     if not chunks:
         return
 
+    # Contextual chunk header: a query mentioning the source's title/topic only
+    # matched a chunk if that title happened to leak into the chunk's own text.
+    # Prepended only to what is sent to embed_fn — never stored in ChunkMeta.text,
+    # so BM25 (built over m.text) and citations stay on the chunk's real content.
+    header = f"{item.stem} — {item.kind}"
+    to_embed = [f"{header}:\n{c}" for c in chunks]
+
     try:
-        vecs = embed_fn(chunks)
+        vecs = embed_fn(to_embed)
     except Exception as exc:  # e.g. Ollama down mid-batch — skip, don't crash
         logging.warning("[!] Could not embed %s: %s", item.path.name, exc)
         return

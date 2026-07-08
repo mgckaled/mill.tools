@@ -55,7 +55,7 @@ def test_index_emits_progress_and_done(tmp_path, monkeypatch, mocker):
     monkeypatch.setattr(indexer, "index_dir", lambda: rag_dir)
 
     f = tmp_path / "a.txt"
-    f.write_text("hello world", encoding="utf-8")
+    f.write_text("hello world.", encoding="utf-8")
     mocker.patch("src.core.library.scanner.scan_library", return_value=[_make_item(f)])
     mocker.patch("src.core.rag.embedder.is_available", return_value=True)
     mocker.patch(
@@ -108,7 +108,7 @@ def test_index_cancel_emits_error(tmp_path, monkeypatch, mocker):
     monkeypatch.setattr(indexer, "index_dir", lambda: rag_dir)
 
     f = tmp_path / "a.txt"
-    f.write_text("hello world", encoding="utf-8")
+    f.write_text("hello world.", encoding="utf-8")
     mocker.patch("src.core.library.scanner.scan_library", return_value=[_make_item(f)])
     mocker.patch("src.core.rag.embedder.is_available", return_value=True)
     mocker.patch(

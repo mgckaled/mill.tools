@@ -52,14 +52,14 @@ def test_build_index_embeds_text_item(tmp_path):
     from src.core.rag.indexer import build_index
 
     f = tmp_path / "a.txt"
-    f.write_text("hello world", encoding="utf-8")
+    f.write_text("hello world.", encoding="utf-8")
     emb = _Embedder()
     store = build_index([_item(f)], _store(), emb)
 
     assert len(store) == 1
     assert emb.calls == 1
     assert store.meta[0].source_path == str(f)
-    assert store.meta[0].text == "hello world"
+    assert store.meta[0].text == "hello world."
     assert store.meta[0].kind == "transcription"
 
 
@@ -84,10 +84,10 @@ def test_build_index_strips_transcription_header(tmp_path):
 
     sep = "-" * 64
     f = tmp_path / "t.txt"
-    f.write_text(f"title: X\nurl: Y\n{sep}\nactual body text", encoding="utf-8")
+    f.write_text(f"title: X\nurl: Y\n{sep}\nactual body text.", encoding="utf-8")
 
     store = build_index([_item(f)], _store(), _Embedder())
-    assert store.meta[0].text == "actual body text"
+    assert store.meta[0].text == "actual body text."
 
 
 @pytest.mark.unit
@@ -103,7 +103,13 @@ def test_read_indexable_text_ignores_separator_look_alike_deep_in_body(tmp_path)
     f = tmp_path / "doc.md"
     f.write_text(text, encoding="utf-8")
 
-    assert _read_indexable_text(_item(f, kind="document")) == text.strip()
+    result = _read_indexable_text(_item(f, kind="document"))
+    # The header-window logic still keeps body_before intact (not mistaken for
+    # a header); clean_document_text separately drops the dash-only line as
+    # non-prose (filter_non_prose), so it — and only it — is gone from the result.
+    assert result.startswith("Paragrafo real com conteudo.")
+    assert "Mais texto depois da linha." in result
+    assert sep not in result
 
 
 @pytest.mark.unit
@@ -131,7 +137,7 @@ def test_build_index_skips_unchanged_on_rerun(tmp_path):
     from src.core.rag.indexer import build_index
 
     f = tmp_path / "a.txt"
-    f.write_text("hello", encoding="utf-8")
+    f.write_text("hello there.", encoding="utf-8")
     item = _item(f, mtime=5.0)
     store = _store()
     emb = _Embedder()
@@ -149,18 +155,18 @@ def test_build_index_reembeds_on_mtime_change(tmp_path):
     from src.core.rag.indexer import build_index
 
     f = tmp_path / "a.txt"
-    f.write_text("hello", encoding="utf-8")
+    f.write_text("hello there.", encoding="utf-8")
     store = _store()
     emb = _Embedder()
 
     build_index([_item(f, mtime=1.0)], store, emb)
     assert emb.calls == 1 and len(store) == 1
 
-    f.write_text("changed content", encoding="utf-8")
+    f.write_text("changed content.", encoding="utf-8")
     build_index([_item(f, mtime=2.0)], store, emb)
     assert emb.calls == 2
     assert len(store) == 1  # stale chunk dropped, new one added
-    assert store.meta[0].text == "changed content"
+    assert store.meta[0].text == "changed content."
 
 
 @pytest.mark.unit
@@ -168,9 +174,9 @@ def test_build_index_reconciles_removed_source(tmp_path):
     from src.core.rag.indexer import build_index
 
     a = tmp_path / "a.txt"
-    a.write_text("aaa", encoding="utf-8")
+    a.write_text("aaa content.", encoding="utf-8")
     b = tmp_path / "b.txt"
-    b.write_text("bbb", encoding="utf-8")
+    b.write_text("bbb content.", encoding="utf-8")
     store = _store()
 
     build_index([_item(a), _item(b)], store, _Embedder())
@@ -191,7 +197,7 @@ def test_indexed_source_path_matches_record_label_path_form(tmp_path):
     from src.core.rag.indexer import build_index
 
     f = tmp_path / "aula.txt"
-    f.write_text("conteudo", encoding="utf-8")
+    f.write_text("conteudo de teste.", encoding="utf-8")
     store = _store()
     build_index([_item(f)], store, _Embedder())
 
@@ -241,7 +247,7 @@ def test_build_index_reports_progress_even_when_skipped(tmp_path):
     from src.core.rag.indexer import build_index
 
     f = tmp_path / "a.txt"
-    f.write_text("hi", encoding="utf-8")
+    f.write_text("hi there.", encoding="utf-8")
     item = _item(f, mtime=1.0)
     store = _store()
     build_index([item], store, _Embedder())  # first pass indexes it
@@ -306,7 +312,7 @@ def test_build_index_skips_data_item_when_card_fn_raises(tmp_path):
     from src.core.rag.indexer import build_index
 
     good = tmp_path / "ok.txt"
-    good.write_text("texto", encoding="utf-8")
+    good.write_text("texto de teste.", encoding="utf-8")
     bad = tmp_path / "broken.csv"
     bad.write_text("x", encoding="utf-8")
 
@@ -325,7 +331,7 @@ def test_index_files_is_additive_no_reconciliation(tmp_path):
     from src.core.rag.indexer import build_index, index_files
 
     a = tmp_path / "a.txt"
-    a.write_text("aaa", encoding="utf-8")
+    a.write_text("aaa conteudo de teste.", encoding="utf-8")
     b = tmp_path / "vendas.csv"
     b.write_text("produto,qtd\nmaca,3\n", encoding="utf-8")
 
@@ -385,9 +391,9 @@ def test_build_index_skips_item_when_embed_fn_raises(tmp_path):
     from src.core.rag.indexer import build_index
 
     good = tmp_path / "ok.txt"
-    good.write_text("texto", encoding="utf-8")
+    good.write_text("texto valido de teste.", encoding="utf-8")
     bad = tmp_path / "broken.txt"
-    bad.write_text("outro texto", encoding="utf-8")
+    bad.write_text("outro texto ruim de teste.", encoding="utf-8")
 
     def _embed(texts):
         if any("outro" in t for t in texts):
@@ -406,7 +412,7 @@ def test_build_index_embed_failure_leaves_previous_chunks_dropped(tmp_path):
     from src.core.rag.indexer import build_index
 
     f = tmp_path / "doc.txt"
-    f.write_text("v1", encoding="utf-8")
+    f.write_text("versao um do documento.", encoding="utf-8")
     store = build_index([_item(f, mtime=1.0)], _store(), _Embedder())
     assert len(store) == 1
 
@@ -422,7 +428,7 @@ def test_index_files_skips_item_when_embed_fn_raises(tmp_path):
     from src.core.rag.indexer import index_files
 
     f = tmp_path / "broken.txt"
-    f.write_text("texto", encoding="utf-8")
+    f.write_text("texto de teste para embed.", encoding="utf-8")
 
     def _failing_embed(_texts):
         raise RuntimeError("Ollama down")
@@ -437,3 +443,43 @@ def test_index_dir_resolves_under_home(monkeypatch, tmp_path):
 
     monkeypatch.setattr(Path, "home", classmethod(lambda cls: tmp_path))
     assert index_dir() == tmp_path / ".mill-tools" / "rag"
+
+
+# ---------------------------------------------------------------------------
+# Contextual chunk header + clean.py adoption (PLANO_RAG_ESPACO_EMBEDDING, Fase 3)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.unit
+def test_index_one_prepends_context_header_only_to_embedded_text(tmp_path):
+    """The header ("{stem} — {kind}:\\n") must reach embed_fn but never
+    ChunkMeta.text — BM25 and citations stay on the chunk's bare content."""
+    from src.core.rag.indexer import build_index
+
+    f = tmp_path / "aula_de_fisica.txt"
+    f.write_text("Conteudo real do documento sobre fisica.", encoding="utf-8")
+    emb = _Embedder()
+
+    store = build_index([_item(f)], _store(), emb)
+
+    assert store.meta[0].text == "Conteudo real do documento sobre fisica."
+    assert emb.texts == [
+        "aula_de_fisica — transcription:\nConteudo real do documento sobre fisica."
+    ]
+
+
+@pytest.mark.unit
+def test_read_indexable_text_strips_pdf_page_markers(tmp_path):
+    from src.core.text.clean import page_marker
+    from src.core.rag.indexer import _read_indexable_text
+
+    f = tmp_path / "extracted.txt"
+    f.write_text(
+        f"Primeira parte do texto real.\n{page_marker(1)}\nSegunda parte do texto real.",
+        encoding="utf-8",
+    )
+
+    result = _read_indexable_text(_item(f, kind="document"))
+    assert "Página" not in result
+    assert "Primeira parte do texto real." in result
+    assert "Segunda parte do texto real." in result
