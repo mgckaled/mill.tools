@@ -45,10 +45,14 @@ mora onde e limites de tamanho → skill `architecture`; superfícies → `cli` 
   reportado por chunk continua o **cosseno denso** (não o valor fundido) — preserva o contrato do aviso de
   fora-de-escopo.
 - **`indexer.build_index()`** é **incremental** por `(path, mtime)`: pula inalterados, reembeda alterados,
-  reconcilia removidos. Indexa kinds textuais (`transcription`/`document` + descrições `.txt`), tira o header
-  de transcrição, chunka via `split_text` (1200/150). Aceita **`card_fn` injetável** e inclui `kind="data"` —
-  arquivos de dados são indexados pelo **cartão de dados** (`core/data/datacard.card_for_path`), nunca pelas
-  linhas cruas. `index_files` é a variante **aditiva** (sem reconciliação, sempre reembeda) usada pelo botão
+  reconcilia removidos. **`force: bool = False`** ignora esse fast path e reembeda tudo — necessário porque
+  uma mudança de esquema (prefixos/header/limpeza) nunca move o mtime de um arquivo-fonte; sem `force`, o
+  botão Reindexar sobre um índice em esquema antigo pularia todo mundo e só mentiria no sidecar (bug real,
+  corrigido — ver a entrada de `is_stale_scheme` abaixo). Indexa kinds textuais (`transcription`/`document` +
+  descrições `.txt`), tira o header de transcrição, chunka via `split_text` (1200/150). Aceita **`card_fn`
+  injetável** e inclui `kind="data"` — arquivos de dados são indexados pelo **cartão de dados**
+  (`core/data/datacard.card_for_path`), nunca pelas linhas cruas. `index_files` é a variante **aditiva** (sem
+  reconciliação, sempre reembeda — imune a esse bug) usada pelo botão
   "Indexar no RAG" da aba Pré-visualização do módulo Dados.
 - **Limpeza + header contextual** (`PLANO_RAG_ESPACO_EMBEDDING`, jul/2026): `_read_indexable_text` passa o
   corpo por `core/text/clean.clean_document_text` antes de chunkar (kinds texto, não `card_fn`) — marcadores
@@ -74,8 +78,13 @@ mora onde e limites de tamanho → skill `architecture`; superfícies → `cli` 
   = `indexer.CURRENT_EMBED_SCHEME` no momento da indexação; `"?"` p/ índice sem o campo). `is_stale_scheme
   (stats, current_scheme)` compara o esquema persistido contra o do código em execução — `stats.py` não
   importa `indexer` (fica puro); quem chama injeta `CURRENT_EMBED_SCHEME`. Usado pela linha de status do
-  hub IA e pelo card "Modelo" da aba Índice/RAG do Observatório para sinalizar "esquema antigo — reindexe"
-  (a migração continua sendo o botão Reindexar existente). `analytics.py` (Plano 2): `index_health` + timing
+  hub IA e pelo card "Modelo" da aba Índice/RAG do Observatório para sinalizar "esquema antigo — reindexe".
+  **A migração é o botão Reindexar existente, mas só migra de verdade porque `build_index` recebe
+  `force=is_stale_scheme(...)`** dos três call sites que persistem `CURRENT_EMBED_SCHEME` (`cli/ai.py`, o
+  worker de reindexação do Observatório, o passo `ai.answer` de Receitas) — `build_index` é incremental por
+  `(path, mtime)`, e uma mudança de esquema sozinha nunca move o mtime de um arquivo-fonte; sem `force`, o
+  botão reescreveria o sidecar afirmando o esquema novo sem reembeddar nada (bug real encontrado ao validar
+  o `PLANO_RAG_ESPACO_EMBEDDING` — ver `docs/HISTORY.md`). `analytics.py` (Plano 2): `index_health` + timing
   por modelo (p90 via `statistics`).
 - **Gate**: `embedder.is_available(model, use_cache=False)` bloqueia os fluxos com `SETUP_HINT`; usa um
   timeout curto próprio (`AVAILABILITY_TIMEOUT=10s`) para o ping, distinto do `EMBED_TIMEOUT=300s` do

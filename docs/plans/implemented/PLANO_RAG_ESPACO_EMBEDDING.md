@@ -144,27 +144,43 @@ isso, a melhoria dos prefixos fica anedótica.
 
 ## Resultado (Fase 5, 08/07/2026)
 
-Reindexação real do acervo pessoal (85 docs, 14.844 chunks — livros de Duna, transcrições de vídeo
-técnico/IA, "Claude's Constitution", cheatsheets), confirmada pelo sidecar
-(`embed_scheme: "nomic-prefix+ctx-header+clean"`). Backup do índice pré-reindexação preservado em
+**Detour — a 1ª tentativa de reindexação foi um no-op silencioso.** `build_index()` é incremental por
+`(path, mtime)`; uma mudança de esquema não move o mtime de nenhum arquivo-fonte, então a 1ª reindexação
+"real" pulou os 85 documentos inteiros e só reescreveu o sidecar com `embed_scheme:
+"nomic-prefix+ctx-header+clean"` por cima dos vetores antigos — confirmado post-hoc pelos marcadores
+`--- Página N ---` crus ainda presentes em `meta.json` depois do "reindex". Corrigido em
+`indexer.build_index(force=...)` (commit separado): os três call sites que persistem
+`CURRENT_EMBED_SCHEME` agora calculam `force=is_stale_scheme(...)` antes de chamar `build_index`, fazendo
+o botão Reindexar migrar de verdade um índice em esquema antigo. Uma 2ª tentativa de correção via script
+direto (`force=True`) foi morta pelo sistema depois de ~1h rodando (CPU-only, sem corrupção — nada tinha
+sido persistido ainda); a reindexação que efetivamente completou foi rodada pelo usuário direto na GUI
+(Observatório → Índice/RAG → Reindexar), após eu corrigir manualmente o campo `embed_scheme` do sidecar
+(que a 1ª tentativa quebrada havia deixado mentindo, o que teria feito `is_stale_scheme` reportar
+"não-obsoleto" e o botão Reindexar pular tudo de novo).
+
+**Reindexação real** confirmada: `meta.json` sem nenhuma ocorrência de `--- Página N ---`; 84 documentos,
+10.471 chunks (antes: 85 docs, 14.844 chunks — a queda de ~30% nos chunks é o `clean.clean_document_text`
+descartando boilerplate real, não perda de conteúdo; auditado item a item — dos 5 itens que saíram do
+índice, 2 são PNGs de gráfico do módulo Dados classificados como `kind="data"` que já falhavam antes
+[bug pré-existente, fora de escopo], 2 são descrições de imagem vazias [arquivo vazio, também
+pré-existente] e 1 é OCR de 2 linhas sem conteúdo real ("»L agents" / "BY hooks") corretamente descartado
+pelo filtro de não-prosa). Backup do índice pré-Fase-5 preservado em
 `~/.mill-tools/rag_backup_pre_fase5_esquema_novo` (fora do controle de versão; o usuário decide quando
 descartar).
 
 **Snapshot antes/depois** (10 perguntas reais, top-8 por `retrieve()`): os documentos recuperados no
-top-k se mantiveram os mesmos antes e depois, sem regressão visível nem ganho visível de relevância
-neste corpus pequeno — o valor desta fase é a correção estrutural (prefixos aplicados corretamente,
-marcadores de página fora do texto embeddado, header contextual), não um salto de acurácia mensurável
-com este método/amostra.
+top-k se mantiveram os mesmos antes e depois, sem regressão visível — o valor desta fase é a correção
+estrutural (prefixos aplicados corretamente, marcadores de página fora do texto embeddado, header
+contextual), não um salto de acurácia facilmente mensurável com este método/amostra pequena.
 
-**Recalibração do limiar — achado honesto**: medido o melhor cosseno denso (mesmo caminho de
-`in_corpus()`) para 10 perguntas claramente cobertas pelo acervo vs. 5 claramente fora dele (culinária,
-manutenção de carro, xadrez, imposto de renda, adestramento de cachorro). As duas faixas **se
-sobrepõem** (cobertas: 0.7045–0.8688; fora: 0.6502–0.7321) — o `nomic-embed-text` tem um piso de cosseno
-alto para textos PT-BR curtos não relacionados, e a média antes/depois da reindexação quase não mudou
-(~0.79 → 0.80), então não houve alargamento observável da separação entre classes por causa dos
-prefixos. O valor antigo (0.35) nunca disparava o aviso — nem antes nem depois desta reindexação — era um
-no-op funcional. Escolhido **0.68** (`core/ml/recommend.DEFAULT_IN_CORPUS_THRESHOLD`): margem abaixo do
-mínimo medido no acervo, priorizando zero alarme falso de "fora do acervo" sobre pergunta real coberta
-(o erro mais custoso num RAG pessoal) sobre capturar toda pergunta fora do acervo — ainda assim captura
-as 2 das 5 perguntas fora do acervo que pontuaram abaixo de 0.70 na amostra. Ver comentário da constante
-para o método completo.
+**Recalibração do limiar** (contra o índice genuinamente reindexado): medido o melhor cosseno denso
+(mesmo caminho de `in_corpus()`) para as mesmas 10 perguntas claramente cobertas pelo acervo vs. 5
+claramente fora dele (culinária, manutenção de carro, xadrez, imposto de renda, adestramento de
+cachorro). Desta vez as faixas **não se sobrepõem**: cobertas 0.7356–0.8684 (média 0.794), fora
+0.6540–0.7115 (média 0.682) — gap real de ~0.024. (Uma medição anterior contra o índice ainda
+contaminado pelo no-op mostrou sobreposição — artefato do bug, não do modelo; descartada.) O valor antigo
+(0.35) nunca disparava o aviso. Escolhido **0.72** (`core/ml/recommend.DEFAULT_IN_CORPUS_THRESHOLD`):
+dentro do gap observado, mais perto da borda de fora-do-acervo do que da borda de dentro — prioriza zero
+alarme falso de "fora do acervo" sobre pergunta real coberta (o erro mais custoso num RAG pessoal), já
+que perguntas reais mais difíceis que esta amostra podem pontuar abaixo do mínimo observado. Ver
+comentário da constante para o método completo.

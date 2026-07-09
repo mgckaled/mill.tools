@@ -30,15 +30,24 @@ confirmado por teste. Auditoria do checklist encontrou um segundo ponto cego: o 
 esquema novo sem tocar arquivos não invalidava o mapa cacheado; `corpus_signature`/`mapviz.build_semantic_map`
 agora também dobram `embed_space_id`. O status do índice (linha do hub IA + card "Modelo" da aba Índice/RAG
 do Observatório) sinaliza "esquema antigo — reindexe" via `stats.is_stale_scheme` quando o sidecar diverge do
-código em execução — a migração continua sendo o botão Reindexar existente.
+código em execução.
 
-Reindexação real do acervo pessoal (85 docs, 14.844 chunks) e recalibração de
+**A migração via botão Reindexar precisou de uma correção própria**: `build_index()` é incremental por
+`(path, mtime)`, e uma mudança de esquema não move o mtime de nenhum arquivo-fonte — a 1ª tentativa de
+reindexação real pulou os 85 documentos inteiros e só reescreveu o sidecar afirmando o esquema novo por
+cima dos vetores antigos (achado post-hoc: marcadores `--- Página N ---` crus ainda em `meta.json` depois
+do "reindex"). Fix: `build_index(force=...)` ignora o fast path de "inalterado" quando `force=True`; os
+três call sites que persistem `CURRENT_EMBED_SCHEME` calculam `force=is_stale_scheme(...)` antes de
+chamar `build_index`, fechando o ciclo entre o aviso e a migração de verdade.
+
+Reindexação real do acervo pessoal (84 docs, 10.471 chunks — a queda de ~30% nos chunks é o
+`clean_document_text` descartando boilerplate real, auditada item a item) e recalibração de
 `core/ml/recommend.DEFAULT_IN_CORPUS_THRESHOLD`: medidas 10 perguntas claramente cobertas vs. 5 claramente
-fora do acervo — as faixas de cosseno **se sobrepõem** (cobertas 0.70–0.87, fora 0.65–0.73; o
-`nomic-embed-text` tem piso de cosseno alto para texto PT-BR curto não relacionado, e a média antes/depois da
-reindexação quase não mudou), então o novo valor (0.68, ante 0.35 — um no-op funcional desde sempre) prioriza
-zero alarme falso de "fora do acervo" sobre pergunta real coberta em vez de perseguir uma separação perfeita
-que a amostra não sustenta. Plano, com o antes/depois completo:
+fora do acervo — desta vez as faixas de cosseno **não se sobrepõem** (cobertas 0.7356–0.8684, fora
+0.6540–0.7115, gap ~0.024; uma medição anterior contra o índice ainda contaminado pelo bug acima mostrou
+sobreposição — artefato do bug, descartado). Novo valor (0.72, ante 0.35 — um no-op funcional desde
+sempre) escolhido dentro do gap, mais perto da borda de fora-do-acervo, priorizando zero alarme falso de
+"fora do acervo" sobre pergunta real coberta. Plano, com o detour completo:
 [`plans/implemented/PLANO_RAG_ESPACO_EMBEDDING.md`](plans/implemented/PLANO_RAG_ESPACO_EMBEDDING.md).
 
 ### Qualidade da aba Insights — limpeza de texto + gates por idioma (jul/2026)
