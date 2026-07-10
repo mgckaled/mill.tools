@@ -104,6 +104,15 @@ def build_answer_view(
     _ticker_stop = threading.Event()
     _pending_model: list[str] = [""]
 
+    # Conversation history for query condensation (Fase 2, PLANO_CONVERSA_
+    # MULTITURNO.md): plain (question, answer, sources) triples — the view
+    # owns recency trimming (last 2 turns) and the session-boundary reset
+    # ("Nova conversa"/_clear_conversation already exists for that). Always
+    # the *original* question, never a condensed rewrite, so references never
+    # compound across turns.
+    _MAX_HISTORY_TURNS = 2
+    _history: list[tuple[str, str, list[str]]] = []
+
     gen_status = ft.Text(
         "",
         size=Type.small.size,
@@ -275,7 +284,12 @@ def build_answer_view(
         )
 
     def _make_turn(
-        query: str, text: str, sources: list[str], *, low_confidence: bool = False
+        query: str,
+        text: str,
+        sources: list[str],
+        *,
+        low_confidence: bool = False,
+        search_query: str | None = None,
     ) -> ft.Control:
         controls: list[ft.Control] = [
             ft.Row(
@@ -297,8 +311,21 @@ def build_answer_view(
                 spacing=Space.xs,
                 vertical_alignment=ft.CrossAxisAlignment.START,
             ),
-            hairline(),
         ]
+        # Discreet transparency legend (Fase 2.2c): only when condensation
+        # actually rewrote the question — a follow-up whose reference the
+        # model resolved wrong is visible right away, not buried in the log.
+        if search_query and search_query != query:
+            controls.append(
+                ft.Text(
+                    f"buscou por: {search_query}",
+                    size=Type.tiny.size,
+                    italic=True,
+                    color=ft.Colors.ON_SURFACE_VARIANT,
+                    no_wrap=False,
+                )
+            )
+        controls.append(hairline())
         if low_confidence:
             controls.append(_scope_warning())
         controls.append(
@@ -339,28 +366,47 @@ def build_answer_view(
         )
 
     def _append_turn(
-        query: str, text: str, sources: list[str], *, low_confidence: bool = False
+        query: str,
+        text: str,
+        sources: list[str],
+        *,
+        low_confidence: bool = False,
+        search_query: str | None = None,
     ) -> None:
         empty_state.visible = False
         session_list.controls.append(
-            _make_turn(query, text, sources, low_confidence=low_confidence)
+            _make_turn(
+                query,
+                text,
+                sources,
+                low_confidence=low_confidence,
+                search_query=search_query,
+            )
         )
         clear_btn.visible = True
 
     def _clear_conversation(_e=None) -> None:
-        """Reset only the visual Q&A list (no model/index state is involved)."""
+        """Reset the visual Q&A list and the condensation history (no model/
+        index state is involved) — the session boundary for both."""
         session_list.controls.clear()
+        _history.clear()
         empty_state.visible = True
         clear_btn.visible = False
         page.update()
 
     def handle_answer_done(payload: dict) -> None:
+        query = payload.get("query", "")
+        text = payload.get("text", "")
+        sources = payload.get("sources", [])
         _append_turn(
-            payload.get("query", ""),
-            payload.get("text", ""),
-            payload.get("sources", []),
+            query,
+            text,
+            sources,
             low_confidence=payload.get("low_confidence", False),
+            search_query=payload.get("search_query"),
         )
+        _history.append((query, text, sources))
+        del _history[:-_MAX_HISTORY_TURNS]
         _record_answer_time(
             payload.get("model_name", _pending_model[0]), payload.get("elapsed", 0.0)
         )
@@ -387,6 +433,7 @@ def build_answer_view(
             model_name=model,
             embed_model=embed_model,
             k=6,
+            history=list(_history),
         )
 
     # ------------------------------------------------------------------

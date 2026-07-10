@@ -37,12 +37,22 @@ def test_fmt_answer_builders():
 
 
 @pytest.mark.unit
+def test_fmt_query_condensed_carries_the_rewritten_question():
+    from src.gui.modules.ai import pipeline_log
+
+    line = pipeline_log.fmt_query_condensed("quais as regras do xadrez?")
+    assert "quais as regras do xadrez?" in line
+    assert line.startswith("[~]")
+
+
+@pytest.mark.unit
 @pytest.mark.parametrize(
     "type,payload,expected_substr",
     [
         ("progress_start", {}, "Iniciando"),
         ("index_start", {}, "Indexando"),
         ("progress_update", {"current": 2, "total": 6}, "2/6"),
+        ("condense_start", {}, "Condensando"),
         ("answer_start", {}, "Consultando"),
         ("index_done", {}, "atualizado"),
         ("answer_done", {}, "gerada"),

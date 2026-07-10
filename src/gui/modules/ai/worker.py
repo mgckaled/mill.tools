@@ -36,13 +36,24 @@ def run_ai_answer(
     model_name: str,
     embed_model: str,
     k: int = 6,
+    history: list[tuple[str, str, list[str]]] | None = None,
     install_log_handler: bool = True,
 ) -> bool:
     """Retrieve top-k chunks for the question and emit a cited answer.
 
-    Emits: progress_start, answer_start, answer_done (text + sources), task_done —
-    or task_error if the index is empty / embedder unavailable / LLM fails / the
-    user cancels.
+    ``history`` is the last 1-2 finished turns as ``(question, answer,
+    sources)`` triples — plain tuples, not ``condense.Turn``, so this module
+    and the view above it stay free of a ``core.rag.condense`` import; they're
+    converted to ``Turn`` right before the one call that needs them. Empty/
+    ``None`` history means the first question of the session — condensation is
+    skipped entirely (not even attempted), matching ``condense_query``'s own
+    zero-cost contract for that case.
+
+    Emits: progress_start, [condense_start if history], answer_start (``query``
+    = the question verbatim, ``search_query`` = what was actually retrieved/
+    asked — equal to ``query`` unless condensation rewrote it), answer_done
+    (text + sources + ``search_query``), task_done — or task_error if the
+    index is empty / embedder unavailable / LLM fails / the user cancels.
 
     ``cancel_event`` is checked once, between retrieve and answer — the only gap
     where interrupting is possible. The ``chain.invoke`` inside ``answer()``
@@ -51,6 +62,7 @@ def run_ai_answer(
     """
     from src.core.rag import embedder
     from src.core.rag.chat import answer as _answer
+    from src.core.rag.condense import Turn, condense_query
     from src.core.rag.indexer import index_dir
     from src.core.rag.retriever import retrieve
     from src.core.rag.store import VectorStore
@@ -80,14 +92,37 @@ def run_ai_answer(
                 )
                 return False
 
-            emit("answer_start", payload={"query": query, "model_name": model_name})
+            turns = [
+                Turn(question=q, answer=a, sources=tuple(s))
+                for q, a, s in history or []
+            ]
+            search_query = query
+            if turns:
+                emit("condense_start")
+                search_query = condense_query(query, turns)
+                if search_query != query:
+                    emit(
+                        "log",
+                        payload={
+                            "message": pipeline_log.fmt_query_condensed(search_query)
+                        },
+                    )
+
+            emit(
+                "answer_start",
+                payload={
+                    "query": query,
+                    "search_query": search_query,
+                    "model_name": model_name,
+                },
+            )
             emit("log", payload={"message": pipeline_log.fmt_answer_start(model_name)})
 
             def _embed_query(q: str):
                 return embedder.embed_query(q, model=embed_model)
 
             t0 = time.monotonic()
-            hits = retrieve(query, store, _embed_query, k=k, scope=scope)
+            hits = retrieve(search_query, store, _embed_query, k=k, scope=scope)
 
             if cancel_event.is_set():
                 emit("task_error", payload={"message": "Cancelado pelo usuário."})
@@ -111,13 +146,14 @@ def run_ai_answer(
                     payload={"message": pipeline_log.fmt_out_of_scope(best_score)},
                 )
 
-            result = _answer(query, hits, model_name=model_name)
+            result = _answer(search_query, hits, model_name=model_name)
             elapsed = time.monotonic() - t0
 
             emit(
                 "answer_done",
                 payload={
                     "query": query,
+                    "search_query": search_query,
                     "text": result.text,
                     "sources": [str(s) for s in result.sources],
                     "model_name": model_name,
@@ -148,6 +184,7 @@ def start_ai_answer(
     model_name: str,
     embed_model: str,
     k: int = 6,
+    history: list[tuple[str, str, list[str]]] | None = None,
     on_finish: Callable | None = None,
 ) -> threading.Thread:
     """Launch run_ai_answer in a daemon thread; call on_finish() when done."""
@@ -161,6 +198,7 @@ def start_ai_answer(
             model_name=model_name,
             embed_model=embed_model,
             k=k,
+            history=history,
         )
         if on_finish:
             on_finish()

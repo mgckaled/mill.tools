@@ -298,6 +298,177 @@ def test_answer_cancelled_between_retrieve_and_answer(tmp_path, monkeypatch, moc
     answer_mock.assert_not_called()
 
 
+# ── conversation history / query condensation (Fase 2, PLANO_CONVERSA_
+# MULTITURNO.md) ──────────────────────────────────────────────────────────────
+
+
+def _store_with_one_chunk(tmp_path, monkeypatch, *, dim: int = 8):
+    import src.core.rag.indexer as indexer
+    from src.core.rag.store import VectorStore
+    from src.core.rag.types import ChunkMeta
+
+    rag_dir = tmp_path / "rag"
+    store = VectorStore(dim=dim)
+    store.add(
+        np.ones((1, dim), dtype=np.float32),
+        [ChunkMeta("doc.txt", "transcription", 1.0, 0, "ctx")],
+    )
+    store.persist(rag_dir)
+    monkeypatch.setattr(indexer, "index_dir", lambda: rag_dir)
+    return rag_dir
+
+
+@pytest.mark.unit
+def test_answer_skips_condensation_when_history_is_empty(tmp_path, monkeypatch, mocker):
+    import src.core.rag.chat as chat
+    import src.core.rag.condense as condense
+    from src.gui.modules.ai.worker import run_ai_answer
+
+    _store_with_one_chunk(tmp_path, monkeypatch)
+    mocker.patch("src.core.rag.embedder.is_available", return_value=True)
+    mocker.patch("src.core.rag.embedder.embed_query", return_value=np.ones(8))
+    mocker.patch.object(chat, "make_llm", return_value=_fake_llm("resposta"))
+    condense_mock = mocker.patch.object(condense, "condense_query")
+
+    bus = _Bus()
+    run_ai_answer(
+        bus,
+        threading.Event(),
+        query="pergunta?",
+        scope=None,
+        model_name="qwen7b-custom",
+        embed_model="nomic-embed-text",
+        history=None,
+        install_log_handler=False,
+    )
+
+    condense_mock.assert_not_called()
+    assert "condense_start" not in bus.types()
+    done = bus.payload_of("answer_done")
+    assert done["search_query"] == done["query"] == "pergunta?"
+
+
+@pytest.mark.unit
+def test_answer_condenses_query_when_history_present(tmp_path, monkeypatch, mocker):
+    import src.core.rag.chat as chat
+    import src.core.rag.condense as condense
+    from src.gui.modules.ai.worker import run_ai_answer
+
+    _store_with_one_chunk(tmp_path, monkeypatch)
+    mocker.patch("src.core.rag.embedder.is_available", return_value=True)
+    mocker.patch("src.core.rag.embedder.embed_query", return_value=np.ones(8))
+    mocker.patch.object(chat, "make_llm", return_value=_fake_llm("resposta [1]"))
+    condense_mock = mocker.patch.object(
+        condense, "condense_query", return_value="pergunta reescrita standalone"
+    )
+
+    bus = _Bus()
+    ok = run_ai_answer(
+        bus,
+        threading.Event(),
+        query="e sobre isso?",
+        scope=None,
+        model_name="qwen7b-custom",
+        embed_model="nomic-embed-text",
+        history=[("pergunta anterior", "resposta anterior", ["doc.txt"])],
+        install_log_handler=False,
+    )
+
+    assert ok is True
+    assert "condense_start" in bus.types()
+    done = bus.payload_of("answer_done")
+    assert done["query"] == "e sobre isso?"
+    assert done["search_query"] == "pergunta reescrita standalone"
+
+    # Turn tuples are converted to condense.Turn right before the one call
+    # that needs them — sources become a tuple, ready for _fmt_history.
+    condense_mock.assert_called_once()
+    called_question, called_history = condense_mock.call_args[0]
+    assert called_question == "e sobre isso?"
+    assert called_history[0].question == "pergunta anterior"
+    assert called_history[0].answer == "resposta anterior"
+    assert called_history[0].sources == ("doc.txt",)
+
+    # The log line announcing the rewrite is only emitted when it actually
+    # differs from what the user typed.
+    assert any("reformulada" in p.get("message", "") for _, p in bus.events)
+
+
+@pytest.mark.unit
+def test_answer_skips_condensed_log_line_when_rewrite_matches_original(
+    tmp_path, monkeypatch, mocker
+):
+    import src.core.rag.chat as chat
+    import src.core.rag.condense as condense
+    from src.gui.modules.ai.worker import run_ai_answer
+
+    _store_with_one_chunk(tmp_path, monkeypatch)
+    mocker.patch("src.core.rag.embedder.is_available", return_value=True)
+    mocker.patch("src.core.rag.embedder.embed_query", return_value=np.ones(8))
+    mocker.patch.object(chat, "make_llm", return_value=_fake_llm("resposta"))
+    mocker.patch.object(condense, "condense_query", return_value="pergunta original")
+
+    bus = _Bus()
+    run_ai_answer(
+        bus,
+        threading.Event(),
+        query="pergunta original",
+        scope=None,
+        model_name="qwen7b-custom",
+        embed_model="nomic-embed-text",
+        history=[("q_anterior", "a_anterior", [])],
+        install_log_handler=False,
+    )
+
+    assert "condense_start" in bus.types()
+    assert not any("reformulada" in p.get("message", "") for _, p in bus.events)
+
+
+@pytest.mark.unit
+def test_answer_uses_condensed_query_for_retrieve_and_answer(
+    tmp_path, monkeypatch, mocker
+):
+    """The condensed query — not the raw one — must reach both retrieve() and
+    answer(), since it's the one reformulation feeding both uses (Fase 1.3)."""
+    from pathlib import Path
+
+    import src.core.rag.chat as chat
+    import src.core.rag.condense as condense
+    import src.core.rag.retriever as retriever
+    from src.core.rag.types import AnswerResult, ChunkMeta, RetrievedChunk
+    from src.gui.modules.ai.worker import run_ai_answer
+
+    _store_with_one_chunk(tmp_path, monkeypatch)
+    mocker.patch("src.core.rag.embedder.is_available", return_value=True)
+    mocker.patch("src.core.rag.embedder.embed_query", return_value=np.ones(8))
+    mocker.patch.object(condense, "condense_query", return_value="pergunta reescrita")
+    retrieve_mock = mocker.patch.object(
+        retriever,
+        "retrieve",
+        return_value=[
+            RetrievedChunk(ChunkMeta("doc.txt", "transcription", 1.0, 0, "ctx"), 0.9)
+        ],
+    )
+    answer_mock = mocker.patch.object(
+        chat, "answer", return_value=AnswerResult(text="ok", sources=[Path("doc.txt")])
+    )
+
+    bus = _Bus()
+    run_ai_answer(
+        bus,
+        threading.Event(),
+        query="pergunta original",
+        scope=None,
+        model_name="qwen7b-custom",
+        embed_model="nomic-embed-text",
+        history=[("q_anterior", "a_anterior", ["doc.txt"])],
+        install_log_handler=False,
+    )
+
+    assert retrieve_mock.call_args[0][0] == "pergunta reescrita"
+    assert answer_mock.call_args[0][0] == "pergunta reescrita"
+
+
 # ── run_ai_command (Fase 3) ──────────────────────────────────────────────────
 
 

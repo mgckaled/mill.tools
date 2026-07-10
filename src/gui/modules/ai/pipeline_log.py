@@ -35,6 +35,13 @@ def fmt_index_done(n_docs: int, n_chunks: int, added: int) -> str:
     )
 
 
+def fmt_query_condensed(search_query: str) -> str:
+    """Log line shown when a follow-up question was rewritten as standalone
+    (Fase 2, PLANO_CONVERSA_MULTITURNO.md) — only emitted when the condensed
+    query actually differs from what the user typed."""
+    return f'[~] Pergunta reformulada: "{search_query}"'
+
+
 def fmt_answer_start(model_name: str) -> str:
     """Log line announcing the answer model being queried."""
     return f"[*] Consultando o acervo com {model_name}…"
@@ -77,6 +84,8 @@ def resolve_status(event: PipelineEvent) -> str | None:
         case "progress_update":
             cur, tot = p.get("current"), p.get("total")
             return f"Indexando {cur}/{tot}…" if tot else None
+        case "condense_start":
+            return "Condensando pergunta…"
         case "answer_start":
             return "Consultando o acervo…"
         case "index_done":
