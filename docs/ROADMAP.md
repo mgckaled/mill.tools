@@ -256,3 +256,40 @@ Itens de baixo risco, deliberadamente não corrigidos na revisão arquivo-a-arqu
 - **Tamanho de arquivo**: `processor.py` está em ~351 linhas — acima do alvo de 300 para módulos de `core/`,
   abaixo do teto de 400 (arquitetura §3). Nenhum sinal de baixa coesão hoje (é uma função por operação de
   PDF, sem abas/seções misturadas) — dividir **ao tocar** na próxima operação nova, não preventivamente.
+
+---
+
+## 12. Pendência — flakiness intermitente de `pytest -m unit` sob ordem aleatória (jul/2026)
+
+Achado ao verificar a suíte completa na Fase 5 do
+[`plans/implemented/PLANO_CONVERSA_MULTITURNO.md`](plans/implemented/PLANO_CONVERSA_MULTITURNO.md) — não
+investigado a fundo nem corrigido ali porque é **pré-existente e ortogonal** ao RAG/condensação/retriever
+(nenhum teste que falha toca esses arquivos).
+
+- **Sintoma**: `uv run pytest -m unit` (ordem aleatória do `pytest-randomly`) falha intermitentemente, em
+  combinações variáveis de testes de CLI sem relação entre si (`tests/cli/test_ai_cli.py`,
+  `tests/cli/test_library_cli.py`, `tests/cli/test_data_cli.py`,
+  `tests/cli/test_observatory_cli.py::test_run_disk_usage_empty`), mudando a cada seed. Com `-p no:randomly`
+  (ordem determinística) a suíte inteira passa de forma consistente, confirmado em múltiplas rodadas — não é
+  bug de lógica num teste isolado, é dependência implícita de ordem entre módulos de teste (exatamente o que
+  o `pytest-randomly` existe para expor, por convenção já documentada no `pyproject.toml`).
+- **Um caso capturado em detalhe** (`test_run_disk_usage_empty`, que mocka `disk_usage.disk_usage()` por
+  inteiro — não toca o filesystem real): `capsys.readouterr()` voltou vazio dentro do teste, mas o texto
+  esperado apareceu na seção "Captured stdout call" do relatório do pytest (captura de nível de sessão,
+  distinta da fixture `capsys`) — indício de janela de captura de stdout/thread, não de arquivo real
+  compartilhado (a hipótese inicial de "sobra de arquivo em `~/.mill-tools/`" foi descartada ao inspecionar
+  esse teste específico, que não escreve no disco).
+- **Pista concreta encontrada, não confirmada como causa raiz**: `src/gui/settings.py` calcula
+  `_CONFIG_DIR`/`_OLD_CONFIG` via `Path.home()` **uma vez, no import do módulo** — diferente do resto do
+  projeto (`core/observatory/*.py`, `core/rag/indexer.py`, `core/data/*.py`, `core/library/tags.py`), que
+  recalcula `Path.home()` a cada chamada (padrão seguro contra monkeypatch cruzado entre testes). Dois
+  arquivos de teste fazem `monkeypatch.setattr("pathlib.Path.home", lambda: tmp_path)` **global**
+  (`tests/cli/test_ai_cli.py`, `tests/core/ml/test_store.py`): se `gui.settings` for importado pela
+  primeira vez na sessão inteira dentro dessa janela — o que a ordem aleatória pode causar —, o
+  `_CONFIG_DIR` cacheado fica apontando para um `tmp_path` já apagado pelo resto da sessão. Não foi
+  confirmado como o gatilho exato das falhas observadas.
+- **Por que não corrigido agora**: exigiria (a) confirmar a causa raiz de fato — fixar a seed de uma rodada
+  que falhou (`--randomly-seed=N`) e instrumentar/depurar o import de `gui.settings` nesse ponto — e (b)
+  possivelmente alinhar `settings.py` ao padrão do resto do projeto (recalcular `Path.home()` por chamada em
+  vez de cachear no import). Mudança pequena, mas que merece seu próprio ciclo de investigação/verificação,
+  não um side-fix dentro de um plano de RAG.
