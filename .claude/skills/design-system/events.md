@@ -97,12 +97,22 @@ pulado pelo VAD; `[i] VAD removed Xs of silence (Y%)`), `transcribe_segment` (`e
 
 ### IA — Conversa (module_id="ai")
 
-Auto-contido (não usa `ProgressPanel`). `progress_start` → `answer_start` (`query`, `model_name`) →
-`answer_done` (`query`/`text`/`sources`/`model_name`/`elapsed` + **`low_confidence`/`best_score`**, Plano 4A —
-derivado do top-1 do retrieve sem re-embeddar; `True` mostra um banner "o acervo não cobre bem esta pergunta"
-acima da resposta) → `task_done`/`task_error`. Sem `progress_update` (um único `invoke()` bloqueante não tem
-fração de progresso) — a view mostra um ticker de tempo decorrido + "típico do modelo" (`ai/timing.py`) em vez
-de uma barra determinada.
+Auto-contido (não usa `ProgressPanel`). `progress_start` → **[`condense_start`, só quando há histórico —
+Fase 2, `PLANO_CONVERSA_MULTITURNO.md`]** → `answer_start` (`query`, `search_query`, `model_name`) →
+`answer_done` (`query`/`search_query`/`text`/`sources`/`model_name`/`elapsed` + **`low_confidence`/
+`best_score`**, Plano 4A — `best_score` agora é o `pool_max_score` que `retriever.retrieve()` devolve, não
+mais derivado de `hits` no worker; `True` mostra um banner "o acervo não cobre bem esta pergunta" acima da
+resposta) → `task_done`/`task_error`. Sem `progress_update` (um único `invoke()` bloqueante não tem fração de
+progresso) — a view mostra um ticker de tempo decorrido + "típico do modelo" (`ai/timing.py`) em vez de uma
+barra determinada.
+
+- **`query` vs. `search_query`** (Fase 2): `query` é sempre a pergunta original do usuário — é o que vira o
+  card do turno e entra no histórico de condensação (nunca uma reescrita, pra referências não se acumularem
+  entre turnos). `search_query` é o que de fato foi usado no retrieve/answer — igual a `query` na maioria das
+  perguntas (histórico vazio ou pergunta já autossuficiente); quando a condensação reescreve a pergunta, a
+  view mostra uma legenda discreta "buscou por: …" no card **só** quando os dois diferem.
+  `pipeline_log.fmt_query_condensed(search_query)` loga a reformulação (estágio `condense_start` no ticker →
+  "Condensando pergunta…").
 
 ### Observatório — Índice/RAG (module_id="observatory")
 

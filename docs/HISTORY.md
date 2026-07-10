@@ -11,6 +11,42 @@ ficam em [`ROADMAP.md`](ROADMAP.md) e [`plans/active/`](plans/active/).
 
 ## Entregas (marcos)
 
+### Conversa multi-turno — condensação de query + pool/MMR + k na GUI (jul/2026)
+Origem: achados §2.2/§2.3/§2.7 da avaliação de produto ML/RAG
+([`reference/AVALIACAO_ML_RAG_FABLE5.md`](reference/AVALIACAO_ML_RAG_FABLE5.md)) — a Conversa do hub de IA
+era multi-turno só na tela: `answer_view.py` renderiza um card por turno, mas `chat.answer()` recebia só a
+pergunta corrente, então um "e sobre a segunda parte?" embedava literalmente essa frase e recuperava lixo.
+Fechado em quatro frentes:
+
+- **Condensação de query** (`core/rag/condense.py`, novo): reescreve a pergunta corrente como standalone a
+  partir dos últimos 1-2 turnos, via LLM local **sempre** (mesmo com resposta em nuvem, o histórico não sai
+  da máquina) e temperatura 0.0. Resolve referências ("esse vídeo") pelo *stem* citado nas fontes do turno
+  anterior — sinergia direta com o header contextual do plano de espaço de embedding acima. Histórico vazio
+  nunca chama o LLM (custo zero na 1ª pergunta); qualquer falha cai pra pergunta crua com log warning — a
+  Conversa nunca deixa de responder por causa disso (decisão: sem retry, diferente do `nl2cli`/`nl2sql`,
+  porque aqui a falha já tem um fallback barato).
+- **Histórico + transparência na GUI**: `run_ai_answer` ganha `history` (últimas 2 trocas, mantidas pela
+  view — "Nova conversa" zera). O payload separa `query` (sempre a pergunta original, pro card e o
+  histórico — nunca uma reescrita, pra referências não se acumularem entre turnos) de `search_query` (o que
+  foi de fato buscado); o card mostra "buscou por: …" só quando os dois divergem. Novo estágio de ticker
+  "Condensando pergunta…".
+- **Pool + MMR no retrieve** (`core/rag/retriever.py`): a fusão RRF ranqueia um pool ~4× maior que `k` antes
+  de diversificar até `k` via MMR (reusa `core/ml/recommend._mmr`, λ=0.7 — mais conservador que o 0.6 de
+  documentos, porque aqui relevância pesa mais que variedade). Sem isso, chunks vizinhos do mesmo documento
+  (quase-duplicatas pelo overlap de 150 chars do chunker) comiam 2-3 dos 6 slots de contexto. MMR ranqueia
+  pelo score **fundido**, não pelo cosseno denso puro — preserva o resgate por BM25 (um match lexical forte
+  não perde a vaga pra um cosseno maior); é pulado em escopo de documento único (irmãos quase-duplicados por
+  construção, onde diversificar prejudica). `retrieve()` passou a devolver `RetrievalResult(hits,
+  pool_max_score)` — a regra de `low_confidence` mudou pela 2ª vez (era `hits[0].score` → virou
+  `max(h.score for h in hits)` na rodada anterior → agora é `pool_max_score`, porque o MMR pode trocar o
+  melhor match por diversidade e o antigo `max(hits)` deixaria de refletir a real cobertura do acervo).
+- **`k` exposto na GUI**: seletor 4·6·8·12 no formulário da Conversa, persistido em `last_ai_k`, desabilitado
+  no modo Comandos CLI.
+
+Persistência de sessões de chat ficou **fora de escopo** deliberadamente — o histórico vive em memória da
+view e morre com "Nova conversa"/fechar o app; plano próprio se a demanda aparecer. Plano:
+[`plans/implemented/PLANO_CONVERSA_MULTITURNO.md`](plans/implemented/PLANO_CONVERSA_MULTITURNO.md).
+
 ### Espaço de embedding versionado — prefixos, header contextual, reindexação (jul/2026)
 Origem: achado nº 1 da avaliação de produto ML/RAG
 ([`reference/AVALIACAO_ML_RAG_FABLE5.md`](reference/AVALIACAO_ML_RAG_FABLE5.md), §2.1/§2.4/§2.6): o

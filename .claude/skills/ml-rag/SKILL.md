@@ -44,6 +44,17 @@ mora onde e limites de tamanho → skill `architecture`; superfícies → `cli` 
   nenhum match (`lexical.max() <= 0`), evitando que um sinal neutro injete viés de ordem-de-índice. O `.score`
   reportado por chunk continua o **cosseno denso** (não o valor fundido) — preserva o contrato do aviso de
   fora-de-escopo.
+- **Pool + MMR** (`retriever.retrieve()`, `PLANO_CONVERSA_MULTITURNO.md`, jul/2026): a fusão RRF ranqueia um
+  **pool** maior que `k` (~4×, `_POOL_MULTIPLIER`) antes de diversificar até `k` via **MMR** — reusa
+  `core/ml/recommend._mmr` (não ganha 3ª cópia; `summarize._mmr` é doutro domínio). Com o overlap de 150
+  chars do chunker, chunks vizinhos do mesmo documento são quase-duplicatas e comiam 2-3 dos 6 slots do
+  contexto. MMR ranqueia pelo **score fundido** (RRF), não pelo cosseno denso puro — é o que levou cada
+  candidato ao pool; reselecionar só por relevância densa desfaria o resgate por BM25 em silêncio. É
+  **pulado** quando o pool já cabe em `k`, ou quando o escopo é um **documento único**
+  (`_is_single_document_scope`) — ali os candidatos são irmãos quase-duplicados por construção e
+  diversificar prejudica, não ajuda. `retrieve()` devolve `RetrievalResult(hits, pool_max_score)`: `.score`
+  de cada hit continua o cosseno denso (contrato preservado); `pool_max_score` é o melhor cosseno entre
+  **todos** os candidatos que respeitam o escopo — não só os `hits` finais que o MMR manteve.
 - **`indexer.build_index()`** é **incremental** por `(path, mtime)`: pula inalterados, reembeda alterados,
   reconcilia removidos. **`force: bool = False`** ignora esse fast path e reembeda tudo — necessário porque
   uma mudança de esquema (prefixos/header/limpeza) nunca move o mtime de um arquivo-fonte; sem `force`, o
@@ -72,6 +83,18 @@ mora onde e limites de tamanho → skill `architecture`; superfícies → `cli` 
   comparando `sources` (entrada) contra os `source_path` dos resultados devolvidos (sem campo novo).
 - **`chat.answer()`** monta contexto numerado `[n]` sob prompt estrito; o **`[n]` é chaveado pelo documento
   distinto** (chunks do mesmo arquivo compartilham número) — as citações nunca passam do total de fontes.
+- **`condense.py`** (`PLANO_CONVERSA_MULTITURNO.md`, jul/2026): reescreve a pergunta corrente como standalone
+  a partir dos últimos 1-2 turnos (`Turn(question, answer, sources)`), via **LLM local sempre** (`make_llm`,
+  temperatura 0.0) — independe do modelo escolhido pra resposta, mesmo que seja de nuvem: o histórico nunca
+  sai da máquina nesse passo. Resolve referências ("esse vídeo") pelo **stem** citado nas fontes do turno
+  anterior, aproveitando o header contextual (`{stem} — {kind}`) que já está nos vetores. **Contratos**:
+  histórico vazio → **não chama o LLM** (custo zero na 1ª pergunta da sessão); qualquer falha (Ollama fora do
+  ar, resposta vazia/malformada) → **fallback silencioso pra pergunta crua** com log warning — a Conversa
+  nunca deixa de responder por causa da condensação (sem retry, diferente do `nl2cli`/`nl2sql`: aqui a falha
+  já tem um fallback natural e barato). A pergunta condensada alimenta **retrieve() e answer()** — uma
+  reescrita, dois usos. Cada chamada de `make_llm` já grava em `model_timings.json` (bucket `"llm"`) via o
+  `_TimingCallback` de sempre — nenhuma mudança no formato foi necessária (item 4.1 do
+  `PLANO_CORRECOES_RAG_ML_2.md` fica "aceito").
 - **`stats.py`** (puro): `index_stats(directory) → IndexStats` (docs, chunks, dim, modelo, **esquema**,
   tamanho, `per_doc`); `fmt_status_line()`, `fmt_disk_size`/`fmt_thousands`/`fmt_datetime`/`chunks_for` (mês
   PT-BR manual, sem `locale`). `embed_space_id(directory)` compõe **`"{modelo}:{dim}:{esquema}"`** (esquema
@@ -247,12 +270,16 @@ Zero dependência nova; agrega o que já existe em outros módulos.
 
 1. **Embeddings sempre locais** (Ollama, na indexação). Gemini/GLM entram **só** no passo de resposta e
    sempre opt-in.
-2. **`.score` = cosseno denso**, não o valor fundido do RRF — contrato do aviso de fora-de-escopo (o worker
-   deriva `low_confidence` do **`max(h.score for h in hits)`** sem re-embeddar, compara com
-   `recommend.DEFAULT_IN_CORPUS_THRESHOLD`). Não é `hits[0].score`: `hits` vem ordenado pela fusão RRF, cujo
-   primeiro lugar não é necessariamente o de maior cosseno denso — um chunk lexicalmente forte porém
-   semanticamente mediano podia vencer a fusão e disparar o aviso de fora-de-escopo com o corpus cobrindo bem
-   a pergunta (`PLANO_CORRECOES_RAG_ML_2.md`, Fase 1).
+2. **`.score` = cosseno denso**, não o valor fundido do RRF nem o de MMR — contrato do aviso de fora-de-escopo.
+   A regra de onde tirar `low_confidence` já mudou duas vezes: **`hits[0].score`** (ingênuo) → **`max(h.score
+   for h in hits)`** (`PLANO_CORRECOES_RAG_ML_2.md`, Fase 1 — `hits` vem ordenado pela fusão RRF, cujo
+   primeiro lugar não é necessariamente o de maior cosseno denso) → **`pool_max_score`**
+   (`PLANO_CONVERSA_MULTITURNO.md`, Fase 3 — desde que `retrieve()` diversifica os `hits` finais por MMR, o
+   `.score` máximo *devolvido* pode não ser mais o melhor da vez: MMR pode ter trocado o chunk de maior
+   cosseno por variedade). O worker usa o segundo campo de `RetrievalResult` (`pool_max_score` — o melhor
+   cosseno entre **todos** os candidatos que respeitam o escopo, não só os `hits` que sobraram do MMR),
+   comparado com `recommend.DEFAULT_IN_CORPUS_THRESHOLD`. Não recalcular a partir de `hits` de novo — o valor
+   já vem pronto do retriever.
 3. **A IA de dados recebe só schema/cartão**, nunca as linhas cruas (privacidade: com nuvem, só nomes de
    coluna saem da máquina).
 4. **Funções puras de `core/ml`/`core/text` nunca escrevem log** — quem grava `activity`/`logs` é o

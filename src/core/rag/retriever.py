@@ -9,6 +9,14 @@ purely dense RAG. This module blends dense with BM25 (lexical) via Reciprocal
 Rank Fusion (RRF), which combines rankings by *position* rather than raw score
 magnitude — cosine lives in ``[-1, 1]`` and BM25 is unbounded, so fusing by
 score would need an ad-hoc normalization; RRF sidesteps that entirely.
+
+Pool + MMR (Fase 3, ``PLANO_CONVERSA_MULTITURNO.md``): the RRF ranking above
+feeds a wider candidate pool, which is then diversified down to ``k`` by
+Maximal Marginal Relevance — reusing ``core/ml/recommend._mmr`` rather than a
+third copy (``core/text/summarize.py`` already has its own for a different
+domain). Chunking's overlap makes sibling chunks of the same document
+near-duplicates by construction; without diversification they can crowd out
+most of the answer's context.
 """
 
 from __future__ import annotations

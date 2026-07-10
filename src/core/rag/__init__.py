@@ -1,8 +1,15 @@
 """Local RAG core — semantic index and retrieval over the Library corpus.
 
 Pure Python with a single isolated network touchpoint (`embedder.py`, which
-calls Ollama). Everything else operates on injected ``embed_fn`` callables so
-the indexer/retriever/chat layers stay unit-testable without a running Ollama.
+calls Ollama). Everything else operates on injected ``embed_fn``/``make_llm_fn``
+callables so the indexer/retriever/chat/condense layers stay unit-testable
+without a running Ollama.
+
+The Conversa is multi-turn (``PLANO_CONVERSA_MULTITURNO.md``, jul/2026):
+``condense.py`` rewrites a follow-up question as standalone from the last 1-2
+turns before it reaches ``retriever.retrieve``, whose own candidate pool is
+then diversified by MMR so near-duplicate sibling chunks stop crowding out
+the rest of the context — see the module docstrings for both.
 
 The layer reuses the project's existing infrastructure — ``llm_factory.make_llm``
 for provider routing (Ollama/Gemini), ``llm_utils.split_text`` for chunking, and

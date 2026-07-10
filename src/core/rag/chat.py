@@ -75,7 +75,10 @@ def answer(
     """Answer ``query`` strictly from ``retrieved`` chunks, citing sources.
 
     Args:
-        query: The user's question.
+        query: The question to answer — the raw one, or (Fase 2, PLANO_CONVERSA_
+            MULTITURNO.md) the standalone rewrite ``condense.condense_query``
+            produces for a follow-up. ``answer`` itself is agnostic to which;
+            it just needs a question and the context to answer it from.
         retrieved: Top-k chunks from the retriever (may be empty).
         model_name: Local Ollama tag or Gemini name; provider resolved by prefix.
         on_event: Optional ``(type, stage, payload)`` emitter for the GUI/CLI bus.
