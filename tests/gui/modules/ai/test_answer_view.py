@@ -13,6 +13,7 @@ from __future__ import annotations
 import threading
 from unittest.mock import MagicMock
 
+import flet as ft
 import pytest
 
 
@@ -149,3 +150,122 @@ def _flatten_text(control) -> list[str]:
         elif child is not None and not isinstance(child, (str, bytes)):
             out.extend(_flatten_text(child))
     return out
+
+
+# ── 👍/👎 feedback (PLANO_RAG_EVAL, Fase 5) ──────────────────────────────────
+
+
+def _icon_buttons(control) -> list:
+    """Collect every ft.IconButton in a control tree."""
+    out: list = []
+    if isinstance(control, ft.IconButton):
+        out.append(control)
+    for attr in ("controls", "content"):
+        child = getattr(control, attr, None)
+        if isinstance(child, list):
+            for c in child:
+                out.extend(_icon_buttons(c))
+        elif child is not None and not isinstance(child, (str, bytes)):
+            out.extend(_icon_buttons(child))
+    return out
+
+
+def _thumbs(turn):
+    """Return (up_btn, down_btn) for a turn card."""
+    btns = [
+        b
+        for b in _icon_buttons(turn)
+        if b.icon in (ft.Icons.THUMB_UP_OUTLINED, ft.Icons.THUMB_DOWN_OUTLINED)
+    ]
+    up = next(b for b in btns if b.icon == ft.Icons.THUMB_UP_OUTLINED)
+    down = next(b for b in btns if b.icon == ft.Icons.THUMB_DOWN_OUTLINED)
+    return up, down
+
+
+@pytest.mark.unit
+def test_feedback_thumbs_up_logs_and_disables(mocker):
+    log_fb = mocker.patch("src.gui.modules.ai.answer_view.log_feedback")
+    log_act = mocker.patch("src.core.observatory.activity.log_activity")
+    view, _q = _build_view()
+
+    view.handle_answer_done(
+        _done_payload(
+            "o que diz a aula?",
+            "resposta",
+            ["C:/out/aula.txt"],
+            best_score=0.83,
+            embed_space_id="nomic-embed-custom:768:scheme-x",
+        )
+    )
+    turn = view.session_area.controls[0].controls[0]
+    up, down = _thumbs(turn)
+    up.on_click(None)
+
+    log_fb.assert_called_once()
+    kwargs = log_fb.call_args.kwargs
+    assert kwargs["verdict"] == "up"
+    assert kwargs["query"] == "o que diz a aula?"
+    assert kwargs["sources"] == ["C:/out/aula.txt"]
+    assert kwargs["pool_max_score"] == 0.83
+    assert kwargs["embed_space_id"] == "nomic-embed-custom:768:scheme-x"
+    assert kwargs["model"] == "gemma3-4b-custom"
+    # a signal, not a review — both thumbs disable after one tap
+    assert up.disabled is True
+    assert down.disabled is True
+    log_act.assert_called_once()
+    assert log_act.call_args.args[1] == "rag_feedback"
+
+
+@pytest.mark.unit
+def test_feedback_thumbs_down_records_down_verdict(mocker):
+    log_fb = mocker.patch("src.gui.modules.ai.answer_view.log_feedback")
+    mocker.patch("src.core.observatory.activity.log_activity")
+    view, _q = _build_view()
+
+    view.handle_answer_done(_done_payload("pergunta", "resposta", ["a.txt"]))
+    turn = view.session_area.controls[0].controls[0]
+    _up, down = _thumbs(turn)
+    down.on_click(None)
+
+    assert log_fb.call_args.kwargs["verdict"] == "down"
+
+
+@pytest.mark.unit
+def test_feedback_uses_search_query_when_condensed(mocker):
+    log_fb = mocker.patch("src.gui.modules.ai.answer_view.log_feedback")
+    mocker.patch("src.core.observatory.activity.log_activity")
+    view, _q = _build_view()
+
+    view.handle_answer_done(
+        _done_payload(
+            "e sobre isso?",
+            "resposta",
+            ["a.txt"],
+            search_query="pergunta reescrita standalone",
+        )
+    )
+    turn = view.session_area.controls[0].controls[0]
+    up, _down = _thumbs(turn)
+    up.on_click(None)
+
+    kwargs = log_fb.call_args.kwargs
+    assert kwargs["query"] == "e sobre isso?"
+    assert kwargs["search_query"] == "pergunta reescrita standalone"
+
+
+@pytest.mark.unit
+def test_feedback_failure_is_swallowed(mocker):
+    """A feedback write failure must never break the conversation."""
+    mocker.patch(
+        "src.gui.modules.ai.answer_view.log_feedback",
+        side_effect=OSError("disk full"),
+    )
+    mocker.patch("src.core.observatory.activity.log_activity")
+    view, _q = _build_view()
+
+    view.handle_answer_done(_done_payload("pergunta", "resposta", ["a.txt"]))
+    turn = view.session_area.controls[0].controls[0]
+    up, down = _thumbs(turn)
+    up.on_click(None)  # must not raise
+
+    assert up.disabled is True and down.disabled is True

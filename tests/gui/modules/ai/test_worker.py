@@ -118,6 +118,9 @@ def test_answer_emits_answer_done_with_sources(tmp_path, monkeypatch, mocker):
     assert done["elapsed"] >= 0.0
     # Query vector == stored vector → cosine ~1.0 → corpus covers it.
     assert done["low_confidence"] is False
+    # Stamped for the 👍/👎 feedback log (PLANO_RAG_EVAL, Fase 5): this store
+    # was persisted without a model/scheme, so both components read "?".
+    assert done["embed_space_id"] == "?:768:?"
 
 
 @pytest.mark.unit

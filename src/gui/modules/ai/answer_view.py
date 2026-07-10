@@ -21,6 +21,7 @@ from typing import TYPE_CHECKING, Callable
 
 import flet as ft
 
+from src.core.rag.feedback import VERDICT_DOWN, VERDICT_UP, log_feedback
 from src.gui import settings
 from src.gui.modules.ai import timing
 from src.gui.modules.ai.worker import start_ai_answer
@@ -284,6 +285,82 @@ def build_answer_view(
             ),
         )
 
+    def _record_feedback(verdict: str, ctx: dict) -> None:
+        """Persist one 👍/👎 and log it — a signal, not a review (no edit).
+
+        Best-effort: a failure to write must never break the conversation, so
+        it is logged at debug and swallowed. Runs inline on the UI thread — the
+        append is a tiny atomic write, same order of cost as ``settings.set``.
+        """
+        from src.core.observatory.activity import log_activity
+
+        mark = "👍" if verdict == VERDICT_UP else "👎"
+        try:
+            log_feedback(
+                query=ctx["query"],
+                search_query=ctx["search_query"],
+                sources=ctx["sources"],
+                pool_max_score=ctx["pool_max_score"],
+                low_confidence=ctx["low_confidence"],
+                verdict=verdict,
+                model=ctx["model"],
+                embed_space_id=ctx["embed_space_id"],
+            )
+            preview = ctx["search_query"]
+            if len(preview) > 60:
+                preview = preview[:59] + "…"
+            log_activity("rag", "rag_feedback", f"feedback {mark}: {preview}")
+        except Exception as exc:
+            logging.debug("[d] feedback log failed: %s", exc)
+
+    def _feedback_row(ctx: dict) -> ft.Control:
+        """Two discreet thumbs per answered turn; giving feedback disables both
+        (it's a signal, not an editable review)."""
+        up_btn = ft.IconButton(
+            icon=ft.Icons.THUMB_UP_OUTLINED,
+            icon_size=IconSize.sm,
+            tooltip="Resposta útil",
+            style=ft.ButtonStyle(mouse_cursor=Cursor.btn),
+        )
+        down_btn = ft.IconButton(
+            icon=ft.Icons.THUMB_DOWN_OUTLINED,
+            icon_size=IconSize.sm,
+            tooltip="Resposta ruim",
+            style=ft.ButtonStyle(mouse_cursor=Cursor.btn),
+        )
+
+        def _give(verdict: str) -> None:
+            _record_feedback(verdict, ctx)
+            up_btn.disabled = True
+            down_btn.disabled = True
+            if verdict == VERDICT_UP:
+                up_btn.icon = ft.Icons.THUMB_UP
+                up_btn.icon_color = ft.Colors.PRIMARY
+            else:
+                down_btn.icon = ft.Icons.THUMB_DOWN
+                down_btn.icon_color = ft.Colors.PRIMARY
+            for btn in (up_btn, down_btn):
+                try:
+                    btn.update()
+                except Exception:
+                    pass
+
+        up_btn.on_click = lambda _e: _give(VERDICT_UP)
+        down_btn.on_click = lambda _e: _give(VERDICT_DOWN)
+        return ft.Row(
+            controls=[
+                ft.Text(
+                    "Isto ajudou?",
+                    size=Type.tiny.size,
+                    color=ft.Colors.ON_SURFACE_VARIANT,
+                ),
+                up_btn,
+                down_btn,
+            ],
+            spacing=Space.xxs,
+            vertical_alignment=ft.CrossAxisAlignment.CENTER,
+        )
+
     def _make_turn(
         query: str,
         text: str,
@@ -291,6 +368,7 @@ def build_answer_view(
         *,
         low_confidence: bool = False,
         search_query: str | None = None,
+        feedback: dict | None = None,
     ) -> ft.Control:
         controls: list[ft.Control] = [
             ft.Row(
@@ -356,6 +434,8 @@ def build_answer_view(
                     spacing=Space.xxs,
                 )
             )
+        if feedback is not None:
+            controls.append(_feedback_row(feedback))
 
         return ft.Container(
             bgcolor=Color.dark.surface_variant,
@@ -373,6 +453,7 @@ def build_answer_view(
         *,
         low_confidence: bool = False,
         search_query: str | None = None,
+        feedback: dict | None = None,
     ) -> None:
         empty_state.visible = False
         session_list.controls.append(
@@ -382,6 +463,7 @@ def build_answer_view(
                 sources,
                 low_confidence=low_confidence,
                 search_query=search_query,
+                feedback=feedback,
             )
         )
         clear_btn.visible = True
@@ -399,12 +481,23 @@ def build_answer_view(
         query = payload.get("query", "")
         text = payload.get("text", "")
         sources = payload.get("sources", [])
+        search_query = payload.get("search_query") or query
+        feedback_ctx = {
+            "query": query,
+            "search_query": search_query,
+            "sources": sources,
+            "pool_max_score": payload.get("best_score", 0.0),
+            "low_confidence": payload.get("low_confidence", False),
+            "model": payload.get("model_name", ""),
+            "embed_space_id": payload.get("embed_space_id", "?"),
+        }
         _append_turn(
             query,
             text,
             sources,
             low_confidence=payload.get("low_confidence", False),
             search_query=payload.get("search_query"),
+            feedback=feedback_ctx,
         )
         _history.append((query, text, sources))
         del _history[:-_MAX_HISTORY_TURNS]

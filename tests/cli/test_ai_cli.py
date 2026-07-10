@@ -1385,3 +1385,63 @@ def test_eval_run_reports_empty_golden(tmp_path, monkeypatch, capsys):
 
     _eval_run(_parse("eval"))
     assert "Golden set vazio" in capsys.readouterr().out
+
+
+@pytest.mark.unit
+def test_eval_parses_promote():
+    assert _parse("eval", "promote").target == "promote"
+
+
+@pytest.mark.unit
+def test_eval_routes_promote(mocker):
+    from src.cli.ai import _eval
+
+    promote = mocker.patch("src.cli.ai._eval_promote")
+    _eval(_parse("eval", "promote"))
+    assert promote.called
+
+
+@pytest.mark.unit
+def test_eval_promote_adds_up_feedback_with_sources(tmp_path, monkeypatch, capsys):
+    import src.core.rag.eval as eval_mod
+    import src.core.rag.feedback as feedback_mod
+    from src.cli.ai import _eval_promote
+
+    fb_path = tmp_path / "retrieval_feedback.json"
+    monkeypatch.setattr(feedback_mod, "_store_path", lambda: fb_path)
+    eval_path = tmp_path / "rag_eval.json"
+    monkeypatch.setattr(eval_mod, "eval_store_path", lambda: eval_path)
+
+    common = dict(
+        pool_max_score=0.8, low_confidence=False, model="m", embed_space_id="s"
+    )
+    # 👍 with sources → promoted; 👍 without sources → skipped; 👎 → skipped.
+    feedback_mod.log_feedback(
+        query="q1", search_query="q1 buscada", sources=["a.txt"], verdict="up", **common
+    )
+    feedback_mod.log_feedback(
+        query="q2", search_query="q2", sources=[], verdict="up", **common
+    )
+    feedback_mod.log_feedback(
+        query="q3", search_query="q3", sources=["b.txt"], verdict="down", **common
+    )
+
+    _eval_promote()
+
+    assert "1 pergunta" in capsys.readouterr().out
+    golden = eval_mod.load_eval_data(eval_path).golden
+    questions = [g.question for g in golden]
+    assert "q1 buscada" in questions
+    assert "q2" not in questions and "q3" not in questions
+
+
+@pytest.mark.unit
+def test_eval_promote_no_feedback(tmp_path, monkeypatch, capsys):
+    import src.core.rag.feedback as feedback_mod
+    from src.cli.ai import _eval_promote
+
+    monkeypatch.setattr(
+        feedback_mod, "_store_path", lambda: tmp_path / "retrieval_feedback.json"
+    )
+    _eval_promote()
+    assert "Nenhum feedback" in capsys.readouterr().out

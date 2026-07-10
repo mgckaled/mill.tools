@@ -65,6 +65,7 @@ def run_ai_answer(
     from src.core.rag.condense import Turn, condense_query
     from src.core.rag.indexer import index_dir
     from src.core.rag.retriever import retrieve
+    from src.core.rag.stats import embed_space_id
     from src.core.rag.store import VectorStore
 
     emit = make_emitter(bus, _MODULE_ID, "ai")
@@ -74,7 +75,8 @@ def run_ai_answer(
     with scope_cm:
         try:
             emit("progress_start")
-            store = VectorStore.load(index_dir(), dim=embedder.EMBED_DIM)
+            directory = index_dir()
+            store = VectorStore.load(directory, dim=embedder.EMBED_DIM)
             if len(store) == 0:
                 emit(
                     "task_error",
@@ -163,6 +165,11 @@ def run_ai_answer(
                     "elapsed": elapsed,
                     "low_confidence": low_confidence,
                     "best_score": best_score,
+                    # Stamped so the Conversa's 👍/👎 feedback records the embedding
+                    # space it was produced under — a later reindex under a new
+                    # model/scheme never makes old feedback silently incomparable
+                    # (PLANO_RAG_EVAL, Fase 5).
+                    "embed_space_id": embed_space_id(directory),
                 },
             )
             emit(

@@ -19,6 +19,7 @@ Flows behind one positional:
     uv run main.py ai eval                          # run the golden-set eval
     uv run main.py ai eval list                     # show golden set + suggestions
     uv run main.py ai eval add --question "..." --expect aula.txt  # add a golden question
+    uv run main.py ai eval promote                  # promote 👍 feedback to golden questions
 
 Reuses the same core (scan_library / build_index / retrieve / answer) as the GUI.
 Embeddings are always local (Ollama); only the answer step may use a cloud
@@ -79,7 +80,7 @@ def add_ai_parser(subparsers: argparse._SubParsersAction) -> None:
         default=None,
         help=(
             "Document path — required by related/classify/keywords/summary/"
-            "entities; or the eval sub-action (run/list/add)"
+            "entities; or the eval sub-action (run/list/add/promote)"
         ),
     )
     p.add_argument(
@@ -753,16 +754,18 @@ def _batch(ns: argparse.Namespace, embed_model: str) -> None:
 
 
 def _eval(ns: argparse.Namespace) -> None:
-    """Dispatch `ai eval` by its ``target`` sub-action: run (default)/list/add."""
+    """Dispatch `ai eval` by its ``target`` sub-action: run/list/add/promote."""
     action = (ns.target or "run").lower()
     if action == "list":
         _eval_list()
     elif action == "add":
         _eval_add(ns)
+    elif action == "promote":
+        _eval_promote()
     elif action == "run":
         _eval_run(ns)
     else:
-        print(f"Ação desconhecida: {action}. Use: ai eval [run|list|add].")
+        print(f"Ação desconhecida: {action}. Use: ai eval [run|list|add|promote].")
         sys.exit(1)
 
 
@@ -815,6 +818,38 @@ def _eval_add(ns: argparse.Namespace) -> None:
             f"[!] {len(missing)} caminho(s) não existe(m) agora — o casamento usará "
             "o nome do arquivo (basename)."
         )
+
+
+def _eval_promote() -> None:
+    """Promote thumbs-up feedback with cited sources into covered golden questions.
+
+    A 👍 whose turn cited sources is a ready-made covered question (question =
+    the query actually searched, expected = the cited sources). This is the only
+    curation surface (PLANO_RAG_EVAL, Fase 5.2) — no editing UI; the feedback is
+    still collect-only otherwise.
+    """
+    from src.core.rag.eval import add_question, load_eval_data
+    from src.core.rag.feedback import VERDICT_UP, load_feedback
+
+    ups = [e for e in load_feedback() if e.verdict == VERDICT_UP and e.sources]
+    if not ups:
+        print("Nenhum feedback 👍 com fontes citadas para promover.")
+        return
+
+    existing = {g.question for g in load_eval_data().golden}
+    added = 0
+    for entry in ups:
+        question = entry.search_query or entry.query
+        if question in existing:
+            continue
+        add_question(question, entry.sources)
+        existing.add(question)
+        added += 1
+
+    if added:
+        print(f"{added} pergunta(s) promovida(s) a golden a partir do feedback 👍.")
+    else:
+        print("Nenhuma pergunta nova — os 👍 já estão no golden set.")
 
 
 def _print_eval_report(result, stats) -> None:
