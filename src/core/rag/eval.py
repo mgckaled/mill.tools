@@ -34,6 +34,8 @@ as regression (the recurring lesson of ``PLANO_RAG_ESPACO_EMBEDDING``).
 
 from __future__ import annotations
 
+import json
+import logging
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -41,9 +43,12 @@ from typing import Callable, Sequence
 
 import numpy as np
 
+from src.core.io_atomic import atomic_write_text
 from src.core.ml.recommend import DEFAULT_IN_CORPUS_THRESHOLD
 from src.core.rag.retriever import retrieve
 from src.core.rag.store import VectorStore
+
+logger = logging.getLogger(__name__)
 
 # The Conversa's default k (retriever.retrieve / run_ai_answer both default to
 # 6). The eval runs at the same k the product uses, so what it measures matches
@@ -318,3 +323,181 @@ def seed_golden() -> tuple[GoldenQuestion, ...]:
 def suggested_covered() -> tuple[Suggestion, ...]:
     """Covered-question prompts to seed a golden set with (see ``Suggestion``)."""
     return _SUGGESTED_COVERED
+
+
+# ── Persistence: golden set + run history (PLANO_RAG_EVAL, Fase 2) ────────────
+#
+# ~/.mill-tools/rag_eval.json holds both the golden set and a small history of
+# runs (last _MAX_RUNS — the model_timing per-bucket idea, but a flat cut here
+# since one run stream). Its shape is a JSON object ({golden, runs}), *not* the
+# flat append-only array of _jsonlog (which is for the feedback log), so it gets
+# its own atomic load/save. Owner of the file: this module.
+_MAX_RUNS = 20
+
+
+@dataclass(frozen=True, slots=True)
+class EvalData:
+    """The persisted evaluation state: the golden set and the run history."""
+
+    golden: tuple[GoldenQuestion, ...]
+    runs: tuple[EvalRunResult, ...]
+
+
+def eval_store_path() -> Path:
+    """Canonical on-disk location for the eval golden set + run history."""
+    return Path.home() / ".mill-tools" / "rag_eval.json"
+
+
+def _golden_to_dict(g: GoldenQuestion) -> dict:
+    return {"question": g.question, "expected": list(g.expected)}
+
+
+def _golden_from_dict(raw: dict) -> GoldenQuestion:
+    return GoldenQuestion(
+        question=str(raw["question"]),
+        expected=tuple(str(e) for e in raw.get("expected", [])),
+    )
+
+
+def _run_to_dict(r: EvalRunResult) -> dict:
+    """Serialize a run to the aggregate record kept on disk (no per-question
+    ``outcomes`` — those are transient, used only for the immediate report)."""
+    m = r.metrics
+    return {
+        "timestamp": r.timestamp,
+        "k": r.k,
+        "embed_space_id": r.embed_space_id,
+        "embed_scheme": r.embed_scheme,
+        "n_docs": r.n_docs,
+        "n_chunks": r.n_chunks,
+        "metrics": {
+            "n_covered": m.n_covered,
+            "n_out_of_corpus": m.n_out_of_corpus,
+            "hit_rate": m.hit_rate,
+            "mrr": m.mrr,
+            "mean_covered_score": m.mean_covered_score,
+            "mean_out_score": m.mean_out_score,
+            "flag_accuracy": m.flag_accuracy,
+        },
+    }
+
+
+def _run_from_dict(raw: dict) -> EvalRunResult:
+    md = raw["metrics"]
+    return EvalRunResult(
+        metrics=EvalMetrics(
+            n_covered=int(md["n_covered"]),
+            n_out_of_corpus=int(md["n_out_of_corpus"]),
+            hit_rate=float(md["hit_rate"]),
+            mrr=float(md["mrr"]),
+            mean_covered_score=float(md["mean_covered_score"]),
+            mean_out_score=float(md["mean_out_score"]),
+            flag_accuracy=float(md["flag_accuracy"]),
+        ),
+        k=int(raw["k"]),
+        embed_space_id=str(raw.get("embed_space_id", "?")),
+        embed_scheme=str(raw.get("embed_scheme", "?")),
+        n_docs=int(raw.get("n_docs", 0)),
+        n_chunks=int(raw.get("n_chunks", 0)),
+        timestamp=float(raw["timestamp"]),
+    )
+
+
+def load_eval_data(path: Path | None = None) -> EvalData:
+    """Load the golden set + run history.
+
+    A missing file yields the default seed (:func:`seed_golden`) with no runs —
+    so a fresh install already has the five out-of-corpus questions to run. A
+    corrupt file yields an empty set with a warning (never clobbers, never
+    raises), and a malformed golden/run entry is skipped rather than aborting
+    the whole load — same tolerance as ``_jsonlog.load_entries``.
+    """
+    path = path or eval_store_path()
+    if not path.exists():
+        return EvalData(golden=seed_golden(), runs=())
+    try:
+        raw = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as exc:
+        logger.warning("[!] Could not read %s (%s) — treating as empty.", path, exc)
+        return EvalData(golden=(), runs=())
+
+    golden: list[GoldenQuestion] = []
+    for g in raw.get("golden", []):
+        try:
+            golden.append(_golden_from_dict(g))
+        except (KeyError, TypeError, ValueError):
+            logger.warning("[!] Skipping malformed golden question: %r", g)
+    runs: list[EvalRunResult] = []
+    for r in raw.get("runs", []):
+        try:
+            runs.append(_run_from_dict(r))
+        except (KeyError, TypeError, ValueError):
+            logger.warning("[!] Skipping malformed eval run: %r", r)
+    return EvalData(golden=tuple(golden), runs=tuple(runs))
+
+
+def save_eval_data(data: EvalData, path: Path | None = None) -> None:
+    """Persist the golden set + run history atomically (temp file + replace)."""
+    path = path or eval_store_path()
+    payload = json.dumps(
+        {
+            "golden": [_golden_to_dict(g) for g in data.golden],
+            "runs": [_run_to_dict(r) for r in data.runs],
+        },
+        ensure_ascii=False,
+        indent=2,
+    )
+    atomic_write_text(path, payload)
+
+
+def add_question(
+    question: str,
+    expected: Sequence[str] = (),
+    *,
+    path: Path | None = None,
+) -> GoldenQuestion:
+    """Add one golden question and persist. Covered when ``expected`` is given.
+
+    Expected paths are resolved (``Path.resolve``) so they match the resolved
+    ``ChunkMeta.source_path`` the indexer stores — the same resolution
+    ``_index_one`` and the CLI's ``_resolve_doc_path`` apply, or matching would
+    silently diverge on Windows.
+    """
+    data = load_eval_data(path)
+    resolved = tuple(str(Path(e).resolve()) for e in expected)
+    gq = GoldenQuestion(question=question.strip(), expected=resolved)
+    save_eval_data(EvalData(golden=(*data.golden, gq), runs=data.runs), path)
+    return gq
+
+
+def record_run(result: EvalRunResult, *, path: Path | None = None) -> None:
+    """Append a run to the history, capped at the last ``_MAX_RUNS``."""
+    data = load_eval_data(path)
+    runs = (*data.runs, result)[-_MAX_RUNS:]
+    save_eval_data(EvalData(golden=data.golden, runs=runs), path)
+
+
+def latest_and_previous(
+    data: EvalData,
+) -> tuple[EvalRunResult | None, EvalRunResult | None]:
+    """Return ``(latest_run, previous_comparable_run)``.
+
+    The previous run is the most recent one *before* the latest that shares its
+    ``embed_space_id`` — runs from a different embedding space are not
+    comparable (a reindex under a new model/scheme moves every cosine). When the
+    latest run has a prior of a different space only, the second element is
+    ``None`` and callers can tell "incomparable" from "first run ever" by
+    ``len(data.runs) > 1``.
+    """
+    if not data.runs:
+        return None, None
+    latest = data.runs[-1]
+    previous = next(
+        (
+            r
+            for r in reversed(data.runs[:-1])
+            if r.embed_space_id == latest.embed_space_id
+        ),
+        None,
+    )
+    return latest, previous

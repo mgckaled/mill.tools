@@ -22,4 +22,11 @@ the embed model, the vector width and the indexer's content scheme — task-inst
 prefixes, contextual chunk headers, PDF-noise cleanup). Anything that changes what
 gets embedded requires a reindex and must bump the scheme marker in
 ``core/rag/indexer.py`` — see ``PLANO_RAG_ESPACO_EMBEDDING`` in ``docs/HISTORY.md``.
+
+Retrieval quality has a permanent instrument (``PLANO_RAG_EVAL.md``): ``eval.py``
+runs a small golden set through the production ``retrieve`` path (retrieval-only,
+no LLM) and reports hit-rate@k/MRR, persisting the golden set + run history to
+``rag_eval.json``; ``feedback.py`` collects 👍/👎 on Conversa answers into
+``retrieval_feedback.json`` (collect-first, no automatic use yet). Both record the
+``embed_space_id`` so a reindex never makes the history silently incomparable.
 """

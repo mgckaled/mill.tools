@@ -248,3 +248,170 @@ def test_seed_and_suggestions_shapes():
     suggestions = suggested_covered()
     assert len(suggestions) == 10
     assert all(s.question and s.hint for s in suggestions)
+
+
+# ── persistence: rag_eval.json (golden set + run history) ────────────────────
+
+
+def _run(space_id: str, ts: float, *, hit_rate: float = 1.0):
+    from src.core.rag.eval import EvalMetrics, EvalRunResult
+
+    metrics = EvalMetrics(
+        n_covered=1,
+        n_out_of_corpus=0,
+        hit_rate=hit_rate,
+        mrr=hit_rate,
+        mean_covered_score=0.8,
+        mean_out_score=0.0,
+        flag_accuracy=1.0,
+    )
+    return EvalRunResult(
+        metrics=metrics,
+        k=6,
+        embed_space_id=space_id,
+        embed_scheme=space_id.split(":")[-1],
+        n_docs=3,
+        n_chunks=12,
+        timestamp=ts,
+    )
+
+
+@pytest.mark.unit
+def test_load_eval_data_seeds_when_file_absent(tmp_path):
+    from src.core.rag.eval import load_eval_data
+
+    data = load_eval_data(tmp_path / "rag_eval.json")
+    assert len(data.golden) == 5  # the out-of-corpus seed
+    assert all(g.is_out_of_corpus for g in data.golden)
+    assert data.runs == ()
+
+
+@pytest.mark.unit
+def test_save_load_round_trip(tmp_path):
+    from src.core.rag.eval import (
+        EvalData,
+        GoldenQuestion,
+        load_eval_data,
+        save_eval_data,
+    )
+
+    path = tmp_path / "rag_eval.json"
+    data = EvalData(
+        golden=(
+            GoldenQuestion("coberta", expected=("C:/x/aula.txt",)),
+            GoldenQuestion("fora"),
+        ),
+        runs=(_run("nomic:768:s1", 100.0),),
+    )
+    save_eval_data(data, path)
+    loaded = load_eval_data(path)
+
+    assert [g.question for g in loaded.golden] == ["coberta", "fora"]
+    assert loaded.golden[0].expected == ("C:/x/aula.txt",)
+    assert loaded.golden[1].is_out_of_corpus is True
+    assert len(loaded.runs) == 1
+    assert loaded.runs[0].embed_space_id == "nomic:768:s1"
+    assert loaded.runs[0].metrics.hit_rate == pytest.approx(1.0)
+    assert loaded.runs[0].outcomes == ()  # outcomes are not persisted
+
+
+@pytest.mark.unit
+def test_add_question_resolves_expected_paths(tmp_path):
+    from pathlib import Path
+
+    from src.core.rag.eval import add_question, load_eval_data
+
+    path = tmp_path / "rag_eval.json"
+    gq = add_question("de que trata isto?", ["relatorio.txt"], path=path)
+    assert gq.expected == (str(Path("relatorio.txt").resolve()),)
+    # persisted alongside the seed (first mutation writes the seed to disk too)
+    loaded = load_eval_data(path)
+    assert loaded.golden[-1].question == "de que trata isto?"
+    assert loaded.golden[-1].expected == (str(Path("relatorio.txt").resolve()),)
+
+
+@pytest.mark.unit
+def test_add_out_of_corpus_question_has_no_expected(tmp_path):
+    from src.core.rag.eval import add_question
+
+    gq = add_question("como fazer bolo?", path=tmp_path / "rag_eval.json")
+    assert gq.expected == ()
+    assert gq.is_out_of_corpus is True
+
+
+@pytest.mark.unit
+def test_record_run_caps_history(tmp_path, monkeypatch):
+    import src.core.rag.eval as eval_mod
+
+    monkeypatch.setattr(eval_mod, "_MAX_RUNS", 3)
+    path = tmp_path / "rag_eval.json"
+    for i in range(5):
+        eval_mod.record_run(_run("nomic:768:s1", float(i)), path=path)
+
+    runs = eval_mod.load_eval_data(path).runs
+    assert len(runs) == 3
+    assert [r.timestamp for r in runs] == [2.0, 3.0, 4.0]  # oldest dropped
+
+
+@pytest.mark.unit
+def test_latest_and_previous_only_compares_same_space():
+    from src.core.rag.eval import EvalData, latest_and_previous
+
+    # s1, s1, then s2 (a reindex): the latest (s2) has no comparable prior.
+    data = EvalData(
+        golden=(),
+        runs=(
+            _run("s1", 1.0),
+            _run("s1", 2.0),
+            _run("s2", 3.0),
+        ),
+    )
+    latest, previous = latest_and_previous(data)
+    assert latest.timestamp == 3.0
+    assert previous is None  # different space → incomparable
+    assert len(data.runs) > 1  # caller distinguishes this from "first run ever"
+
+    # A prior run in the same space → it is the comparison baseline.
+    data2 = EvalData(golden=(), runs=(_run("s1", 1.0), _run("s1", 2.0)))
+    latest2, previous2 = latest_and_previous(data2)
+    assert latest2.timestamp == 2.0
+    assert previous2.timestamp == 1.0
+
+
+@pytest.mark.unit
+def test_latest_and_previous_empty():
+    from src.core.rag.eval import EvalData, latest_and_previous
+
+    assert latest_and_previous(EvalData(golden=(), runs=())) == (None, None)
+
+
+@pytest.mark.unit
+def test_load_tolerates_corruption(tmp_path):
+    from src.core.rag.eval import load_eval_data
+
+    path = tmp_path / "rag_eval.json"
+    path.write_text("{ this is not valid json", encoding="utf-8")
+    data = load_eval_data(path)
+    assert data.golden == ()  # empty, not the seed, and never raises
+    assert data.runs == ()
+
+
+@pytest.mark.unit
+def test_load_skips_malformed_entries(tmp_path):
+    import json
+
+    from src.core.rag.eval import load_eval_data
+
+    path = tmp_path / "rag_eval.json"
+    path.write_text(
+        json.dumps(
+            {
+                "golden": [{"question": "ok"}, {"no_question": True}],
+                "runs": [{"garbage": 1}],
+            }
+        ),
+        encoding="utf-8",
+    )
+    data = load_eval_data(path)
+    assert [g.question for g in data.golden] == ["ok"]  # bad golden skipped
+    assert data.runs == ()  # bad run skipped
