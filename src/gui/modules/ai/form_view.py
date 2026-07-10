@@ -40,6 +40,7 @@ _SCOPE_LABELS = {
 }
 _MODE_OPTIONS = ["corpus", "cli"]
 _MODE_LABELS = {"corpus": "Corpus", "cli": "Comandos CLI"}
+_K_OPTIONS = ["4", "6", "8", "12"]
 # Answer models, recommended first: gemma3-4b is the quality/speed sweet spot for
 # RAG synthesis + citation on this CPU; gemma3-1b is the fast/low-RAM fallback;
 # qwen7b is slowest/heaviest (but the most reliable at strict-JSON/flag formatting,
@@ -65,6 +66,7 @@ class AiForm:
     get_query: Callable[[], str]
     get_scope: Callable[[], str | None]
     get_model: Callable[[], str]
+    get_k: Callable[[], int]
     get_mode: Callable[[], str]
     set_running: Callable[[bool], None]
     set_available: Callable[[bool], None]
@@ -202,6 +204,18 @@ def build_ai_form(
             return _bound_doc[0]
         value = get_scope_value()
         return None if value == "all" else value
+
+    # ── k (chunks retrieved per question, Fase 4) ────────────────────────────
+    k_grid, get_k_value, set_k_disabled = segmented_selector(
+        options=_K_OPTIONS,
+        value=str(cfg.get("last_ai_k", 6)),
+        page=page,
+        on_change=lambda v: settings.set("last_ai_k", int(v)),
+        columns=4,
+    )
+
+    def get_k() -> int:
+        return int(get_k_value())
 
     # ── answer/command model + cloud privacy note ───────────────────────────
     cloud_warning = ft.Container(
@@ -377,9 +391,10 @@ def build_ai_form(
         prompt_chips.visible = not is_cli
         prompt_section_label.visible = not is_cli
         _sync_scope_disabled()
+        set_k_disabled(is_cli)
         _sync_cloud_warning()
         _refresh_gate()
-        _safe_update(question, prompt_chips, prompt_section_label)
+        _safe_update(question, prompt_chips, prompt_section_label, k_grid)
 
     def _on_mode_change(mode: str) -> None:
         settings.set("last_ai_mode", mode)
@@ -399,6 +414,8 @@ def build_ai_form(
             section_label("Escopo"),
             scope_grid,
             doc_chip,
+            section_label("Contexto (trechos por pergunta)"),
+            k_grid,
             section_label("Resposta"),
             model_dd,
             cloud_warning,
@@ -425,6 +442,7 @@ def build_ai_form(
         get_query=get_query,
         get_scope=get_scope,
         get_model=get_model,
+        get_k=get_k,
         get_mode=get_mode,
         set_running=set_running,
         set_available=set_available,

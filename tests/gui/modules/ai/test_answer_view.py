@@ -39,6 +39,7 @@ def _build_view(*, query="pergunta"):
         get_query=lambda: query_box[0],
         get_scope=lambda: None,
         get_model=lambda: "gemma3-4b-custom",
+        get_k=lambda: 6,
         on_begin=lambda: None,
         on_empty_query=lambda: None,
         toast=lambda _msg: None,

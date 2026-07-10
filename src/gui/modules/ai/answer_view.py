@@ -85,6 +85,7 @@ def build_answer_view(
     get_query: Callable[[], str],
     get_scope: Callable[[], str | None],
     get_model: Callable[[], str],
+    get_k: Callable[[], int],
     on_begin: Callable[[], None],
     on_empty_query: Callable[[], None],
     toast: Callable[[str], None],
@@ -432,7 +433,7 @@ def build_answer_view(
             scope=get_scope(),
             model_name=model,
             embed_model=embed_model,
-            k=6,
+            k=get_k(),
             history=list(_history),
         )
 

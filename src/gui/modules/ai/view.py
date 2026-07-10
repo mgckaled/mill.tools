@@ -177,6 +177,7 @@ def build_ai_module(
         get_query=form.get_query,
         get_scope=form.get_scope,
         get_model=form.get_model,
+        get_k=form.get_k,
         on_begin=_begin_run,
         on_empty_query=lambda: _toast("Digite uma pergunta."),
         toast=_toast,
