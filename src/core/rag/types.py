@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import NamedTuple
 
@@ -34,10 +34,23 @@ class RetrievedChunk:
 
 @dataclass(frozen=True, slots=True)
 class AnswerResult:
-    """A RAG answer plus the distinct source documents it cites."""
+    """A RAG answer, the sources it consulted, and the subset it actually cites.
+
+    ``sources`` is every distinct document whose chunks were retrieved into the
+    answer's context (the *consulted* set), in first-seen order — parallel to
+    the ``[n]`` markers ``build_context`` assigns. ``cited_sources`` is the
+    subset the model actually referenced via ``[n]`` in ``text`` (the *cited*
+    set), parsed by ``chat.cited_source_numbers``. The two differ whenever
+    retrieval pulls in a document the answer never uses: the UI shows cited
+    prominently and consulted-but-not-cited discreetly
+    (``PLANO_FONTES_E_PISO_RELEVANCIA.md``, Fase 1). An answer that cites nothing
+    parseable has ``cited_sources == []`` — every source is consulted-only and
+    no citation is ever invented.
+    """
 
     text: str
-    sources: list[Path]  # distinct source items cited, in first-seen order
+    sources: list[Path]  # distinct documents consulted (retrieved), first-seen order
+    cited_sources: list[Path] = field(default_factory=list)  # subset actually cited
 
 
 class RetrievalResult(NamedTuple):

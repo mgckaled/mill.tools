@@ -18,6 +18,7 @@ def _log(path, **overrides):
         query="o que eu disse sobre X?",
         search_query="o que eu disse sobre X no vídeo Y?",
         sources=["C:/out/a.txt", "C:/out/b.txt"],
+        cited_sources=["C:/out/a.txt"],
         pool_max_score=0.81,
         low_confidence=False,
         verdict="up",
@@ -42,6 +43,7 @@ def test_log_and_load_round_trip(tmp_path):
     assert e.query == "o que eu disse sobre X?"
     assert e.search_query == "o que eu disse sobre X no vídeo Y?"
     assert e.sources == ("C:/out/a.txt", "C:/out/b.txt")
+    assert e.cited_sources == ("C:/out/a.txt",)  # cited subset recorded (Fase 1.4)
     assert e.pool_max_score == pytest.approx(0.81)
     assert e.low_confidence is False
     assert e.verdict == "up"
@@ -108,6 +110,37 @@ def test_load_skips_malformed_entry(tmp_path):
     entries = load_feedback(path)
     assert len(entries) == 1
     assert entries[0].verdict == "down"
+
+
+@pytest.mark.unit
+def test_load_legacy_entry_without_cited_sources_defaults_empty(tmp_path):
+    """A feedback log written before the cited/consulted split has no
+    ``cited_sources`` key — it must load as an empty tuple, never raise."""
+    from src.core.rag.feedback import load_feedback
+
+    path = tmp_path / "retrieval_feedback.json"
+    path.write_text(
+        json.dumps(
+            [
+                {
+                    "query": "q",
+                    "search_query": "q",
+                    "sources": ["a.txt"],
+                    "pool_max_score": 0.7,
+                    "low_confidence": False,
+                    "verdict": "up",
+                    "model": "m",
+                    "embed_space_id": "s",
+                    "timestamp": 1.0,
+                }
+            ]
+        ),
+        encoding="utf-8",
+    )
+    entries = load_feedback(path)
+    assert len(entries) == 1
+    assert entries[0].sources == ("a.txt",)
+    assert entries[0].cited_sources == ()
 
 
 @pytest.mark.unit

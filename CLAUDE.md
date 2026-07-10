@@ -156,7 +156,8 @@ Ambos são hubs de ML — **toda a maquinaria de RAG/ML/NLP e o detalhe destes d
 `ml-rag`**. Resumo:
 
 - **IA**: RAG local sobre o corpus (indexa o texto que você produziu, recupera trechos e responde citando
-  fontes). Toggle **Corpus | Comandos CLI**: Corpus é a Conversa (mostra a linha de status do índice
+  fontes — o card distingue **citadas** de **consultadas, não citadas**; parse dos `[n]` em `core/rag/chat.py`,
+  skill `ml-rag`). Toggle **Corpus | Comandos CLI**: Corpus é a Conversa (mostra a linha de status do índice
   read-only + botão "Indexar no Observatório", já que a reindexação em si roda lá); Comandos CLI traduz um
   pedido em português no comando `uv run main.py ...` exato (nunca executa — só copia), via
   `core/text/nl2cli.py` + a referência introspectada de `cli/reference.py` (mesmo recurso do CLI `ai --cmd`).

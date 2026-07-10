@@ -83,6 +83,15 @@ mora onde e limites de tamanho → skill `architecture`; superfícies → `cli` 
   comparando `sources` (entrada) contra os `source_path` dos resultados devolvidos (sem campo novo).
 - **`chat.answer()`** monta contexto numerado `[n]` sob prompt estrito; o **`[n]` é chaveado pelo documento
   distinto** (chunks do mesmo arquivo compartilham número) — as citações nunca passam do total de fontes.
+  **Fontes citadas vs. consultadas** (`PLANO_FONTES_E_PISO_RELEVANCIA.md`, Fase 1): o `AnswerResult` distingue
+  `sources` (toda fonte distinta **consultada**/recuperada, na ordem `[n]`) de `cited_sources` (o subconjunto
+  que a resposta **citou** de verdade via `[n]`). O parse dos `[n]` mora **num lugar só** —
+  `chat.cited_source_numbers(text, n_sources)`, ao lado do `build_context` que gera os `[n]` — defensivo
+  (ignora números fora da faixa e colchetes não-numéricos; aceita `[1,2]`/`[1][2]`); GUI, CLI e o adaptador de
+  Receitas consomem a mesma função, **nunca** cada superfície parseia por conta própria. Resposta sem nenhum
+  `[n]` parseável → `cited_sources` vazio, tudo vira consultada (**nunca inventa citação**). GUI/CLI mostram
+  citadas em destaque e consultadas-não-citadas discretamente; `feedback.py` grava as duas listas; `ai eval
+  promote` usa as **citadas** como `expected` (fallback p/ `sources` em entradas legadas).
 - **`condense.py`** (`PLANO_CONVERSA_MULTITURNO.md`, jul/2026): reescreve a pergunta corrente como standalone
   a partir dos últimos 1-2 turnos (`Turn(question, answer, sources)`), via **LLM local sempre** (`make_llm`,
   temperatura 0.0) — independe do modelo escolhido pra resposta, mesmo que seja de nuvem: o histórico nunca
@@ -142,8 +151,9 @@ mora onde e limites de tamanho → skill `architecture`; superfícies → `cli` 
   regressão. As 10 cobertas da calibração ficam como `suggested_covered()` (sugestões, não paths inventados).
 - **`feedback.py`** — log append-only de 👍/👎 da Conversa em `retrieval_feedback.json` (reusa
   `observatory/_jsonlog`, cap 200). Mora em `core/rag/` (não `observatory/`, que segue read-only; o `_jsonlog`
-  é só o helper genérico). Cada entrada grava `query`/`search_query`/fontes/`pool_max_score`/`low_confidence`/
-  veredicto/modelo/**`embed_space_id`** — **coleta-primeiro-usa-depois**: nenhum uso automático (recalibração
+  é só o helper genérico). Cada entrada grava `query`/`search_query`/`sources` (consultadas)/**`cited_sources`
+  (citadas, `PLANO_FONTES_E_PISO_RELEVANCIA.md` Fase 1; vazio em entradas legadas)**/`pool_max_score`/
+  `low_confidence`/veredicto/modelo/**`embed_space_id`** — **coleta-primeiro-usa-depois**: nenhum uso automático (recalibração
   de limiar, treino de reranker) nesta fase. Regra transversal: **toda entrada persistida grava o
   `embed_space_id` vigente** (o worker de resposta o carimba no payload `answer_done`), senão uma reindexação
   torna o histórico incomparável em silêncio.

@@ -8,6 +8,7 @@ PR7 does not introduce a second way of talking to an LLM.
 from __future__ import annotations
 
 import logging
+import re
 from pathlib import Path
 from typing import TYPE_CHECKING, Callable
 
@@ -65,6 +66,34 @@ def build_context(retrieved: list[RetrievedChunk]) -> tuple[str, list[Path]]:
     return context, sources
 
 
+# Citation markers the model emits: [n], possibly grouped ([1, 2]) or adjacent
+# ([1][2]). This is the single home for parsing them — it lives next to
+# build_context, which is what assigns the [n] in the first place, so GUI and
+# CLI both consume one function instead of each re-parsing on its own
+# (PLANO_FONTES_E_PISO_RELEVANCIA.md, Fase 1).
+_CITATION_RE = re.compile(r"\[\s*(\d+(?:\s*,\s*\d+)*)\s*\]")
+
+
+def cited_source_numbers(text: str, n_sources: int) -> list[int]:
+    """Distinct 1-based source numbers actually cited in ``text``, in order.
+
+    Extracts ``[n]`` markers — including grouped ``[1, 2]`` and adjacent
+    ``[1][2]`` forms — keeping only numbers within ``1..n_sources`` and
+    de-duplicating by first appearance. Parsed defensively: numbers out of range
+    and non-numeric brackets are ignored, so a "creative" model never fabricates
+    a citation that can't be backed by a real retrieved source. Returns ``[]``
+    when the answer cites nothing parseable — the caller then treats every
+    source as consulted-but-not-cited (Fase 1.5) rather than inventing one.
+    """
+    seen: list[int] = []
+    for group in _CITATION_RE.findall(text):
+        for token in re.findall(r"\d+", group):
+            n = int(token)
+            if 1 <= n <= n_sources and n not in seen:
+                seen.append(n)
+    return seen
+
+
 def answer(
     query: str,
     retrieved: list[RetrievedChunk],
@@ -84,7 +113,9 @@ def answer(
         on_event: Optional ``(type, stage, payload)`` emitter for the GUI/CLI bus.
 
     Returns:
-        An ``AnswerResult`` with the model's text and the distinct cited sources.
+        An ``AnswerResult`` with the model's text, the distinct sources
+        consulted (retrieved into context) and the subset actually cited via
+        ``[n]`` in the text (see ``AnswerResult``).
     """
 
     def _emit(type: str, payload: dict | None = None) -> None:
@@ -103,5 +134,11 @@ def answer(
     chain = RAG_PROMPT | make_llm(model_name, temperature=0.2)
     resp = chain.invoke({"context": context, "question": query})
 
-    _emit("answer_done", {"n_sources": len(sources)})
-    return AnswerResult(text=extract_llm_text(resp.content), sources=sources)
+    text = extract_llm_text(resp.content)
+    # The cited subset, in citation-number order (a clean subset of `sources`);
+    # empty when the model cited nothing parseable — never inventing a citation.
+    cited_numbers = set(cited_source_numbers(text, len(sources)))
+    cited_sources = [s for i, s in enumerate(sources, 1) if i in cited_numbers]
+
+    _emit("answer_done", {"n_sources": len(sources), "n_cited": len(cited_sources)})
+    return AnswerResult(text=text, sources=sources, cited_sources=cited_sources)

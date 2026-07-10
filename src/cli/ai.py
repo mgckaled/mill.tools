@@ -705,9 +705,30 @@ def _ask(ns: argparse.Namespace, embed_model: str) -> None:
     result = answer(ns.query, hits, model_name=ns.model or DEFAULT_MODEL)
 
     print(result.text)
-    if result.sources:
-        print("\nFontes:")
-        for i, source in enumerate(result.sources, 1):
+    _print_sources(result.sources, result.cited_sources)
+
+
+def _print_sources(sources: list[Path], cited: list[Path]) -> None:
+    """Print cited sources, then consulted-but-not-cited ones (same split as the
+    GUI card; PLANO_FONTES_E_PISO_RELEVANCIA.md, Fase 1).
+
+    Each ``[n]`` is the citation number — a row keeps its position in
+    ``sources`` (the [n] order the answer context used), so a consulted-only
+    source still shows the slot it occupied. An answer that cites nothing
+    parseable prints everything under "Consultadas (não citadas)".
+    """
+    if not sources:
+        return
+    cited_set = set(cited)
+    cited_rows = [(i, s) for i, s in enumerate(sources, 1) if s in cited_set]
+    consulted_rows = [(i, s) for i, s in enumerate(sources, 1) if s not in cited_set]
+    if cited_rows:
+        print("\nFontes citadas:")
+        for i, source in cited_rows:
+            print(f"  [{i}] {source.name}")
+    if consulted_rows:
+        print("\nConsultadas (não citadas):")
+        for i, source in consulted_rows:
             print(f"  [{i}] {source.name}")
 
 
@@ -827,11 +848,20 @@ def _eval_promote() -> None:
     the query actually searched, expected = the cited sources). This is the only
     curation surface (PLANO_RAG_EVAL, Fase 5.2) — no editing UI; the feedback is
     still collect-only otherwise.
+
+    Expected = the *cited* sources (``PLANO_FONTES_E_PISO_RELEVANCIA.md``,
+    Fase 1) — the documents the answer actually used, not merely everything
+    retrieved. Legacy 👍 entries predate that split (``cited_sources`` empty), so
+    those fall back to ``sources``, preserving their old promotion behaviour.
     """
     from src.core.rag.eval import add_question, load_eval_data
     from src.core.rag.feedback import VERDICT_UP, load_feedback
 
-    ups = [e for e in load_feedback() if e.verdict == VERDICT_UP and e.sources]
+    ups = [
+        e
+        for e in load_feedback()
+        if e.verdict == VERDICT_UP and (e.cited_sources or e.sources)
+    ]
     if not ups:
         print("Nenhum feedback 👍 com fontes citadas para promover.")
         return
@@ -842,7 +872,7 @@ def _eval_promote() -> None:
         question = entry.search_query or entry.query
         if question in existing:
             continue
-        add_question(question, entry.sources)
+        add_question(question, entry.cited_sources or entry.sources)
         existing.add(question)
         added += 1
 

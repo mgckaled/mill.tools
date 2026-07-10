@@ -160,7 +160,12 @@ def run_ai_answer(
                     "query": query,
                     "search_query": search_query,
                     "text": result.text,
+                    # sources = every document consulted (retrieved); cited =
+                    # the subset the answer actually references via [n]. The view
+                    # shows cited prominently, consulted-but-not-cited discreetly
+                    # (PLANO_FONTES_E_PISO_RELEVANCIA.md, Fase 1).
                     "sources": [str(s) for s in result.sources],
+                    "cited": [str(s) for s in result.cited_sources],
                     "model_name": model_name,
                     "elapsed": elapsed,
                     "low_confidence": low_confidence,
@@ -174,7 +179,9 @@ def run_ai_answer(
             )
             emit(
                 "log",
-                payload={"message": pipeline_log.fmt_answer_done(len(result.sources))},
+                payload={
+                    "message": pipeline_log.fmt_answer_done(len(result.cited_sources))
+                },
             )
             emit("task_done", payload={})
             return True

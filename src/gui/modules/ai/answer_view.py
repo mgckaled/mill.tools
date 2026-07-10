@@ -300,6 +300,7 @@ def build_answer_view(
                 query=ctx["query"],
                 search_query=ctx["search_query"],
                 sources=ctx["sources"],
+                cited_sources=ctx["cited"],
                 pool_max_score=ctx["pool_max_score"],
                 low_confidence=ctx["low_confidence"],
                 verdict=verdict,
@@ -361,10 +362,65 @@ def build_answer_view(
             vertical_alignment=ft.CrossAxisAlignment.CENTER,
         )
 
+    def _sources_section(sources: list[str], cited: list[str]) -> list[ft.Control]:
+        """Cited sources under a prominent label; consulted-but-not-cited under a
+        discreet, muted one below (PLANO_FONTES_E_PISO_RELEVANCIA.md, Fase 1).
+
+        The ``[n]`` badge is the citation number — each row keeps its position in
+        ``sources`` (the [n] order ``build_context`` assigned), so a consulted-
+        only row still shows the context slot it occupied. When the answer cited
+        nothing parseable, ``cited`` is empty and every source falls under
+        "Consultadas (não citadas)" — no citation is ever invented (Fase 1.5).
+        """
+        if not sources:
+            return []
+        cited_set = set(cited)
+        cited_rows = [(i, s) for i, s in enumerate(sources, 1) if s in cited_set]
+        consulted_rows = [
+            (i, s) for i, s in enumerate(sources, 1) if s not in cited_set
+        ]
+        out: list[ft.Control] = []
+        if cited_rows:
+            out.append(
+                ft.Text(
+                    "Fontes citadas",
+                    size=Type.caption.size,
+                    weight=ft.FontWeight.W_600,
+                    color=ft.Colors.ON_SURFACE_VARIANT,
+                )
+            )
+            out.append(
+                ft.Column(
+                    controls=[_source_item(i, Path(s)) for i, s in cited_rows],
+                    spacing=Space.xxs,
+                )
+            )
+        if consulted_rows:
+            out.append(
+                ft.Text(
+                    "Consultadas (não citadas)",
+                    size=Type.tiny.size,
+                    italic=True,
+                    color=ft.Colors.ON_SURFACE_VARIANT,
+                )
+            )
+            # Slightly recessed so the eye lands on the cited set first.
+            out.append(
+                ft.Container(
+                    opacity=0.6,
+                    content=ft.Column(
+                        controls=[_source_item(i, Path(s)) for i, s in consulted_rows],
+                        spacing=Space.xxs,
+                    ),
+                )
+            )
+        return out
+
     def _make_turn(
         query: str,
         text: str,
         sources: list[str],
+        cited: list[str],
         *,
         low_confidence: bool = False,
         search_query: str | None = None,
@@ -416,24 +472,7 @@ def build_answer_view(
                 md_style_sheet=_MD_STYLE,
             )
         )
-        if sources:
-            controls.append(
-                ft.Text(
-                    "Fontes citadas",
-                    size=Type.caption.size,
-                    weight=ft.FontWeight.W_600,
-                    color=ft.Colors.ON_SURFACE_VARIANT,
-                )
-            )
-            # Tight column so the compact source rows don't get the turn's sm gap.
-            controls.append(
-                ft.Column(
-                    controls=[
-                        _source_item(i, Path(s)) for i, s in enumerate(sources, 1)
-                    ],
-                    spacing=Space.xxs,
-                )
-            )
+        controls.extend(_sources_section(sources, cited))
         if feedback is not None:
             controls.append(_feedback_row(feedback))
 
@@ -450,6 +489,7 @@ def build_answer_view(
         query: str,
         text: str,
         sources: list[str],
+        cited: list[str],
         *,
         low_confidence: bool = False,
         search_query: str | None = None,
@@ -461,6 +501,7 @@ def build_answer_view(
                 query,
                 text,
                 sources,
+                cited,
                 low_confidence=low_confidence,
                 search_query=search_query,
                 feedback=feedback,
@@ -481,11 +522,13 @@ def build_answer_view(
         query = payload.get("query", "")
         text = payload.get("text", "")
         sources = payload.get("sources", [])
+        cited = payload.get("cited", [])
         search_query = payload.get("search_query") or query
         feedback_ctx = {
             "query": query,
             "search_query": search_query,
             "sources": sources,
+            "cited": cited,
             "pool_max_score": payload.get("best_score", 0.0),
             "low_confidence": payload.get("low_confidence", False),
             "model": payload.get("model_name", ""),
@@ -495,6 +538,7 @@ def build_answer_view(
             query,
             text,
             sources,
+            cited,
             low_confidence=payload.get("low_confidence", False),
             search_query=payload.get("search_query"),
             feedback=feedback_ctx,

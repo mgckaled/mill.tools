@@ -39,7 +39,8 @@ class FeedbackEntry:
 
     query: str  # the original user question
     search_query: str  # what was actually retrieved (condensed; == query if not)
-    sources: tuple[str, ...]  # the cited source document paths
+    sources: tuple[str, ...]  # every source document consulted (retrieved)
+    cited_sources: tuple[str, ...]  # subset actually cited via [n] in the answer
     pool_max_score: float  # best dense cosine over the scope-respecting pool
     low_confidence: bool  # whether the out-of-scope warning fired
     verdict: str  # VERDICT_UP | VERDICT_DOWN
@@ -58,6 +59,9 @@ def _parse_entry(raw: dict) -> FeedbackEntry:
         query=raw["query"],
         search_query=raw["search_query"],
         sources=tuple(raw.get("sources", [])),
+        # Older entries predate the cited/consulted split — default to empty so a
+        # loaded legacy log never raises; `eval promote` falls back to `sources`.
+        cited_sources=tuple(raw.get("cited_sources", [])),
         pool_max_score=float(raw["pool_max_score"]),
         low_confidence=bool(raw["low_confidence"]),
         verdict=raw["verdict"],
@@ -79,6 +83,7 @@ def log_feedback(
     query: str,
     search_query: str,
     sources: Sequence[str],
+    cited_sources: Sequence[str] = (),
     pool_max_score: float,
     low_confidence: bool,
     verdict: str,
@@ -89,14 +94,17 @@ def log_feedback(
 ) -> None:
     """Append one feedback entry, capped at the last ``_MAX_ENTRIES``.
 
-    ``now`` is injectable (epoch seconds) for deterministic tests; defaults to
-    the wall clock.
+    ``sources`` is every consulted (retrieved) document; ``cited_sources`` is
+    the subset the answer actually cited — both are recorded so the collected
+    dataset stays rich for future use (Fase 1.4). ``now`` is injectable (epoch
+    seconds) for deterministic tests; defaults to the wall clock.
     """
     path = path or _store_path()
     entry = FeedbackEntry(
         query=query,
         search_query=search_query,
         sources=tuple(sources),
+        cited_sources=tuple(cited_sources),
         pool_max_score=float(pool_max_score),
         low_confidence=bool(low_confidence),
         verdict=verdict,

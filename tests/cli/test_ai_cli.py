@@ -285,8 +285,43 @@ def test_ask_prints_answer_and_sources(tmp_path, monkeypatch, mocker, capsys):
 
     out = capsys.readouterr().out
     assert "resposta [1]" in out
-    assert "Fontes:" in out
+    # [1] cites doc.txt → it appears under "Fontes citadas", not merely consulted.
+    assert "Fontes citadas:" in out
     assert "doc.txt" in out
+
+
+@pytest.mark.unit
+def test_print_sources_splits_cited_from_consulted(capsys):
+    """Cited sources print under "Fontes citadas"; retrieved-but-not-cited ones
+    under "Consultadas (não citadas)", each keeping its [n] slot."""
+    from pathlib import Path
+
+    from src.cli.ai import _print_sources
+
+    sources = [Path("out/a.txt"), Path("out/b.txt")]
+    _print_sources(sources, cited=[Path("out/a.txt")])
+
+    out = capsys.readouterr().out
+    assert "Fontes citadas:" in out
+    assert "Consultadas (não citadas):" in out
+    # a.txt is [1] cited; b.txt keeps its [2] slot under the consulted heading.
+    assert "[1] a.txt" in out
+    assert "[2] b.txt" in out
+
+
+@pytest.mark.unit
+def test_print_sources_all_consulted_when_nothing_cited(capsys):
+    """No cited source → nothing under "Fontes citadas"; everything consulted."""
+    from pathlib import Path
+
+    from src.cli.ai import _print_sources
+
+    _print_sources([Path("out/a.txt")], cited=[])
+
+    out = capsys.readouterr().out
+    assert "Fontes citadas:" not in out
+    assert "Consultadas (não citadas):" in out
+    assert "[1] a.txt" in out
 
 
 @pytest.mark.unit

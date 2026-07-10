@@ -99,7 +99,7 @@ pulado pelo VAD; `[i] VAD removed Xs of silence (Y%)`), `transcribe_segment` (`e
 
 Auto-contido (não usa `ProgressPanel`). `progress_start` → **[`condense_start`, só quando há histórico —
 Fase 2, `PLANO_CONVERSA_MULTITURNO.md`]** → `answer_start` (`query`, `search_query`, `model_name`) →
-`answer_done` (`query`/`search_query`/`text`/`sources`/`model_name`/`elapsed` + **`low_confidence`/
+`answer_done` (`query`/`search_query`/`text`/`sources`/**`cited`**/`model_name`/`elapsed` + **`low_confidence`/
 `best_score`**, Plano 4A — `best_score` agora é o `pool_max_score` que `retriever.retrieve()` devolve, não
 mais derivado de `hits` no worker; `True` mostra um banner "o acervo não cobre bem esta pergunta" acima da
 resposta + **`embed_space_id`**, `PLANO_RAG_EVAL.md` Fase 5 — carimba o espaço de embedding vigente para os
@@ -116,6 +116,15 @@ barra determinada.
   view mostra uma legenda discreta "buscou por: …" no card **só** quando os dois diferem.
   `pipeline_log.fmt_query_condensed(search_query)` loga a reformulação (estágio `condense_start` no ticker →
   "Condensando pergunta…").
+
+- **`sources` vs. `cited`** (`PLANO_FONTES_E_PISO_RELEVANCIA.md`, Fase 1): `sources` é toda fonte distinta
+  **consultada** (recuperada para o contexto, na ordem `[n]` que `build_context` atribui); `cited` é o
+  subconjunto que a resposta de fato **citou** via `[n]` no texto (parseado num lugar só —
+  `chat.cited_source_numbers`, ao lado do `build_context` que gera os `[n]`). O card mostra as citadas sob
+  "Fontes citadas" e as consultadas-não-citadas sob "Consultadas (não citadas)" (esmaecidas), cada linha
+  mantendo seu número `[n]`; `fmt_answer_done(len(cited))` conta as **citadas de verdade**. Resposta sem
+  nenhum `[n]` parseável → `cited` vazio, tudo cai em "Consultadas" (nunca inventa citação). O feedback
+  grava as **duas** listas em `retrieval_feedback.json`.
 
 ### Observatório — Índice/RAG (module_id="observatory")
 

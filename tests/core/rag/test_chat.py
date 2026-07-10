@@ -72,6 +72,55 @@ def test_answer_returns_text_and_cited_sources(mocker):
     result = chat.answer("pergunta?", retrieved, model_name="qwen7b-custom")
     assert result.text == "A resposta [1]."
     assert result.sources == [Path("a.txt")]
+    assert result.cited_sources == [Path("a.txt")]  # [1] cites the only source
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    "text, n_sources, expected",
+    [
+        ("usa [1] e depois [2]", 2, [1, 2]),
+        ("cita [2] antes de [1]", 2, [2, 1]),  # first-appearance order preserved
+        ("repete [1] e [1] de novo", 2, [1]),  # de-duplicated
+        ("agrupadas [1, 2] e [3]", 3, [1, 2, 3]),  # grouped form
+        ("adjacentes [1][2]", 2, [1, 2]),  # adjacent markers
+        ("fora da faixa [5] com 2 fontes", 2, []),  # out of range → ignored
+        ("sem marcador algum", 2, []),  # nothing to cite
+        ("marcador vazio [] e [x]", 2, []),  # non-numeric brackets → ignored
+    ],
+)
+def test_cited_source_numbers_is_defensive(text, n_sources, expected):
+    from src.core.rag.chat import cited_source_numbers
+
+    assert cited_source_numbers(text, n_sources) == expected
+
+
+@pytest.mark.unit
+def test_answer_splits_cited_from_consulted(mocker):
+    """Two documents retrieved, but the answer only cites [1] — the second is
+    consulted-but-not-cited (PLANO_FONTES_E_PISO_RELEVANCIA.md, Fase 1)."""
+    from src.core.rag import chat
+
+    mocker.patch.object(chat, "make_llm", return_value=_fake_llm("Só uso a [1]."))
+    retrieved = [_chunk("a.txt", "ctx", 0), _chunk("b.txt", "ctx", 0)]
+
+    result = chat.answer("pergunta?", retrieved)
+    assert result.sources == [Path("a.txt"), Path("b.txt")]  # both consulted
+    assert result.cited_sources == [Path("a.txt")]  # only the cited subset
+
+
+@pytest.mark.unit
+def test_answer_without_parseable_citation_cites_nothing(mocker):
+    """No [n] in the answer → cited_sources is empty; the UI shows every source
+    as consulted-only, never inventing a citation (Fase 1.5)."""
+    from src.core.rag import chat
+
+    mocker.patch.object(
+        chat, "make_llm", return_value=_fake_llm("Resposta sem marcadores.")
+    )
+    result = chat.answer("q?", [_chunk("a.txt", "ctx", 0), _chunk("b.txt", "ctx", 0)])
+    assert result.sources == [Path("a.txt"), Path("b.txt")]
+    assert result.cited_sources == []
 
 
 @pytest.mark.unit
