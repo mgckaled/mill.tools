@@ -55,6 +55,26 @@ mora onde e limites de tamanho → skill `architecture`; superfícies → `cli` 
   diversificar prejudica, não ajuda. `retrieve()` devolve `RetrievalResult(hits, pool_max_score)`: `.score`
   de cada hit continua o cosseno denso (contrato preservado); `pool_max_score` é o melhor cosseno entre
   **todos** os candidatos que respeitam o escopo — não só os `hits` finais que o MMR manteve.
+- **Piso de relevância** (`retriever._apply_relevance_floor`, `PLANO_FONTES_E_PISO_RELEVANCIA.md`, Fase 2):
+  entre a fusão RRF e o MMR, dropa candidatos do pool cujo **cosseno denso** fique mais de `δ`
+  (`_RELEVANCE_FLOOR_DELTA = 0.05`, **provisório** — validar via `ai eval`, Fase 4) abaixo do melhor denso do
+  pool. Guarda contra **desbalanceamento do corpus** (chunks de um documento volumoso mas irrelevante ao
+  assunto — os de Duna numa pergunta sobre Ollama — entravam no contexto só por serem o 2º-6º melhor). Regra:
+  **`keep = denso ≥ melhor_denso − δ  OU (é o top-1 do BM25 e lexical.max() > 0)`**. A **isenção do top-1
+  BM25** é a reconciliação deliberada de dois contratos que colidiriam: o piso precisa ser um corte **denso
+  puro** pra funcionar (isentar todo `lexical>0` o tornaria no-op — sem stopwords PT, palavras genéricas casam
+  qualquer livro, o não-achado do plano); mas o **resgate híbrido do BM25** (termo raro/nome próprio com match
+  exato, denso-longe mas no assunto — a razão de ser do denso+BM25) precisa sobreviver. Como um resgate de
+  termo raro é **concentrado** (é o top-1 do BM25) e o ruído genérico é **difuso** (nunca top-1), isentar
+  **só** o top-1 (no máximo **um** chunk/consulta) separa os dois mundos. Pior caso — pergunta sem termo raro
+  — o top-1 é um match genérico espúrio e **um** chunk irrelevante sobrevive; o ranking fundido tende a
+  enterrá-lo e a Fase 1 já o mostra como "consultada, não citada". **Pulado em escopo de documento único**
+  (mesma razão do MMR: irmãos do mesmo doc, cortá-los reduz recall intra-documento). **Contratos**:
+  `retrieve()` pode devolver **menos que `k`** (`build_context`/card de fontes/`run_batch` toleram); nunca
+  vazio com escopo não-vazio (o melhor do pool sempre sobrevive); **`pool_max_score` é calculado ANTES do
+  piso** (o aviso de cobertura mede o acervo, não o corte). *Refinamento futuro (só se o eval pedir)*:
+  condicionar a isenção à **distintividade** do top-1 BM25 (destacado da distribuição lexical), não a ser
+  meramente o primeiro.
 - **`indexer.build_index()`** é **incremental** por `(path, mtime)`: pula inalterados, reembeda alterados,
   reconcilia removidos. **`force: bool = False`** ignora esse fast path e reembeda tudo — necessário porque
   uma mudança de esquema (prefixos/header/limpeza) nunca move o mtime de um arquivo-fonte; sem `force`, o

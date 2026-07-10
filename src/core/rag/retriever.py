@@ -17,6 +17,14 @@ third copy (``core/text/summarize.py`` already has its own for a different
 domain). Chunking's overlap makes sibling chunks of the same document
 near-duplicates by construction; without diversification they can crowd out
 most of the answer's context.
+
+Relevance floor (``PLANO_FONTES_E_PISO_RELEVANCIA.md``, Fase 2): between the
+fused ranking and MMR, pool candidates whose dense cosine falls more than
+:data:`_RELEVANCE_FLOOR_DELTA` below the pool's best are dropped — a corpus-
+imbalance guard, with a BM25 top-1 exemption so it doesn't undo the hybrid
+rescue (see :func:`_apply_relevance_floor`). It can leave fewer than ``k`` hits;
+``pool_max_score`` is still measured over the *whole* scope, before the cut, so
+the coverage flag keeps gauging the corpus and not the floor.
 """
 
 from __future__ import annotations
@@ -47,6 +55,20 @@ _POOL_MULTIPLIER = 4
 # answer's context, relevance to the question matters more than topical
 # variety — MMR here trades away near-duplicate chunks, not distinct topics.
 _MMR_LAMBDA = 0.7
+
+# Relevance floor (PLANO_FONTES_E_PISO_RELEVANCIA.md, Fase 2): after the fused
+# ranking picks the pool, a candidate whose *dense cosine* sits more than this
+# far below the pool's best dense score is dropped BEFORE MMR — a corpus-
+# imbalance guard so chunks from an unrelated but voluminous document (the
+# many Dune chunks riding along an Ollama question) can't crowd the context
+# just by being the 2nd–6th best. See _apply_relevance_floor for the BM25
+# top-1 exemption that keeps the floor from fighting the hybrid rescue.
+#
+# δ=0.05 is PROVISIONAL — a starting point from the threshold calibration's
+# spread (covered questions 0.7356–0.8684, out-of-corpus ≤0.7115). It must be
+# validated/tuned against `ai eval` before being treated as final (Fase 4); do
+# not harden it on intuition alone.
+_RELEVANCE_FLOOR_DELTA = 0.05
 
 
 def _reciprocal_rank_fusion(*score_arrays: np.ndarray) -> np.ndarray:
@@ -85,6 +107,57 @@ def _is_single_document_scope(scope: str | None, store: VectorStore) -> bool:
     return bool(scope) and any(m.source_path == scope for m in store.meta)
 
 
+def _apply_relevance_floor(
+    pool: np.ndarray, dense: np.ndarray, lexical: np.ndarray
+) -> np.ndarray:
+    """Drop pool candidates whose dense cosine is more than
+    :data:`_RELEVANCE_FLOOR_DELTA` below the pool's best dense score, exempting
+    the single strongest BM25 (lexical) match (PLANO_FONTES_E_PISO_RELEVANCIA.md,
+    Fase 2).
+
+    The exemption is the deliberate reconciliation of two contracts that would
+    otherwise collide (see the plan's impasse note):
+
+    * The **dense floor** must stay a *pure dense* cut for its own goal — the
+      Dune-imbalance chunks it targets often match the question's generic
+      Portuguese words (no BM25 stopwords, a known gap kept out of this plan),
+      so exempting anything with ``lexical > 0`` would let them survive and make
+      the floor a no-op on the very case that motivated it.
+    * The **hybrid BM25 rescue** must survive — a rare term / proper noun with an
+      exact match (the retriever's whole reason for blending in BM25) is
+      dense-far yet exactly on-topic, and a naive dense floor would kill it.
+
+    A rare-term rescue is *concentrated*: the rescued chunk is the top of the
+    BM25 ranking. Diffuse generic-word noise is not. So exempting **only** the
+    single top-1 BM25 match separates the two worlds: the deep 0.17-cosine
+    rescue survives, the ~0.65 Dune chunks (never top-1 lexical when the rare
+    term points elsewhere) still fall. Worst case — a question with no rare term
+    at all — the top-1 BM25 is a spurious generic match and *one* off-topic chunk
+    survives the floor; the fused ranking tends to bury it and, if the model
+    doesn't cite it, Fase 1 already shows it only as "consultada, não citada".
+
+    ``keep = dense >= best_dense - δ  OR  (is the pool's top-1 BM25 and
+    lexical.max() > 0)`` — the exemption covers at most one chunk per query. The
+    pool's best dense score always survives (``δ >= 0``), so the result is never
+    empty for a non-empty pool. Order among survivors is preserved (the fused
+    rank the pool arrived in).
+
+    Future refinement (do NOT implement without the numbers): if the eval shows
+    spurious top-1 matches leaking systematically, condition the exemption on the
+    top-1 BM25 being *distinctive* — clearly detached from the rest of the
+    lexical distribution — rather than merely first.
+    """
+    if len(pool) == 0:
+        return pool
+    pool_dense = dense[pool]
+    best = float(pool_dense.max())
+    keep = pool_dense >= best - _RELEVANCE_FLOOR_DELTA
+    pool_lexical = lexical[pool]
+    if float(pool_lexical.max()) > 0:  # exempt the single strongest lexical match
+        keep[int(np.argmax(pool_lexical))] = True
+    return pool[keep]
+
+
 def retrieve(
     query: str,
     store: VectorStore,
@@ -111,18 +184,21 @@ def retrieve(
     Returns:
         A ``RetrievalResult(hits, pool_max_score)``. ``hits`` holds up to
         ``k`` chunks: a candidate pool (~``k`` * :data:`_POOL_MULTIPLIER`) is
-        first ranked by the fused dense+BM25 RRF score, then diversified down
-        to ``k`` by MMR (skipped when the pool already fits within ``k``, or
-        the scope pins a single document — see
-        :func:`_is_single_document_scope`) so near-duplicate sibling chunks
-        stop crowding out the rest of the context. Each hit's ``.score`` is
-        still its dense cosine similarity (not the fused or MMR-adjusted
-        value) — unchanged contract for the out-of-scope check.
-        ``pool_max_score`` is the best dense cosine among every scope-
-        respecting candidate (not just the returned hits, and not just the
-        pool) — MMR can trade the single best match away for diversity, so
-        the out-of-scope signal needs the true best coverage to stay stable
-        under the narrow 0.72 threshold gap (Fase 0.3/3.2).
+        first ranked by the fused dense+BM25 RRF score, then passed through the
+        relevance floor (:func:`_apply_relevance_floor`; skipped for a single-
+        document scope) and finally diversified down to ``k`` by MMR (skipped
+        when the pool already fits within ``k``, or the scope pins a single
+        document — see :func:`_is_single_document_scope`) so near-duplicate
+        sibling chunks stop crowding out the rest of the context. The floor can
+        leave **fewer than ``k``** hits (an intended contract — never empty for
+        a non-empty scope). Each hit's ``.score`` is still its dense cosine
+        similarity (not the fused or MMR-adjusted value) — unchanged contract
+        for the out-of-scope check. ``pool_max_score`` is the best dense cosine
+        among every scope-respecting candidate (not just the returned hits, and
+        computed **before** the floor) — MMR can trade the single best match
+        away for diversity and the floor can drop candidates, so the out-of-
+        scope signal needs the true best coverage to stay stable under the
+        narrow 0.72 threshold gap (Fase 0.3/3.2).
     """
     if len(store) == 0:  # nothing to search — skip the embed_query_fn round-trip
         return RetrievalResult([], 0.0)
@@ -154,7 +230,18 @@ def retrieve(
     ]  # drop masked-out rows in a too-small scope
     pool = order[: max(k, k * _POOL_MULTIPLIER)]
 
-    if len(pool) <= k or _is_single_document_scope(scope, store):
+    # Relevance floor before MMR, but never for a single-document scope: there
+    # every candidate is a sibling chunk of the *same* file by construction, so a
+    # dense-gap cut would just trim the document's own less-central chunks and
+    # reduce within-document recall — the same reason MMR is skipped below. The
+    # floor's target is cross-document imbalance, which a single-doc scope can't
+    # have. It can drop the pool below k (an intended contract: build_context /
+    # the source card / run_batch all tolerate fewer than k hits).
+    single_doc = _is_single_document_scope(scope, store)
+    if not single_doc:
+        pool = _apply_relevance_floor(pool, dense, lexical)
+
+    if len(pool) <= k or single_doc:
         top = pool[:k]
     else:
         # MMR ranks by the *fused* score, not raw dense cosine: it's what got

@@ -54,10 +54,13 @@ def test_retrieve_empty_store_skips_embed_query_fn():
 def test_retrieve_orders_by_similarity_to_query():
     from src.core.rag.retriever import retrieve
 
+    # Both rows sit within the relevance floor's band of the query (cosine 1.0
+    # and 0.96) so this test isolates the *ordering* contract from the floor —
+    # the floor's own cut is exercised by the dedicated tests below.
     store = _store_with(
         [
             ([1, 0, 0], _meta("near", kind="transcription")),
-            ([0, 1, 0], _meta("far", kind="transcription")),
+            ([0.96, 0.28, 0], _meta("far", kind="transcription")),  # cosine ≈ 0.96
         ]
     )
     # Query vector points exactly at the first row.
@@ -261,11 +264,14 @@ def test_retrieve_diversifies_near_duplicate_sibling_chunks():
     redundant one away for a still-relevant, more diverse chunk."""
     from src.core.rag.retriever import retrieve
 
+    # diverse.txt stays comfortably inside the relevance floor's band (cosine
+    # 0.87, well above 0.90 − δ) so the floor keeps all three and this test
+    # isolates MMR diversification — not the floor's boundary.
     store = _store_with(
         [
-            ([0.9, 0.4359, 0.0], _meta("dup1.txt", text="x")),  # cosine to q = 0.9
+            ([0.9, 0.4359, 0.0], _meta("dup1.txt", text="x")),  # cosine to q = 0.90
             ([0.89, 0.4560, 0.0], _meta("dup2.txt", text="x")),  # cosine to q = 0.89
-            ([0.85, 0.0, 0.5268], _meta("diverse.txt", text="x")),  # cosine to q = 0.85
+            ([0.87, 0.0, 0.493], _meta("diverse.txt", text="x")),  # cosine to q = 0.87
         ]
     )
     hits, _ = retrieve(
@@ -286,11 +292,13 @@ def test_retrieve_matches_plain_top_k_when_pool_covers_the_whole_store():
     candidates than the ``k`` it must narrow down to."""
     from src.core.rag.retriever import retrieve
 
+    # Cosines 1.0 / 0.98 / 0.96 — all within the relevance floor's band, so the
+    # floor is a no-op here and the test isolates the plain-top-k contract.
     store = _store_with(
         [
             ([1.0, 0.0, 0.0], _meta("a.txt", text="x")),
-            ([0.9, 0.1, 0.0], _meta("b.txt", text="x")),
-            ([0.5, 0.5, 0.0], _meta("c.txt", text="x")),
+            ([0.98, 0.199, 0.0], _meta("b.txt", text="x")),
+            ([0.96, 0.28, 0.0], _meta("c.txt", text="x")),
         ]
     )
     hits, _ = retrieve(
@@ -405,3 +413,103 @@ def test_retrieve_pool_max_score_respects_scope():
         scope="doc_a.txt",
     )
     assert pool_max == pytest.approx(0.2, abs=1e-2)
+
+
+# ── relevance floor (Fase 2, PLANO_FONTES_E_PISO_RELEVANCIA.md) ───────────────
+
+
+@pytest.mark.unit
+def test_relevance_floor_drops_dense_far_candidate():
+    """A candidate whose dense cosine is more than δ below the pool's best is
+    dropped before MMR — the corpus-imbalance guard. Retrieval may then return
+    fewer than k hits (an intended contract)."""
+    from src.core.rag.retriever import retrieve
+
+    store = _store_with(
+        [
+            ([1.0, 0.0, 0.0], _meta("a.txt", text="x")),  # cosine 1.00
+            ([0.98, 0.199, 0.0], _meta("b.txt", text="x")),  # cosine 0.98 (kept)
+            ([0.6, 0.8, 0.0], _meta("c.txt", text="x")),  # cosine 0.60 (dropped)
+        ]
+    )
+    hits, pool_max = retrieve(
+        "q", store, lambda _q: np.array([1, 0, 0], dtype=np.float32), k=6
+    )
+    sources = {h.meta.source_path for h in hits}
+    assert sources == {"a.txt", "b.txt"}  # c.txt fell below the floor
+    assert len(hits) == 2  # fewer than k — the floor trimmed the pool
+    assert pool_max == pytest.approx(1.0, abs=1e-3)  # measured before the floor
+
+
+@pytest.mark.unit
+def test_relevance_floor_always_keeps_the_best_even_when_all_else_is_far():
+    """The pool's single best dense candidate always survives the floor — the
+    result is never empty for a non-empty scope, however wide the gap."""
+    from src.core.rag.retriever import retrieve
+
+    store = _store_with(
+        [
+            ([1.0, 0.0, 0.0], _meta("best.txt", text="x")),  # cosine 1.00
+            ([0.5, 0.866, 0.0], _meta("far1.txt", text="x")),  # cosine 0.50
+            ([0.4, 0.916, 0.0], _meta("far2.txt", text="x")),  # cosine 0.40
+        ]
+    )
+    hits, _ = retrieve(
+        "q", store, lambda _q: np.array([1, 0, 0], dtype=np.float32), k=6
+    )
+    assert [h.meta.source_path for h in hits] == ["best.txt"]
+
+
+@pytest.mark.unit
+def test_relevance_floor_exempts_top1_bm25_rescue():
+    """The deliberate reconciliation (Fase 2 impasse): the dense floor drops
+    dense-far chunks, but the single strongest BM25 match is exempt — so a
+    rare-term exact match (dense cosine ~0.17) survives while an equally
+    dense-far chunk with no lexical hit is still cut."""
+    from src.core.rag.retriever import retrieve
+
+    store = _store_with(
+        [
+            ([1.0, 0.0, 0.0], _meta("filler1.txt", text="notes about gardening")),
+            ([0.98, 0.199, 0.0], _meta("filler2.txt", text="notes about cooking")),
+            # Dense-far AND no lexical overlap — the floor must drop it.
+            ([0.55, 0.835, 0.0], _meta("noise.txt", text="unrelated car engines")),
+            # Dense-far but the only exact match — the top-1 BM25 exemption saves it.
+            ([0.17, 0.985, 0.0], _meta("target.txt", text="zephyrion quasar exactly")),
+        ]
+    )
+    hits, _ = retrieve(
+        "zephyrion quasar",
+        store,
+        lambda _q: np.array([1, 0, 0], dtype=np.float32),
+        k=6,
+    )
+    sources = {h.meta.source_path for h in hits}
+    assert "target.txt" in sources  # rescued by the BM25 top-1 exemption
+    assert "noise.txt" not in sources  # dense-far, no lexical hit → dropped
+
+
+@pytest.mark.unit
+def test_relevance_floor_skipped_for_single_document_scope():
+    """Within a single-document scope every candidate is a sibling chunk of the
+    same file — the floor is skipped (like MMR) so it can't trim the document's
+    own less-central chunks and cut within-document recall."""
+    from src.core.rag.retriever import retrieve
+
+    store = _store_with(
+        [
+            ([1.0, 0.0, 0.0], _meta("doc_a.txt", 0)),  # cosine 1.00
+            ([0.9, 0.436, 0.0], _meta("doc_a.txt", 1)),  # cosine 0.90
+            ([0.7, 0.714, 0.0], _meta("doc_a.txt", 2)),  # cosine 0.70 (kept anyway)
+        ]
+    )
+    hits, _ = retrieve(
+        "q",
+        store,
+        lambda _q: np.array([1, 0, 0], dtype=np.float32),
+        k=6,
+        scope="doc_a.txt",
+    )
+    # All three siblings survive — a whole-corpus floor would have cut the 0.70.
+    assert len(hits) == 3
+    assert {h.meta.source_path for h in hits} == {"doc_a.txt"}
