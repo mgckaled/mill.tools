@@ -267,6 +267,11 @@ HELP_SHORT: dict[str, str] = {
         "Índice semântico local do seu acervo. Reindexar embute só os arquivos "
         "novos ou alterados (incremental, por mtime)."
     ),
+    "observatory.rag_eval": (
+        "Mede a qualidade de recuperação do RAG sobre um conjunto pequeno de "
+        "perguntas com resposta esperada (golden set). Só recuperação — sem "
+        "chamar o LLM."
+    ),
     "observatory.rag_panel": (
         "Quais documentos dominam o índice (mais chunks) — ajuda a identificar "
         "arquivos grandes ou redundantes no acervo indexado."
@@ -519,6 +524,20 @@ HELP_LONG: dict[str, str] = {
         '"Reindexar" aqui não roda a indexação neste hub (o Observatório é só '
         "leitura, como a Biblioteca) — ele navega para o hub de IA e dispara "
         "a reindexação por lá."
+    ),
+    "observatory.rag_eval": (
+        "Harness de avaliação do RAG (PLANO_RAG_EVAL): roda um golden set de "
+        "perguntas pelo mesmo caminho de recuperação da Conversa (pool + MMR) e "
+        "reporta hit-rate@k, MRR e a acurácia do aviso de baixa cobertura.\n\n"
+        "É retrieval-only por desenho — nenhuma chamada de LLM, então é "
+        "determinístico, rápido e barato. Duas rodadas só são comparáveis se "
+        "rodaram no mesmo espaço de embedding (mesmo modelo/esquema); uma "
+        "reindexação que mude o esquema torna o histórico incomparável, e isso "
+        "é sinalizado em vez de virar falsa regressão.\n\n"
+        "Monte o golden set pela CLI: uv run main.py ai eval add "
+        '--question "..." --expect <arquivo> (coberta) ou sem --expect '
+        "(fora-do-acervo). Rodar avaliação exige o embedder disponível e um "
+        "índice no esquema atual."
     ),
     "observatory.rag_panel": (
         "Quais documentos concentram mais chunks no índice — útil para achar "

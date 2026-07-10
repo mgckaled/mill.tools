@@ -47,11 +47,12 @@ def isolate_settings(tmp_path, monkeypatch):
 
 
 def _no_spin(mocker):
-    """Replace the index tab's spinner with an inert stand-in (headless-safe)."""
-    mocker.patch(
-        "src.gui.modules.observatory.index_tab.spinner",
-        return_value=(MagicMock(), lambda: None, lambda: None),
-    )
+    """Replace the index/eval tabs' spinners with inert stand-ins (headless-safe)."""
+    for mod in ("index_tab", "eval_tab"):
+        mocker.patch(
+            f"src.gui.modules.observatory.{mod}.spinner",
+            return_value=(MagicMock(), lambda: None, lambda: None),
+        )
 
 
 @pytest.mark.unit
@@ -65,8 +66,9 @@ def test_rag_tab_builds():
 def test_indice_is_the_default_subtab():
     control, _apply = build_rag_tab(MagicMock(), MagicMock(), MagicMock(), [False])
     body_stack = control.controls[2].content
-    index_view, analytics_view, disk_view = body_stack.controls
+    index_view, eval_view, analytics_view, disk_view = body_stack.controls
     assert index_view.visible is True
+    assert eval_view.visible is False
     assert analytics_view.visible is False
     assert disk_view.visible is False
 
@@ -74,11 +76,23 @@ def test_indice_is_the_default_subtab():
 @pytest.mark.unit
 def test_switching_to_painel_subtab_does_not_raise():
     control, _apply = build_rag_tab(MagicMock(), MagicMock(), MagicMock(), [False])
-    tab_painel = control.controls[0].controls[1]
+    tab_painel = control.controls[0].controls[2]  # Índice · Avaliação · Painel · Disco
     tab_painel.on_click(MagicMock())
     body_stack = control.controls[2].content
-    index_view, analytics_view, disk_view = body_stack.controls
+    index_view, _eval_view, analytics_view, _disk_view = body_stack.controls
     assert analytics_view.visible is True
+    assert index_view.visible is False
+
+
+@pytest.mark.unit
+def test_switching_to_avaliacao_subtab_shows_eval_view(mocker):
+    mocker.patch("src.gui.modules.observatory.rag_tab.threading.Thread")  # no bg read
+    control, _apply = build_rag_tab(MagicMock(), MagicMock(), MagicMock(), [False])
+    tab_aval = control.controls[0].controls[1]
+    tab_aval.on_click(MagicMock())
+    body_stack = control.controls[2].content
+    index_view, eval_view, _analytics_view, _disk_view = body_stack.controls
+    assert eval_view.visible is True
     assert index_view.visible is False
 
 
@@ -91,11 +105,34 @@ def test_switching_to_disco_subtab_populates_entries(mocker):
         return_value=(DiskUsageEntry("rag", 100, True),),
     )
     control, _apply = build_rag_tab(MagicMock(), MagicMock(), MagicMock(), [False])
-    tab_disco = control.controls[0].controls[2]
+    tab_disco = control.controls[0].controls[3]
     tab_disco.on_click(MagicMock())
     body_stack = control.controls[2].content
-    _index_view, _analytics_view, disk_view = body_stack.controls
+    _index_view, _eval_view, _analytics_view, disk_view = body_stack.controls
     assert disk_view.visible is True
+
+
+@pytest.mark.unit
+def test_run_eval_button_starts_the_eval_pipeline(mocker):
+    """The "Rodar avaliação" button runs the eval pipeline itself (Fase 4)."""
+    _no_spin(mocker)
+    start_mock = mocker.patch("src.gui.modules.observatory.rag_tab.start_eval_pipeline")
+
+    bus = MagicMock()
+    cancel_event = threading.Event()
+    pipeline_running = [False]
+    control, _apply = build_rag_tab(MagicMock(), bus, cancel_event, pipeline_running)
+
+    run_btn = next(
+        c for c in _walk(control) if getattr(c, "content", None) == "Rodar avaliação"
+    )
+    run_btn.on_click(MagicMock())
+
+    assert pipeline_running[0] is True
+    assert run_btn.disabled is True
+    start_mock.assert_called_once()
+    _args, kwargs = start_mock.call_args
+    assert kwargs["embed_model"]
 
 
 @pytest.mark.unit

@@ -70,6 +70,24 @@ def fmt_command_done(has_command: bool) -> str:
     return "[✓] Comando gerado." if has_command else "[i] Pedido fora do escopo da CLI."
 
 
+# ─── RAG eval (Observatório, PLANO_RAG_EVAL, Fase 4) ──────────────────────────
+
+
+def fmt_eval_start(total: int) -> str:
+    """Log line announcing how many golden questions the run will evaluate."""
+    return f"[*] Avaliando {total} pergunta(s)…"
+
+
+def fmt_eval_progress(current: int, total: int) -> str:
+    """Mutable progress line during an evaluation run."""
+    return f"[~] Avaliando {current}/{total}…"
+
+
+def fmt_eval_done(hit_rate: float, mrr: float) -> str:
+    """Summary line after an evaluation run completes."""
+    return f"[✓] Avaliação concluída — hit-rate {hit_rate:.0%}, MRR {mrr:.2f}."
+
+
 # ─── Resolvers (view.py → status line) ────────────────────────────────────────
 
 
