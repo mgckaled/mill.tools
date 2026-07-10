@@ -102,7 +102,10 @@ Fase 2, `PLANO_CONVERSA_MULTITURNO.md`]** → `answer_start` (`query`, `search_q
 `answer_done` (`query`/`search_query`/`text`/`sources`/`model_name`/`elapsed` + **`low_confidence`/
 `best_score`**, Plano 4A — `best_score` agora é o `pool_max_score` que `retriever.retrieve()` devolve, não
 mais derivado de `hits` no worker; `True` mostra um banner "o acervo não cobre bem esta pergunta" acima da
-resposta) → `task_done`/`task_error`. Sem `progress_update` (um único `invoke()` bloqueante não tem fração de
+resposta + **`embed_space_id`**, `PLANO_RAG_EVAL.md` Fase 5 — carimba o espaço de embedding vigente para os
+polegares 👍/👎 do card gravarem `retrieval_feedback.json` sem tornar o histórico incomparável numa
+reindexação futura; o feedback é uma escrita direta em `core/rag/feedback.py`, não um evento) →
+`task_done`/`task_error`. Sem `progress_update` (um único `invoke()` bloqueante não tem fração de
 progresso) — a view mostra um ticker de tempo decorrido + "típico do modelo" (`ai/timing.py`) em vez de uma
 barra determinada.
 
@@ -123,6 +126,14 @@ de IA): `progress_start` → `index_start` (`total`) → `progress_update` (`cur
 leitura de `index_stats`/`analytics` em `task_done`) — a mesma forma worker+view de um módulo-ferramenta,
 não o padrão auto-contido single-file do hub de IA/Receitas. `core/observatory/` (o pacote puro) continua sem
 saber nada disso — o pipeline vive só na camada `gui/`.
+
+A **sub-aba Avaliação** (`PLANO_RAG_EVAL.md`, jul/2026) roda um **segundo** pipeline sob o mesmo
+`module_id="observatory"`: `progress_start` → `eval_start` (`total`) → `eval_progress` (`current`/`total`,
+por pergunta, mutable) → `eval_done` (`hit_rate`/`mrr` — só o headline do log; a view re-lê `load_eval_data`
+em `task_done`) → `task_done`/`task_error`. Emitido por `gui/modules/observatory/eval_worker.py::
+run_eval_pipeline`, consumido por `rag_tab.py`. Como os dois pipelines dividem os eventos genéricos
+(`task_done`/`task_error`/`log`), `rag_tab` mantém um marcador `_active` (`"index"`|`"eval"`, setado no begin)
+para rotear esses ao tab certo — os por-item já são distintos (`progress_update` vs. `eval_progress`).
 
 ### Dados (module_id="data")
 

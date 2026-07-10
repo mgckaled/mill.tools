@@ -293,3 +293,21 @@ investigado a fundo nem corrigido ali porque é **pré-existente e ortogonal** a
   possivelmente alinhar `settings.py` ao padrão do resto do projeto (recalcular `Path.home()` por chamada em
   vez de cachear no import). Mudança pequena, mas que merece seu próprio ciclo de investigação/verificação,
   não um side-fix dentro de um plano de RAG.
+
+---
+
+## 13. Avaliação do RAG — harness entregue; reranker ONNX segue condicional (jul/2026)
+
+O **harness de avaliação de recuperação** proposto na avaliação profunda
+([`reference/AVALIACAO_ML_RAG_FABLE5.md`](reference/AVALIACAO_ML_RAG_FABLE5.md), §2.8/§5/§7) foi **entregue** —
+[`plans/implemented/PLANO_RAG_EVAL.md`](plans/implemented/PLANO_RAG_EVAL.md): golden set + runner (`core/rag/
+eval.py`, retrieval-only), CLI `ai eval`, sub-aba Avaliação do Observatório e feedback 👍/👎 na Conversa
+(`core/rag/feedback.py`, coleta-primeiro). Métricas: hit-rate@k, MRR, acurácia do flag; comparabilidade por
+`embed_space_id`. Com ele, todo ajuste fino de retrieval deixa de ser cego.
+
+Pendente **condicional**: **reranker neural (cross-encoder ONNX)**. Continua fora de escopo por ora — puxaria
+torch, conflitando com a decisão base sem PyTorch, e o §2.8 da avaliação recomenda **só considerá-lo se o
+eval mostrar teto de retrieval** (2.1–2.3 já melhoraram a recuperação; medir antes de adicionar peso). Só
+reabrir quando uma rodada de `ai eval` sobre um golden set real evidenciar o teto. Igualmente condicionais e
+fora de escopo por desenho: LLM-as-judge (mede geração, não retrieval) e benchmark IR completo (nDCG/corpus
+sintético — sobre-engenharia para acervo pessoal).

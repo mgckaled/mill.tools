@@ -172,5 +172,13 @@ op = ns.video_op if ns.video_op != "extract-audio" else "extract_audio"
 ### `ai` é a exceção: um único positional
 
 `ai` **não** usa sub-subparser — tem um positional `query` que é despachado por valor literal (`index`/
-`stats`/`dups`/`topics`/`map`/`related` são fluxos de ML; qualquer outro valor é a pergunta). Ver skill
+`stats`/`dups`/`topics`/`map`/`related`/`eval` são fluxos de ML; qualquer outro valor é a pergunta). Ver skill
 `ml-rag`.
+
+- **`ai eval`** (`PLANO_RAG_EVAL.md`, Fase 3): harness de avaliação do RAG, **retrieval-only** (sem LLM).
+  Sub-despacha pelo segundo positional `target` — `run` (default), `list`, `add`, `promote`. `run` recusa
+  índice vazio / embedder fora do ar / **esquema antigo** (avaliar índice stale mede artefato), grava a
+  rodada (`rag_eval.json`) e imprime o delta vs. a rodada anterior **comparável** (mesmo `embed_space_id`);
+  `add --question "..." [--expect <arquivo>]...` (coberta com paths, ou fora-do-acervo); `promote` vira os
+  👍 com fontes (`retrieval_feedback.json`) em golden cobertas. Read-only exceto as escritas próprias; **sem
+  `CLIEventBus`** (golden set pequeno). Detalhe do core → skill `ml-rag`.

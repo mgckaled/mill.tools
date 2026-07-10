@@ -160,10 +160,11 @@ Ambos são hubs de ML — **toda a maquinaria de RAG/ML/NLP e o detalhe destes d
   read-only + botão "Indexar no Observatório", já que a reindexação em si roda lá); Comandos CLI traduz um
   pedido em português no comando `uv run main.py ...` exato (nunca executa — só copia), via
   `core/text/nl2cli.py` + a referência introspectada de `cli/reference.py` (mesmo recurso do CLI `ai --cmd`).
-- **Observatório**: hub cross-módulo de ML — read-only, **exceto** a sub-aba Índice (Índice/RAG), que roda o
-  próprio pipeline de reindexação (botão Reindexar + progresso + Cancelar, `module_id="observatory"`). 5 abas
-  (Índice/RAG · Status · Atividade · Logs · Tempo de resposta); Índice/RAG é aninhada (Índice·Painel·Uso de
-  disco). Selo de novidades no AppBar (`last_ml_activity_seen`).
+- **Observatório**: hub cross-módulo de ML — read-only, **exceto** as sub-abas Índice e **Avaliação** de
+  Índice/RAG, que rodam os próprios pipelines (Reindexar / Rodar avaliação + progresso + Cancelar,
+  `module_id="observatory"`). 5 abas (Índice/RAG · Status · Atividade · Logs · Tempo de resposta); Índice/RAG é
+  aninhada (Índice·**Avaliação**·Painel·Uso de disco). **Avaliação** roda o harness retrieval-only do RAG
+  (golden set → hit-rate@k/MRR; skill `ml-rag`). Selo de novidades no AppBar (`last_ml_activity_seen`).
 
 ## Módulo Receitas (hub)
 
@@ -229,6 +230,7 @@ uv run main.py library list [--kind audio|data] [--since 7d] [--sort size] | lib
 uv run main.py ai index | ai stats | ai dups | ai topics | ai map [--method pca|tsne|umap] | ai related <path> | ai classify|keywords|summary|entities <path>
 uv run main.py ai "pergunta" [--scope X] [--model gemini-2.5-flash] [--k 8] [--batch]
 uv run main.py ai --cmd "corta o silêncio do podcast.mp3 e acelera 1.25x"  # NL->CLI, imprime o comando
+uv run main.py ai eval | ai eval list | ai eval add --question "..." [--expect <arquivo>] | ai eval promote  # harness de avaliação do RAG
 uv run main.py recipe list | recipe run "<nome>" <URL_OR_FILE> [--model medium]
 uv run main.py data   query <arquivos...> "<pergunta>" [--sql] [--out csv|xlsx|json|parquet] | data convert|profile|assess|plot|outliers <arquivo>
 uv run main.py observatory status | observatory activity | observatory logs | observatory disk-usage

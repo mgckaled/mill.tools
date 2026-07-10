@@ -13,7 +13,7 @@ mora onde e limites de tamanho → skill `architecture`; superfícies → `cli` 
 
 | Pacote | Responsabilidade |
 |---|---|
-| `core/rag/` | RAG local: embedder (única rede) · store `.npz` · busca híbrida · indexer incremental · chat com citação · bm25 · templates · batch · stats · analytics |
+| `core/rag/` | RAG local: embedder (única rede) · store `.npz` · busca híbrida · indexer incremental · chat com citação · bm25 · templates · batch · stats · analytics · **eval** (harness retrieval-only) · **feedback** (👍/👎) |
 | `core/ml/` | ML clássico torch-free: features (acessor) · dedup · cluster · labeling · project · recommend · classify/ (pacote) · store (modelos versionados) · deps (gate `[ml]`) · cache · mapviz |
 | `core/text/` | NLP textual (Plano 4B, independente de `core/ml`): keywords (YAKE) · summarize (TextRank) · entities (spaCy NER) · reader · lang |
 | `core/observatory/` | Cross-módulo read-only: activity · logs · status · model_timing · disk_usage |
@@ -118,6 +118,39 @@ mora onde e limites de tamanho → skill `architecture`; superfícies → `cli` 
 
 > `rank-bm25` é dependência **base** (puro Python/numpy, sem scipy) — não atrás de extra, porque a busca densa
 > do RAG já é incondicional. Racional da escolha (vs. `bm25s`) → `docs/HISTORY.md`.
+
+### `eval.py` / `feedback.py` — avaliação de recuperação (`PLANO_RAG_EVAL`, jul/2026)
+
+- **`eval.py` (puro, injetável)** — harness **retrieval-only**: **nenhuma chamada de LLM** (determinístico,
+  rápido, barato; julgar a resposta gerada / LLM-as-judge fica **fora de escopo** por desenho). `run_eval
+  (golden, store, embed_query_fn, *, k, threshold, embed_space_id, embed_scheme, on_progress)` roda o
+  **`retrieve()` de produção** (pool+MMR, `scope=None`) com a **pergunta crua** — condensação é de conversa;
+  golden questions são standalone por definição. `threshold` reusa `recommend.DEFAULT_IN_CORPUS_THRESHOLD`
+  (fonte única, nunca recopiado). **Contratos**: `pool_max_score` dirige o flag de baixa cobertura, igual ao
+  `run_ai_answer`; `on_progress` é o seam de cancelamento (callback que levanta aborta entre perguntas, como
+  o `index_worker`). Dois tipos de golden: **coberta** (`expected` = paths esperados; hit = doc esperado entre
+  as fontes distintas dos hits, por resolved-path ou basename) e **fora-do-acervo** (`expected` vazio; acerto
+  = o flag disparar). Métricas: hit-rate@k, MRR sobre documentos, médias de `pool_max_score` (cob. vs. fora),
+  acurácia do flag. `EvalRunResult` carrega métricas + `k`/`embed_space_id`/esquema/nº docs·chunks/timestamp;
+  `outcomes` (detalhe por pergunta) é **transiente** — não persistido.
+- **Persistência (dono: `eval.py`)** — `rag_eval.json` = objeto `{golden, runs}` (escrita atômica via
+  `io_atomic`, **não** o array append-only do `_jsonlog`), histórico cap `_MAX_RUNS=20`. `load_eval_data`
+  **semeia** as 5 perguntas fora-do-acervo quando o arquivo não existe; tolera corrupção (vazio + warning) e
+  pula entradas malformadas. `add_question` resolve os paths esperados (paridade com `ChunkMeta.source_path`).
+  `latest_and_previous` devolve a rodada anterior **comparável** — mesmo `embed_space_id`; rodadas de espaços
+  diferentes são **incomparáveis** (uma reindexação move todo cosseno), sinalizadas em vez de virar falsa
+  regressão. As 10 cobertas da calibração ficam como `suggested_covered()` (sugestões, não paths inventados).
+- **`feedback.py`** — log append-only de 👍/👎 da Conversa em `retrieval_feedback.json` (reusa
+  `observatory/_jsonlog`, cap 200). Mora em `core/rag/` (não `observatory/`, que segue read-only; o `_jsonlog`
+  é só o helper genérico). Cada entrada grava `query`/`search_query`/fontes/`pool_max_score`/`low_confidence`/
+  veredicto/modelo/**`embed_space_id`** — **coleta-primeiro-usa-depois**: nenhum uso automático (recalibração
+  de limiar, treino de reranker) nesta fase. Regra transversal: **toda entrada persistida grava o
+  `embed_space_id` vigente** (o worker de resposta o carimba no payload `answer_done`), senão uma reindexação
+  torna o histórico incomparável em silêncio.
+- **Superfícies**: CLI `ai eval` (run/list/add/promote → skill `cli`); sub-aba **Avaliação** do Observatório
+  (worker+view no padrão do reindex, `module_id="observatory"`, gate do embedder com `use_cache=False`, recusa
+  esquema antigo — o pipeline vive só na camada `gui/`, o core segue puro); polegares por card na Conversa
+  (`answer_view.py`). `ai eval promote` é a única curadoria (👍 com fontes → golden coberta).
 
 ---
 
@@ -342,15 +375,18 @@ temperatura por papel).
 | `library_tags.json` | `library/tags` | auto-tags YAKE por item, keyed por `(path, mtime)` |
 | `entity_glossary.json` | (manual) | padrões opcionais do EntityRuler |
 | `prompts.json` | `rag/templates` | biblioteca de prompts do usuário |
+| `rag_eval.json` | `rag/eval` | golden set + histórico de rodadas de avaliação (`{golden, runs}`, cap 20) |
+| `retrieval_feedback.json` | `rag/feedback` | log de 👍/👎 da Conversa (cap 200, coleta-primeiro) |
 | `config.json` (chaves `last_ai_*`, `ai_answer_times`, `last_embed_model`) | `gui/settings` | preferências + janela móvel de tempos da Conversa |
 
 ---
 
 ## Superfícies (ponteiros)
 
-- **CLI** `ai` (index/stats/dups/topics/map/related/classify/keywords/summary/entities/pergunta/`--cmd`) e
-  `observatory` (status/activity/logs/disk-usage) → skill **`cli`** (read-only, sem `CLIEventBus`; `ai` usa um
-  positional despachado por valor literal; `--cmd` tem prioridade sobre os demais).
+- **CLI** `ai` (index/stats/dups/topics/map/related/classify/keywords/summary/entities/pergunta/`--cmd`/`eval`)
+  e `observatory` (status/activity/logs/disk-usage) → skill **`cli`** (read-only, sem `CLIEventBus`; `ai` usa
+  um positional despachado por valor literal; `--cmd` tem prioridade sobre os demais; `eval` sub-despacha pelo
+  `target` em run/list/add/promote).
 - **GUI** hub IA (toggle Corpus|Comandos CLI — ver `nl2cli.py` acima) e hub Observatório (5 abas: Índice/RAG
   · Status · Atividade · Logs · Tempo de resposta) → skill **`design-system`** (abas manuais `visible=`,
   spinner, thread-safety).

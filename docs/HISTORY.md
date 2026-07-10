@@ -11,6 +11,21 @@ ficam em [`ROADMAP.md`](ROADMAP.md) e [`plans/active/`](plans/active/).
 
 ## Entregas (marcos)
 
+### Harness de avaliação do RAG — golden set + feedback 👍/👎 (jul/2026)
+Origem: achados §2.8/§5/§7 da avaliação de produto ML/RAG
+([`reference/AVALIACAO_ML_RAG_FABLE5.md`](reference/AVALIACAO_ML_RAG_FABLE5.md)). Instrumento **permanente**
+para medir recuperação — sem ele, todo ajuste fino futuro (reranker, chunking, troca de modelo) é cego.
+`core/rag/eval.py` (puro): golden set tipado (coberta com docs esperados / fora-do-acervo), runner injetável
+que roda o `retrieve()` de produção (pool+MMR) e reporta hit-rate@k, MRR, cossenos médios e acurácia do flag
+de baixa cobertura; persistência em `rag_eval.json` (golden + histórico cap 20). `core/rag/feedback.py`
+coleta 👍/👎 da Conversa em `retrieval_feedback.json` (reusa `observatory/_jsonlog`). Superfícies: CLI
+`ai eval` (run/list/add/promote), sub-aba **Avaliação** do Observatório (worker+view no padrão do reindex) e
+os polegares por card na Conversa. Decisões: **retrieval-only sem LLM** (determinístico/rápido/barato;
+LLM-as-judge mede geração, fica fora); **pergunta crua, sem condensação** (golden questions são standalone
+por definição); **comparabilidade por `embed_space_id`** (rodadas de espaços diferentes são incomparáveis,
+não regressão); **feedback coleta-primeiro-usa-depois** (nenhuma recalibração/treino automático nesta fase).
+[`plans/implemented/PLANO_RAG_EVAL.md`](plans/implemented/PLANO_RAG_EVAL.md).
+
 ### Conversa multi-turno — condensação de query + pool/MMR + k na GUI (jul/2026)
 Origem: achados §2.2/§2.3/§2.7 da avaliação de produto ML/RAG
 ([`reference/AVALIACAO_ML_RAG_FABLE5.md`](reference/AVALIACAO_ML_RAG_FABLE5.md)) — a Conversa do hub de IA
