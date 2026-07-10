@@ -1160,3 +1160,228 @@ def test_nl2cli_exits_on_nl2cli_error(mocker, capsys):
         _nl2cli(_parse("corta o silêncio do podcast.mp3", "--cmd"))
 
     assert "não consegui gerar" in capsys.readouterr().out
+
+
+# ── ai eval (PLANO_RAG_EVAL, Fase 3) ─────────────────────────────────────────
+
+
+def _persist_eval_store(directory, *, source: str = "aula.txt"):
+    """Persist a one-doc store tagged with the *current* scheme (not stale)."""
+    from src.core.rag.indexer import CURRENT_EMBED_SCHEME
+    from src.core.rag.store import VectorStore
+    from src.core.rag.types import ChunkMeta
+
+    store = VectorStore(dim=768)
+    store.add(
+        np.ones((1, 768), dtype=np.float32),
+        [ChunkMeta(source, "transcription", 1.0, 0, "context text")],
+    )
+    store.persist(
+        directory, embed_model="nomic-embed-custom", embed_scheme=CURRENT_EMBED_SCHEME
+    )
+    return store
+
+
+@pytest.mark.unit
+def test_eval_parses():
+    assert _parse("eval").query == "eval"
+    assert _parse("eval").target is None
+    a = _parse(
+        "eval", "add", "--question", "q", "--expect", "a.txt", "--expect", "b.txt"
+    )
+    assert a.target == "add"
+    assert a.question == "q"
+    assert a.expect == ["a.txt", "b.txt"]
+
+
+@pytest.mark.unit
+def test_eval_dispatches_to_eval_runner(mocker):
+    ev = mocker.patch("src.cli.ai._eval")
+    ask = mocker.patch("src.cli.ai._ask")
+
+    ns = _parse("eval")
+    ns.func(ns)
+
+    assert ev.called
+    assert not ask.called
+
+
+@pytest.mark.unit
+def test_eval_routes_by_target(mocker):
+    from src.cli.ai import _eval
+
+    run = mocker.patch("src.cli.ai._eval_run")
+    lst = mocker.patch("src.cli.ai._eval_list")
+    add = mocker.patch("src.cli.ai._eval_add")
+
+    _eval(_parse("eval"))
+    _eval(_parse("eval", "list"))
+    _eval(_parse("eval", "add"))
+
+    assert run.called and lst.called and add.called
+
+
+@pytest.mark.unit
+def test_eval_unknown_action_exits(capsys):
+    from src.cli.ai import _eval
+
+    with pytest.raises(SystemExit):
+        _eval(_parse("eval", "bogus"))
+    assert "Ação desconhecida" in capsys.readouterr().out
+
+
+@pytest.mark.unit
+def test_eval_list_shows_seed_and_suggestions(tmp_path, monkeypatch, capsys):
+    import src.core.rag.eval as eval_mod
+    from src.cli.ai import _eval_list
+
+    monkeypatch.setattr(eval_mod, "eval_store_path", lambda: tmp_path / "rag_eval.json")
+    _eval_list()
+    out = capsys.readouterr().out
+    assert "Fora-do-acervo" in out  # the five seed questions
+    assert "Sugestões" in out
+    assert "risoto" in out.lower()  # one of the seeded out-of-corpus questions
+
+
+@pytest.mark.unit
+def test_eval_add_covered_question(tmp_path, monkeypatch, capsys):
+    import src.core.rag.eval as eval_mod
+    from src.cli.ai import _eval_add
+
+    eval_path = tmp_path / "rag_eval.json"
+    monkeypatch.setattr(eval_mod, "eval_store_path", lambda: eval_path)
+    doc = tmp_path / "doc.txt"
+    doc.write_text("x", encoding="utf-8")
+
+    _eval_add(
+        _parse("eval", "add", "--question", "de que trata?", "--expect", str(doc))
+    )
+    assert "coberta adicionada" in capsys.readouterr().out
+    data = eval_mod.load_eval_data(eval_path)
+    assert any(g.question == "de que trata?" and g.expected for g in data.golden)
+
+
+@pytest.mark.unit
+def test_eval_add_out_of_corpus_question(tmp_path, monkeypatch, capsys):
+    import src.core.rag.eval as eval_mod
+    from src.cli.ai import _eval_add
+
+    monkeypatch.setattr(eval_mod, "eval_store_path", lambda: tmp_path / "rag_eval.json")
+    _eval_add(_parse("eval", "add", "--question", "como fazer bolo?"))
+    assert "fora-do-acervo adicionada" in capsys.readouterr().out
+
+
+@pytest.mark.unit
+def test_eval_add_without_question_exits(capsys):
+    from src.cli.ai import _eval_add
+
+    with pytest.raises(SystemExit):
+        _eval_add(_parse("eval", "add"))
+    assert "Informe a pergunta" in capsys.readouterr().out
+
+
+@pytest.mark.unit
+def test_eval_run_reports_and_records(tmp_path, monkeypatch, mocker, capsys):
+    import src.core.rag.eval as eval_mod
+    import src.core.rag.indexer as indexer
+    from src.cli.ai import _eval_run
+
+    rag_dir = tmp_path / "rag"
+    _persist_eval_store(rag_dir, source="aula.txt")
+    monkeypatch.setattr(indexer, "index_dir", lambda: rag_dir)
+    eval_path = tmp_path / "rag_eval.json"
+    monkeypatch.setattr(eval_mod, "eval_store_path", lambda: eval_path)
+    # One covered question whose expected doc is the only chunk → guaranteed hit.
+    eval_mod.save_eval_data(
+        eval_mod.EvalData(
+            golden=(
+                eval_mod.GoldenQuestion("o que diz a aula?", expected=("aula.txt",)),
+            ),
+            runs=(),
+        ),
+        eval_path,
+    )
+    mocker.patch("src.core.rag.embedder.is_available", return_value=True)
+    mocker.patch(
+        "src.core.rag.embedder.embed_query",
+        return_value=np.ones(768, dtype=np.float32),
+    )
+    log_mock = mocker.patch("src.core.observatory.activity.log_activity")
+
+    _eval_run(_parse("eval"))
+
+    out = capsys.readouterr().out
+    assert "Avaliação do RAG" in out
+    assert "hit-rate@6" in out
+    assert "100%" in out  # the covered question hit
+    # the run was recorded
+    assert len(eval_mod.load_eval_data(eval_path).runs) == 1
+    log_mock.assert_called_once()
+    assert log_mock.call_args.args[1] == "rag_eval"
+
+
+@pytest.mark.unit
+def test_eval_run_exits_on_empty_index(tmp_path, monkeypatch, capsys):
+    import src.core.rag.eval as eval_mod
+    import src.core.rag.indexer as indexer
+    from src.cli.ai import _eval_run
+
+    monkeypatch.setattr(indexer, "index_dir", lambda: tmp_path / "empty")
+    monkeypatch.setattr(eval_mod, "eval_store_path", lambda: tmp_path / "rag_eval.json")
+    with pytest.raises(SystemExit):
+        _eval_run(_parse("eval"))
+    assert "Índice vazio" in capsys.readouterr().out
+
+
+@pytest.mark.unit
+def test_eval_run_refuses_stale_scheme(tmp_path, monkeypatch, capsys):
+    import src.core.rag.eval as eval_mod
+    import src.core.rag.indexer as indexer
+    from src.cli.ai import _eval_run
+
+    rag_dir = tmp_path / "rag"
+    _persisted_store(rag_dir, source="aula.txt")  # persisted WITHOUT a scheme → stale
+    monkeypatch.setattr(indexer, "index_dir", lambda: rag_dir)
+    monkeypatch.setattr(eval_mod, "eval_store_path", lambda: tmp_path / "rag_eval.json")
+
+    with pytest.raises(SystemExit):
+        _eval_run(_parse("eval"))
+    assert "esquema antigo" in capsys.readouterr().out
+
+
+@pytest.mark.unit
+def test_eval_run_exits_when_embedder_unavailable(
+    tmp_path, monkeypatch, mocker, capsys
+):
+    import src.core.rag.eval as eval_mod
+    import src.core.rag.indexer as indexer
+    from src.cli.ai import _eval_run
+
+    rag_dir = tmp_path / "rag"
+    _persist_eval_store(rag_dir)  # current scheme → not stale
+    monkeypatch.setattr(indexer, "index_dir", lambda: rag_dir)
+    monkeypatch.setattr(eval_mod, "eval_store_path", lambda: tmp_path / "rag_eval.json")
+    mocker.patch("src.core.rag.embedder.is_available", return_value=False)
+
+    with pytest.raises(SystemExit):
+        _eval_run(_parse("eval"))
+    assert "ollama pull" in capsys.readouterr().out
+
+
+@pytest.mark.unit
+def test_eval_run_reports_empty_golden(tmp_path, monkeypatch, capsys):
+    import json
+
+    import src.core.rag.eval as eval_mod
+    import src.core.rag.indexer as indexer
+    from src.cli.ai import _eval_run
+
+    rag_dir = tmp_path / "rag"
+    _persist_eval_store(rag_dir)
+    monkeypatch.setattr(indexer, "index_dir", lambda: rag_dir)
+    eval_path = tmp_path / "rag_eval.json"
+    eval_path.write_text(json.dumps({"golden": [], "runs": []}), encoding="utf-8")
+    monkeypatch.setattr(eval_mod, "eval_store_path", lambda: eval_path)
+
+    _eval_run(_parse("eval"))
+    assert "Golden set vazio" in capsys.readouterr().out

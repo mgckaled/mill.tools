@@ -16,6 +16,9 @@ Flows behind one positional:
     uv run main.py ai "..." --model gemini-2.5-flash --k 8
     uv run main.py ai "..." --model glm-4.7-flash --k 8
     uv run main.py ai --cmd "corta o silêncio do podcast.mp3 e acelera 1.25x"
+    uv run main.py ai eval                          # run the golden-set eval
+    uv run main.py ai eval list                     # show golden set + suggestions
+    uv run main.py ai eval add --question "..." --expect aula.txt  # add a golden question
 
 Reuses the same core (scan_library / build_index / retrieve / answer) as the GUI.
 Embeddings are always local (Ollama); only the answer step may use a cloud
@@ -53,6 +56,8 @@ _CLASSIFY_CMD = "classify"
 _KEYWORDS_CMD = "keywords"
 _SUMMARY_CMD = "summary"
 _ENTITIES_CMD = "entities"
+# Retrieval-only eval harness (PLANO_RAG_EVAL): sub-action carried by `target`.
+_EVAL_CMD = "eval"
 
 
 def add_ai_parser(subparsers: argparse._SubParsersAction) -> None:
@@ -65,14 +70,17 @@ def add_ai_parser(subparsers: argparse._SubParsersAction) -> None:
         "query",
         help=(
             "Your question, or a flow keyword: index/stats/dups/topics/map/"
-            "related/classify/keywords/summary/entities"
+            "related/classify/keywords/summary/entities/eval"
         ),
     )
     p.add_argument(
         "target",
         nargs="?",
         default=None,
-        help=("Document path — required by related/classify/keywords/summary/entities"),
+        help=(
+            "Document path — required by related/classify/keywords/summary/"
+            "entities; or the eval sub-action (run/list/add)"
+        ),
     )
     p.add_argument(
         "--scope",
@@ -150,6 +158,21 @@ def add_ai_parser(subparsers: argparse._SubParsersAction) -> None:
         default=10,
         metavar="N",
         help="With keywords, how many keyphrases to return (default 10)",
+    )
+    p.add_argument(
+        "--question",
+        default=None,
+        help='With eval add, the golden question text (e.g. "o que eu disse sobre X?")',
+    )
+    p.add_argument(
+        "--expect",
+        action="append",
+        default=None,
+        metavar="PATH",
+        help=(
+            "With eval add, an expected document path (repeatable); omit for an "
+            "out-of-corpus question"
+        ),
     )
     p.add_argument(
         "--cmd",
@@ -729,6 +752,205 @@ def _batch(ns: argparse.Namespace, embed_model: str) -> None:
             print(f"  • {Path(source).name}")
 
 
+def _eval(ns: argparse.Namespace) -> None:
+    """Dispatch `ai eval` by its ``target`` sub-action: run (default)/list/add."""
+    action = (ns.target or "run").lower()
+    if action == "list":
+        _eval_list()
+    elif action == "add":
+        _eval_add(ns)
+    elif action == "run":
+        _eval_run(ns)
+    else:
+        print(f"Ação desconhecida: {action}. Use: ai eval [run|list|add].")
+        sys.exit(1)
+
+
+def _eval_list() -> None:
+    """List the golden set (covered + out-of-corpus) plus covered suggestions."""
+    from src.core.rag.eval import load_eval_data, suggested_covered
+
+    data = load_eval_data()
+    covered = [g for g in data.golden if not g.is_out_of_corpus]
+    out = [g for g in data.golden if g.is_out_of_corpus]
+    print(
+        f"Golden set — {len(covered)} coberta(s), {len(out)} fora-do-acervo, "
+        f"{len(data.runs)} rodada(s) no histórico\n"
+    )
+    if covered:
+        print("Cobertas (documento esperado no top-k):")
+        for g in covered:
+            docs = ", ".join(Path(e).name for e in g.expected)
+            print(f"  • {g.question}")
+            print(f"      → {docs}")
+        print()
+    if out:
+        print("Fora-do-acervo (devem disparar o aviso de baixa cobertura):")
+        for g in out:
+            print(f"  • {g.question}")
+        print()
+    print('Sugestões (adicione com: ai eval add --question "..." --expect <arquivo>):')
+    for s in suggested_covered():
+        print(f"  • {s.question}  [{s.hint}]")
+
+
+def _eval_add(ns: argparse.Namespace) -> None:
+    """Add a golden question — covered when --expect is given, else out-of-corpus."""
+    from src.core.rag.eval import add_question
+
+    if not ns.question:
+        print('Informe a pergunta: ai eval add --question "..." [--expect <arquivo>]')
+        sys.exit(1)
+    expected = ns.expect or []
+    missing = [e for e in expected if not Path(e).exists()]
+    gq = add_question(ns.question, expected)
+    if gq.expected:
+        print(
+            f"Pergunta coberta adicionada ({len(gq.expected)} documento(s) esperado(s))."
+        )
+    else:
+        print("Pergunta fora-do-acervo adicionada.")
+    if missing:
+        print(
+            f"[!] {len(missing)} caminho(s) não existe(m) agora — o casamento usará "
+            "o nome do arquivo (basename)."
+        )
+
+
+def _print_eval_report(result, stats) -> None:
+    """Print the run's metrics and the per-question breakdown."""
+    from src.core.rag.stats import fmt_thousands
+
+    m = result.metrics
+
+    def _row(label: str, value: str) -> None:
+        print(f"  {label:<22}: {value}")
+
+    print(f"Avaliação do RAG (k={result.k})")
+    print(
+        f"  Índice   : {fmt_thousands(stats.n_docs)} docs · "
+        f"{fmt_thousands(stats.n_chunks)} chunks · esquema {result.embed_scheme}"
+    )
+    print(
+        f"  Perguntas: {m.n_covered} coberta(s) + {m.n_out_of_corpus} fora-do-acervo\n"
+    )
+
+    covered_hits = sum(1 for o in result.outcomes if not o.is_out_of_corpus and o.hit)
+    _row(
+        f"hit-rate@{result.k}",
+        f"{m.hit_rate:.0%}  ({covered_hits}/{m.n_covered})"
+        if m.n_covered
+        else "—  (sem cobertas)",
+    )
+    _row("MRR", f"{m.mrr:.2f}" if m.n_covered else "—")
+    _row("cosseno médio (cob.)", f"{m.mean_covered_score:.2f}" if m.n_covered else "—")
+    _row(
+        "cosseno médio (fora)",
+        f"{m.mean_out_score:.2f}" if m.n_out_of_corpus else "—",
+    )
+    _row("acurácia do flag", f"{m.flag_accuracy:.0%}")
+
+    if result.outcomes:
+        print("\n  Por pergunta:")
+        for o in result.outcomes:
+            _print_outcome(o)
+
+
+def _print_outcome(o) -> None:
+    """Print one per-question line of the eval report."""
+    score = f"{o.pool_max_score:.2f}"
+    question = o.question if len(o.question) <= 60 else o.question[:59] + "…"
+    if o.is_out_of_corpus:
+        mark = "flag ✓" if o.flag_correct else "flag ✗"
+        print(f"   [{mark}] {score}  {question}  (fora-do-acervo)")
+    elif o.hit:
+        print(f"   [✓] rank {o.rank:<2} {score}  {question}")
+    else:
+        print(f"   [✗] ----   {score}  {question}")
+
+
+def _print_eval_delta(latest, previous, *, has_prior: bool) -> None:
+    """Print the delta against the previous comparable run (same embed space)."""
+    if previous is not None:
+        d_hit = latest.metrics.hit_rate - previous.metrics.hit_rate
+        d_mrr = latest.metrics.mrr - previous.metrics.mrr
+        print("\nDelta vs. rodada anterior comparável:")
+        print(f"  hit-rate {d_hit:+.0%} · MRR {d_mrr:+.2f}")
+    elif has_prior:
+        print(
+            "\n[i] Rodada anterior em espaço de embedding diferente — incomparável "
+            "(o modelo/esquema mudou; a reindexação recalibra a base)."
+        )
+
+
+def _eval_run(ns: argparse.Namespace) -> None:
+    """Run the golden set through retrieval; print metrics + delta, record the run.
+
+    Retrieval-only (no LLM). Refuses when the index is empty, the embedder is
+    down, or the index is on a stale scheme (evaluating that measures an
+    artifact — the sidecar claims a scheme the vectors don't have).
+    """
+    from src.core.observatory.activity import log_activity
+    from src.core.rag import embedder
+    from src.core.rag.eval import (
+        latest_and_previous,
+        load_eval_data,
+        record_run,
+        run_eval,
+    )
+    from src.core.rag.indexer import CURRENT_EMBED_SCHEME, index_dir
+    from src.core.rag.stats import embed_space_id, index_stats, is_stale_scheme
+    from src.core.rag.store import VectorStore
+
+    directory = index_dir()
+    store = VectorStore.load(directory, dim=embedder.EMBED_DIM)
+    if len(store) == 0:
+        print('Índice vazio. Rode "uv run main.py ai index" primeiro.')
+        sys.exit(1)
+
+    data = load_eval_data()
+    if not data.golden:
+        print('Golden set vazio. Adicione perguntas com: ai eval add --question "..."')
+        return
+
+    stats = index_stats(directory)
+    if is_stale_scheme(stats, CURRENT_EMBED_SCHEME):
+        print(
+            "[!] Índice em esquema antigo — reindexe antes de avaliar "
+            "(uv run main.py ai index)."
+        )
+        sys.exit(1)
+
+    embed_model = ns.embed_model or embedder.DEFAULT_EMBED_MODEL
+    if not embedder.is_available(embed_model):
+        print(f"Embedder indisponível. Rode: {embedder.SETUP_HINT}")
+        sys.exit(1)
+
+    _, embed_query = _embed_fns(embed_model)
+    result = run_eval(
+        data.golden,
+        store,
+        embed_query,
+        k=ns.k,
+        embed_space_id=embed_space_id(directory),
+        embed_scheme=stats.embed_scheme,
+    )
+    record_run(result)
+
+    _print_eval_report(result, stats)
+    data_after = load_eval_data()
+    latest, previous = latest_and_previous(data_after)
+    _print_eval_delta(latest, previous, has_prior=len(data_after.runs) > 1)
+
+    m = result.metrics
+    log_activity(
+        "rag",
+        "rag_eval",
+        f"avaliação: hit-rate {m.hit_rate:.0%}, MRR {m.mrr:.2f} "
+        f"({m.n_covered} cob. + {m.n_out_of_corpus} fora)",
+    )
+
+
 def run_ai_cli(ns: argparse.Namespace) -> None:
     """Dispatch the `ai` subcommand: (re)index and/or answer/batch a question."""
     # Output filenames may contain non-cp1252 characters (e.g. fullwidth ｜).
@@ -778,6 +1000,10 @@ def run_ai_cli(ns: argparse.Namespace) -> None:
 
     if ns.query == _ENTITIES_CMD:  # spaCy NER over the document ([nlp] + model)
         _entities(ns)
+        return
+
+    if ns.query == _EVAL_CMD:  # retrieval-only eval harness (run/list/add)
+        _eval(ns)
         return
 
     from src.core.rag import embedder
