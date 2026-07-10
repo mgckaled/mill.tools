@@ -671,7 +671,7 @@ def _ask(ns: argparse.Namespace, embed_model: str) -> None:
         sys.exit(1)
 
     _, embed_query = _embed_fns(embed_model)
-    hits = retrieve(
+    hits, _ = retrieve(
         ns.query,
         store,
         embed_query,

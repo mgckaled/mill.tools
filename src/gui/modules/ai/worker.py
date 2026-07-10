@@ -122,23 +122,26 @@ def run_ai_answer(
                 return embedder.embed_query(q, model=embed_model)
 
             t0 = time.monotonic()
-            hits = retrieve(search_query, store, _embed_query, k=k, scope=scope)
+            hits, pool_max_score = retrieve(
+                search_query, store, _embed_query, k=k, scope=scope
+            )
 
             if cancel_event.is_set():
                 emit("task_error", payload={"message": "Cancelado pelo usuário."})
                 return False
 
-            # Out-of-corpus warning (Plano 4A): the best retrieved chunk's cosine
-            # is the corpus's closeness to the question. Below the threshold the
-            # corpus probably does not cover it — flag it so the view can warn
-            # (we still answer; the user decides). No re-embedding: reuse the hit.
-            # max(), not hits[0]: `hits` is ordered by the fused RRF ranking, whose
-            # top slot is not necessarily the highest *dense* cosine — a lexically
-            # strong but semantically mediocre chunk can win the fusion and falsely
-            # trip the out-of-scope warning even when the corpus covers the question.
+            # Out-of-corpus warning (Plano 4A): the corpus's closeness to the
+            # question, below which it probably doesn't cover it — flag it so
+            # the view can warn (we still answer; the user decides). No
+            # re-embedding: reuse retrieve()'s own pool scan.
+            # pool_max_score, not max(h.score for h in hits) (Fase 3, PLANO_
+            # CONVERSA_MULTITURNO.md): `hits` is now MMR-diversified, which can
+            # trade the single best-matching chunk away for variety — the
+            # out-of-scope signal needs the true best coverage across every
+            # scope-respecting candidate, not just what MMR kept.
             from src.core.ml.recommend import DEFAULT_IN_CORPUS_THRESHOLD
 
-            best_score = max((h.score for h in hits), default=0.0)
+            best_score = pool_max_score
             low_confidence = best_score < DEFAULT_IN_CORPUS_THRESHOLD
             if low_confidence:
                 emit(

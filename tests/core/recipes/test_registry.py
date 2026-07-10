@@ -449,7 +449,7 @@ def test_ai_answer_adapter_writes_markdown_with_sources(mocker, tmp_path, monkey
     mocker.patch("src.core.library.scanner.scan_library", return_value=[])
     mocker.patch("src.core.rag.indexer.build_index", return_value=None)
     mocker.patch("src.core.rag.store.VectorStore.load", return_value=mocker.MagicMock())
-    mocker.patch("src.core.rag.retriever.retrieve", return_value=[])
+    mocker.patch("src.core.rag.retriever.retrieve", return_value=([], 0.0))
     mocker.patch(
         "src.core.rag.chat.answer",
         return_value=AnswerResult(text="resposta gerada", sources=[Path("foo.txt")]),

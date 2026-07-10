@@ -1,4 +1,11 @@
-"""Unit tests for src/core/rag/retriever.py — top-k order and scope filtering."""
+"""Unit tests for src/core/rag/retriever.py — top-k order, scope filtering,
+and pool+MMR diversification (Fase 3, PLANO_CONVERSA_MULTITURNO.md).
+
+``retrieve()`` returns a ``RetrievalResult(hits, pool_max_score)`` NamedTuple
+— every test unpacks it (``hits, _ = retrieve(...)``), matching how the real
+callers (``batch.py``, ``recipes/registry/ai.py``, ``cli/ai.py``, the GUI
+worker) use it.
+"""
 
 from __future__ import annotations
 
@@ -12,11 +19,11 @@ def _meta(source: str, idx: int = 0, *, kind: str = "transcription", text: str =
     return ChunkMeta(source_path=source, kind=kind, mtime=1.0, chunk_idx=idx, text=text)
 
 
-def _store_with(rows):
+def _store_with(rows, *, dim: int = 3):
     """Build a VectorStore from a list of (vector, meta) pairs."""
     from src.core.rag.store import VectorStore
 
-    store = VectorStore(dim=3)
+    store = VectorStore(dim=dim)
     vecs = np.array([v for v, _ in rows], dtype=np.float32)
     store.add(vecs, [m for _, m in rows])
     return store
@@ -36,9 +43,10 @@ def test_retrieve_empty_store_skips_embed_query_fn():
         calls.append(q)
         return np.zeros(3, dtype=np.float32)
 
-    hits = retrieve("pergunta", VectorStore(dim=3), embed_query, k=6)
+    hits, pool_max = retrieve("pergunta", VectorStore(dim=3), embed_query, k=6)
 
     assert hits == []
+    assert pool_max == 0.0
     assert calls == []
 
 
@@ -53,7 +61,9 @@ def test_retrieve_orders_by_similarity_to_query():
         ]
     )
     # Query vector points exactly at the first row.
-    hits = retrieve("q", store, lambda _q: np.array([1, 0, 0], dtype=np.float32), k=2)
+    hits, _ = retrieve(
+        "q", store, lambda _q: np.array([1, 0, 0], dtype=np.float32), k=2
+    )
     assert [h.meta.source_path for h in hits] == ["near", "far"]
 
 
@@ -68,7 +78,7 @@ def test_retrieve_scope_by_single_document():
             ([0.8, 0.2, 0], _meta("doc_a.txt", 1)),
         ]
     )
-    hits = retrieve(
+    hits, _ = retrieve(
         "q",
         store,
         lambda _q: np.array([1, 0, 0], dtype=np.float32),
@@ -90,7 +100,7 @@ def test_retrieve_scope_by_kind():
             ([0.9, 0.1, 0], _meta("c.txt", 0, kind="document")),
         ]
     )
-    hits = retrieve(
+    hits, _ = retrieve(
         "q",
         store,
         lambda _q: np.array([1, 0, 0], dtype=np.float32),
@@ -121,7 +131,7 @@ def test_retrieve_scope_returns_full_k_even_when_outranked_globally():
     ]
     store = _store_with(other_docs + scoped_docs)
 
-    hits = retrieve(
+    hits, _ = retrieve(
         "q",
         store,
         lambda _q: np.array([1, 0, 0], dtype=np.float32),
@@ -142,7 +152,9 @@ def test_retrieve_no_scope_searches_whole_corpus():
             ([0, 1, 0], _meta("b.txt", 0, kind="document")),
         ]
     )
-    hits = retrieve("q", store, lambda _q: np.array([1, 1, 0], dtype=np.float32), k=2)
+    hits, _ = retrieve(
+        "q", store, lambda _q: np.array([1, 1, 0], dtype=np.float32), k=2
+    )
     assert len(hits) == 2
 
 
@@ -174,7 +186,7 @@ def test_retrieve_hybrid_surfaces_lexical_match_dense_alone_would_miss():
             ),
         ]
     )
-    hits = retrieve(
+    hits, _ = retrieve(
         "zephyrion quasar",
         store,
         lambda _q: np.array([1, 0, 0], dtype=np.float32),
@@ -212,7 +224,7 @@ def test_retrieve_skips_rrf_fusion_when_bm25_has_no_signal():
             (_vec(0.99720994), _meta("d2.txt", text="zzz yyy xxx")),
         ]
     )
-    hits = retrieve(
+    hits, _ = retrieve(
         "totally unrelated gibberish not in corpus",
         store,
         lambda _q: np.array([1, 0, 0], dtype=np.float32),
@@ -231,5 +243,165 @@ def test_retrieve_score_is_dense_cosine_not_fused_value():
     store = _store_with(
         [([1, 0, 0], _meta("a", text="x")), ([0, 1, 0], _meta("b", text="x"))]
     )
-    hits = retrieve("q", store, lambda _q: np.array([1, 0, 0], dtype=np.float32), k=2)
+    hits, _ = retrieve(
+        "q", store, lambda _q: np.array([1, 0, 0], dtype=np.float32), k=2
+    )
     assert hits[0].score == pytest.approx(1.0, abs=1e-5)
+
+
+# ── pool + MMR diversification (Fase 3, PLANO_CONVERSA_MULTITURNO.md) ─────────
+
+
+@pytest.mark.unit
+def test_retrieve_diversifies_near_duplicate_sibling_chunks():
+    """Mirrors ``test_related_diversifies_near_duplicate_candidates``
+    (core/ml/recommend.py) at the retriever level: with the chunker's overlap,
+    sibling chunks of the same/adjacent content are near-duplicates by
+    construction and can crowd out the rest of the context — MMR trades the
+    redundant one away for a still-relevant, more diverse chunk."""
+    from src.core.rag.retriever import retrieve
+
+    store = _store_with(
+        [
+            ([0.9, 0.4359, 0.0], _meta("dup1.txt", text="x")),  # cosine to q = 0.9
+            ([0.89, 0.4560, 0.0], _meta("dup2.txt", text="x")),  # cosine to q = 0.89
+            ([0.85, 0.0, 0.5268], _meta("diverse.txt", text="x")),  # cosine to q = 0.85
+        ]
+    )
+    hits, _ = retrieve(
+        "q", store, lambda _q: np.array([1, 0, 0], dtype=np.float32), k=2
+    )
+    paths = [h.meta.source_path for h in hits]
+
+    assert paths[0] == "dup1.txt"  # most relevant still wins the first slot
+    assert "diverse.txt" in paths  # MMR picks it over the redundant dup2.txt
+    assert "dup2.txt" not in paths
+
+
+@pytest.mark.unit
+def test_retrieve_matches_plain_top_k_when_pool_covers_the_whole_store():
+    """Fase 3.3 regression: when the pool already contains every valid
+    candidate (a small store), the result must be identical to the pre-MMR
+    plain fused top-k — MMR only changes anything when the pool holds more
+    candidates than the ``k`` it must narrow down to."""
+    from src.core.rag.retriever import retrieve
+
+    store = _store_with(
+        [
+            ([1.0, 0.0, 0.0], _meta("a.txt", text="x")),
+            ([0.9, 0.1, 0.0], _meta("b.txt", text="x")),
+            ([0.5, 0.5, 0.0], _meta("c.txt", text="x")),
+        ]
+    )
+    hits, _ = retrieve(
+        "q", store, lambda _q: np.array([1, 0, 0], dtype=np.float32), k=3
+    )
+    assert [h.meta.source_path for h in hits] == ["a.txt", "b.txt", "c.txt"]
+
+
+@pytest.mark.unit
+def test_retrieve_skips_mmr_for_single_document_scope(mocker):
+    """Fase 3.2: a document-scoped question (Library's "Conversar sobre" bridge)
+    gets mostly near-duplicate sibling chunks by construction — diversifying
+    would push out the most relevant ones. MMR must not even run in that case,
+    regardless of how many siblings the pool holds."""
+    import src.core.rag.retriever as retriever
+    from src.core.ml.recommend import _mmr as real_mmr
+
+    mmr_spy = mocker.patch.object(retriever, "_mmr", side_effect=real_mmr)
+    # 10 near-identical siblings of the same document — well over k, which
+    # would normally force MMR to run for a non-document scope.
+    store = _store_with([([1, 0, 0], _meta("doc_a.txt", i)) for i in range(10)])
+
+    hits, _ = retriever.retrieve(
+        "q",
+        store,
+        lambda _q: np.array([1, 0, 0], dtype=np.float32),
+        k=3,
+        scope="doc_a.txt",
+    )
+
+    mmr_spy.assert_not_called()
+    assert len(hits) == 3
+
+
+@pytest.mark.unit
+def test_retrieve_calls_mmr_when_pool_exceeds_k_for_non_document_scope(mocker):
+    """Companion to the skip test above: MMR does run for a corpus-wide (or
+    kind-scoped) question once the pool holds more than k candidates."""
+    import src.core.rag.retriever as retriever
+    from src.core.ml.recommend import _mmr as real_mmr
+
+    mmr_spy = mocker.patch.object(retriever, "_mmr", side_effect=real_mmr)
+    # 10 distinct documents at increasing angles from the query — a pool with
+    # plenty of room for MMR to trade relevance against diversity.
+    store = _store_with(
+        [([1, 0.02 * i, 0], _meta(f"doc_{i}.txt", 0)) for i in range(1, 11)]
+    )
+
+    hits, _ = retriever.retrieve(
+        "q", store, lambda _q: np.array([1, 0, 0], dtype=np.float32), k=3
+    )
+
+    mmr_spy.assert_called_once()
+    assert len(hits) == 3
+
+
+@pytest.mark.unit
+def test_retrieve_pool_max_score_can_exceed_the_returned_hits_max():
+    """Fase 3.2: MMR ranks by the fused (not dense) score, so a strongly
+    lexical-but-weakly-dense chunk can win the single returned slot over a
+    chunk with a much higher raw cosine that simply lost the lexical race.
+    ``pool_max_score`` must still report that higher cosine — the out-of-scope
+    signal needs the true best coverage, not just what MMR kept."""
+    from src.core.rag.retriever import retrieve
+
+    store = _store_with(
+        [
+            # D and C: filler, no lexical overlap with the query.
+            ([0.50, 0.866, 0.0], _meta("D.txt", text="filler about gardening tools")),
+            ([0.60, 0.8, 0.0], _meta("C.txt", text="filler about cooking pans")),
+            # A: the best raw cosine (0.95) of the pool, but no lexical overlap.
+            ([0.95, 0.312, 0.0], _meta("A.txt", text="filler about car engines")),
+            # B: weaker cosine (0.70) but the only exact lexical match — wins
+            # the fused ranking (and the sole k=1 slot) over A.
+            (
+                [0.70, 0.714, 0.0],
+                _meta("B.txt", text="zephyrion quasar appears exactly here"),
+            ),
+        ]
+    )
+    hits, pool_max = retrieve(
+        "zephyrion quasar",
+        store,
+        lambda _q: np.array([1, 0, 0], dtype=np.float32),
+        k=1,
+    )
+
+    assert hits[0].meta.source_path == "B.txt"
+    assert hits[0].score == pytest.approx(0.70, abs=1e-2)
+    assert pool_max == pytest.approx(0.95, abs=1e-2)
+    assert pool_max > max(h.score for h in hits)
+
+
+@pytest.mark.unit
+def test_retrieve_pool_max_score_respects_scope():
+    """``pool_max_score`` must only consider scope-respecting candidates —
+    otherwise a document-scoped conversation could report false confidence
+    from a chunk outside the bound document."""
+    from src.core.rag.retriever import retrieve
+
+    store = _store_with(
+        [
+            ([1.0, 0.0, 0.0], _meta("other.txt")),  # perfect match, out of scope
+            ([0.2, 0.98, 0.0], _meta("doc_a.txt")),  # weak match, in scope
+        ]
+    )
+    _, pool_max = retrieve(
+        "q",
+        store,
+        lambda _q: np.array([1, 0, 0], dtype=np.float32),
+        k=1,
+        scope="doc_a.txt",
+    )
+    assert pool_max == pytest.approx(0.2, abs=1e-2)

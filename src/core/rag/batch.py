@@ -84,7 +84,7 @@ def run_batch(
         if cancel_is_set is not None and cancel_is_set():
             break
         try:
-            hits = retrieve(instruction, store, embed_query_fn, k=k, scope=source)
+            hits, _ = retrieve(instruction, store, embed_query_fn, k=k, scope=source)
             result = answer(instruction, hits, model_name=model_name)
         except Exception as exc:  # one bad document must not abort the batch
             logging.warning("[!] Could not answer for %s: %s", Path(source).name, exc)

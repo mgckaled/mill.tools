@@ -86,6 +86,16 @@ class VectorStore:
             )
         return self._normalized
 
+    def normalized_vectors(self) -> np.ndarray:
+        """Public accessor over the cached L2-normalized vectors.
+
+        Used by :func:`src.core.rag.retriever.retrieve`'s MMR diversification
+        step, which needs cosine similarity *among* pool candidates (not just
+        each one against the query, which :meth:`dense_scores` already
+        covers) — same cache, same invalidation on ``add()``/``drop_source()``.
+        """
+        return self._normalized_vectors()
+
     def _bm25_index(self) -> BM25Okapi | None:
         """Return the cached BM25 index over chunk text, built once until mutated.
 

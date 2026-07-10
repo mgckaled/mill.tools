@@ -203,18 +203,20 @@ def test_answer_checks_embedder_availability_with_cache(tmp_path, monkeypatch, m
 
 
 @pytest.mark.unit
-def test_answer_low_confidence_uses_max_dense_score_not_first_hit(
+def test_answer_low_confidence_uses_pool_max_score_not_hits(
     tmp_path, monkeypatch, mocker
 ):
-    """PLANO_CORRECOES_RAG_ML_2, Fase 1.1: `hits` is ordered by the fused RRF
-    ranking, not by dense cosine — the first hit can have a low dense score
-    while a later hit scores well above the threshold. `low_confidence` must
-    reflect the *max* dense score across hits, not `hits[0].score`."""
+    """Fase 3, PLANO_CONVERSA_MULTITURNO.md: retrieve() now returns
+    ``RetrievalResult(hits, pool_max_score)`` — ``hits`` is MMR-diversified
+    and can trade the single best-matching chunk away for variety, so
+    ``low_confidence`` must come from ``pool_max_score`` (the true best
+    coverage across every scope-respecting candidate), never from anything
+    derived out of ``hits`` itself (neither ``hits[0]`` nor ``max(hits)``)."""
     import src.core.rag.chat as chat
     import src.core.rag.indexer as indexer
     import src.core.rag.retriever as retriever
     from src.core.rag.store import VectorStore
-    from src.core.rag.types import ChunkMeta, RetrievedChunk
+    from src.core.rag.types import ChunkMeta, RetrievalResult, RetrievedChunk
     from src.gui.modules.ai.worker import run_ai_answer
 
     rag_dir = tmp_path / "rag"
@@ -228,13 +230,13 @@ def test_answer_low_confidence_uses_max_dense_score_not_first_hit(
 
     mocker.patch("src.core.rag.embedder.is_available", return_value=True)
     mocker.patch("src.core.rag.embedder.embed_query", return_value=np.ones(8))
-    # RRF put the low-scoring chunk first (e.g. a lexical-only match) and the
-    # high-scoring one second — a fusion order that differs from dense order.
+    # Neither returned hit reaches the 0.72 threshold, but the pool's true
+    # best (0.90) does — MMR traded it away for variety.
     hits = [
         RetrievedChunk(ChunkMeta("a.txt", "transcription", 1.0, 0, "a"), 0.10),
-        RetrievedChunk(ChunkMeta("b.txt", "transcription", 1.0, 0, "b"), 0.90),
+        RetrievedChunk(ChunkMeta("b.txt", "transcription", 1.0, 0, "b"), 0.20),
     ]
-    mocker.patch.object(retriever, "retrieve", return_value=hits)
+    mocker.patch.object(retriever, "retrieve", return_value=RetrievalResult(hits, 0.90))
     mocker.patch.object(chat, "make_llm", return_value=_fake_llm("resposta"))
 
     bus = _Bus()
@@ -261,7 +263,7 @@ def test_answer_cancelled_between_retrieve_and_answer(tmp_path, monkeypatch, moc
     import src.core.rag.indexer as indexer
     import src.core.rag.retriever as retriever
     from src.core.rag.store import VectorStore
-    from src.core.rag.types import ChunkMeta, RetrievedChunk
+    from src.core.rag.types import ChunkMeta, RetrievalResult, RetrievedChunk
     from src.gui.modules.ai.worker import run_ai_answer
 
     rag_dir = tmp_path / "rag"
@@ -276,7 +278,7 @@ def test_answer_cancelled_between_retrieve_and_answer(tmp_path, monkeypatch, moc
     mocker.patch("src.core.rag.embedder.is_available", return_value=True)
     mocker.patch("src.core.rag.embedder.embed_query", return_value=np.ones(8))
     hits = [RetrievedChunk(ChunkMeta("a.txt", "transcription", 1.0, 0, "a"), 0.9)]
-    mocker.patch.object(retriever, "retrieve", return_value=hits)
+    mocker.patch.object(retriever, "retrieve", return_value=RetrievalResult(hits, 0.9))
     answer_mock = mocker.patch.object(chat, "answer")
 
     cancel_event = threading.Event()
@@ -435,7 +437,12 @@ def test_answer_uses_condensed_query_for_retrieve_and_answer(
     import src.core.rag.chat as chat
     import src.core.rag.condense as condense
     import src.core.rag.retriever as retriever
-    from src.core.rag.types import AnswerResult, ChunkMeta, RetrievedChunk
+    from src.core.rag.types import (
+        AnswerResult,
+        ChunkMeta,
+        RetrievalResult,
+        RetrievedChunk,
+    )
     from src.gui.modules.ai.worker import run_ai_answer
 
     _store_with_one_chunk(tmp_path, monkeypatch)
@@ -445,9 +452,10 @@ def test_answer_uses_condensed_query_for_retrieve_and_answer(
     retrieve_mock = mocker.patch.object(
         retriever,
         "retrieve",
-        return_value=[
-            RetrievedChunk(ChunkMeta("doc.txt", "transcription", 1.0, 0, "ctx"), 0.9)
-        ],
+        return_value=RetrievalResult(
+            [RetrievedChunk(ChunkMeta("doc.txt", "transcription", 1.0, 0, "ctx"), 0.9)],
+            0.9,
+        ),
     )
     answer_mock = mocker.patch.object(
         chat, "answer", return_value=AnswerResult(text="ok", sources=[Path("doc.txt")])

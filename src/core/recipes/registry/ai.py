@@ -55,7 +55,7 @@ def _ai_answer(inputs: list, params: dict, ctx: StepContext) -> list[Path]:
         index_directory, embed_model=embed_model, embed_scheme=CURRENT_EMBED_SCHEME
     )
 
-    hits = retrieve(
+    hits, _ = retrieve(
         query,
         store,
         lambda q: embedder.embed_query(q, model=embed_model),

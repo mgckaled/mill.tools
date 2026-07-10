@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
+from typing import NamedTuple
 
 
 @dataclass(frozen=True, slots=True)
@@ -37,3 +38,21 @@ class AnswerResult:
 
     text: str
     sources: list[Path]  # distinct source items cited, in first-seen order
+
+
+class RetrievalResult(NamedTuple):
+    """``retriever.retrieve()``'s return value: the final hits plus the best
+    dense coverage found anywhere in the scope-respecting candidate set.
+
+    ``pool_max_score`` is *not* necessarily ``max(h.score for h in hits)``:
+    MMR diversification (Fase 3, PLANO_CONVERSA_MULTITURNO.md) can trade the
+    single best-matching chunk away for variety, so the out-of-scope check
+    needs the true best coverage, not just what MMR kept. A ``NamedTuple``
+    keeps the common ``hits, _ = retrieve(...)`` unpack working for callers
+    that only need the hits (``batch.py``, ``recipe/registry/ai.py``,
+    ``cli/ai.py``) while still allowing ``.hits``/``.pool_max_score`` access
+    where both matter (the GUI worker's out-of-scope warning).
+    """
+
+    hits: list[RetrievedChunk]
+    pool_max_score: float
