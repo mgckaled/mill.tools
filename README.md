@@ -7,6 +7,7 @@
 ![Python](https://img.shields.io/badge/Python-3.13+-3776AB?logo=python&logoColor=white)
 ![uv](https://img.shields.io/badge/uv-managed-DE5FE9)
 ![Flet](https://img.shields.io/badge/GUI-Flet%200.85-02569B)
+![Windows](https://img.shields.io/badge/Windows-10%2B-0078D4)
 ![faster-whisper](https://img.shields.io/badge/faster--whisper-GPU-FFB000)
 ![Ollama](https://img.shields.io/badge/Ollama-local-000000?logo=ollama&logoColor=white)
 ![Gemini](https://img.shields.io/badge/Gemini-opt--in-8E75B2?logo=googlegemini&logoColor=white)
@@ -15,40 +16,299 @@
 ![scikit-learn](https://img.shields.io/badge/scikit--learn-ML-F7931E?logo=scikitlearn&logoColor=white)
 
 ![License](https://img.shields.io/badge/license-PolyForm%20Noncommercial%201.0.0-blue)
+![Tests](https://img.shields.io/badge/tests-1.2k%2B%20unit-brightgreen)
 ![Coverage](https://img.shields.io/badge/coverage-93%25-brightgreen)
 ![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)
 ![torch-free](https://img.shields.io/badge/PyTorch-free-success?logo=pytorch&logoColor=white)
+![privacy](https://img.shields.io/badge/dados-nunca%20saem%20da%20m%C3%A1quina-success)
+
+<!-- PLACEHOLDER: screenshot da Home Screen (grade 3+3 de ferramentas + hubs sobre o moinho) -->
+<img src="assets/screenshots/home.png" alt="Home do mill.tools" width="820">
 
 </div>
 
 ---
 
-## Visão geral
+**Índice** · [O que é](#o-que-é) · [Comece em 5 minutos](#comece-em-5-minutos) · [Módulos](#módulos) · [Primeiro uso](#primeiro-uso) · [Instalação completa](#instalação-completa) · [CLI](#cli) · [Destaques técnicos](#destaques-técnicos) · [Saídas](#saídas) · [Modelos](#modelos) · [Arquitetura](#arquitetura--testes) · [Roadmap](#roadmap) · [Licença](#licença)
 
-**mill.tools** é uma caixa de ferramentas pessoal que processa mídia, documentos e dados **diretamente no seu computador** — sem enviar arquivos para servidores, sem assinaturas e sem limites de uso. A IA roda 100% local por padrão (via [Ollama](https://ollama.com)), com o [Google Gemini](https://ai.google.dev/) e o [GLM da Zhipu/Z.ai](https://z.ai/model-api) disponíveis como alternativas opt-in na nuvem.
+---
 
-A aplicação é organizada em **módulos independentes que se integram**: cada um é especializado numa categoria de tarefa, mas a saída de um alimenta o outro — um áudio baixado segue para a transcrição com um clique, e uma cadeia inteira (`URL → áudio → transcrever → analisar`) cabe numa receita.
+## O que é
+
+**mill.tools** processa mídia, documentos e dados **diretamente no seu computador** — sem enviar arquivos para servidores, sem assinatura e sem limite de uso. Três ideias resumem o app:
+
+- **Local por padrão.** Transcrição, IA, busca e análise rodam na sua máquina (via [Ollama](https://ollama.com)). Nuvem ([Gemini](https://ai.google.dev/) / [GLM](https://z.ai/model-api)) só se você ativar, e só na etapa de resposta — seus arquivos nunca sobem.
+- **Módulos que se alimentam.** Cada ferramenta faz uma coisa bem-feita, e a saída de uma vira entrada da outra: um áudio baixado segue para a transcrição com um clique, e a cadeia inteira (`URL → áudio → transcrever → analisar`) cabe numa receita.
+- **Seu acervo vira conhecimento.** Tudo que você produz é indexado localmente: pergunte em português ao seu próprio material (RAG — busca por significado + resposta citando as fontes) e navegue por temas, duplicatas e relacionados.
 
 Acesse por uma **GUI desktop** (Flet/Flutter) ou pela **CLI** — paridade de comportamento entre as duas.
 
 ---
 
+## Comece em 5 minutos
+
+Pré-requisitos mínimos: [Python 3.13+](https://www.python.org/), [uv](https://docs.astral.sh/uv/), [ffmpeg](https://ffmpeg.org/download.html) e [yt-dlp](https://github.com/yt-dlp/yt-dlp) no PATH, [Ollama](https://ollama.com/download) instalado.
+
+```bash
+git clone https://github.com/mgckaled/mill.tools
+cd mill.tools
+uv sync
+
+# dois modelos locais bastam para começar (resposta/análise + busca do acervo)
+ollama pull gemma3:4b        && ollama create gemma3-4b-custom   -f ollama/Modelfile.gemma3-4b
+ollama pull nomic-embed-text && ollama create nomic-embed-custom -f ollama/Modelfile.nomic
+
+uv run gui.py
+```
+
+Pronto: cole uma URL do YouTube no módulo **Transcrição** e veja o texto sair. Os demais modelos, extras e chaves de nuvem são opcionais — [instalação completa](#instalação-completa) abaixo.
+
+---
+
 ## Módulos
 
-Seis **ferramentas** de processamento (NavigationRail) e quatro **hubs** que operam sobre as saídas de todas elas (AppBar).
+Seis **ferramentas** de processamento e quatro **hubs** que operam sobre as saídas de todas elas. Cada linha abre nos detalhes.
 
-| Módulo | Tipo | Descrição |
+| Módulo | Tipo | Em uma linha |
 |---|---|---|
-| **Transcrição** | Ferramenta | Whisper local (GPU) sobre URL, áudio/vídeo local ou texto; pós-processamento por IA: parágrafos, análise estruturada e digest. Um `.txt`/`.md` pula o Whisper e vai direto à IA |
-| **Áudio** | Ferramenta | Download (yt-dlp), conversão e extração de faixas em fila; pós-processamento encadeável: remoção de silêncio, denoise (spectral gating), velocidade sem pitch (`atempo`), normalização de loudness (EBU R128), downmix mono e reamostragem; **presets de uma tecla** (Transcrição/Podcast/Música); reprodutor com **A/B antes/depois**; aba **Visualizar** (waveform/espectrograma PNG) |
-| **Vídeo** | Ferramenta | 8 operações: download, convert, trim, compress, resize, extract-audio, thumbnail e legenda (mux/burn-in). Encoding 100% CPU — sem NVENC |
-| **Imagens** | Ferramenta | Conversão/manipulação + IA, com toggle **Edição \| Descrição IA**. Edição: convert, resize, **smart crop** (ponto focal), rotate, **watermark** (texto/imagem/QR, 9-grid, tiling, rotação), border, adjust, **grade de filtros**, favicon, colagem, **remoção/troca de fundo** (rembg) e **OCR** (Tesseract). Controle de **EXIF** (privacidade/copyright), visor Antes/Depois (xadrez de transparência, metadados, lote navegável), bridge **imagem→PDF**. Descrição por visão (local ou Gemini/GLM em nuvem) em aba própria com Markdown, com 6 presets de estilo de prompt (detalhada/objetiva/técnica/texto/objetos/narrativa) |
-| **Documentos** | Ferramenta | 13 operações PDF/QR (merge, split, compress, rotate, watermark, stamp, encrypt, extract, OCR, pdf↔imagens, QR, análise). 100% local via pymupdf |
-| **Dados** | Ferramenta | Consulte CSV/TSV/JSON/Parquet/XLSX em **português** (a IA traduz para SQL vendo só o schema) ou SQL na mão; motor **DuckDB** embutido. Salva o resultado, perfila e gera **gráficos** (barras/linha/histograma/dispersão) |
-| **Biblioteca** | Hub | Índice navegável de tudo em `output/`: grade com thumbnails, lista, **painel analítico** (acervo por tipo/tamanho/crescimento) ou **mapa semântico** (temas do acervo agrupados + relacionados); filtro/busca/ordenação, abrir arquivo/pasta e reenviar a outro módulo |
-| **IA** | Hub | RAG local sobre o seu acervo: pergunte ao corpus e receba respostas **citando as fontes** (com aviso quando o acervo não cobre a pergunta). Embeddings sempre locais; Gemini/GLM opt-in. Só a Conversa aqui — o inspetor de índice e o painel de saúde moram no Observatório (aba Índice/RAG). **ML semântico**: duplicatas (`ai dups`), tópicos automáticos (`ai topics`), mapa semântico (`ai map`) e relacionados (`ai related`) — tudo reusando o índice |
-| **Receitas** | Hub | Automação: cadeias lineares entre módulos (`URL → áudio → transcrever → analisar`). Presets + construtor com validação ao vivo; lote; **histórico de execução** (confiabilidade/velocidade); CLI `recipe run` |
-| **Observatório** | Hub | Central de ML de todo o app, 5 abas (Índice/RAG é a padrão): **Índice/RAG** (aninhada — Índice: inspetor do índice RAG; Painel: quais documentos dominam o índice; Uso de disco: tamanho de cada arquivo/pasta em `~/.mill-tools/`), **Status** (gates de extras, modelos Ollama instalados, binários externos, provedores de nuvem configurados, classificador por domínio, parâmetros em vigor), **Atividade** (feed do que o ML fez em qualquer módulo), **Logs** (falhas recentes cross-módulo) e **Tempo de resposta** (por modelo, com badge nuvem/local). Read-only, sem pipeline; CLI `observatory status`/`observatory activity`/`observatory logs`/`observatory disk-usage` |
+| **Transcrição** | Ferramenta | Vídeo, áudio ou URL → texto (Whisper local, GPU), com formatação, análise e digest por IA |
+| **Áudio** | Ferramenta | Baixe, converta e trate áudio: silêncio, ruído, velocidade, loudness — com player A/B |
+| **Vídeo** | Ferramenta | Baixe, converta, corte, comprima, redimensione e legende vídeos |
+| **Imagens** | Ferramenta | Converta, edite, marque d'água, remova fundo, extraia texto e descreva imagens com IA |
+| **Documentos** | Ferramenta | 13 operações de PDF e QR — 100% local, incluindo OCR de PDF escaneado |
+| **Dados** | Ferramenta | Consulte planilhas e CSVs **em português** (a IA traduz para SQL) ou SQL direto; gráficos |
+| **Biblioteca** | Hub | Tudo que você produziu, navegável: thumbnails, busca, painel do acervo e mapa semântico |
+| **IA** | Hub | Converse com o seu acervo (respostas com fontes) ou peça o comando de CLI em português |
+| **Receitas** | Hub | Automação: cadeias entre módulos com presets, construtor validado e histórico |
+| **Observatório** | Hub | Central de ML: saúde do índice, avaliação do RAG, atividade, falhas e tempos por modelo |
+
+<details>
+<summary><b>Transcrição</b> — detalhes</summary>
+
+Whisper local ([faster-whisper](https://github.com/SYSTRAN/faster-whisper), GPU) sobre **URL**, **áudio/vídeo local** ou **texto** (`.txt`/`.md` pula o Whisper e vai direto à IA). Pós-processamento opcional por IA: quebra de parágrafos, **análise estruturada** dirigida por perfil (aula, reunião, entrevista…, com auto-sugestão de perfil) e **digest** condensado (~40%). Aba **Insights**: palavras-chave, resumo extrativo e entidades — instantâneos, sem LLM. Segmentos incertos são marcados com `[?]`.
+
+<!-- PLACEHOLDER: screenshot do módulo Transcrição com resultado e aba Insights -->
+<img src="assets/screenshots/transcricao.png" alt="Módulo Transcrição" width="820">
+
+</details>
+
+<details>
+<summary><b>Áudio</b> — detalhes</summary>
+
+Download (yt-dlp), conversão e extração de faixas em fila; pós-processamento encadeável: remoção de silêncio, denoise (spectral gating), velocidade sem alterar o tom (`atempo`), normalização de loudness (EBU R128), downmix mono e reamostragem. **Presets de uma tecla** (Transcrição/Podcast/Música), reprodutor com **A/B antes/depois** e aba **Visualizar** (waveform/espectrograma → PNG).
+
+</details>
+
+<details>
+<summary><b>Vídeo</b> — detalhes</summary>
+
+8 operações: download, convert, trim, compress, resize, extract-audio, thumbnail e legenda (soft mux ou burn-in). Encoding 100% CPU (libx264/libx265/libvpx-vp9) — sem NVENC, por decisão.
+
+</details>
+
+<details>
+<summary><b>Imagens</b> — detalhes</summary>
+
+Toggle **Edição | Descrição IA**. Edição: convert, resize, **smart crop** (ponto focal), rotate, **watermark** (texto/imagem/QR, 9-grid, tiling, rotação), border, adjust, **grade de filtros**, favicon, colagem, **remoção/troca de fundo** (rembg) e **OCR** (Tesseract). Controle de **EXIF** (privacidade/copyright), visor Antes/Depois (xadrez de transparência, metadados, lote navegável) e bridge **imagem→PDF**. Descrição por visão (local ou Gemini/GLM opt-in) com 6 presets de estilo.
+
+<!-- PLACEHOLDER: screenshot do visor Antes/Depois do módulo Imagens -->
+<img src="assets/screenshots/imagens.png" alt="Módulo Imagens" width="820">
+
+</details>
+
+<details>
+<summary><b>Documentos</b> — detalhes</summary>
+
+13 operações PDF/QR via [pymupdf](https://pymupdf.readthedocs.io): merge, split, compress, rotate, watermark, stamp, encrypt, extract, **OCR híbrido** (usa a camada de texto nativa; só rasteriza páginas escaneadas), pdf↔imagens, QR e análise. Fecha o ciclo *PDF escaneado → OCR → texto → análise por IA*.
+
+</details>
+
+<details>
+<summary><b>Dados</b> — detalhes</summary>
+
+Consulte CSV/TSV/JSON/Parquet/XLSX em **português** — a IA traduz para SQL vendo **só o schema** (nomes e tipos de coluna; as linhas nunca saem da máquina) — ou escreva SQL direto. Motor [DuckDB](https://duckdb.org) embutido. 4 abas: Consulta, Pré-visualização, Análise com IA e **Gráfico** (barras/linha/histograma/dispersão). Detecção de linhas atípicas (IsolationForest).
+
+</details>
+
+<details>
+<summary><b>Biblioteca</b> — detalhes</summary>
+
+Índice navegável de tudo em `output/`: grade com thumbnails, lista, **painel analítico** (acervo por tipo/tamanho/crescimento) e **mapa semântico** (temas agrupados automaticamente). Filtro, busca (com auto-tags por conteúdo), ordenação, abrir arquivo/pasta e reenviar a outro módulo com um clique. Dedup de imagens quase-idênticas (dHash).
+
+</details>
+
+<details>
+<summary><b>IA</b> — detalhes</summary>
+
+Duas conversas num toggle. **Corpus**: RAG local sobre o seu acervo — pergunta em português, resposta citando as fontes `[n]`, **multi-turno de verdade** (perguntas de acompanhamento são reescritas antes da busca — o card mostra "buscou por:"), aviso quando o acervo não cobre o assunto, escopo (tudo/kind/documento), contexto ajustável (4–12 trechos) e feedback 👍/👎 por resposta. **Comandos CLI**: descreva a tarefa em português e receba o comando `uv run main.py ...` exato — gerado por introspecção dos parsers reais, validado, nunca executado. Embeddings sempre locais; Gemini/GLM opt-in só na resposta.
+
+<!-- PLACEHOLDER: screenshot da Conversa do hub IA com fontes citadas -->
+<img src="assets/screenshots/ia-conversa.png" alt="Hub IA — Conversa com fontes" width="820">
+
+</details>
+
+<details>
+<summary><b>Receitas</b> — detalhes</summary>
+
+Cadeias lineares nomeadas entre módulos (`URL → baixar áudio → transcrever → analisar`). Presets prontos + construtor com validação ao vivo, execução em lote e **histórico** (confiabilidade/velocidade por receita).
+
+</details>
+
+<details>
+<summary><b>Observatório</b> — detalhes</summary>
+
+Central de ML de todo o app, 5 abas. **Índice/RAG** (aninhada — Índice: inspetor e **reindexação**; **Avaliação**: harness de qualidade do RAG com golden questions, hit-rate e MRR; Painel: quais documentos dominam o índice; Uso de disco). **Status** (gates de extras, modelos Ollama, binários, provedores de nuvem, classificadores, parâmetros em vigor). **Atividade** (feed do que o ML fez em qualquer módulo). **Logs** (falhas recentes). **Tempo de resposta** (por modelo, badge nuvem/local). Leitura em quase tudo — os únicos pipelines que rodam aqui são os do próprio índice (reindexar/avaliar).
+
+<!-- PLACEHOLDER: screenshot do Observatório (aba Índice/RAG → Avaliação) -->
+<img src="assets/screenshots/observatorio.png" alt="Hub Observatório" width="820">
+
+</details>
+
+---
+
+## Primeiro uso
+
+**Na GUI** (`uv run gui.py`): splash → Home → **Transcrição**. Cole uma URL do YouTube, escolha o modelo Whisper (`small` é o equilíbrio) e clique em Iniciar — o painel direito mostra log e progresso ao vivo. Marque **Analisar** para receber também um relatório estruturado em Markdown. Depois, abra o hub **IA** e pergunte algo sobre o que acabou de transcrever — a resposta vem com a fonte citada.
+
+**Na CLI**, o mesmo fluxo em uma linha:
+
+```bash
+uv run main.py transcribe "https://youtu.be/..." --format --analyze --profile lecture
+```
+
+As saídas ficam em `output/` ([estrutura](#saídas)) e alimentam automaticamente a Biblioteca e o índice da IA.
+
+---
+
+## Instalação completa
+
+### Requisitos
+
+| Requisito | Necessário para |
+|---|---|
+| [Python 3.13+](https://www.python.org/) · [uv](https://docs.astral.sh/uv/) | Tudo |
+| [ffmpeg](https://ffmpeg.org/download.html) · [yt-dlp](https://github.com/yt-dlp/yt-dlp) (no PATH) | Áudio, Vídeo, Transcrição |
+| [Ollama](https://ollama.com/download) | IA local (formatação, análise, RAG, PT→SQL) |
+| Chave [Google AI Studio](https://aistudio.google.com/apikey) | Modelos Gemini (opcional) |
+| Chave [z.ai](https://z.ai/model-api) | Modelos GLM/Zhipu (opcional) |
+| [Tesseract OCR](https://github.com/UB-Mannheim/tesseract/wiki) + packs `por`/`eng` | OCR (extra `[ocr]`) |
+| Modelos spaCy `pt_core_news_sm` / `en_core_web_sm` | NER do `[nlp]` (download à parte, como o Tesseract) |
+
+DuckDB e a extensão `excel` (XLSX) são embutidos — sem instalação separada.
+
+### Modelos locais (Ollama)
+
+Além dos dois do [quickstart](#comece-em-5-minutos):
+
+```bash
+# formatação de parágrafos (Transcrição)
+ollama pull phi4-mini    && ollama create phi4mini-custom  -f ollama/Modelfile.phi4mini
+# análise / RAG de máxima qualidade (lento na CPU)
+ollama pull qwen2.5:7b   && ollama create qwen7b-custom    -f ollama/Modelfile
+# fallback rápido / baixa-RAM
+ollama pull gemma3:1b    && ollama create gemma3-1b-custom -f ollama/Modelfile.gemma3-1b
+# descrição de imagens (visão)
+ollama pull moondream    && ollama create moondream-custom -f ollama/Modelfile.vision
+```
+
+### Extras opcionais
+
+```bash
+uv sync --extra ai-image   # remoção de fundo (Imagens)
+uv sync --extra ocr        # OCR de PDFs escaneados (requer Tesseract no PATH)
+uv sync --extra analysis --extra data-plot  # DataFrames + gráficos no módulo Dados
+uv sync --extra ml         # clustering/tópicos/mapa semântico; dups/related rodam sem ele
+uv sync --extra ml-viz     # projeção UMAP do mapa (opcional; PCA é o default)
+uv sync --extra nlp        # keyphrases (YAKE) + entidades (spaCy NER)
+uv run python -m spacy download pt_core_news_sm   # modelo de NER PT
+uv run python -m spacy download en_core_web_sm    # opcional-recomendado p/ material em inglês
+```
+
+> O app base funciona sem os extras — os recursos correspondentes desabilitam-se graciosamente, com a dica de instalação no lugar.
+
+### Modelos em nuvem (opcionais, free tier)
+
+```bash
+cp .env.example .env       # preencha GOOGLE_API_KEY=... e/ou ZHIPU_API_KEY=...
+```
+
+O `.env` é carregado quando um modelo começa com `gemini` ou `glm`; nada quebra sem ele. **Gemini**: chave no [Google AI Studio](https://aistudio.google.com/apikey); recomendado `gemini-2.5-flash` (1M tokens). **GLM**: chave no [z.ai](https://z.ai/model-api) (portal internacional — não use `open.bigmodel.cn`); recomendado `glm-4.7-flash` (200K tokens, tier grátis recorrente).
+
+---
+
+## CLI
+
+Os comandos que resolvem 90% do dia a dia:
+
+```bash
+uv run main.py transcribe <URL|video.mp4|notas.txt> --format --analyze --profile lecture
+uv run main.py audio podcast.mp3 --trim-silence --denoise --normalize   # limpeza completa de áudio
+uv run main.py video download <URL> --quality 1080 --container mp4
+uv run main.py image remove-bg foto.png --bg-mode blur
+uv run main.py document ocr scanned.pdf --lang por
+uv run main.py data query vendas.csv "total por cliente, do maior para o menor" --out xlsx
+uv run main.py ai "o que eu disse sobre faster-whisper?"                # pergunta ao acervo
+uv run main.py ai --cmd "corta o silêncio do podcast.mp3 e acelera 1.25x"  # NL→CLI: imprime o comando
+uv run main.py recipe run "YouTube → transcrição completa" "https://youtu.be/..."
+```
+
+<details>
+<summary><b>Referência completa por módulo</b></summary>
+
+```bash
+# Áudio — download/conversão/extração + pós-processamento
+uv run main.py audio <URL|arquivo> --fmt mp3 --quality 320 --denoise --normalize
+uv run main.py audio aula.mp4 --mono --sample-rate 16000 --trim-silence   # pronto p/ transcrição
+uv run main.py audio podcast.mp3 --speed 1.5                              # 1,5× sem alterar o tom
+uv run main.py audio-viz musica.mp3 --spectrogram                         # waveform/espectrograma PNG
+
+# Vídeo — download | convert | trim | compress | resize | extract-audio | thumbnail | subtitle
+uv run main.py video subtitle video.mp4 --subs legenda.srt --mode soft
+
+# Imagens — convert | resize | crop | rotate | watermark | border | adjust | filter |
+#           favicon | contact-sheet | remove-bg | describe | exif | ocr
+uv run main.py image convert photo.jpg --fmt webp --quality 85
+uv run main.py image crop photo.jpg --mode focal --ratio 1:1 --focal-x 0.5 --focal-y 0.35
+uv run main.py image watermark photo.jpg --mode qr --text "https://mill.tools" --position bottom-right
+uv run main.py image exif photo.jpg --strip-gps          # privacidade (remove localização)
+uv run main.py image ocr captura.png --lang por          # texto → .txt indexável no RAG
+
+# Documentos — merge | split | compress | rotate | watermark | stamp | encrypt | extract |
+#              ocr | pdf-to-images | images-to-pdf | qr
+uv run main.py document split doc.pdf --pages "1-3,5,8-"
+
+# Dados — consulta em PT ou SQL; converte, perfila, plota, acha atípicos
+uv run main.py data query dados.parquet "SELECT * FROM dados LIMIT 10" --sql
+uv run main.py data convert dados.csv --out parquet
+uv run main.py data profile dados.csv
+uv run main.py data plot vendas.csv "total por produto" --kind bar
+uv run main.py data outliers vendas.csv --contamination 0.05
+
+# Biblioteca — índice de output/ como tabela (+ dashboard e dedup de imagens)
+uv run main.py library list --kind audio --since 7d --sort size
+uv run main.py library stats --top 10
+uv run main.py library dedup-images --max-distance 8
+
+# IA — RAG local (busca híbrida BM25+denso, cita fontes) + ML semântico + avaliação
+uv run main.py ai index
+uv run main.py ai "pergunta" --scope arquivo.txt --k 8 --model gemini-2.5-flash
+uv run main.py ai stats | ai dups | ai topics | ai map | ai related <path>
+uv run main.py ai classify|keywords|summary|entities <path>
+uv run main.py ai eval            # roda a avaliação do RAG (golden questions)
+uv run main.py ai eval add --question "..." --expect <arquivo>
+
+# Receitas
+uv run main.py recipe list | recipe run "<nome>" <URL_OR_FILE> | recipe stats
+
+# Observatório (leitura)
+uv run main.py observatory status | activity --limit 15 | logs | disk-usage
+```
+
+**Flags da Transcrição**: `--wm` (modelo Whisper, `small` default) · `--language` (auto) · `--beam-size` (1=rápido, 5=preciso) · `--format`/`--fm` · `--analyze`/`--am` · `--profile` · `--prompt`/`--pm` · `--verbose`. Modelos `gemini-*`/`glm-*` nas flags de IA roteiam para a nuvem (exigem a chave correspondente).
+
+</details>
+
+> **Cookies do YouTube (anti-bot)**: se aparecer "Sign in to confirm you're not a bot", ative os cookies do navegador em **Configurações** (opt-in, lidos localmente). Atenção: cookies de conta logada podem fazer o YouTube exigir *PO Token* e o download falhar — nesse caso, desative-os.
 
 ---
 
@@ -57,249 +317,82 @@ Seis **ferramentas** de processamento (NavigationRail) e quatro **hubs** que ope
 | Característica | Detalhe |
 |---|---|
 | Transcrição local | [faster-whisper](https://github.com/SYSTRAN/faster-whisper) + ctranslate2, aceleração GPU, **sem PyTorch** |
-| Dados | [DuckDB](https://duckdb.org) embutido (in-process, torch-free); PT→SQL pela IA recebendo só o schema — o conteúdo das tabelas nunca sai da máquina |
-| RAG local | embeddings Ollama (`nomic-embed-text`, CPU), vector store numpy, busca **híbrida** (cosseno + [BM25](https://github.com/dorianbrown/rank_bm25) via Reciprocal Rank Fusion — pega termos exatos que o denso sozinho perde), resposta com fontes `[n]` |
-| ML local | `core/ml` **torch-free** sobre os embeddings do RAG (sem recálculo): duplicatas e relacionados por cosseno com reranking **MMR** (**numpy**); clustering ([HDBSCAN](https://scikit-learn.org)/k-means com auto-k), rótulos de tema (c-TF-IDF) e mapa semântico 2D (PCA/t-SNE) via [scikit-learn](https://scikit-learn.org) (extra `[ml]`); projeção UMAP opcional (extra `[ml-viz]`); **classificação de perfil** zero-shot→supervisionada (`classify`, reusável por domínio: perfil de transcrição, domínio de dados, tipo de documento); outliers tabulares (IsolationForest) e dedup de imagens (dHash, zero dependência nova) |
-| NLP textual | `core/text` **torch-free** (extra `[nlp]`): keyphrases ([YAKE](https://github.com/LIAAD/yake)), resumo extractivo (TextRank self-contained, sem nltk) e entidades ([spaCy](https://spacy.io) CNN `pt_core_news_sm`). Auto-sugestão de perfil, aba Insights e auto-tags da Biblioteca |
+| RAG local | embeddings Ollama (`nomic-embed-text` com prefixos de tarefa, CPU), vector store numpy, busca **híbrida** (cosseno + [BM25](https://github.com/dorianbrown/rank_bm25) via Reciprocal Rank Fusion), **conversa multi-turno** (condensação de pergunta local), diversificação MMR do contexto, resposta com fontes `[n]` e **avaliação embutida** (golden questions → hit-rate/MRR) |
+| Dados | [DuckDB](https://duckdb.org) in-process, torch-free; PT→SQL pela IA vendo só o schema — as linhas nunca saem da máquina |
+| ML local | `core/ml` **torch-free** sobre os embeddings do RAG (sem recálculo): duplicatas/relacionados por cosseno + **MMR** (numpy puro); clustering (HDBSCAN/k-means auto-k), rótulos c-TF-IDF e mapa 2D (PCA/t-SNE) via [scikit-learn](https://scikit-learn.org) (`[ml]`); UMAP opcional (`[ml-viz]`); **classificação zero-shot→supervisionada** por domínio; outliers (IsolationForest); dedup de imagens (dHash) |
+| NLP textual | `core/text` **torch-free** (`[nlp]`): keyphrases ([YAKE](https://github.com/LIAAD/yake)), resumo extrativo (TextRank self-contained, com limpeza de boilerplate) e entidades ([spaCy](https://spacy.io) CNN, PT/EN, glossário de domínio opcional) |
+| Áudio | noisereduce (spectral gating, CPU) + ffmpeg loudnorm (EBU R128, 2 passes), silenceremove e atempo |
 | Vídeo | yt-dlp + ffmpeg CPU-only (libx264/libx265/libvpx-vp9) — sem NVENC |
-| Áudio | noisereduce (spectral gating, CPU) + ffmpeg loudnorm (EBU R128, 2 passes), silenceremove e atempo (silêncio/velocidade); torch-free |
-| Imagens | Pillow (transforms, EXIF, smart crop, watermark/QR, filtros) + rembg/ONNX (CPU) para remoção/troca de fundo; OCR via Tesseract (extra `[ocr]`); descrição por visão via Ollama (`gemma3-4b`/moondream/llava/minicpm-v) ou nuvem (`glm-4.6v-flash`/`gemini-2.5-flash`, opt-in) |
-| Documentos | [pymupdf](https://pymupdf.readthedocs.io) (PDF) + Tesseract (OCR híbrido, opcional) |
-| Interface | [Flet 0.85](https://flet.dev) (Flutter desktop) com log em tempo real, design system próprio e ajuda contextual (ⓘ) |
+| Imagens | Pillow (transforms, EXIF, smart crop, watermark/QR, filtros) + rembg/ONNX (CPU); OCR Tesseract (`[ocr]`); visão via Ollama ou nuvem opt-in |
+| Documentos | [pymupdf](https://pymupdf.readthedocs.io) + Tesseract (OCR híbrido, opcional) |
+| Interface | [Flet 0.85](https://flet.dev) (Flutter desktop): log em tempo real, design system próprio, ajuda contextual (ⓘ) |
 | IA | Ollama local por padrão; Gemini/GLM opt-in por prefixo de modelo (`gemini-*`/`glm-*`) |
 
 > **Decisão consciente: sem PyTorch.** O app base é torch-free. IA de áudio com torch (DeepFilterNet/Demucs) ficaria isolada num extra opcional.
 
 ---
 
-## Requisitos
-
-| Requisito | Necessário para |
-|---|---|
-| [Python 3.13+](https://www.python.org/) · [uv](https://docs.astral.sh/uv/) | Tudo |
-| [ffmpeg](https://ffmpeg.org/download.html) · [yt-dlp](https://github.com/yt-dlp/yt-dlp) (no PATH) | Áudio, Vídeo, Transcrição |
-| [Ollama](https://ollama.com/download) | Modelos de IA locais (formatação, análise, RAG, PT→SQL) |
-| Chave [Google AI Studio](https://aistudio.google.com/apikey) | Modelos Gemini (opcional) |
-| Chave [z.ai](https://z.ai/model-api) | Modelos GLM/Zhipu (opcional) |
-| [Tesseract OCR](https://github.com/UB-Mannheim/tesseract/wiki) + packs `por`/`eng` | OCR de Documentos (extra `[ocr]`) |
-| Modelo spaCy `pt_core_news_sm` (`python -m spacy download …`) | NER do `[nlp]` (download à parte, como o Tesseract) |
-
-DuckDB e a extensão `excel` (XLSX) são embutidos — sem instalação separada.
-
----
-
-## Instalação
-
-```bash
-git clone https://github.com/mgckaled/mill.tools
-cd mill.tools
-uv sync
-```
-
-### Modelos locais (Ollama)
-
-```bash
-# formatação de parágrafos (Transcrição)
-ollama pull phi4-mini      && ollama create phi4mini-custom  -f ollama/Modelfile.phi4mini
-# análise / RAG / PT→SQL (qualidade máxima, lento na CPU)
-ollama pull qwen2.5:7b     && ollama create qwen7b-custom    -f ollama/Modelfile
-# análise / RAG / PT→SQL (padrão — melhor custo-benefício) e fallback rápido
-ollama pull gemma3:4b      && ollama create gemma3-4b-custom -f ollama/Modelfile.gemma3-4b
-ollama pull gemma3:1b      && ollama create gemma3-1b-custom -f ollama/Modelfile.gemma3-1b
-# embeddings do RAG (CPU-only, num_gpu 0)
-ollama pull nomic-embed-text && ollama create nomic-embed-custom -f ollama/Modelfile.nomic
-# descrição de imagens (visão)
-ollama pull moondream      && ollama create moondream-custom -f ollama/Modelfile.vision
-```
-
-### Extras opcionais
-
-```bash
-uv sync --extra ai-image   # remoção de fundo (Imagens)
-uv sync --extra ocr        # OCR de PDFs escaneados (requer binário Tesseract no PATH)
-uv sync --extra analysis --extra data-plot  # gráficos no módulo Dados (aba Gráfico / data plot)
-uv sync --extra ml         # clustering/tópicos/mapa semântico (Plano 4A); dups/related rodam sem ele (numpy)
-uv sync --extra ml-viz     # projeção UMAP do mapa (opcional, puxa numba; PCA é o default)
-uv sync --extra nlp        # keyphrases (YAKE) + entidades (spaCy NER); ai keywords/entities, Insights, auto-tags
-uv run python -m spacy download pt_core_news_sm  # modelo de NER (download à parte, como o Tesseract)
-```
-
-> O app base funciona sem os extras; os cards correspondentes desabilitam-se graciosamente quando ausentes.
-> O resumo extractivo (`ai summary` / Insights) e a classificação de perfil usam só o extra `[ml]` — sem dep nova.
-
-### Modelos em nuvem (opcionais, free tier)
-
-```bash
-cp .env.example .env       # preencha GOOGLE_API_KEY=... e/ou ZHIPU_API_KEY=...
-```
-
-O `.env` é carregado quando um modelo começa com `gemini` ou `glm`. O Ollama segue como padrão — nada quebra sem o `.env`.
-
-- **Google Gemini**: chave em [Google AI Studio](https://aistudio.google.com/apikey). Recomendado: `gemini-2.5-flash` (contexto de 1M tokens).
-- **Zhipu GLM**: chave em [z.ai](https://z.ai/model-api) (portal internacional — não use `open.bigmodel.cn`, que exige verificação de identidade chinesa). Recomendado: `glm-4.7-flash` (contexto de 200K tokens, tier grátis recorrente).
-
----
-
-## Uso
-
-### GUI desktop
-
-```bash
-uv run gui.py
-```
-
-Abre maximizado: splash animada → **Home Screen** (6 ferramentas em grade 3+3 e 3 hubs em destaque) → módulo escolhido. Cada módulo tem layout split — formulário à esquerda, painel de acompanhamento (log + barra de progresso + spinner) à direita. A troca de módulo é bloqueada enquanto um pipeline roda; os logs são preservados ao navegar.
-
-### CLI
-
-```bash
-# Transcrição (idioma automático; --format/--analyze/--prompt adicionam etapas de IA)
-uv run main.py <URL|video.mp4|notas.txt> --format --analyze --profile lecture
-
-# Áudio — download/conversão/extração + pós-processamento
-uv run main.py audio <URL|arquivo> --fmt mp3 --quality 320 --denoise --normalize
-# Pronto p/ transcrição: mono + 16 kHz + remoção de silêncio
-uv run main.py audio aula.mp4 --mono --sample-rate 16000 --trim-silence
-# Estudo acelerado: 1,5× sem alterar o tom
-uv run main.py audio podcast.mp3 --speed 1.5
-# Visualização — waveform/espectrograma PNG
-uv run main.py audio-viz musica.mp3 --spectrogram
-
-# Vídeo — download | convert | trim | compress | resize | extract-audio | thumbnail | subtitle
-uv run main.py video download <URL> --quality 1080 --container mp4
-uv run main.py video subtitle video.mp4 --subs legenda.srt --mode soft
-
-# Imagens — convert | resize | crop | rotate | watermark | border | adjust | filter | favicon | contact-sheet | remove-bg | describe | exif | ocr
-uv run main.py image convert photo.jpg --fmt webp --quality 85
-uv run main.py image crop photo.jpg --mode focal --ratio 1:1 --focal-x 0.5 --focal-y 0.35
-uv run main.py image watermark photo.jpg --mode qr --text "https://mill.tools" --position bottom-right
-uv run main.py image remove-bg photo.png --model u2net --bg-mode blur --bg-blur 20
-uv run main.py image exif photo.jpg --strip-gps          # privacidade (remove localização)
-uv run main.py image ocr captura.png --lang por          # texto → .txt indexável no RAG
-
-# Documentos — merge | split | compress | rotate | watermark | stamp | encrypt | extract | ocr | pdf-to-images | images-to-pdf | qr
-uv run main.py document split doc.pdf --pages "1-3,5,8-"
-uv run main.py document ocr scanned.pdf --lang por --dpi 300
-
-# Dados — consulta em PT (a IA traduz) ou SQL na mão; converte e perfila
-uv run main.py data query vendas.csv clientes.csv "total por cliente, do maior para o menor" --out xlsx
-uv run main.py data query dados.parquet "SELECT * FROM dados LIMIT 10" --sql
-uv run main.py data convert dados.csv --out parquet
-uv run main.py data profile dados.csv
-uv run main.py data plot vendas.csv "total por produto" --kind bar   # gráfico PNG em output/data/
-uv run main.py data outliers vendas.csv --contamination 0.05        # linhas atípicas (IsolationForest)
-
-# Biblioteca — índice de output/ como tabela (+ dashboard do acervo)
-uv run main.py library list --kind audio --since 7d --sort size
-uv run main.py library stats --top 10
-uv run main.py library dedup-images --max-distance 8   # imagens quase-duplicadas (dHash)
-
-# IA — RAG local sobre o corpus (busca híbrida BM25+denso; cita fontes); stats inclui timing por modelo
-uv run main.py ai index
-uv run main.py ai "o que eu disse sobre faster-whisper?" --k 8
-uv run main.py ai stats
-
-# Receitas — cadeias nomeadas entre módulos (+ histórico de execução)
-uv run main.py recipe list
-uv run main.py recipe run "YouTube → transcrição completa" "https://youtu.be/..." --model medium
-uv run main.py recipe stats
-
-# Observatório — atividade, falhas e status de ML entre todos os módulos (leitura)
-uv run main.py observatory status
-uv run main.py observatory activity --limit 15
-uv run main.py observatory logs --limit 50
-uv run main.py observatory disk-usage
-```
-
-#### Flags da Transcrição
-
-| Flag | Default | Descrição |
-|---|---|---|
-| `--wm` | `small` | Whisper: `tiny`/`base`/`small`/`medium`/`large-v3-turbo`/`large-v3` |
-| `--language` | auto | Código do idioma (`pt`, `en`…) |
-| `--beam-size` | `1` | `1` = rápido, `5` = preciso |
-| `--format` / `--fm` | off / `phi4mini-custom` | Quebra de parágrafos via LLM |
-| `--analyze` / `--am` | off / `gemma3-4b-custom` | Análise estruturada (`--profile` escolhe o esquema) |
-| `--prompt` / `--pm` | off / `gemma3-4b-custom` | Digest condensado (~40%) |
-| `--verbose` | off | Logging DEBUG |
-
-> Modelos `gemini-*` em `--fm`/`--am`/`--pm` roteiam para o Google (requer `GOOGLE_API_KEY`); `glm-*` roteiam para a Zhipu (requer `ZHIPU_API_KEY`).
-
-#### Cookies do YouTube (verificação anti-bot)
-
-O YouTube às vezes bloqueia downloads com "Sign in to confirm you're not a bot". O app pode usar os **cookies do seu navegador logado** (Áudio/Vídeo/Transcrição) — **desativado por padrão** (opt-in). Ative em **Configurações** (engrenagem no AppBar) ou via `MILL_YT_COOKIES_BROWSER`/`MILL_YT_COOKIES_PROFILE`. Os cookies são lidos localmente. **Atenção:** cookies de **conta logada** podem fazer o YouTube exigir um *PO Token* e o download falhar (`Requested format is not available`) — nesse caso, desative-os e tente sem.
-
----
-
 ## Saídas
 
-Tudo é gravado em `output/`, organizado por tipo:
+Tudo é gravado em `output/`, organizado por tipo — e é daí que a Biblioteca e o índice da IA se alimentam:
 
 ```text
 output/
-├── audio/         source/ (downloads) · processed/ (conversões, extrações)
-├── video/         source/ · processed/
-├── image/         source/ · processed/
-├── document/      processed/
-├── data/          consultas, conversões e perfis do módulo Dados
+├── audio/          source/ (downloads) · processed/ (conversões, extrações)
+├── video/          source/ · processed/
+├── image/          source/ · processed/
+├── document/       processed/
+├── data/           consultas, conversões e perfis do módulo Dados
 └── transcriptions/ text/ · analysis/ (--analyze) · digest/ (--prompt) · subtitles/
 ```
 
-- **Transcrição** (`text/*.txt`): cabeçalho de metadados + texto; segmentos incertos marcados com `[?]` (`avg_logprob < -1.0` ou `no_speech_prob > 0.6`).
-- **Análise** (`analysis/*.md`): relatório estruturado (resumo, pontos-chave, ações, conceitos, métricas, citações…), perfil-dirigido (`--profile`). Saída em PT-BR.
-- **Digest** (`digest/*.txt`): versão condensada (~40%) sem CTAs, pronta para colar como contexto.
+- **Transcrição** (`text/*.txt`): cabeçalho de metadados + texto; segmentos incertos marcados com `[?]`.
+- **Análise** (`analysis/*.md`): relatório estruturado perfil-dirigido, em PT-BR.
+- **Digest** (`digest/*.txt`): versão condensada (~40%), pronta para colar como contexto.
 
 ---
 
 ## Modelos
 
-**Whisper (transcrição de áudio)** (`--wm`): `tiny` → `large-v3` (mais rápido → mais preciso); `small` é o padrão equilibrado.
+**Whisper** (`--wm`): `tiny` → `large-v3` (mais rápido → mais preciso); `small` é o padrão equilibrado.
 
-**Ollama ("gerenciador" modelos open-source)** (local, padrão) — customizados via Modelfiles em `ollama/` (CPU-pinned, `num_gpu 0`):
+**Ollama** (local, padrão) — customizados via Modelfiles em `ollama/` (CPU-pinned, `num_gpu 0`):
 
 | Modelo | Papel | Tamanho |
 |---|---|---|
-| `phi4mini-custom` | Formatação | ~2,5 GB |
-| `gemma3-4b-custom` | Análise · Prompt · RAG · PT→SQL (**padrão**) | ~3,3 GB |
+| `gemma3-4b-custom` | Análise · Digest · RAG · PT→SQL (**padrão**) | ~3,3 GB |
+| `nomic-embed-custom` | Embeddings do RAG (768-dim) | ~275 MB |
+| `phi4mini-custom` | Formatação de parágrafos | ~2,5 GB |
 | `gemma3-1b-custom` | Fallback rápido / baixa-RAM | ~815 MB |
 | `qwen7b-custom` | Análise/RAG de máxima qualidade (lento na CPU) | ~4,7 GB |
-| `nomic-embed-custom` | Embeddings do RAG (768-dim) | ~275 MB |
 | `moondream-custom` | Descrição de imagens (visão) | ~1,7 GB |
 
-**Gemini** (nuvem, opt-in): roteado por prefixo `gemini-*`. Com a janela de 1M tokens, `--analyze`/`--prompt` dispensam chunking. Recomendado: `gemini-2.5-flash`. Também disponível como VLM no módulo Imagens: todo modelo Gemini já é multimodal nativamente (sem variante de visão separada), então o mesmo `gemini-2.5-flash` descreve imagens sem precisar de Ollama.
+**Gemini** (nuvem, opt-in): prefixo `gemini-*`; janela de 1M tokens dispensa chunking; `gemini-2.5-flash` recomendado — também descreve imagens (multimodal nativo).
 
-**GLM/Zhipu** (nuvem, opt-in): roteado por prefixo `glm-*`, via `langchain-openai` apontando para a API OpenAI-compatible da Zhipu. Com a janela de 200K tokens, `--analyze`/`--prompt` também dispensam chunking. Recomendado: `glm-4.7-flash` (tier grátis recorrente, sem assinatura). Também disponível como VLM no módulo Imagens: `glm-4.6v-flash` (visão, mesmo tier grátis) descreve imagens sem precisar de Ollama.
+**GLM/Zhipu** (nuvem, opt-in): prefixo `glm-*`, via API OpenAI-compatible; 200K tokens; `glm-4.7-flash` recomendado (tier grátis recorrente) e `glm-4.6v-flash` para visão.
 
 ---
 
-## Arquitetura
+## Arquitetura · Testes
 
-`src/core/` é **puro** (sem Flet) e reutilizável por CLI e GUI; `src/gui/` é a camada Flet; `src/cli/` os subcomandos.
+`src/core/` é **puro** (sem Flet, dependências de rede/modelo injetáveis) e reutilizável por CLI e GUI; `src/gui/` é a camada Flet; `src/cli/` os subcomandos.
 
 ```text
 src/
-├── transcriber · formatter · analyzer · prompter · llm_factory · llm_utils · utils
-├── analysis/      perfis de análise (puro)
-├── cli/           1 módulo por subcomando (audio/video/image/document/library/ai/recipes/data) + bus
-├── core/          PURO — audio · video · image · document · library · rag · recipes · data
-│   └── data/      types · scanner · engine (fronteira DuckDB) · frames (DataFrame, Plano 0) · charts (matplotlib, Plano 1) · nl2sql · validate · convert · profile · store
-└── gui/           app (rail + hubs) · home · splash · events · settings · modules/ · theme/ (design system) · views/
+├── transcriber · formatter · analyzer · prompter · llm_factory · llm_utils
+├── analysis/   perfis de análise (puro)
+├── core/       PURO — audio · video · image · document · library · rag · ml · text · observatory · recipes · data
+├── cli/        1 módulo por subcomando + bus
+└── gui/        app (rail + hubs) · home · splash · modules/ · theme/ · views/
 ```
-
-Cada módulo da GUI é uma entrada na lista `MODULES` (`app.py`); o `control` é construído uma vez e a navegação alterna visibilidade num `ft.Stack`. Saídas vão para `output/`, a origem do índice da Biblioteca e do RAG. Detalhes por subsistema vivem nas *skills* do projeto (`.claude/skills/`) e no `CLAUDE.md`.
-
----
-
-## Testes
 
 ```bash
 uv run pytest -m unit            # unitários — rápido, sem ffmpeg/rede/GPU
 uv run pytest -m integration     # integração — requer ffmpeg
-uv run pytest -n auto            # paralelizado (pytest-xdist)
 uv run pytest --cov=src --cov-report=html
 ```
 
-**1255 testes unitários** (0 falhas); cobertura sobre `src/` (branch on, GUI excluída por não ser testável headless), agregado ~92%. Testes de integração são pulados automaticamente sem `ffmpeg`. Linter: **ruff** — `uv run pytest -m unit` verde + `ruff` limpo antes de qualquer commit.
+**1,2 mil+ testes unitários**, cobertura agregada >90% (branch on; GUI excluída por não ser testável headless). Linter **ruff**; suíte verde + ruff limpo antes de qualquer commit. Documentação de desenvolvimento: [`CLAUDE.md`](CLAUDE.md), [`docs/`](docs/README.md) e as skills em `.claude/skills/`.
 
 ---
 
@@ -314,8 +407,12 @@ uv run pytest --cov=src --cov-report=html
 
 ## Roadmap
 
-Entregue: **Tier 0** (legendas, OCR) · **PR4** Vídeo · **PR5/5.1** Documentos + OCR · **PR6/6.6** Biblioteca + entrada flexível · **PR7/7.2** IA (RAG local) + inspetor de índice · **PR8** Receitas · **PR9** Dados (query-first sobre DuckDB) · **PR9.1** gráficos no módulo Dados (matplotlib → PNG) · **Plano 2** painéis analíticos nos hubs (acervo da Biblioteca, saúde do índice + timing por modelo na IA, histórico de execução nas Receitas).
+A seguir: **PR9.2** encadeamento em estágios nas Receitas · **PR3.1-B** IA de áudio com torch (extra isolado `[ai-audio]`) · melhorias em Imagens (batch rename, upscale ONNX, HEIC) · streaming da resposta da IA · timestamps nas citações do RAG + capítulos automáticos de transcrição.
 
-Também entregue — **módulo Imagens (Tier 1+2)**: visor polido (xadrez de transparência, faixa de metadados, tira de lote), controle de **EXIF** (CLI/GUI), aba **Descrição IA** (gemma3-4b vision), inspetor de metadados, **smart crop** por ponto focal, **grade de filtros**, **background replacement** (cor/desfoque/imagem), **watermark avançado** (9-grid/tiling/rotação/QR), **OCR** de imagem e bridge **imagem→PDF**.
+Histórico completo de marcos e decisões: [`docs/HISTORY.md`](docs/HISTORY.md) · planos: [`docs/plans/`](docs/plans/).
 
-A seguir: **PR9.2** encadeamento em estágios · **PR3.1-B** IA de áudio com torch (extra `[ai-audio]`) · mais melhorias em Imagens (batch rename, upscale ONNX, HEIC) · streaming da resposta da IA.
+---
+
+## Licença
+
+[PolyForm Noncommercial 1.0.0](https://polyformproject.org/licenses/noncommercial/1.0.0/) — uso pessoal e não-comercial livre.
