@@ -22,9 +22,6 @@
 ![torch-free](https://img.shields.io/badge/PyTorch-free-success?logo=pytorch&logoColor=white)
 ![privacy](https://img.shields.io/badge/dados-nunca%20saem%20da%20m%C3%A1quina-success)
 
-<!-- PLACEHOLDER: screenshot da Home Screen (grade 3+3 de ferramentas + hubs sobre o moinho) -->
-<img src="assets/screenshots/home.png" alt="Home do mill.tools" width="820">
-
 </div>
 
 ---
@@ -87,9 +84,6 @@ Seis **ferramentas** de processamento e quatro **hubs** que operam sobre as saí
 
 Whisper local ([faster-whisper](https://github.com/SYSTRAN/faster-whisper), GPU) sobre **URL**, **áudio/vídeo local** ou **texto** (`.txt`/`.md` pula o Whisper e vai direto à IA). Pós-processamento opcional por IA: quebra de parágrafos, **análise estruturada** dirigida por perfil (aula, reunião, entrevista…, com auto-sugestão de perfil) e **digest** condensado (~40%). Aba **Insights**: palavras-chave, resumo extrativo e entidades — instantâneos, sem LLM. Segmentos incertos são marcados com `[?]`.
 
-<!-- PLACEHOLDER: screenshot do módulo Transcrição com resultado e aba Insights -->
-<img src="assets/screenshots/transcricao.png" alt="Módulo Transcrição" width="820">
-
 </details>
 
 <details>
@@ -110,9 +104,6 @@ Download (yt-dlp), conversão e extração de faixas em fila; pós-processamento
 <summary><b>Imagens</b> — detalhes</summary>
 
 Toggle **Edição | Descrição IA**. Edição: convert, resize, **smart crop** (ponto focal), rotate, **watermark** (texto/imagem/QR, 9-grid, tiling, rotação), border, adjust, **grade de filtros**, favicon, colagem, **remoção/troca de fundo** (rembg) e **OCR** (Tesseract). Controle de **EXIF** (privacidade/copyright), visor Antes/Depois (xadrez de transparência, metadados, lote navegável) e bridge **imagem→PDF**. Descrição por visão (local ou Gemini/GLM opt-in) com 6 presets de estilo.
-
-<!-- PLACEHOLDER: screenshot do visor Antes/Depois do módulo Imagens -->
-<img src="assets/screenshots/imagens.png" alt="Módulo Imagens" width="820">
 
 </details>
 
@@ -142,9 +133,6 @@ Consulte CSV/TSV/JSON/Parquet/XLSX em **português** — a IA traduz para SQL ve
 
 Duas conversas num toggle. **Corpus**: RAG local sobre o seu acervo — pergunta em português, resposta citando as fontes `[n]`, **multi-turno de verdade** (perguntas de acompanhamento são reescritas antes da busca — o card mostra "buscou por:"), aviso quando o acervo não cobre o assunto, escopo (tudo/kind/documento), contexto ajustável (4–12 trechos) e feedback 👍/👎 por resposta. **Comandos CLI**: descreva a tarefa em português e receba o comando `uv run main.py ...` exato — gerado por introspecção dos parsers reais, validado, nunca executado. Embeddings sempre locais; Gemini/GLM opt-in só na resposta.
 
-<!-- PLACEHOLDER: screenshot da Conversa do hub IA com fontes citadas -->
-<img src="assets/screenshots/ia-conversa.png" alt="Hub IA — Conversa com fontes" width="820">
-
 </details>
 
 <details>
@@ -158,9 +146,6 @@ Cadeias lineares nomeadas entre módulos (`URL → baixar áudio → transcrever
 <summary><b>Observatório</b> — detalhes</summary>
 
 Central de ML de todo o app, 5 abas. **Índice/RAG** (aninhada — Índice: inspetor e **reindexação**; **Avaliação**: harness de qualidade do RAG com golden questions, hit-rate e MRR; Painel: quais documentos dominam o índice; Uso de disco). **Status** (gates de extras, modelos Ollama, binários, provedores de nuvem, classificadores, parâmetros em vigor). **Atividade** (feed do que o ML fez em qualquer módulo). **Logs** (falhas recentes). **Tempo de resposta** (por modelo, badge nuvem/local). Leitura em quase tudo — os únicos pipelines que rodam aqui são os do próprio índice (reindexar/avaliar).
-
-<!-- PLACEHOLDER: screenshot do Observatório (aba Índice/RAG → Avaliação) -->
-<img src="assets/screenshots/observatorio.png" alt="Hub Observatório" width="820">
 
 </details>
 
