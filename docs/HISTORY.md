@@ -11,6 +11,37 @@ ficam em [`ROADMAP.md`](ROADMAP.md) e [`plans/active/`](plans/active/).
 
 ## Entregas (marcos)
 
+### Fontes citadas vs. consultadas + piso de relevância no retrieve (jul/2026)
+Origem: primeiro caso real pós-planos 3–5 — pergunta sobre Ollama num acervo dominado por Duna respondeu
+**certo** citando só `[1]`, mas (a) a UI listou "5 fontes citadas" (4 delas Duna, só *recuperadas*) e (b) os
+chunks de Duna irrelevantes entravam no contexto só por serem o 2º-6º melhor. Primeiro consumidor real do
+harness de avaliação (abaixo) como instrumento de decisão. Duas frentes:
+
+- **Fontes citadas vs. consultadas** (`core/rag/chat.py`): parse dos `[n]` da resposta **num lugar só**
+  (`cited_source_numbers`, ao lado do `build_context` que gera os `[n]`; defensivo contra fora-da-faixa e
+  formatos criativos), `AnswerResult.cited_sources` distingue o subconjunto **citado** do conjunto
+  **consultado** (recuperado). GUI/CLI/feedback consomem a mesma função — a UI mostra citadas em destaque e
+  consultadas-não-citadas discretamente; `ai eval promote` usa as citadas como `expected`. Decisão: fontes
+  citadas são **parseadas da resposta, nunca inferidas do contexto** — sem `[n]` parseável, tudo vira
+  consultada e **nenhuma citação é inventada**.
+- **Piso de relevância** (`core/rag/retriever.py`): entre a fusão RRF e o MMR, dropa candidatos cujo cosseno
+  **denso** fique mais de δ (=0.05) abaixo do melhor do pool — guarda contra desbalanceamento do corpus. A
+  colisão com o resgate híbrido do BM25 (um match lexical exato é denso-longe mas no assunto) foi reconciliada
+  **isentando só o top-1 do BM25** (no máximo um chunk): o piso segue um corte denso-puro (necessário sem
+  stopwords PT, senão vira no-op) mas o resgate de termo raro/nome próprio — que é sempre concentrado no top-1
+  lexical — sobrevive. Pulado em escopo de documento único; pode devolver `<k`; `pool_max_score` continua
+  pré-piso (o aviso de cobertura mede o acervo, não o corte).
+
+Validado pelo eval (antes/depois no mesmo golden set, medindo só o piso): **hit-rate estável (70%), MRR
+0.38→0.45**, com o piso **resgatando o caso do Ollama** (miss → rank 2) e afinando ranks (ML 6→2, IA 3→2) ao
+custo de um conceito franchise-wide (Mentats, artefato de mapa single-doc no golden set). Decisões pelos
+números: **δ=0.05 validado e mantido** (δ maior desfaria o ganho do Ollama); **Fase 3 (MMR ciente de
+dominância) não executada** — o piso já resolveu a dominância e a diversificação do MMR está *ajudando*, não
+prejudicando (pular o MMR pioraria o Mentats); **limiar 0.72 mantido** (3ª calibração, flag 100%, gap limpo
+0.71/0.74). Não-achado confirmado: o modelo não errou (citou a fonte certa) — o defeito era a UI tratar
+recuperado como citado e o retrieval não ter piso.
+[`plans/implemented/PLANO_FONTES_E_PISO_RELEVANCIA.md`](plans/implemented/PLANO_FONTES_E_PISO_RELEVANCIA.md).
+
 ### Harness de avaliação do RAG — golden set + feedback 👍/👎 (jul/2026)
 Origem: achados §2.8/§5/§7 da avaliação de produto ML/RAG
 ([`reference/AVALIACAO_ML_RAG_FABLE5.md`](reference/AVALIACAO_ML_RAG_FABLE5.md)). Instrumento **permanente**
