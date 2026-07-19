@@ -95,3 +95,52 @@ no RAG sem expor dados: um resumo indexável. Detalhe em
    privacidade.
 5. O motor DuckDB é "injetável". Que outra fronteira do projeto segue a mesma regra, e o que isso
    permite nos testes?
+
+<details>
+<summary><b>Gabarito</b> — abra só depois de tentar responder</summary>
+
+1. A IA recebe **só o schema** (nomes e tipos de coluna) e devolve `(sql, explicação)`. Ela **nunca**
+   vê uma linha. Mesmo com modelo de nuvem, só nomes de coluna saem da máquina — o SQL roda
+   localmente contra os dados reais.
+2. Porque mesmo numa conexão read-only, um `COPY ... TO` poderia tocar o disco. O `ensure_select`
+   rejeita por lista de permissão (só começos de leitura) + lista de proibição (`copy`, `insert`,
+   `attach`...). Ex.: `COPY (SELECT ...) TO 'x.csv'` é bloqueado.
+3. O ffmpeg é **processo externo** — thread daemon + eventos funcionam. DuckDB/LLM é **trabalho
+   Python** que bloquearia a thread da UI, e thread daemon não repinta (quirk 0.85) — daí
+   `page.run_task` + `await asyncio.to_thread`, que volta ao loop da UI para o `update()`.
+4. O cartão é um **resumo indexável** (schema, estatísticas, descrição) — a tabela entra no corpus
+   sem expor linhas. Mesma fronteira de privacidade do `nl2sql`, agora na indexação.
+5. O `embed_fn` do RAG (e o `progress_cb` da espinha, o `make_llm`). Injeção na fronteira permite
+   testar toda a lógica com dublês, sem Ollama/rede — regra nº 2.
+
+</details>
+
+## Desafios
+
+- **D1 (ache o bug)** Um PR melhora o `nl2sql` enviando à IA, além do schema, "5 linhas de amostra
+  para o modelo entender os dados". A qualidade do SQL até melhora. Por que o PR é recusado mesmo
+  assim?
+- **D2 (e se...?)** E se o `ensure_select` tivesse **só** a lista de proibição (sem a lista de
+  permissão de tokens iniciais)? Que categoria de brecha ficaria aberta?
+- **D3 (projete)** Nova aba "Exportar" que roda a consulta atual e grava xlsx — a consulta pode levar
+  20s. Qual dos três modos de concorrência do projeto você usa, e por que os outros dois estão
+  errados aqui?
+
+<details>
+<summary><b>Gabarito dos desafios</b></summary>
+
+- **D1** — Quebra a **fronteira de privacidade**, que é um contrato absoluto, não um "trade-off de
+  qualidade": com modelo de nuvem, linhas reais (possivelmente dados pessoais/financeiros) sairiam da
+  máquina. O desenho do módulo promete "a IA nunca vê uma linha" — a GUI e a doc afirmam isso ao
+  usuário. Melhorias de qualidade têm que vir de schema mais rico (tipos, nomes, estatísticas
+  agregadas), nunca de dados.
+- **D2** — Comandos **desconhecidos ou futuros** passariam: a lista de proibição só pega o que foi
+  previsto. Um token novo do DuckDB (ou um comando exótico) que escreve/toca disco não estaria na
+  lista e rodaria. A lista de permissão inverte o default: **tudo é proibido, exceto começos de
+  leitura conhecidos** — o default seguro.
+- **D3** — `page.run_task(coro)` + `await asyncio.to_thread(exportar, ...)`, o padrão das abas do
+  Dados. Thread daemon está errada: o `update()` dela não repinta (quirk 0.85) — e não há contrato de
+  eventos de pipeline nesta aba. Bloquear a thread da UI está errado: 20s de tela congelada. Depois
+  do `await`, você está de volta ao loop da UI e o `update()` repinta o rodapé com o resultado.
+
+</details>

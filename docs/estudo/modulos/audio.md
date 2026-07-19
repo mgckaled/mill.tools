@@ -12,7 +12,7 @@ por quê. Referências cruzadas em vez de reexplicação.
 ## O que é igual (aponta para a Sessão 2)
 
 Tudo o esqueleto: `core/audio/` puro chamando `run_ffmpeg`; `VideoArgs`↔`AudioArgs` como contrato;
-`cli/audio.py` traduz `Namespace`→`AudioArgs`; `gui/modules/audio/worker.py` reusado pela CLL **e** GUI
+`cli/audio.py` traduz `Namespace`→`AudioArgs`; `gui/modules/audio/worker.py` reusado pela CLI **e** GUI
 (Flet-free); `run_queue_pipeline` processando a fila; formulário quebrado em `audio/blocks/` (denoise,
 normalize, silence, speed, output, presets). Se algo aqui te confundir, é sinal de reler a Sessão 2.
 
@@ -85,7 +85,8 @@ O Áudio tem um **reprodutor embutido** (A/B Original|Processado + card de loudn
 O `FFmpegExtractAudio` do yt-dlp cria um `.temp.<ext>` **no diretório do arquivo de entrada**
 (hardcoded), e o Defender às vezes trava o rename. A mitigação: rodar download+pós num
 `tempfile.mkdtemp()` e mover com `shutil.move`. É o primo do quirk `FFmpegVideoConvertor` do Vídeo — a
-mesma família de dores de plataforma (candidato ao futuro `APENDICE_WINDOWS_HARDWARE.md`).
+mesma família de dores de plataforma, reunida no
+[`../conceitos/APENDICE_WINDOWS_HARDWARE.md`](../conceitos/APENDICE_WINDOWS_HARDWARE.md).
 
 ---
 
@@ -99,3 +100,51 @@ mesma família de dores de plataforma (candidato ao futuro `APENDICE_WINDOWS_HAR
 4. Por que a reprodução de áudio **não** usa um controle do Flet? O que ela usa, e por quê?
 5. Um mesmo item de áudio pode emitir `audio_op_start`/`progress_update` **várias vezes**. Por quê — e
    como o painel da GUI ainda mostra tudo coerente? (ligue ao [`../conceitos/EVENTOS.md`](../conceitos/EVENTOS.md))
+
+<details>
+<summary><b>Gabarito</b> — abra só depois de tentar responder</summary>
+
+1. `out_path` é **reatribuído** a cada estágio: a saída do silêncio vira a entrada do denoise, e
+   assim por diante — um mini pipeline linear dentro de um item.
+2. No Áudio, a **natureza** da entrada já determina o que fazer (URL → baixar; vídeo → extrair;
+   áudio → converter) — não há ambiguidade a perguntar. No Vídeo, o mesmo arquivo pode sofrer 8
+   operações diferentes, então o usuário escolhe pelo subcomando.
+3. O worker emite um log `[!] ... skipping denoise` e **pula** o estágio — nunca quebra. Regra nº 6,
+   degradação graciosa.
+4. Porque `ft.Audio` **não existe** no Flet 0.85. A reprodução usa `sounddevice` + ffmpeg
+   (`audio_player.py`), fora do Flet — a GUI só desenha os botões.
+5. Cada estágio da cadeia emite seu próprio `audio_op_start` + `progress_update`. O painel mostra
+   tudo coerente porque o **contrato é o mesmo** da Sessão 3 — só se repete por estágio, e cada
+   evento carrega o `module_id` certo.
+
+</details>
+
+## Desafios
+
+- **D1 (e se...?)** E se o **encode final** não existisse na cadeia? Descreva o bug concreto que
+  volta quando o usuário pede "denoise + mp3 mono 16kHz".
+- **D2 (projete)** Novo pós-processo: **fade-in/fade-out** (2s no início e no fim, via filtro
+  `afade` do ffmpeg). Em que ponto da cadeia fixa ele entra, e o que precisa ser criado em cada
+  camada?
+- **D3 (ache o bug)** Um refactor "simplificou" o downloader: baixa e roda o `FFmpegExtractAudio`
+  direto em `AUDIO_SOURCE_DIR`, sem o `tempfile.mkdtemp()`. Passa em todos os testes unitários — e
+  usuários no Windows começam a reportar falhas intermitentes. O que está acontecendo?
+
+<details>
+<summary><b>Gabarito dos desafios</b></summary>
+
+- **D1** — O denoise sempre gera `.wav`; sem o encode final, o `args.fmt` (mp3), o downmix mono
+  (`-ac`) e o sample-rate (`-ar`) nunca seriam aplicados — o usuário pediria mp3 e receberia um wav
+  estéreo. O encode final existe exatamente para "consertar" a saída do denoise e aplicar formato de
+  uma vez.
+- **D2** — Entra **depois** do speed e **antes** do normalize (fade sobre o áudio já cortado/
+  acelerado; loudness medida sobre o resultado final). Criar: função pura em `core/audio/` (monta o
+  filtro `afade`, chama `run_ffmpeg`); campos no `AudioArgs`; bloco novo em `audio/blocks/` (toggle +
+  `XRefs`); um estágio condicional no `_process_item` emitindo `audio_op_start`; flag na CLI; testes
+  unitários do comando montado (`_capture_cmd`).
+- **D3** — O quirk do Windows: o `FFmpegExtractAudio` cria `.temp.<ext>` **no diretório do arquivo de
+  entrada** (hardcoded) e o Defender intermitentemente trava o rename (`WinError 32`). Os testes
+  unitários mockam o yt-dlp — nunca exercitam o rename real. A mitigação removida (tempdir +
+  `shutil.move`) era a proteção; "intermitente no Windows" é a assinatura do Defender.
+
+</details>

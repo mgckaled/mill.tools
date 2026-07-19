@@ -75,3 +75,49 @@ como todo pipeline.
 4. Duas sub-abas rodam pipelines de verdade. Quais, e por que a reindexação mora aqui e não no hub IA?
 5. A Avaliação é "retrieval-only". O que isso significa, e por que **não** chamar o LLM para julgar a
    resposta foi uma decisão de desenho?
+
+<details>
+<summary><b>Gabarito</b> — abra só depois de tentar responder</summary>
+
+1. Porque a superfície de ML cobre RAG **e** Biblioteca **e** Transcrição **e** Dados **e** Receitas —
+   aninhá-la no IA (que é só RAG) seria um descasamento semântico.
+2. Os **workers/CLI runners**, no ponto de conclusão de cada operação (mais o hook central de
+   `task_error` no `EventBus`). As funções puras de `core/ml`/`core/text` nunca escrevem log.
+3. Do `_TimingCallback` anexado no funil único `make_llm`: ele cronometra toda chamada de LLM e grava
+   em `model_timings.json`, por `(domínio, modelo)`.
+4. **Índice** (Reindexar) e **Avaliação** (harness do RAG). A reindexação mora aqui porque é um
+   pipeline de escrita com progresso/cancelamento — o hub IA fica read-only.
+5. Mede só o `retrieve()` (hit-rate@k, MRR, acurácia do flag de cobertura), **sem** nenhuma chamada
+   de LLM — determinístico, rápido e barato. Julgar a resposta gerada seria caro, lento e subjetivo;
+   ficou fora de escopo por desenho.
+
+</details>
+
+## Desafios
+
+- **D1 (ache o bug)** Um PR faz a função pura `core/ml/cluster.py::cluster_documents` gravar sua
+  própria entrada em `ml_activity.json` ao terminar ("assim ninguém esquece de logar"). Por que
+  recusar?
+- **D2 (e se...?)** E se o botão **Reindexar** chamasse `build_index` sem o
+  `force=is_stale_scheme(...)`? Descreva o bug silencioso após uma mudança de esquema de indexação —
+  e por que ele é traiçoeiro.
+- **D3 (projete)** Métrica nova: **tempo médio de indexação por documento**. Quem grava, onde
+  persiste, e em que aba aparece — respeitando as fronteiras deste doc?
+
+<details>
+<summary><b>Gabarito dos desafios</b></summary>
+
+- **D1** — Viola a fronteira: funções puras de `core/ml` **não escrevem log** — quem registra
+  atividade é o **worker/CLI runner no ponto de conclusão**. Se a função pura grava, ela ganha efeito
+  colateral de disco (deixa de ser pura), os testes passam a sujar `~/.mill-tools/`, e a mesma função
+  chamada por Receitas/CLI/GUI logaria em triplicata.
+- **D2** — Mudança de esquema **não move o mtime** dos arquivos → o indexer, confiando no cache por
+  `(path, mtime)`, pula tudo e só atualiza o sidecar — dizendo "índice novo" sem ter reembeddado
+  nada. Traiçoeiro porque **parece** que funcionou: sem erro, busca rodando — mas sobre vetores do
+  esquema antigo (foi o bug real que invalidou a primeira calibração do limiar 0.72).
+- **D3** — O **index_worker** (a borda que roda o pipeline) cronometra e grava ao concluir — nunca o
+  `core/rag/indexer` puro. Persiste em `~/.mill-tools/` num JSON com **cap** (o padrão dos logs, ex.:
+  junto a `model_timings.json`). Exibe na aba **Tempo de resposta** (ou na sub-aba Painel do
+  Índice/RAG). `core/observatory/` só ganha uma função de **leitura/agregação** — continua read-only.
+
+</details>

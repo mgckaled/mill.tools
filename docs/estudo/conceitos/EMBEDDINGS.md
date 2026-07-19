@@ -8,6 +8,11 @@ analogia, e aterrado no seu código real de `src/core/rag/` e `src/core/ml/`. Gl
 > Por que este doc existe separado: o RAG **recupera** por embeddings e o ML clássico do projeto
 > (`core/ml/features.py`) faz *mean-pool* **desses mesmos** embeddings. A fundação é comum aos dois —
 > então ela mora aqui, uma vez, e os outros dois a referenciam.
+>
+> **Como este doc é escrito** (convenção do acervo, ver [`../README.md`](../README.md)): cada técnica
+> aparece em três camadas — a **ideia com analogia** (zero código) → um **🧸 exemplo de brinquedo**
+> (números pequenos que você confere de cabeça) → o **código real** do projeto. Seções marcadas com
+> **⚙️ Avançado** são engenharia fina — pule na primeira leitura e volte depois.
 
 ---
 
@@ -105,9 +110,42 @@ do ângulo entre eles, e vive em `[-1, 1]`:
 - **0.0** → perpendiculares (sem relação).
 - **-1.0** → direções opostas.
 
+Analogia: pense em duas **bússolas**. Não importa se uma agulha é maior que a outra — o que você
+compara é **para onde cada uma aponta**. Agulhas paralelas = cosseno 1; em ângulo reto = 0; opostas
+= −1.
+
+### 🧸 Exemplo de brinquedo (2D — dá para conferir de cabeça)
+
+Três "textos" imaginários num espaço de só **2** dimensões:
+
+| texto | vetor | pense como |
+|---|---|---|
+| A | `[3, 4]` | "cachorro" |
+| B | `[6, 8]` | "cão" — mesma direção de A, seta 2× mais longa |
+| C | `[-4, 3]` | "declaração de imposto" |
+
+- **A vs. B:** produto escalar `3·6 + 4·8 = 50`. Normas: `‖A‖ = √(9+16) = 5`, `‖B‖ = 10`.
+  Cosseno = `50 / (5·10)` = **1.0** — significado "idêntico", mesmo B tendo o dobro do comprimento.
+  É exatamente o que queremos: um texto longo sobre cães não é "mais cão" que um curto.
+- **A vs. C:** produto escalar `3·(−4) + 4·3 = 0`. Cosseno = **0.0** — perpendiculares, sem relação.
+
+A **mesma conta**, com 768 números em vez de 2, é tudo o que o RAG faz para medir similaridade.
+
 🔑 **Por que cosseno e não distância?** Porque significado é **orientação**, não tamanho. Dois textos
 sobre o mesmo assunto devem ser "iguais" mesmo que um seja um parágrafo e o outro um livro. Cosseno
 mede exatamente isso — a direção pura — descartando a magnitude que só atrapalharia.
+
+> 🧪 **Experimento de 5 minutos.** Rode `uv run python` na raiz do projeto e digite:
+>
+> ```python
+> import numpy as np
+> a = np.array([3, 4]); b = np.array([6, 8]); c = np.array([-4, 3])
+> cos = lambda x, y: x @ y / (np.linalg.norm(x) * np.linalg.norm(y))
+> print(cos(a, b), cos(a, c))   # → 1.0  0.0
+> ```
+>
+> Troque os números e veja o cosseno mudar. Essa função de uma linha é, na essência, o
+> `dense_scores` do projeto.
 
 ## 3.3 O truque da normalização L2
 
@@ -125,6 +163,10 @@ cos(θ) = a·b          (quando ‖a‖ = ‖b‖ = 1)
 🔑 **Ou seja: com vetores normalizados, o cosseno vira um simples produto escalar.** Você paga a
 normalização uma vez e, daí em diante, "medir similaridade" é só multiplicar-e-somar — barato e
 vetorizável (uma multiplicação de matriz para comparar contra o corpus inteiro de uma vez).
+
+🧸 No brinquedo da seção anterior: `A/5 = [0.6, 0.8]` e `B/10 = [0.6, 0.8]` — normalizados, viram o
+**mesmo** vetor unitário, e o produto escalar `0.6·0.6 + 0.8·0.8 = 1.0` já **é** o cosseno, sem
+nenhuma divisão na hora da busca.
 
 Veja isso **exatamente** no seu `store.py`:
 
@@ -155,10 +197,10 @@ Ponto a ponto:
 - **Cache (`self._normalized`)**: normaliza uma vez e guarda; só recalcula quando o store muda
   (`add`/`drop_source` zeram o cache). Custo pago uma vez, não por busca.
 
-🔑 Note o comentário no `__init__` do store: os vetores **crus** (`self.vectors`) ficam intactos; a
-normalização vive num cache à parte. Motivo: o `ml/features.py` precisa dos vetores crus para o
-*mean-pool* antes de normalizar o resultado agregado — normalizar in-place quebraria a matemática do
-pooling (Parte 4).
+⚙️ **Avançado — pule na 1ª leitura.** Note o comentário no `__init__` do store: os vetores **crus**
+(`self.vectors`) ficam intactos; a normalização vive num cache à parte. Motivo: o `ml/features.py`
+precisa dos vetores crus para o *mean-pool* antes de normalizar o resultado agregado — normalizar
+in-place quebraria a matemática do pooling (Parte 4).
 
 ---
 
@@ -192,10 +234,14 @@ A intuição: se cada pedaço aponta para uma nuance do sentido, a média aponta
 semântico do documento. Depois normaliza-se o resultado (L2) para o cosseno voltar a ser produto
 escalar entre documentos.
 
-Repare na ordem: pool (média dos **crus**) → **depois** normaliza. É por isso que o store guarda os
-vetores crus separados do cache normalizado — se ele já normalizasse in-place, a média seria de
-vetores unitários e o "centro de massa" ficaria distorcido. Uma decisão de design sutil que só faz
-sentido quando você vê os dois usos (RAG e ML) juntos.
+🧸 Analogia: cada pedaço é a opinião de uma pessoa sobre "do que o documento fala"; a média é o
+consenso da sala. Com 2 pedaços `[1, 0]` e `[0, 1]`, o vetor-documento é `[0.5, 0.5]` — aponta "no
+meio" dos dois assuntos, como esperado.
+
+⚙️ **Avançado — pule na 1ª leitura.** Repare na ordem: pool (média dos **crus**) → **depois**
+normaliza. É por isso que o store guarda os vetores crus separados do cache normalizado — se ele já
+normalizasse in-place, a média seria de vetores unitários e o "centro de massa" ficaria distorcido.
+Uma decisão de design sutil que só faz sentido quando você vê os dois usos (RAG e ML) juntos.
 
 ---
 

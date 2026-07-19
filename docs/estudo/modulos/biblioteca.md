@@ -65,3 +65,46 @@ direto e imprime. É o par natural de um hub que não processa nada.
    transversal isso mostra?
 5. Por que a CLI da Biblioteca não usa `CLIEventBus`, enquanto a do Vídeo usa? (ligue à taxonomia do
    [`../conceitos/CLI.md`](../conceitos/CLI.md))
+
+<details>
+<summary><b>Gabarito</b> — abra só depois de tentar responder</summary>
+
+1. Porque "módulo" no projeto = uma entrada em `MODULES` com um `control` (e ganchos de ciclo de
+   vida) — não implica pipeline. A Biblioteca prova a definição.
+2. O scanner **lê o disco a cada visita**, varrendo os dirs canônicos das constantes de `utils.py`.
+   Como todo módulo grava no seu dir canônico, o hub não precisa de estado próprio.
+3. `page.update()` global é caro e mata animações em curso (regra do spinner); o update **escopado**
+   no item repinta só a thumbnail que chegou. Mesmo cuidado de repintura, agora sem pipeline.
+4. Fonte única / reúso cross-módulo: poucos motores (render de PDF, projeção 2D, YAKE, dHash), muitos
+   usos — a Biblioteca só **exibe** resultados de motores que moram alhures.
+5. Porque `library` é **read-only core-direto** (rápido, síncrono, sem progresso): chama o core e
+   imprime. O `video` é **pipeline** (longo, com progresso/cancelamento) → precisa do bus.
+
+</details>
+
+## Desafios
+
+- **D1 (e se...?)** E se as thumbnails fossem geradas na **thread da UI**, item a item, ao abrir a
+  Grade com 200 arquivos? Descreva a experiência do usuário.
+- **D2 (projete)** Card de um `.csv` deve ganhar a ação **"Analisar nos Dados"**. Como implementar,
+  usando um mecanismo que a Biblioteca já usa para Transcrição e IA?
+- **D3 (ache o bug)** Um PR adiciona um kind novo ao scanner varrendo a string literal
+  `"output/novomodulo/processed"`. Funciona hoje. Que fragilidade isso introduz, e qual é o jeito
+  certo?
+
+<details>
+<summary><b>Gabarito dos desafios</b></summary>
+
+- **D1** — A tela **congela** até a última miniatura: renderizar 200 PDFs/vídeos é trabalho pesado, e
+  na thread da UI nada repinta nem responde a clique enquanto roda. Por isso a thread daemon + update
+  **escopado** por item: a grade aparece na hora e as miniaturas vão "pipocando" sem travar nada.
+- **D2** — Uma **bridge**: o card chama `navigate_to("data", {"file": path})`; o `on_mount` do módulo
+  Dados recebe o payload e pré-carrega o arquivo como fonte da consulta. É exatamente o mecanismo de
+  "Transcrever" (Biblioteca→Transcrição) e "Conversar sobre" (Biblioteca→IA) — nenhuma infraestrutura
+  nova.
+- **D3** — Duplica o caminho canônico como string solta: se a constante de `utils.py` mudar, o
+  scanner quebra em silêncio (varre uma pasta que não existe mais). O certo: importar a constante
+  (`NOVOMODULO_PROCESSED_DIR`) de `utils.py` — fonte única de caminhos, a mesma razão de o scanner
+  funcionar para todos os outros módulos.
+
+</details>

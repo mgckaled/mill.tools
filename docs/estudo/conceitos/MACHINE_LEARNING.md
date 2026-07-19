@@ -7,6 +7,10 @@ com analogia, e aterrada no seu código real de `src/core/ml/` e `src/core/text/
 **[`EMBEDDINGS.md`](EMBEDDINGS.md)** — quase tudo aqui opera sobre os vetores de documento (mean-pool)
 que ele explica. Glossário no fim.
 
+> **Como este doc é escrito** (convenção do acervo, ver [`../README.md`](../README.md)): cada técnica
+> em três camadas — **ideia com analogia** → **🧸 exemplo de brinquedo** → **código real**. Seções
+> **⚙️ Avançado** são engenharia fina — pule na primeira leitura.
+
 ---
 
 # PARTE 1 — O que é Machine Learning (e o que NÃO é aqui)
@@ -39,7 +43,23 @@ do de embeddings: sem entender "documento = vetor", nada aqui faz sentido.
 **Clustering** = achar grupos naturais nos dados **sem** dizer quais grupos existem. Dado o conjunto
 de vetores de documento, quais formam "nuvens" próximas no espaço? Cada nuvem é um assunto.
 
-O seu `cluster.py` oferece dois algoritmos.
+Analogia: uma **foto aérea de uma praça**. Você vê rodinhas de pessoas conversando (clusters), e uma
+ou outra pessoa andando sozinha (ruído/outlier). Ninguém te disse quantas rodinhas existem — você as
+**vê** pela proximidade. Clustering é ensinar o computador a "ver" isso numa nuvem de pontos que, no
+nosso caso, tem 768 dimensões.
+
+### 🧸 Exemplo de brinquedo (2D)
+
+Seis documentos, já como pontos:
+
+```
+docs de culinária:  (1.0, 1.0)  (1.2, 0.9)  (0.9, 1.1)     ← rodinha 1
+docs de Python:     (5.0, 5.0)  (5.1, 4.9)                  ← rodinha 2
+um PDF de boleto:   (9.0, 1.0)                              ← sozinho (ruído)
+```
+
+Qualquer algoritmo decente encontra 2 grupos + 1 ponto isolado. A diferença entre os algoritmos é
+**como** eles chegam aí — e é o assunto das duas seções seguintes. O seu `cluster.py` oferece dois.
 
 ## 2.1 HDBSCAN (o padrão)
 
@@ -47,8 +67,9 @@ O seu `cluster.py` oferece dois algoritmos.
 clusters; pontos em regiões vazias viram **ruído** (rótulo `-1`, reusado como "conteúdo isolado/órfão").
 
 🔑 A grande vantagem sobre o k-means: **HDBSCAN descobre sozinho quantos grupos existem** — você não
-precisa dizer "quero 5 grupos". E ele lida com clusters de tamanhos/densidades diferentes e admite que
-alguns pontos simplesmente não pertencem a grupo nenhum (ruído). Para um acervo pessoal heterogêneo,
+precisa dizer "quero 5 grupos". Na analogia da praça: ele conta as rodinhas olhando onde as pessoas
+estão **apinhadas**, e admite que o rapaz do boleto não pertence a rodinha nenhuma (ruído, rótulo
+`-1`). Ele lida com grupos de tamanhos/densidades diferentes. Para um acervo pessoal heterogêneo,
 isso é o comportamento certo.
 
 ```python
@@ -58,21 +79,25 @@ def _hdbscan(x, min_cluster_size):
     return model.fit_predict(x).astype(int)
 ```
 
-🔑 Note `metric="euclidean"` sobre vetores **L2-normalizados**. Por que euclidiano e não cosseno? O
-comentário do arquivo explica com matemática: para vetores unitários, `‖a−b‖² = 2 − 2·cos(θ)` — a
-distância euclidiana é **monótona** no cosseno (uma cresce quando a outra decresce). Então, com os
-vetores já normalizados (doc de embeddings, Parte 3), o euclidiano padrão do HDBSCAN **equivale** a
-usar cosseno, sem precisar de métrica custom. Um detalhe que só se entende sabendo da normalização.
+⚙️ **Avançado — pule na 1ª leitura.** Note `metric="euclidean"` sobre vetores **L2-normalizados**.
+Por que euclidiano e não cosseno? O comentário do arquivo explica com matemática: para vetores
+unitários, `‖a−b‖² = 2 − 2·cos(θ)` — a distância euclidiana é **monótona** no cosseno (uma cresce
+quando a outra decresce). Então, com os vetores já normalizados (doc de embeddings, Parte 3), o
+euclidiano padrão do HDBSCAN **equivale** a usar cosseno, sem precisar de métrica custom. Um detalhe
+que só se entende sabendo da normalização.
 
 ## 2.2 k-means (a alternativa) e a auto-seleção de k
 
 **k-means** é o clustering clássico: você diz **quantos** grupos quer (`k`), e ele parte os dados em
-`k` grupos minimizando a distância de cada ponto ao centro do seu grupo. Simples e rápido, mas exige
-saber `k` de antemão e assume grupos "redondos".
+`k` grupos minimizando a distância de cada ponto ao centro do seu grupo. Na analogia da praça: você
+grita "formem **3** grupos!" e todo mundo corre para o centro mais próximo — mesmo o rapaz do boleto
+é forçado a entrar em alguma rodinha. Simples e rápido, mas exige saber `k` de antemão e assume
+grupos "redondos".
 
 E quando você **não** sabe `k`? O projeto pode escolher automaticamente via **silhouette score** —
-uma métrica de quão "bem separados e coesos" os grupos ficaram, para cada `k` candidato; vence o `k`
-de maior score:
+uma métrica em que cada ponto responde: "estou mais perto dos meus colegas de grupo ou do grupo
+vizinho?". A média dessas respostas mede quão "bem separados e coesos" os grupos ficaram, para cada
+`k` candidato; vence o `k` de maior score:
 
 ```python
 def _auto_k(x, m):
@@ -84,11 +109,11 @@ def _auto_k(x, m):
     return best_k
 ```
 
-🔑 Mas a auto-seleção só liga acima de `_MIN_FOR_AUTO_K = 20` documentos. Por quê? A silhouette é
-**instável/enviesada** com poucas amostras por cluster candidato (o comentário cita "15-20 por
-grupo") e é O(n²). Abaixo desse piso, `k` volta a ser um argumento obrigatório. E `random_state=42`
-**semeia** o k-means para o mesmo corpus sempre dar a mesma partição (determinismo — importante para
-não confundir o usuário com resultados que mudam a cada clique).
+⚙️ **Avançado — pule na 1ª leitura.** A auto-seleção só liga acima de `_MIN_FOR_AUTO_K = 20`
+documentos. Por quê? A silhouette é **instável/enviesada** com poucas amostras por cluster candidato
+(o comentário cita "15-20 por grupo") e é O(n²). Abaixo desse piso, `k` volta a ser um argumento
+obrigatório. E `random_state=42` **semeia** o k-means para o mesmo corpus sempre dar a mesma partição
+(determinismo — importante para não confundir o usuário com resultados que mudam a cada clique).
 
 ---
 
@@ -97,7 +122,12 @@ não confundir o usuário com resultados que mudam a cada clique).
 Os vetores têm 768 dimensões. Você não consegue **desenhar** 768 eixos numa tela. Para mostrar o
 "mapa" dos seus documentos, é preciso **projetar** de 768D para **2D** preservando ao máximo as
 distâncias — quem estava perto no espaço grande deve ficar perto no mapa. Isso é **redução de
-dimensionalidade**. O `project.py` oferece três métodos, um trade-off clássico:
+dimensionalidade**.
+
+Analogia: a **sombra** de um objeto 3D na parede. A sombra é 2D e sempre perde informação — mas
+escolhendo bem o ângulo da luz, ela ainda mostra o formato essencial. Outra: o **mapa-múndi** — todo
+mapa plano do globo distorce *algo* (área ou ângulo); cada projeção escolhe o que sacrificar. Os três
+métodos abaixo são três "ângulos de luz" diferentes, um trade-off clássico:
 
 - **PCA (padrão):** Análise de Componentes Principais. Acha os eixos de **maior variância** dos dados e
   projeta neles. É **linear, instantâneo e determinístico** — mas pode "borrar" a estrutura local
@@ -114,11 +144,17 @@ def project_2d(dm, *, method="pca", ...):
     if method == "umap": return _umap_2d(dm.X, random_state, pre_pca_dims)
 ```
 
-🔑 Dois detalhes de engenharia: (1) para UMAP/t-SNE, os vetores são **pré-reduzidos com PCA** para ~50
-dims antes (`_maybe_pre_reduce`) — prática consagrada, acelera e estabiliza os dois. (2) **Determinismo
-de novo:** PCA ganha uma convenção de sinal (`_fix_signs`) para dois runs darem exatamente o mesmo
-mapa, e t-SNE/UMAP rodam com `random_state` fixo. O tema "mesma entrada → mesmo resultado" é uma
-obsessão saudável do projeto (o usuário não deve ver o mapa "pular" sem motivo).
+⚙️ **Avançado — pule na 1ª leitura.** Dois detalhes de engenharia: (1) para UMAP/t-SNE, os vetores
+são **pré-reduzidos com PCA** para ~50 dims antes (`_maybe_pre_reduce`) — prática consagrada, acelera
+e estabiliza os dois. (2) **Determinismo de novo:** PCA ganha uma convenção de sinal (`_fix_signs`)
+para dois runs darem exatamente o mesmo mapa, e t-SNE/UMAP rodam com `random_state` fixo. O tema
+"mesma entrada → mesmo resultado" é uma obsessão saudável do projeto (o usuário não deve ver o mapa
+"pular" sem motivo).
+
+> 🧪 **Experimento de 5 minutos.** Rode `uv run main.py ai map --method pca` e depois
+> `--method tsne`. Compare os dois mapas do **mesmo** acervo: o PCA tende a espalhar; o t-SNE separa
+> os grupos com mais nitidez (à custa das distâncias globais). É o trade-off da lista acima, visível
+> nos seus próprios documentos.
 
 ---
 
@@ -144,10 +180,15 @@ usos.
 ## 4.2 Detecção de outliers (`IsolationForest`)
 
 No módulo Dados, `detect_outliers` acha linhas "anômalas" numa tabela via **Isolation Forest**. A
-intuição do algoritmo é elegante: ele constrói árvores que **separam** pontos aleatoriamente; um ponto
-anômalo (muito diferente dos demais) é **isolado com poucos cortes** (fica sozinho num galho raso),
-enquanto um ponto normal exige muitos cortes. Quanto mais fácil isolar, mais anômalo. É rápido e não
-supervisionado — não precisa de exemplos de "o que é anomalia".
+intuição do algoritmo é elegante — pense no jogo de **"adivinhe quem"**: a pessoa com uma
+característica única ("usa chapéu roxo") é isolada com **uma** pergunta; alguém comum exige muitas.
+O algoritmo constrói árvores que **separam** pontos com cortes aleatórios; um ponto anômalo fica
+sozinho num galho raso (poucos cortes), um ponto normal exige muitos. Quanto mais fácil isolar, mais
+anômalo.
+
+🧸 Numa tabela de vendas com valores `10, 12, 11, 9, 13, 9800`, o corte aleatório "valor > 500?"
+isola o `9800` de primeira — anômalo. Para separar o `11` do `12`, seriam precisos muitos cortes
+finos — normal. É rápido e não supervisionado — não precisa de exemplos de "o que é anomalia".
 
 ---
 
@@ -158,10 +199,16 @@ palestra) com uma escada elegante que **escala com o uso**.
 
 ## 5.1 Zero-shot por protótipo (funciona desde o primeiro documento)
 
-**Zero-shot** = classificar **sem** exemplos de treino. Como? Você descreve cada categoria com uma
+**Zero-shot** = classificar **sem** exemplos de treino. Analogia: corrigir redações comparando cada
+uma com **textos-modelo** — um modelo de "aula", um de "entrevista", um de "palestra" — e dando à
+redação o rótulo do modelo com que ela mais se parece. Aqui: você descreve cada categoria com uma
 frase-semente ("uma aula, uma explicação didática..."), **embeda** essa frase (vira um **protótipo** —
 um vetor que representa a categoria), e classifica um documento pela categoria cujo protótipo está
 **mais próximo** (maior cosseno). Nearest-prototype — o vizinho mais próximo entre os protótipos.
+
+🧸 No espaço 2D de brinquedo: protótipo "culinária" em `(1, 1)`, protótipo "programação" em `(5, 5)`.
+Um documento novo em `(1.3, 0.8)` está claramente mais perto de "culinária" → é o rótulo. A diferença
+de cosseno para o 2º colocado é a **margem** — pequena = classificação incerta.
 
 🔑 A beleza: funciona **de cara**, sem você rotular nada, porque reusa o mesmo espaço de embedding. A
 "margem" (diferença de cosseno para a 2ª categoria) vira uma medida de **incerteza**.
@@ -220,17 +267,23 @@ def keyphrases(text, *, lang="pt", top_n=10, ngram=3):
     return [(phrase, float(score)) for phrase, score in extractor.extract_keywords(cleaned)]
 ```
 
-🔑 Duas pegadinhas que o código documenta: (1) no YAKE, **score menor = frase mais relevante** (a
-lista vem ascendente — contra-intuitivo). (2) Passar `stopwords=` **substitui** a lista padrão do YAKE
-em vez de estendê-la (verificado no fonte instalado, não na doc) — então o projeto primeiro lê a lista
-default e faz a **união** com as suas stopwords extras (nomes de mês, "página", "figura"...), senão
-desligaria todo o filtro de palavras funcionais do YAKE sem querer.
+⚙️ **Avançado — pule na 1ª leitura.** Duas pegadinhas que o código documenta: (1) no YAKE, **score
+menor = frase mais relevante** (a lista vem ascendente — contra-intuitivo). (2) Passar `stopwords=`
+**substitui** a lista padrão do YAKE em vez de estendê-la (verificado no fonte instalado, não na doc)
+— então o projeto primeiro lê a lista default e faz a **união** com as suas stopwords extras (nomes
+de mês, "página", "figura"...), senão desligaria todo o filtro de palavras funcionais do YAKE sem
+querer.
 
 ## 6.2 Resumo extrativo: TextRank (grafo + PageRank)
 
 **Resumo extrativo** = escolher as frases mais importantes do texto (não gera texto novo, "extrai" as
 existentes). O método é o **TextRank**, uma aplicação do **PageRank** (o algoritmo do Google para
-ranquear páginas) a frases:
+ranquear páginas) a frases.
+
+Analogia: **reputação numa roda de amigos**. Uma pessoa é influente se pessoas influentes concordam
+com ela — definição circular de propósito, resolvida por iteração: comece com todo mundo igual e vá
+repassando "prestígio" pelas conexões até estabilizar. No TextRank, "concordar" = frases parecidas
+entre si; a frase com que muitas frases importantes se parecem é o coração do texto. O algoritmo:
 
 1. Quebra o texto em frases.
 2. Vetoriza cada frase com **TF-IDF** e monta um **grafo** onde frases parecidas se "conectam"
@@ -251,11 +304,12 @@ def _textrank_scores(sim):
     return (1 - _POSITION_BIAS_WEIGHT) * scores + _POSITION_BIAS_WEIGHT * position_bias
 ```
 
-🔑 Duas decisões didáticas: o projeto **constrói o TextRank à mão** (não usa `sumy`) porque a
-biblioteca pronta baixaria dados do `nltk` em runtime, quebrando a promessa offline. E mistura um
-**prior de posição** (frases do começo pesam mais) porque transcrições/artigos costumam anunciar o
-tema logo no início — algo que o TextRank puro ignora. O `@` de novo é multiplicação de matriz (o
-passo do PageRank).
+⚙️ **Avançado — pule na 1ª leitura** (o código acima é a "iteração de potência" da analogia: repassar
+prestígio até estabilizar). Duas decisões didáticas: o projeto **constrói o TextRank à mão** (não usa
+`sumy`) porque a biblioteca pronta baixaria dados do `nltk` em runtime, quebrando a promessa offline.
+E mistura um **prior de posição** (frases do começo pesam mais) porque transcrições/artigos costumam
+anunciar o tema logo no início — algo que o TextRank puro ignora. O `@` de novo é multiplicação de
+matriz (o passo do PageRank).
 
 ## 6.3 Entidades: spaCy NER (CNN, torch-free)
 
@@ -273,6 +327,11 @@ transcrição longa) são **fatiados** antes do NER, porque o spaCy estima ~1GB 
 caracteres — processar tudo de uma vez estouraria a memória dos 16GB da máquina.
 
 ---
+
+> 🧪 **Experimento de 5 minutos.** Escolha uma transcrição sua e rode
+> `uv run main.py ai keywords <arquivo>` (YAKE), `ai summary <arquivo>` (TextRank) e
+> `ai entities <arquivo>` (NER). São os três engines desta parte, sobre o **seu** texto — repare no
+> resumo puxando frases do início (o prior de posição) e nas entidades rotuladas por tipo.
 
 # PARTE 7 — Gates e degradação graciosa
 

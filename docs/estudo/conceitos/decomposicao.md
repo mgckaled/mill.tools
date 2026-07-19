@@ -201,3 +201,50 @@ montados por um `__init__`.
    origem)
 5. Ligue ao `segmented_selector` do [`FLET_GUI.md`](FLET_GUI.md): em que sentido `blocks/` é "o mesmo
    padrão, uma escala acima"?
+
+<details>
+<summary><b>Gabarito</b> — abra só depois de tentar responder</summary>
+
+1. O `ft.Column` é o **widget**, para o builder principal encaixar no layout; o `CropRefs` são os
+   **acessores**, para coletar os valores na hora de montar os `Args`. Layout e coleta ficam
+   desacoplados.
+2. Uma tupla nomeada e imutável de funções `get_*`/`set_*` — o "contrato" do bloco. O builder chama
+   `refs.get_left()` sem saber **como** o bloco guarda o valor internamente.
+3. Congela o formulário durante o pipeline (desabilita os controles do bloco). O builder principal o
+   chama em **todos** os blocos de uma vez quando o worker parte.
+4. `blocks/` decompõe por **seção de UI** (um arquivo por seção do formulário); `registry/` decompõe
+   por **origem** (um arquivo por módulo de onde vêm os adaptadores).
+5. O `segmented_selector` já devolve `(controle, get_value, set_disabled)` — controle + acessores em
+   miniatura. `blocks/` aplica exatamente esse contrato à escala de um módulo: um arquivo por bloco,
+   uma `NamedTuple` de refs por arquivo.
+
+</details>
+
+## Desafios
+
+- **D1 (projete)** Um módulo novo terá um formulário com 8 seções (entrada, formato, qualidade, 3
+  pós-processos, saída, presets). Descreva a estrutura de pastas/arquivos e o contrato de cada peça.
+- **D2 (e se...?)** E se um bloco, em vez de expor `get_left: Callable[[], int]`, devolvesse o
+  próprio `ft.TextField` para o builder ler `left_tf.value` direto? Funciona — mas que acoplamento
+  isso cria, e o que quebra no futuro?
+- **D3 (ache o bug)** Um arquivo `gui/modules/novo/view.py` tem 250 linhas: o builder do módulo, as
+  três abas do painel e dois adaptadores de Receitas. Pela régua da skill `architecture`, ele passa
+  ou reprova? Por quê — e qual é a divisão certa?
+
+<details>
+<summary><b>Gabarito dos desafios</b></summary>
+
+- **D1** — `gui/modules/novo/blocks/`, um arquivo por seção: `build_X_block(page) → (controle,
+  XRefs)`, onde `XRefs` é uma `NamedTuple` de `get_*`/`set_*` (e `set_disabled` em quase todos). O
+  `form_view.py` principal só monta o estado compartilhado, encaixa os controles no layout e, no
+  submit, coleta `refs.get_*()` para montar os `Args`. Presets usam os `set_*`.
+- **D2** — O builder passa a conhecer os **internals** do bloco (que controle guarda o valor, como
+  parsear). Se o bloco trocar o `TextField` por um `Slider`, ou mudar a validação, **todo** consumidor
+  quebra. O getter é o contrato estável: "como eu guardo" fica privado, "o que eu entrego" fica
+  público — a mesma lógica do `_is_gemini` privado vs. `is_gemini_model` público.
+- **D3** — Reprova — não pelo tamanho (250 < 400), mas pela **coesão**: mistura três "mundos"
+  (builder, abas, adaptadores de outro domínio). A régua é dupla, e os dois sintomas juntos reprovam;
+  aqui o segundo basta. Divisão: abas → `tabs/` (`build_X_tab`), adaptadores → `core/recipes/
+  registry/novo.py` (decomposição por origem), e o `view.py` fica só com a montagem.
+
+</details>

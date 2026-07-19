@@ -108,3 +108,53 @@ contrato entre eles?* A resposta explica quase tudo.
 4. O truque `[valor]` resolve qual limitação de closures em Python? Onde você o viu mais vezes?
 5. Complete com suas palavras: "quando abro um arquivo novo do projeto, a primeira pergunta que faço
    é..."
+
+<details>
+<summary><b>Gabarito</b> — abra só depois de tentar responder</summary>
+
+1. Exemplos válidos em três camadas: `progress_cb` (espinha — um número), `emit`/bus (eventos — um
+   vocabulário), `embed_fn`/`make_llm`/motor DuckDB (rede/modelo/banco). Em todos, quem chama passa a
+   dependência pronta.
+2. **CLI** (traduz eventos em tqdm/terminal), **GUI** (traduz em barra/painéis via pubsub) e
+   **Receitas** (normaliza callbacks para `ctx.emit` numa cadeia). Cada uma traduz o mesmo core para
+   seu contexto.
+3. O import lazy garante que a lib pesada só carrega se o recurso for acionado (o extra pode nem
+   estar instalado); o `is_available()` permite ao gate **desabilitar com dica** em vez de estourar
+   um `ImportError` — exatamente a definição de degradação graciosa.
+4. Uma closure pode ler variáveis do escopo externo, mas **reatribuir** criaria uma variável local
+   nova. Mutar `x[0]` numa lista de 1 elemento contorna isso. Visto no `segmented_selector`, em
+   `pipeline_running`, `current_idx` e nos `blocks/`.
+5. "...este arquivo é **core puro**, **borda**, ou **contrato** entre eles?" — a resposta posiciona o
+   arquivo na arquitetura e explica quase tudo sobre o que ele pode ou não fazer.
+
+</details>
+
+## Desafios
+
+- **D1 (Feynman)** Explique "um core, N bordas" em **3 frases**, sem nenhum termo técnico, para
+  alguém que nunca programou. Se precisar de jargão, a camada de baixo ainda não consolidou.
+- **D2 (projete)** O projeto vai ganhar uma **quarta borda**: uma API HTTP local (`POST /transcribe`
+  dispara um pipeline). Usando os idiomas deste doc, liste o que precisa ser **criado** — e o que
+  **não** precisa ser tocado.
+- **D3 (ache o bug)** Sintoma real: um usuário reporta que um nome de arquivo com "ç" quebra uma
+  operação nova com `UnicodeDecodeError`. Sem ver o código: qual regra provavelmente foi violada, em
+  que camada o bug mora, e onde você procuraria primeiro?
+
+<details>
+<summary><b>Gabarito dos desafios</b></summary>
+
+- **D1** — Exemplo de resposta: "A receita do bolo fica escrita **uma vez só** num caderno. Tanto a
+  confeitaria de balcão quanto o serviço de entrega usam o **mesmo** caderno — cada uma só muda a
+  embalagem e o jeito de servir. Se a receita melhora, os dois lados melhoram juntos, sem ninguém
+  reescrever nada."
+- **D2** — Criar: a borda em si (`api/`), que traduz o request nos `Args` do módulo (como a CLI traduz
+  o `Namespace`) e um **bus adapter** com o mesmo `emit` (traduzindo eventos em, digamos, respostas de
+  status/streaming — o papel do `CLIEventBus`). **Não tocar**: `core/` (puro, já serve), os workers
+  (Flet-free, já reusáveis), o contrato de eventos (vocabulário pronto). É o teste-ácido do idioma:
+  borda nova = tradutores novos, zero mudança no núcleo.
+- **D3** — Regra nº 5 (subprocess em modo binário). O bug mora na fronteira com um processo externo —
+  provavelmente alguém usou `text=True` (ou `check_output` sem decode manual) num `subprocess` novo.
+  Procuraria primeiro por `text=True` / `universal_newlines` no diff da operação nova. O "ç" fora do
+  cp1252 do console Windows é a assinatura clássica.
+
+</details>

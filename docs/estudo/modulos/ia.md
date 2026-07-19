@@ -73,3 +73,53 @@ dada (senão uma reindexação tornaria o histórico incomparável).
    o LLM local?
 5. Ligue ao [`../conceitos/RAG.md`](../conceitos/RAG.md): quando você faz uma pergunta na Conversa, quais
    etapas (chunking já feito) rodam entre o seu texto e a resposta citada?
+
+<details>
+<summary><b>Gabarito</b> — abra só depois de tentar responder</summary>
+
+1. O **Corpus** usa o embedder (precisa embeddar a pergunta para o retrieval). O **Comandos CLI** não
+   faz retrieval nenhum — só traduz português → comando via LLM de chat + a referência introspectada;
+   por isso o gate é só o Ollama de chat, nunca o embedder.
+2. Porque reindexar é um **pipeline** (progresso, cancelamento, escrita) — e pipelines moram no
+   Observatório. O hub IA mantém só a linha de status do índice (read-only) + o botão que navega
+   para lá.
+3. A introspecção real dos parsers argparse só existe em `cli/reference.py`; duplicá-la em `core/`
+   seria reinventá-la. Exceção única, registrada e comentada inline.
+4. Reescreve a pergunta como **standalone** (resolve "esse vídeo" → o stem citado no turno anterior)
+   antes do retrieval. Sempre com LLM **local** para o histórico da conversa nunca sair da máquina.
+5. Condensação (se multiturno) → embedding da pergunta → busca híbrida (denso + BM25) → fusão RRF →
+   piso de relevância → MMR → contexto numerado `[n]` → LLM responde citando → parse defensivo das
+   citações → card de fontes (citadas vs. consultadas).
+
+</details>
+
+## Desafios
+
+- **D1 (e se...?)** E se a **condensação multiturno** usasse o mesmo modelo da resposta — inclusive
+  quando o usuário escolheu Gemini? O que exatamente passaria a sair da máquina que hoje não sai?
+- **D2 (ache o bug)** Um PR da view da Conversa adiciona uma regex própria para extrair os `[n]` da
+  resposta e montar o card de fontes ("a minha cobre um caso a mais"). Por que recusar, mesmo se a
+  regex for boa?
+- **D3 (projete)** Um usuário pede: "coloca um botão Reindexar aqui na Conversa mesmo, é mais
+  prático". Você tem que responder como arquiteto: por que a resposta é não, e qual é a alternativa
+  que atende o desejo sem violar o desenho?
+
+<details>
+<summary><b>Gabarito dos desafios</b></summary>
+
+- **D1** — O **histórico inteiro da conversa** (todos os turnos anteriores, que são o contexto da
+  condensação) sairia para a nuvem — não só a pergunta corrente. Hoje o desenho garante: condensação
+  **sempre local**; para a nuvem vai, no máximo, a pergunta standalone + os trechos recuperados. É
+  uma diferença enorme de superfície de exposição.
+- **D2** — Fonte única: `chat.cited_source_numbers` é o **único** parser de `[n]`, consumido por GUI,
+  CLI e Receitas. Duas regexes = dois comportamentos divergindo em silêncio (um card mostraria
+  "citada" onde o outro não). Se a regex nova cobre um caso real a mais, o lugar dela é **dentro** da
+  função única, com teste — aí todos os consumidores ganham juntos.
+- **D3** — Reindexar é um **pipeline de escrita** (progresso, cancelamento, worker próprio), e o hub
+  IA é deliberadamente **read-only** sobre o índice — a separação "quem lê vs. quem escreve". Um
+  botão que roda pipeline na Conversa reintroduziria toda a maquinaria (e a confusão de estado) que o
+  desenho tirou de lá. A alternativa que já existe: o botão "Indexar no Observatório" navega via
+  bridge (`nav[0]("observatory", {"tab": "index"})`) direto para a sub-aba certa — um clique a mais,
+  arquitetura intacta.
+
+</details>

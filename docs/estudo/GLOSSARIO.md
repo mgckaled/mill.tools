@@ -1,7 +1,10 @@
 # Glossário — mill.tools
 
-Termos técnicos que aparecem no estudo, explicados do zero e com analogia. Alimentado a cada sessão.
-Organizado por categoria; dentro de cada uma, em ordem de "quando você encontra".
+Termos técnicos **transversais** que aparecem no estudo, explicados do zero e com analogia. Este
+arquivo cobre a base comum (Python, sistema operacional, concorrência, padrões do projeto) — termos
+específicos de um assunto (GUI/Flet, CLI/argparse, testes, RAG/embeddings, ML) moram no **glossário
+do próprio doc**, no fim de cada um. Organizado por categoria; dentro de cada uma, em ordem de
+"quando você encontra".
 
 ---
 

@@ -82,3 +82,49 @@ comportamento real do core".
    do Áudio?
 5. Nos testes, por que o Pillow roda de verdade enquanto o ffmpeg é mockado? (ligue à distinção
    dependência hard/in-process vs. externa do [`../conceitos/TESTES.md`](../conceitos/TESTES.md))
+
+<details>
+<summary><b>Gabarito</b> — abra só depois de tentar responder</summary>
+
+1. Porque o core é Pillow **em-processo**: rápido e síncrono, sem processo externo emitindo progresso.
+   O worker vira "chama a função pura + `image_op_start`/`image_op_done`", sem os `progress_update`
+   contínuos que o ffmpeg alimentava no Áudio.
+2. Porque os arquivos internos (`_shared`, `ops`, `watermark`) são detalhe privado; o contrato é a
+   API pública reexportada pelo `__init__`. Espelhar 1:1 só vale quando cada arquivo tem testes
+   genuinamente independentes.
+3. `ocr` (Tesseract → `.txt`) e `describe` (visão por LLM → descrição). O `_ocr.txt` cai em `output/`
+   e o RAG o indexa — texto extraído de imagem vira corpus pesquisável.
+4. Roda **depois** da transformação, sem tocar a assinatura das funções de transform — um passo extra
+   opcional que não polui o núcleo, como o encode final do Áudio.
+5. Pillow é dependência **hard e in-process** (sempre presente, sem rede/GPU) → roda real e ainda
+   conta como `unit`. O ffmpeg é **processo externo** → mockado nos unitários, real só na integração.
+
+</details>
+
+## Desafios
+
+- **D1 (projete)** O roadmap prevê **upscale** de imagem (aumentar resolução com IA). Decida: core
+  puro Pillow ou extra opcional com gate? Onde mora, e o que muda na GUI se o extra faltar?
+- **D2 (e se...?)** Alguém propõe adicionar "vídeo → GIF animado" como operação do módulo Imagem
+  ("GIF é imagem, ora"). Por que a proposta está na família errada — e onde a operação deveria morar?
+- **D3 (ache o bug)** Um PR adiciona gravação de EXIF **dentro** de cada função de
+  `transform/ops.py` (novo parâmetro `exif_mode` em todas). Funciona — mas o revisor recusa. Com que
+  argumento?
+
+<details>
+<summary><b>Gabarito dos desafios</b></summary>
+
+- **D1** — Upscale com IA puxa um modelo (ONNX, como o rembg) → **extra opcional** (`[ai-image]` ou
+  um novo), nunca no app base. A função mora em `core/image/` (ex.: `upscale.py`, como `background.py`),
+  com `is_available()`. Na GUI, o gate desabilita o card com dica de instalação — regra nº 6, o mesmo
+  molde do `remove_bg`.
+- **D2** — Decodificar vídeo exige **ffmpeg** (processo externo) — a família do core de Imagem é
+  Pillow em-processo, sem `run_ffmpeg`, sem progresso contínuo. A operação pertence ao **Vídeo**
+  (que já embrulha o ffmpeg e tem a maquinaria de progresso); a saída `.gif` pode até aparecer na
+  Biblioteca como imagem, mas o *processamento* é da família do ffmpeg.
+- **D3** — Viola o desenho "EXIF como **pós-processo aditivo**": tocar a assinatura de **todas** as
+  transforms para um aspecto transversal espalha a responsabilidade e quebra a pureza das funções
+  (cada uma passaria a saber de metadados). O lugar do EXIF é a camada aditiva (`exif.py`) que roda
+  **depois** de qualquer transform — um lugar só, nenhuma assinatura tocada.
+
+</details>

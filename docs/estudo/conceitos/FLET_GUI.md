@@ -12,6 +12,11 @@ exemplo é código real de `src/gui/`. Glossário no fim.
 >
 > Como ler: Partes 1–3 são conceito de Flet (valem para qualquer app Flet). Partes 4–7 são a sua
 > arquitetura e os quirks. As caixas 🔑 marcam o que mais pega quem está aprendendo.
+>
+> **Trilha mínima (1ª leitura):** Partes 1 e 3 (o modelo mental + threading) e §4.3–4.5 (módulos,
+> navegação e a ponte de eventos — pré-requisitos da Sessão 2/3). A Parte 2 é um **catálogo** de
+> controles (consulte quando encontrar um no código); a Parte 6 é a **tabela de sobrevivência** dos
+> quirks (consulte quando algo "não repintar").
 
 ---
 

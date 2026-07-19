@@ -67,3 +67,48 @@ comportamento real ([`../conceitos/TESTES.md`](../conceitos/TESTES.md) §pymupdf
    duas bordas"?
 5. Por que os testes de Documentos rodam pymupdf de verdade, como o Imagem roda Pillow, mas o Vídeo
    mocka o ffmpeg?
+
+<details>
+<summary><b>Gabarito</b> — abra só depois de tentar responder</summary>
+
+1. Áudio/Vídeo → **ffmpeg** (externo, subprocesso); Imagem → **Pillow** (em-processo); Documentos →
+   **pymupdf** (em-processo). Mesma arquitetura, só muda a ferramenta embrulhada.
+2. Por página: usa a camada de texto **nativa** se existir; só rasteriza (300 DPI) + Tesseract nas
+   páginas **escaneadas**. OCR em tudo seria lento e degradaria texto que já era perfeito; só nativo
+   perderia os scans.
+3. Fonte única atravessando módulos: a lógica de "desenhar a 1ª página" mora num lugar só, e a
+   Biblioteca a consome para thumbnails sem reimplementar.
+4. Porque depende do pipeline de IA e faz mais sentido na tela. Lição: as bordas não precisam ser
+   espelhos perfeitos — cada operação vive onde tem valor.
+5. pymupdf é dependência hard e **in-process** (roda real, qualifica como `unit`); o ffmpeg é
+   **processo externo** (mockado nos unitários).
+
+</details>
+
+## Desafios
+
+- **D1 (projete)** Nova operação: **carimbar assinatura** (uma imagem PNG posicionada em página/
+  coordenada escolhidas). Em que arquivo do core ela entra, e o que mais precisa ser tocado até
+  chegar à GUI e à CLI?
+- **D2 (e se...?)** E se o OCR híbrido não existisse e o módulo rasterizasse + rodasse Tesseract em
+  **todas** as páginas? Para um PDF de 300 páginas com 290 nativas, estime as duas perdas.
+- **D3 (ache o bug)** Um PR da Biblioteca adiciona `import pymupdf` no `thumbnails.py` e reimplementa
+  ali o render da 1ª página "para não depender do módulo Documentos". Por que o revisor recusa?
+
+<details>
+<summary><b>Gabarito dos desafios</b></summary>
+
+- **D1** — No `processor.py` (a 8ª função pymupdf — é irmã de `watermark`/`stamp`): função pura
+  recebendo PDF, imagem, página e coordenadas. Depois: campos no `DocumentArgs`, bloco em
+  `document/blocks/`, `case` no worker, sub-subparser na CLI, e teste `unit` com pymupdf real +
+  fixture `sample_pdf`.
+- **D2** — (1) **Tempo**: rasterizar a 300 DPI + Tesseract em 290 páginas que já tinham texto — de
+  segundos para muitos minutos. (2) **Qualidade**: a camada nativa é perfeita; o OCR sobre a
+  rasterização reintroduz erros de reconhecimento em texto que já estava certo. O híbrido paga o
+  custo só nas ~10 páginas escaneadas.
+- **D3** — Viola a fonte única: a lógica de "desenhar a 1ª página" já mora em
+  `core/document/info.py::render_first_page_png`, e é **desenhada** para ser reusada (o core de
+  Documentos é puro — depender dele não é acoplamento de borda). Duplicar = dois lugares para
+  consertar o mesmo bug de render.
+
+</details>

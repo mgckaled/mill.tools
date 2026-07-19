@@ -367,5 +367,61 @@ Responda sem consultar; confira depois nos arquivos citados.
 7. O que `owner_id="video"` no `ProgressPanel` garante? Que problema ele evita quando há vários
    módulos montados no mesmo `Stack`?
 
+<details>
+<summary><b>Gabarito</b> — abra só depois de tentar responder</summary>
+
+1. `cli/video.py` o coloca em `VideoArgs(vcodec="h264")`; em `core/video/converter.py`, o
+   `VCODEC_MAP.get("h264")` o traduz para `["-c:v", "libx264", "-preset", "medium"]` — a linha que
+   entra no `cmd` do ffmpeg.
+2. Porque o core é puro e não conhece bordas. Recebendo o callback, a **mesma** função serve GUI
+   (barra), CLI (tqdm) e testes (callback falso que anota valores).
+3. Porque o worker é **Flet-free**: só orquestra e chama `bus.emit(...)`, sem nenhum controle de UI.
+   O que é GUI-only mora na `view.py`; o worker é reutilizável por qualquer borda.
+4. `run_ffmpeg` lê `out_time_us=` do stdout → chama `progress_cb(ratio)` → que é o `_progress_cb` do
+   worker → `emit("progress_update", {"current": ratio})` → `pubsub` → o `ProgressPanel` (thread da
+   UI) move a barra.
+5. O teste do core quer provar que o ffmpeg **real** produz um arquivo válido (integração, pulado sem
+   ffmpeg). O da CLI só quer provar a **tradução** `Namespace` → `VideoArgs` — o pipeline inteiro é
+   mockado, então é unitário e roda em ms.
+6. Na thread da UI, a conversão **congelaria** a tela. A thread daemon não pode tocar a UI (quirk da
+   0.85), então ela só **emite eventos**; a UI os recebe via `pubsub` na thread dela e repinta.
+7. Garante que o painel só reage a eventos com `module_id == "video"`. Sem isso, o log e a barra de
+   qualquer outro módulo (todos montados no mesmo `Stack`) poluiriam a tela do Vídeo.
+
+</details>
+
+## Desafios
+
+- **D1 (e se...?)** E se `convert_video` (o core) chamasse `emit("progress_update", ...)` diretamente,
+  em vez de receber `progress_cb`? O código até funcionaria na GUI — mas o que quebraria no projeto
+  como um todo?
+- **D2 (projete)** Você vai adicionar a operação `watermark` ao módulo Vídeo (marca d'água de imagem
+  sobre o vídeo, via filtro do ffmpeg). Liste **arquivo por arquivo** o que precisa ser tocado, da
+  camada mais baixa à mais alta — e que tipo de teste cada camada ganha.
+- **D3 (ache o bug)** Num teste unitário do converter, um colega escreveu
+  `mocker.patch("src.core.ffmpeg.run_ffmpeg")`. O teste dele fica **lento** e falha em máquinas sem
+  ffmpeg. Por quê?
+
+<details>
+<summary><b>Gabarito dos desafios</b></summary>
+
+- **D1** — O core deixaria de ser puro: passaria a conhecer o bus/contrato de eventos (uma
+  dependência de borda). A CLI e os testes teriam que arrastar essa infraestrutura; testar
+  `convert_video` isolado exigiria um bus falso; e qualquer mudança no contrato de eventos tocaria o
+  core. O `progress_cb` (um `Callable[[float], None]`) mantém a fronteira: o core empurra números,
+  quem traduz para eventos é o worker.
+- **D2** — (1) `core/video/converter.py` (ou arquivo novo): função pura `add_watermark(...)` montando
+  o cmd ffmpeg → teste de **integração** (ffmpeg real). (2) `core/video/args.py`: campos novos no
+  `VideoArgs`. (3) `cli/video.py`: sub-subparser `watermark` + tradução no `run_video_cli` → teste
+  **unitário** (pipeline mockado, asserta o `VideoArgs`). (4) `gui/modules/video/worker.py`: um
+  `case "watermark":` no `_process_item`. (5) `form_view.py`/blocks: os campos na GUI. Nenhuma
+  mudança no runner genérico nem no contrato de eventos — eles já servem.
+- **D3** — Patch **onde é definido**, não onde é usado. O `converter.py` importou `run_ffmpeg` no
+  topo (`from src.core.ffmpeg import run_ffmpeg`), criando uma referência própria; o patch na origem
+  não a alcança. O teste chama o ffmpeg **de verdade** sem o colega perceber. O alvo certo é
+  `src.core.video.converter.run_ffmpeg`.
+
+</details>
+
 *Próximo: [`EVENTOS.md`](../conceitos/EVENTOS.md) (Sessão 3) abre a "caixa preta" do `emit` — o contrato de
 eventos que liga o worker à tela.*

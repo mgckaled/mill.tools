@@ -8,6 +8,10 @@ têm um glossário no fim.
 > Como ler: os fundamentos (Parte 1) valem para qualquer linguagem. A partir da Parte 2 é `pytest`
 > concreto. Você pode ler linear ou pular para a seção que precisar. As caixas 🔑 marcam os pontos
 > não óbvios que separam "sei rodar um teste" de "entendo testar".
+>
+> **Trilha mínima (1ª leitura):** Partes 1–3 + §4.1–4.3 (o que é mock e a armadilha do patch). As
+> Partes 5–8 (plugins, cobertura, boas práticas, checklist) são **referência** — volte quando for
+> escrever testes de verdade.
 
 ---
 

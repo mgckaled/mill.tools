@@ -9,8 +9,16 @@ transversais moram em `GLOSSARIO.md` (cada doc de arquivo também tem seu própr
 
 1. Leia a seção da sessão aqui **primeiro** (o "porquê" e o lugar da peça no todo).
 2. Abra o doc de detalhe referenciado e leia o código junto.
-3. Volte aqui e responda as **perguntas de fixação** sem consultar. Confira depois.
-4. Todo termo novo que travar → confira no glossário (ou peça para adicioná-lo).
+3. Volte aqui e responda as **perguntas de fixação** sem consultar. Confira no **gabarito
+   colapsável** abaixo de cada lista. Depois encare os **Desafios** (prever/projetar/diagnosticar).
+4. No dia seguinte ao fim de cada sessão, faça o quiz cumulativo dela em
+   [`REVISAO.md`](REVISAO.md) — e refaça em D+7 e D+30.
+5. Todo termo novo que travar → confira no glossário (ou peça para adicioná-lo).
+
+> **Convenções do acervo** (detalhe no [`README.md`](README.md)): docs de conceito explicam cada
+> técnica em **três camadas** (analogia → 🧸 exemplo de brinquedo → código real); seções **⚙️
+> Avançado** podem ser puladas na 1ª leitura; caixas **🧪** são experimentos de 5 minutos para rodar
+> no seu próprio acervo; docs longos têm uma **trilha mínima** no topo.
 
 ## Mapa do percurso
 
@@ -156,6 +164,75 @@ Responda sem consultar; depois confira nos docs de detalhe.
 14. Por que `temperature=0.0` é o padrão para as tarefas deste projeto?
 15. Onde ficam as chaves de API, e o que acontece se faltar a chave quando você pede um modelo de
     nuvem?
+
+<details>
+<summary><b>Gabarito da Sessão 1</b> — abra só depois de tentar responder</summary>
+
+1. Porque CLI **e** GUI o usam. Em `core/` (puro, sem Flet nem argparse), as duas bordas importam o
+   mesmo tipo sem arrastar dependências uma da outra.
+2. Campos nomeados (`item.kind`) são auto-documentados e imunes a erro de ordem — numa tupla, trocar
+   `(kind, value)` por `(value, kind)` compila e quebra em silêncio.
+3. O buffer do stderr encheria; **quando um buffer enche, quem escreve para e espera espaço**. O
+   ffmpeg congela esperando o stderr esvaziar; o Python espera progresso no stdout que nunca vem —
+   deadlock. A thread `_drain` esvazia o stderr em paralelo.
+4. Cada borda passa o **seu** `progress_cb`: a GUI passa um que emite eventos (barra); a CLI, um que
+   atualiza o `tqdm`. O core só chama a função — não sabe quem está do outro lado.
+5. Porque returncode `0` não garante que o arquivo de saída existe (filtro que não produziu saída,
+   parâmetro estranho). Checar `out_path.exists()` fecha esse buraco, com um tipo de erro distinto.
+6. `text=True` decodificaria com o cp1252 do console Windows → um acento num nome de arquivo vira
+   `UnicodeDecodeError`. Bytes crus + `.decode("utf-8", errors="replace")` nunca quebram.
+7. Fonte única: Biblioteca e RAG sabem exatamente onde varrer, e reestruturar as pastas é uma edição
+   num arquivo só.
+8. No NTFS, um `:` no nome cria um *Alternate Data Stream* (fluxo oculto) em vez de falhar
+   visivelmente. Trocar por hífen preserva a legibilidade e evita o comportamento traiçoeiro.
+9. Um log comum escreveria no meio da barra do tqdm e a "rasgaria" (linhas embaralhadas). O handler
+   escreve via `tqdm.write`, que apaga a barra, escreve e a redesenha.
+10. `shutil.which` procura um executável no PATH do sistema. Rodar no início transforma um erro
+    futuro e críptico ("ffmpeg not found" no meio de um download) num aviso imediato e acionável.
+11. `make_llm` esconde **qual classe/provedor** foi instanciado (Ollama/Gemini/GLM). O chamador passa
+    uma string e recebe "um modelo que responde `.invoke()`" — trocar de provedor é trocar a string.
+12. Import preguiçoso: quem usa só Ollama nunca paga o custo de carregar as libs de nuvem. Partida
+    rápida e dependências de fato opcionais.
+13. O `_TimingCallback` é anexado no **funil único** (`make_llm`); o LangChain chama
+    `on_llm_start`/`on_llm_end` automaticamente em toda chamada — nenhum consumidor precisa saber.
+14. As tarefas são estruturadas (JSON, extração, formatação): querem a **mesma saída para a mesma
+    entrada**, não criatividade.
+15. No `.env` da raiz (fora do código e do controle de versão). Sem a chave, o `_make_*` levanta
+    `RuntimeError` **imediatamente**, com instrução de como criar o `.env`.
+
+</details>
+
+## Desafios — Sessão 1
+
+Um nível acima das perguntas: aqui você **prevê**, **projeta** e **diagnostica**.
+
+- **D1 (e se...?)** Apague mentalmente a thread `_drain` do `run_ffmpeg`. Descreva, passo a passo, o
+  que acontece numa conversão de 2 horas — e por que o programa não mostra nenhum erro.
+- **D2 (projete)** O projeto vai adotar o `exiftool` (um programa externo de linha de comando, como o
+  ffmpeg). Projete o runner: em que camada mora, que regras do projeto a função precisa honrar, e
+  quais parâmetros a assinatura deveria ter no mínimo?
+- **D3 (ache o bug)** Um colega escreveu num core novo:
+  `subprocess.run(cmd, text=True, capture_output=True)`. Compila, passa nos testes dele no Linux — e
+  quebra na sua máquina com certos vídeos. Qual regra foi violada, e qual é o sintoma exato?
+
+<details>
+<summary><b>Gabarito dos desafios</b></summary>
+
+- **D1** — O stderr do ffmpeg vai enchendo o buffer do pipe sem ninguém ler. Quando enche, o ffmpeg
+  **para de escrever e espera espaço** — congelado, ele para de emitir progresso no stdout. O Python
+  segue esperando linhas que nunca chegam. Nenhum erro: os dois processos estão vivos, só travados um
+  esperando o outro (deadlock). A conversão "pendura para sempre".
+- **D2** — Mora em `src/core/` (puro), como fonte única (`run_exiftool`, todo acesso passa por ela).
+  Regras: subprocess em **modo binário** + `.decode("utf-8", errors="replace")` (nº 5); sem `print`
+  (nº 4); validação dupla (returncode **e** existência/validade da saída); `progress_cb` injetável se
+  houver progresso; e um `cwd=` se algum quirk de caminho aparecer. Assinatura mínima:
+  `run_exiftool(cmd: list[str], out_path: Path, *, progress_cb=None) -> Path`.
+- **D3** — Regra nº 5 ("subprocess sempre em modo binário"). `text=True` decodifica com o encoding do
+  console — cp1252 no Windows. Um título de vídeo com caractere fora do cp1252 produz
+  `UnicodeDecodeError` no meio da leitura da saída. No Linux (UTF-8 nativo) nunca aparece — por isso
+  "funciona na máquina dele".
+
+</details>
 
 ---
 

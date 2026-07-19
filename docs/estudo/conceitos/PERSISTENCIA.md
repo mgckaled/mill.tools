@@ -69,3 +69,46 @@ a **presença** da chave, nunca o valor.
    nesse esquema?
 3. Por que os modelos de ML e o índice do RAG guardam o `embed_space_id`? O que aconteceria sem isso?
 4. Onde ficam as chaves de API, e o que o Observatório mostra sobre elas?
+
+<details>
+<summary><b>Gabarito</b> — abra só depois de tentar responder</summary>
+
+1. Fonte única de caminhos: a Biblioteca (scanner) sabe onde varrer e o RAG sabe onde indexar, porque
+   todo módulo grava no dir canônico. Reestruturar pastas é uma edição só.
+2. Uma mudança de **esquema** (limpeza, linha de contexto, modelo) não altera o `mtime` dos arquivos —
+   o cache acharia tudo "válido" e não reembeddaria nada. O `force` ignora o cache e refaz de verdade.
+3. Porque vetores de espaços diferentes não são comparáveis ("um espaço, uma régua"). Sem a
+   assinatura, trocar o modelo de embedding deixaria caches/modelos do espaço antigo prevendo lixo em
+   silêncio; com ela, eles se invalidam sozinhos.
+4. No `.env` da raiz (fora do código e do versionamento). O Observatório reporta só a **presença** da
+   chave, nunca o valor.
+
+</details>
+
+## Desafios
+
+- **D1 (e se...?)** E se você apagasse a pasta `~/.mill-tools/` inteira agora? Separe: o que se
+  **regenera sozinho**, o que se regenera **com custo**, e o que se **perde para sempre**.
+- **D2 (projete)** Você vai cachear um resultado caro por arquivo (ex.: uma análise de IA que depende
+  do modelo de embedding usado). Que **chave de cache** você usa, e por quê cada componente dela?
+- **D3 (ache o bug)** Um recurso novo grava seu log de atividade com `lista.append(...)` e persiste,
+  sem mais nada. Meses depois, o hub que lê esse log fica lento e o JSON tem dezenas de MB. O que
+  faltou, e qual é o padrão do projeto?
+
+<details>
+<summary><b>Gabarito dos desafios</b></summary>
+
+- **D1** — Regenera sozinho: os logs do Observatório (voltam vazios), snapshots baratos. Regenera com
+  custo: o índice do RAG (reindexar embedda tudo de novo — minutos), modelos supervisionados
+  (retreinam quando houver rótulos), tags/avaliações (recomputam por demanda). **Perde para sempre**:
+  o que só você produziu — o golden set do `rag_eval.json`, a biblioteca de `prompts.json`, o
+  histórico de feedback 👍/👎 e as preferências do `config.json`.
+- **D2** — `(path, mtime)` + a **assinatura do espaço** (`embed_space_id`). O `(path, mtime)` invalida
+  quando o arquivo muda; o `embed_space_id` invalida quando o **modelo/esquema** muda (que não move o
+  mtime — a lição do `force`). Sem o segundo componente, trocar o modelo deixaria caches antigos
+  "válidos" prevendo lixo.
+- **D3** — Faltou o **cap** (teto de tamanho). O padrão do projeto: logs **append-only com cap** —
+  crescem até um teto (200/100/500...) e descartam os mais antigos. Log sem teto é um vazamento de
+  disco em câmera lenta.
+
+</details>

@@ -8,6 +8,10 @@ qualquer linguagem, e os detalhes de Python (`argparse`) e do seu projeto. Foco 
 
 > Como ler: a Parte 1 (fundamentos de CLI) vale para qualquer projeto/linguagem. Da Parte 2 em
 > diante é `argparse` e a arquitetura da sua CLI. As caixas 🔑 marcam o que mais confunde.
+>
+> **Trilha mínima (1ª leitura):** Partes 1–3 (fundamentos, `argparse`, subcomandos) + §5 (o
+> `CLIEventBus`, necessário para a Sessão 2). As Partes 4, 6 e 7 (arquitetura fina, gotchas,
+> checklist) são **referência** — volte quando for mexer na `cli/`.
 
 ---
 

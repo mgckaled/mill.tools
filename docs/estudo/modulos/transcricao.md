@@ -67,3 +67,48 @@ transparência: o usuário vê onde a transcrição pode ter errado.
    por prefixo permite escolher entre Ollama local e Gemini de nuvem para a análise?
 4. Como o ML clássico aparece neste módulo? (dica: auto-sugestão de perfil + aba Insights)
 5. O que o marcador `[?]` num segmento significa, e de onde vem essa informação?
+
+<details>
+<summary><b>Gabarito</b> — abra só depois de tentar responder</summary>
+
+1. Esconde a seção de transcrição (modelo Whisper etc.) e mantém só as etapas de IA — um `.txt` já é
+   texto, não há o que transcrever.
+2. O ramo **texto** pula o Whisper (só copia para `output/` e roda a IA). A guarda: exige **≥1
+   análise** — copiar um texto sem pedir nada de IA seria inútil.
+3. `make_llm` roteia pelo **prefixo do nome**: `gemini-*` → nuvem Google, `glm-*` → Zhipu, resto →
+   Ollama local. Escolher o provedor da análise = escolher a string do modelo no formulário.
+4. O `classify` zero-shot (nearest-prototype sobre o embedding do texto) **sugere o perfil** de
+   análise; keywords (YAKE), summary (TextRank) e entities (NER) alimentam a aba **Insights**.
+5. Um segmento em que o próprio Whisper teve baixa confiança: `avg_logprob < -1.0` ou
+   `no_speech_prob > 0.6`. A incerteza do modelo virando um marcador visível para o usuário revisar.
+
+</details>
+
+## Desafios
+
+- **D1 (e se...?)** E se o ramo texto do worker **não copiasse** o arquivo para
+  `output/transcriptions/text/` e rodasse a IA direto sobre o original? Que dado do usuário fica em
+  risco, e por quê?
+- **D2 (projete)** Você quer um perfil de análise novo: **"sermão/homilia"**. O que precisa criar —
+  e o que acontece **automaticamente** com a auto-sugestão de perfil, sem você treinar nada?
+- **D3 (e se...?)** Durante uma transcrição longa, o usuário fica usando a GUI intensamente (trocando
+  visual, abrindo painéis). No hardware deste projeto, qual é o risco real, por que ele existe, e
+  quais mitigações o projeto já embute?
+
+<details>
+<summary><b>Gabarito dos desafios</b></summary>
+
+- **D1** — O `formatter` **reescreve in-place**. Sem a cópia, ele reescreveria o arquivo **original**
+  do usuário — as notas `.md` de alguém seriam alteradas permanentemente por um passo de IA. A cópia
+  para o dir canônico é a proteção: o pipeline só toca o que é dele.
+- **D2** — Criar o perfil em `src/analysis/profiles/` (prompts/estrutura do relatório) com uma
+  **frase-semente** descrevendo a categoria. A auto-sugestão ganha o perfil de graça: o `classify`
+  zero-shot embedda a frase-semente (vira protótipo) e passa a considerá-la no nearest-prototype —
+  nenhum treino, nenhum rótulo (só o ramo supervisionado exigiria exemplos acumulados).
+- **D3** — Risco: BSOD `WIN32K_POWER_WATCHDOG_TIMEOUT`. O Whisper (CUDA) e o Flet (DirectX) disputam
+  a mesma MX150 de 2GB — uso simultâneo intenso pode estourar o watchdog. Mitigações embutidas: logs
+  em INFO com libs ruidosas capadas (menos I/O), fila de áudio sequencial, e a recomendação de forçar
+  o `python.exe` na iGPU Intel se persistir. É também por isso que só a Transcrição usa GPU pesada —
+  todo encode de vídeo é CPU-only.
+
+</details>

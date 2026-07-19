@@ -75,3 +75,55 @@ pipeline, não read-only. `--model` sobrescreve só o Whisper dos passos `transc
    [`../conceitos/CLI.md`](../conceitos/CLI.md))
 5. Em que sentido as Receitas são a "generalização do `run_pipeline`" da Sessão 2? O que mudou de "uma
    operação" para "uma cadeia"?
+
+<details>
+<summary><b>Gabarito</b> — abra só depois de tentar responder</summary>
+
+1. Se o core dependesse de Flet, de estado de UI ou de um bus específico, não poderia ser chamado de
+   um contexto novo. Puro + injeção = chamável de qualquer borda, em qualquer ordem — a receita é a
+   prova.
+2. (1) Chama a função **pura** do módulo; (2) grava no **dir canônico** daquele módulo; (3)
+   **normaliza os callbacks** para `ctx.emit` — traduzindo o `progress_cb`/eventos do core para o
+   contrato de eventos da receita.
+3. `transcription.format` **reescreve in-place** (output = `[input_path]`, não gera arquivo novo);
+   `video.subtitle` é **multi-input** (vídeo + legenda); `ai.answer` exige **`is_available()`**
+   (gate). Lição: abstrações lineares têm bordas — melhor tratá-las explicitamente que forçar tudo
+   no molde.
+4. Porque `recipe` **roda pipeline** (passos longos, progresso, cancelamento) → `CLIEventBus`;
+   `library`/`ai` são read-only core-direto → chamam o core e imprimem.
+5. De "uma operação por item" para "uma **cadeia nomeada** de passos cross-módulo, onde a saída de um
+   alimenta o próximo" — o mesmo contrato de eventos e o mesmo core puro, recombinados.
+
+</details>
+
+## Desafios
+
+- **D1 (projete)** Novo passo de receita: `image.describe` (descrição de imagem por IA). Escreva o
+  "contrato" do adaptador: o que ele checa antes, o que chama, onde grava, e o que devolve.
+- **D2 (ache o bug)** Um adaptador novo de áudio importa e chama
+  `gui.modules.audio.worker.run_audio_pipeline` "para reaproveitar a cadeia inteira de estágios".
+  Funciona — por que está errado mesmo assim?
+- **D3 (e se...?)** Monte mentalmente a receita `URL → audio.download → transcription.transcribe →
+  transcription.format → ai.answer`. Aponte os **dois** casos sutis desta cadeia e o que o runner
+  precisa saber sobre cada um.
+
+<details>
+<summary><b>Gabarito dos desafios</b></summary>
+
+- **D1** — Checa o **gate** antes (`describe.is_available()` — modelo de visão local/nuvem
+  configurado), como `ai.answer` faz. Chama a função **pura** `core/image/describe.py` (nunca o
+  worker da GUI). Grava a descrição no dir canônico do módulo Imagem. Devolve `list[Path]` com o
+  arquivo de texto gerado — que o passo seguinte pode consumir. Callbacks → normalizados para
+  `ctx.emit`.
+- **D2** — O adaptador deve chamar o **core puro**, não o worker de um módulo: o worker embute a
+  semântica de fila/eventos do módulo (module_id "audio", `run_queue_pipeline`, log scope) — dentro
+  de uma receita isso duplicaria maquinaria de pipeline dentro de pipeline, emitiria eventos com
+  escopo errado e acoplaria as Receitas à camada `gui/`. Adaptador fino = core + dir canônico +
+  `ctx.emit`.
+- **D3** — (1) `transcription.format` **reescreve in-place**: o output do passo é `[input_path]` — o
+  runner precisa saber que o "arquivo novo" é o mesmo caminho, senão a cadeia perderia o fio. (2)
+  `ai.answer` exige **`is_available()`**: sem o embedder de pé, a receita deve falhar cedo no gate
+  (mensagem clara), não estourar no meio. (`video.subtitle` seria o terceiro caso, mas não aparece
+  nesta cadeia.)
+
+</details>

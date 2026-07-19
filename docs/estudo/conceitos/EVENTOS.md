@@ -324,5 +324,57 @@ mesmo em caso de exceção.
 7. Ligue este doc ao `progress_cb` da espinha: em que sentido o contrato de eventos é "o mesmo
    princípio, um nível acima"?
 
+<details>
+<summary><b>Gabarito</b> — abra só depois de tentar responder</summary>
+
+1. O worker chama `emit(...)` → o `EventBus` embrulha num `PipelineEvent` e o entrega ao
+   `page.pubsub.send_all` (**thread-safe**) → o `ProgressPanel`, assinante na **thread da UI**,
+   recebe o evento e repinta. Só dados cruzam a fronteira de thread, nunca uma chamada de UI.
+2. Porque "lembra" o `bus`, o `module_id` e o `default_stage`. O worker escreve só
+   `emit("progress_update", ...)` e o `module_id` correto vai carimbado **automaticamente** em todo
+   evento — sem ele, o escopo por painel não funcionaria.
+3. `progress_start` → `queue_progress` (runner) → `video_op_start` → `log` → `progress_update`
+   (repetido) → `video_op_done` (worker/`_process_item`) → `task_done` (runner). Genéricos vêm do
+   runner compartilhado; os `video_op_*` são do módulo.
+4. Porque o painel filtra: `if event.module_id != owner_id: return`. O `send_all` entrega a todos,
+   mas cada painel só aceita eventos do seu módulo.
+5. Pela ponte `LogEventHandler` (instalado pelo `_LogScope` durante o pipeline): cada mensagem do
+   `logging` vira um evento `"log"` no bus — o core continua sem conhecer o bus.
+6. Porque a CLI já recebe os logs pelo `CLIEventBus`; com o handler instalado também, cada mensagem
+   sairia **duas vezes** no terminal.
+7. O `progress_cb` injeta uma função que empurra **um número**; o bus injeta um **vocabulário
+   inteiro** de eventos. Nos dois casos, o núcleo não conhece a borda — recebe a dependência pronta e
+   a chama.
+
+</details>
+
+## Desafios
+
+- **D1 (e se...?)** E se o worker, em vez de `emit`, fizesse
+  `progress_panel.bar.value = ratio; progress_panel.bar.update()` direto da thread daemon? Liste os
+  **três** problemas que isso cria.
+- **D2 (e se...?)** E se o `make_emitter` não carimbasse o `module_id`? Qual seria o **sintoma
+  visível** na GUI ao rodar um pipeline de Áudio com o módulo Vídeo já usado antes?
+- **D3 (ache o bug)** Um módulo novo instala o `LogEventHandler` com
+  `logging.root.addHandler(handler)` solto no início do worker, sem `_LogScope`. Funciona na primeira
+  execução. O que o usuário nota a partir da segunda?
+
+<details>
+<summary><b>Gabarito dos desafios</b></summary>
+
+- **D1** — (1) Quirk da 0.85: `update()` de thread daemon **não repinta** — a barra fica congelada.
+  (2) O worker acopla-se à UI: deixa de ser reusável pela CLI (que não tem `progress_panel`). (3)
+  Quebra o contrato: qualquer mudança no painel exige mexer no worker. O `emit` resolve os três — só
+  dados cruzam a fronteira.
+- **D2** — Todo painel receberia todos os eventos sem conseguir filtrar (`module_id` vazio ≠
+  `owner_id`, ou pior: se o filtro fosse permissivo, todos reagiriam). Na prática: o log e a barra do
+  Áudio apareceriam **também** no painel do Vídeo — poluição cruzada entre módulos montados no mesmo
+  `Stack`.
+- **D3** — Handlers **acumulam**: cada execução adiciona mais um ao root logger sem nunca remover. Na
+  2ª execução, cada mensagem aparece 2× no painel; na 3ª, 3×... O `_LogScope` (context manager)
+  garante `removeHandler` no `__exit__`, **mesmo com exceção**.
+
+</details>
+
 *Próximo: Sessão 4 — os demais módulos como variações desta fatia (Áudio, Imagem, Documentos, Dados,
 Transcrição, Biblioteca).*

@@ -6,6 +6,11 @@ Pré-requisito: o doc **[`EMBEDDINGS.md`](EMBEDDINGS.md)** (vetor, cosseno, norm
 assumimos que "medir similaridade = produto escalar de vetores unitários" já está claro. Glossário no
 fim.
 
+> **Como este doc é escrito** (convenção do acervo, ver [`../README.md`](../README.md)): cada técnica
+> aparece em três camadas — a **ideia com analogia** → um **🧸 exemplo de brinquedo** com números
+> pequenos → o **código real**. Seções **⚙️ Avançado** são engenharia fina — pule na primeira leitura;
+> o pipeline faz sentido sem elas.
+
 ---
 
 # PARTE 1 — O que é RAG e por que existe
@@ -103,15 +108,35 @@ documentada** do RAG puramente denso.
 ## 4.2 Busca esparsa (BM25) — por termo exato
 
 A cura para a fraqueza acima é o **BM25**, um método clássico de recuperação por **palavras-chave**.
-Ele não entende significado; ele conta **coincidência de termos**, com duas ideias:
+
+Analogia: um **bibliotecário com fichas**. Ele não entende do que o livro trata; ele olha as fichas e
+conta em quais livros as palavras da sua pergunta aparecem. E ele é esperto em dois sentidos:
 
 - **TF (Term Frequency):** quanto mais vezes um termo da pergunta aparece num documento, mais
   relevante — mas com retornos decrescentes (a 10ª ocorrência importa menos que a 2ª).
 - **IDF (Inverse Document Frequency):** termos **raros** no corpus valem mais que termos comuns. "de"
   aparece em tudo (peso baixo); "Muad'Dib" aparece em pouquíssimos (peso alto — é um sinal forte).
+  Como o bibliotecário: se você pergunta por "o gato **de** Schrödinger", o "de" não ajuda em nada; o
+  "Schrödinger" resolve a busca sozinho.
 
 BM25 combina os dois e normaliza pelo comprimento do documento. É "esparso" porque opera sobre
 contagens de palavras (a maioria zero para qualquer documento).
+
+### 🧸 Exemplo de brinquedo
+
+Corpus de 3 documentos; pergunta: **"Muad'Dib deserto"**.
+
+| doc | conteúdo | "Muad'Dib"? | "deserto"? |
+|---|---|---|---|
+| 1 | "O deserto é vasto. O deserto queima." | não | 2× |
+| 2 | "Muad'Dib atravessou o deserto." | **1×** | 1× |
+| 3 | "Receita de bolo de cenoura." | não | não |
+
+"deserto" aparece em 2 dos 3 docs → IDF médio. "Muad'Dib" aparece em **1** dos 3 → IDF alto (termo
+raro = sinal forte). Resultado: **doc 2 vence** (casou o termo raro + um "deserto"), doc 1 fica em 2º
+(dois "deserto", mas com retorno decrescente e sem o termo forte), doc 3 pontua zero. Repare que a
+busca **densa** poderia até pôr doc 1 na frente ("fala muito de deserto") — é o doc 2, com o nome
+próprio exato, que o BM25 resgata.
 
 No seu `bm25.py`:
 
@@ -150,13 +175,29 @@ Ter dois rankings (denso e BM25) levanta o problema: como **combiná-los**? E de
 ## 5.1 Fusão por posição: Reciprocal Rank Fusion (RRF)
 
 🔑 **O problema de somar os scores diretamente:** o cosseno vive em `[-1, 1]`, o BM25 é ilimitado
-(pode ir a 15, 30...). Somá-los deixaria o BM25 dominar só pela escala. Normalizar exigiria um
-truque ad-hoc frágil. A solução elegante é **ignorar os valores e usar só as posições** (ranks): o
-**Reciprocal Rank Fusion**.
+(pode ir a 15, 30...). Somá-los deixaria o BM25 dominar só pela escala.
 
-Cada método ranqueia os pedaços; cada pedaço ganha, de cada ranking, uma pontuação `1/(k + posição)`;
-somam-se as contribuições. Um pedaço que ficou em 1º no denso e 3º no BM25 acumula bastante; um que
-ficou mal nos dois, pouco.
+Analogia: dois **jurados** avaliam os mesmos candidatos, mas um dá notas de 0 a 1 e o outro de 0 a
+100. Somar as notas seria injusto — o segundo jurado mandaria no resultado sozinho. A solução justa:
+ignorar as notas e somar as **posições no pódio** de cada jurado. É exatamente o **Reciprocal Rank
+Fusion**: cada pedaço ganha, de cada ranking, uma pontuação `1/(k + posição)`; somam-se as
+contribuições. Um pedaço que ficou em 1º no denso e 3º no BM25 acumula bastante; um que ficou mal nos
+dois, pouco.
+
+### 🧸 Exemplo de brinquedo (k = 60, a constante do projeto)
+
+Três pedaços A, B, C. O denso ranqueia `A > B > C`; o BM25 ranqueia `C > A > B` (digamos que C tem o
+termo raro):
+
+| pedaço | rank denso | rank BM25 | RRF = 1/(60+rank) + 1/(60+rank) | total |
+|---|---|---|---|---|
+| A | 1º | 2º | 1/61 + 1/62 | **0.0325** ← vence |
+| C | 3º | 1º | 1/63 + 1/61 | 0.0323 |
+| B | 2º | 3º | 1/62 + 1/63 | 0.0320 |
+
+A vence por ir bem **nos dois**; C, que o denso deixaria em último, sobe para 2º **resgatado pelo
+BM25** — sem nenhuma nota ter sido comparada entre escalas diferentes. É todo o espírito do híbrido
+em três linhas de tabela.
 
 No seu `retriever.py`:
 
@@ -171,12 +212,13 @@ def _reciprocal_rank_fusion(*score_arrays):
     return fused
 ```
 
-🔑 Dois detalhes finos: o `_RRF_K = 60` é a constante clássica do paper (não ajustada por corpus,
-porque o próprio paper mostrou os resultados insensíveis a ela na faixa que importa). E o desempate
-por `np.lexsort` (não `argsort[::-1]`) é deliberado: com pouquíssimos candidatos, um sinal totalmente
-sem informação (BM25 sem nenhum casamento) poderia, ao ser revertido, cancelar uma preferência clara
-do outro sinal. Por isso, quando o BM25 não casa **nada** (`lexical.max() <= 0`), a fusão é
-**pulada** e cai no denso puro — para não injetar viés de ordem-de-índice.
+⚙️ **Avançado — pule na 1ª leitura.** Dois detalhes finos: o `_RRF_K = 60` é a constante clássica do
+paper (não ajustada por corpus, porque o próprio paper mostrou os resultados insensíveis a ela na
+faixa que importa). E o desempate por `np.lexsort` (não `argsort[::-1]`) é deliberado: com
+pouquíssimos candidatos, um sinal totalmente sem informação (BM25 sem nenhum casamento) poderia, ao
+ser revertido, cancelar uma preferência clara do outro sinal. Por isso, quando o BM25 não casa
+**nada** (`lexical.max() <= 0`), a fusão é **pulada** e cai no denso puro — para não injetar viés de
+ordem-de-índice.
 
 ## 5.2 Diversificar: Maximal Marginal Relevance (MMR)
 
@@ -184,6 +226,26 @@ Lembra dos "irmãos quase-duplicados" da sobreposição do chunking? Sem cuidado
 recuperados poderiam ser 3 fatias vizinhas **do mesmo** parágrafo — redundância que desperdiça o
 contexto. O **MMR** resolve: em vez de pegar os mais relevantes, ele equilibra **relevância à
 pergunta** contra **diferença dos já escolhidos**.
+
+Analogia: montar uma **banca de especialistas**. Você quer os mais competentes no assunto — mas três
+clones que dizem a mesma coisa desperdiçam duas cadeiras. Depois de escolher o primeiro, cada novo
+candidato é avaliado por dois critérios: "quão bom ele é?" **menos** "quão parecido ele é com quem já
+está na banca?".
+
+### 🧸 Exemplo de brinquedo (escolher 2 de 4, λ = 0.7)
+
+Quatro candidatos, com relevância à pergunta e — o detalhe — o 2º é quase-duplicata do 1º
+(similaridade 0.95 entre eles; os demais ~0.2–0.3):
+
+| candidato | relevância | rodada 1 | rodada 2: `0.7·rel − 0.3·redundância` |
+|---|---|---|---|
+| P1 | 0.90 | **escolhido** (maior relevância) | — |
+| P2 (gêmeo de P1) | 0.85 | | `0.7·0.85 − 0.3·0.95` = **0.31** |
+| P3 | 0.80 | | `0.7·0.80 − 0.3·0.30` = **0.47** ← escolhido |
+| P4 | 0.60 | | `0.7·0.60 − 0.3·0.20` = 0.36 |
+
+Na rodada 2, P3 **vence P2** mesmo tendo relevância menor — porque P2 é redundante com quem já entrou.
+Sem MMR, o contexto teria duas cópias do mesmo parágrafo; com MMR, cobre dois ângulos.
 
 O RRF ranqueia um **pool** maior que `k` (~4×, `_POOL_MULTIPLIER`); o MMR então escolhe `k` desse pool
 diversificando. No seu `retriever.py`:
@@ -207,27 +269,38 @@ def _mmr(relevance, similarity, k, *, lambda_):
 ```
 
 🔑 A fórmula é `λ·relevância − (1−λ)·redundância`: com `λ=0.7`, prioriza relevância mas penaliza pegar
-algo muito parecido com o que já entrou. É **pulado** quando o pool já cabe em `k` ou quando o escopo
-é um documento único (ali os pedaços são irmãos por construção — diversificar prejudicaria). Repare
-que o MMR ranqueia pelo **score fundido** (RRF), não pelo cosseno puro: reranquear por relevância
-densa desfaria em silêncio o resgate do BM25.
+algo muito parecido com o que já entrou (é a conta da tabela acima). É **pulado** quando o pool já
+cabe em `k` ou quando o escopo é um documento único (ali os pedaços são irmãos por construção —
+diversificar prejudicaria).
 
-## 5.3 O piso de relevância
+⚙️ **Avançado.** Repare que o MMR ranqueia pelo **score fundido** (RRF), não pelo cosseno puro:
+reranquear por relevância densa desfaria em silêncio o resgate do BM25.
 
-Um último filtro (`_apply_relevance_floor`): entre a fusão e o MMR, descarta candidatos do pool cujo
-**cosseno denso** esteja mais de `δ=0.05` abaixo do melhor do pool. É um **guarda contra
+## 5.3 O piso de relevância — ⚙️ Avançado (pule na 1ª leitura)
+
+A ideia em uma frase: uma **nota de corte relativa** — só continua no páreo quem ficou a menos de
+`δ` pontos do 1º colocado.
+
+Em detalhe: um último filtro (`_apply_relevance_floor`), entre a fusão e o MMR, descarta candidatos
+do pool cujo **cosseno denso** esteja mais de `δ=0.05` abaixo do melhor do pool. É um **guarda contra
 desbalanceamento do corpus**: pedaços de um documento volumoso mas irrelevante ao assunto (os muitos
 capítulos de Duna numa pergunta sobre Ollama) entravam no contexto só por serem "o 2º-6º melhor". O
 piso os corta — com uma **isenção para o top-1 do BM25**, para não matar o resgate de termo raro que é
 a razão de ser do híbrido. É a parte mais sutil do retriever; o comentário do arquivo documenta o
 impasse dos dois contratos e por que isentar só o top-1 os reconcilia.
 
-## 5.4 O contrato do `.score` e a cobertura
+## 5.4 O contrato do `.score` e a cobertura — ⚙️ Avançado
 
 🔑 Uma regra de fronteira que amarra tudo: o `.score` reportado por cada hit continua sendo o
 **cosseno denso** (não o valor fundido nem o do MMR), porque é o que o aviso de "fora de escopo" usa.
 E o `retrieve()` devolve também `pool_max_score` — o melhor cosseno entre **todos** os candidatos do
 escopo, medido **antes** do piso — para o sinal de cobertura medir o acervo, não o corte.
+
+> 🧪 **Experimento de 5 minutos.** Com o índice construído (`uv run main.py ai index`), faça duas
+> perguntas na CLI: uma claramente **coberta** pelo seu acervo e uma claramente **fora** (ex.:
+> `uv run main.py ai "qual a capital da Mongólia?"`). Compare: o aviso de cobertura (Parte 7), e no
+> card de fontes, quais foram **citadas** vs. só **consultadas** (Parte 6.2). Você acabou de ver o
+> pipeline inteiro deste doc funcionando.
 
 ---
 
